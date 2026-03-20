@@ -1,0 +1,28 @@
+# Source maps (not needed for npm consumers)
+**/*.js.map
+**/*.d.ts.map
+
+# Dev files
+tests/
+test-harness/
+.github/
+.session-state/
+retrospect-workspace/
+examples/
+plans/
+docs/
+assets/
+
+# TypeScript source (dist/ has compiled output)
+bus/*.ts
+cli/*.ts
+cli/**/*.ts
+daemon/*.ts
+daemon/**/*.tsx
+daemon/**/*.ts
+providers/*.ts
+providers/**/*.ts
+
+# Build artifacts
+dist/**/*.js.map
+dist/**/*.d.ts.map

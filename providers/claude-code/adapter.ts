@@ -1,0 +1,162 @@
+/**
+ * Claude Code Provider — bridges existing hook system to the quorum bus.
+ *
+ * Claude Code has 12 native hooks that produce events.
+ * This adapter listens for hook output (via IPC/file) and normalizes to QuorumEvents.
+ *
+ * Two modes:
+ * 1. Hook-forwarding: hooks write events to a JSONL inbox, adapter polls and emits
+ * 2. Standalone: adapter watches files directly (for when hooks aren't installed)
+ */
+
+import { existsSync, readFileSync, watchFile, unwatchFile, statSync } from "node:fs";
+import { resolve } from "node:path";
+import type { QuorumBus } from "../../bus/bus.js";
+import { createEvent } from "../../bus/events.js";
+import type {
+  QuorumProvider,
+  ProviderCapability,
+  ProviderConfig,
+  ProviderStatus,
+} from "../provider.js";
+
+export class ClaudeCodeProvider implements QuorumProvider {
+  readonly kind = "claude-code" as const;
+  readonly displayName = "Claude Code";
+  readonly capabilities: ProviderCapability[] = [
+    "hooks",
+    "worktree",
+    "audit",
+    "agent-spawn",
+    "streaming",
+  ];
+
+  private bus: QuorumBus | null = null;
+  private config: ProviderConfig | null = null;
+  private intervals: ReturnType<typeof setInterval>[] = [];
+  private lastEventTime = 0;
+  private activeAgentCount = 0;
+  private pendingAuditCount = 0;
+  private lastError: string | undefined;
+
+  async start(bus: QuorumBus, config: ProviderConfig): Promise<void> {
+    this.bus = bus;
+    this.config = config;
+
+    const watchPath = resolve(config.repoRoot, config.watchFile);
+    const lockPath = resolve(config.repoRoot, ".claude", "audit.lock");
+    const inboxPath = resolve(config.repoRoot, ".claude", "quorum-inbox.jsonl");
+
+    // Mode 1: Poll hook-generated inbox
+    if (existsSync(inboxPath)) {
+      this.pollInbox(inboxPath);
+    }
+
+    // Mode 2: Watch evidence file for changes
+    this.watchEvidence(watchPath);
+
+    // Monitor audit lock
+    this.watchAuditLock(lockPath);
+
+    this.bus.emit(createEvent("session.start", "claude-code", {
+      mode: existsSync(inboxPath) ? "hook-forwarding" : "file-watch",
+    }));
+  }
+
+  async stop(): Promise<void> {
+    for (const id of this.intervals) {
+      clearInterval(id);
+    }
+    this.intervals = [];
+
+    if (this.config) {
+      const watchPath = resolve(this.config.repoRoot, this.config.watchFile);
+      unwatchFile(watchPath);
+    }
+
+    this.bus = null;
+    this.config = null;
+  }
+
+  status(): ProviderStatus {
+    return {
+      connected: this.bus !== null,
+      lastEvent: this.lastEventTime || undefined,
+      activeAgents: this.activeAgentCount,
+      pendingAudits: this.pendingAuditCount,
+      error: this.lastError,
+    };
+  }
+
+  // ── Internal watchers ─────────────────────────────
+
+  private pollInbox(inboxPath: string): void {
+    let lastSize = existsSync(inboxPath) ? statSync(inboxPath).size : 0;
+
+    this.intervals.push(setInterval(() => {
+      if (!existsSync(inboxPath) || !this.bus) return;
+
+      const currentSize = statSync(inboxPath).size;
+      if (currentSize <= lastSize) return;
+
+      // Read only new lines
+      const content = readFileSync(inboxPath, "utf8");
+      const lines = content.trim().split("\n");
+      const newLines = lines.slice(-Math.ceil((currentSize - lastSize) / 100));
+
+      for (const line of newLines) {
+        try {
+          const event = JSON.parse(line);
+          this.bus.emit(event);
+          this.lastEventTime = Date.now();
+        } catch {
+          // Skip malformed lines
+        }
+      }
+
+      lastSize = currentSize;
+    }, 1000));
+  }
+
+  private watchEvidence(watchPath: string): void {
+    if (!existsSync(watchPath)) return;
+
+    let lastMtime = statSync(watchPath).mtimeMs;
+
+    watchFile(watchPath, { interval: 2000 }, (curr) => {
+      if (curr.mtimeMs <= lastMtime || !this.bus) return;
+      lastMtime = curr.mtimeMs;
+
+      const content = readFileSync(watchPath, "utf8");
+      const hasTrigger = content.includes("[REVIEW_NEEDED]");
+
+      if (hasTrigger) {
+        this.bus.emit(createEvent("audit.submit", "claude-code", {
+          file: watchPath,
+        }));
+        this.lastEventTime = Date.now();
+      }
+    });
+  }
+
+  private watchAuditLock(lockPath: string): void {
+    let wasLocked = existsSync(lockPath);
+
+    this.intervals.push(setInterval(() => {
+      if (!this.bus) return;
+
+      const isLocked = existsSync(lockPath);
+
+      if (!wasLocked && isLocked) {
+        this.pendingAuditCount++;
+        this.bus.emit(createEvent("audit.start", "claude-code"));
+        this.lastEventTime = Date.now();
+      } else if (wasLocked && !isLocked) {
+        this.pendingAuditCount = Math.max(0, this.pendingAuditCount - 1);
+        this.lastEventTime = Date.now();
+      }
+
+      wasLocked = isLocked;
+    }, 2000));
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "quorum-audit",
+  "version": "0.2.2",
+  "description": "Cross-model audit gate with structural enforcement. Edit → audit → agree → retro → commit.",
+  "type": "module",
+  "author": {
+    "name": "berrzebb",
+    "url": "https://github.com/berrzebb"
+  },
+  "repository": "https://github.com/berrzebb/quorum",
+  "homepage": "https://github.com/berrzebb/quorum#readme",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "consensus",
+    "quorum",
+    "audit",
+    "orchestrator",
+    "cross-model",
+    "ai-agents",
+    "claude-code",
+    "codex"
+  ],
+  "bin": {
+    "quorum": "dist/cli/index.js"
+  },
+  "pkg": {
+    "assets": [
+      "core/**/*",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+    ],
+    "outputPath": "release"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "package": "pkg dist/cli/index.js --compress GZip",
+    "dev": "tsx daemon/index.ts",
+    "daemon": "node dist/daemon/index.js",
+    "test": "node --test tests/*.test.mjs",
+    "test:single": "node --test",
+    "mcp": "node core/tools/mcp-server.mjs",
+    "tool": "node core/tools/tool-runner.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "ink": "^6.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@yao-pkg/pkg": "^6.14.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

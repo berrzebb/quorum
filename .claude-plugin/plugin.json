@@ -1,0 +1,22 @@
+{
+  "name": "quorum",
+  "version": "0.2.2",
+  "description": "Cross-model audit gate — orchestrator distributes tasks to headless workers, independent auditor verifies, structural enforcement auto-blocks downstream on upstream failure.",
+  "author": {
+    "name": "berrzebb",
+    "url": "https://github.com/berrzebb"
+  },
+  "repository": "https://github.com/berrzebb/quorum",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "quorum",
+    "consensus",
+    "audit",
+    "orchestrator",
+    "cross-model",
+    "claude-code",
+    "codex",
+    "ai-agents"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "plugin": {
+    "locale": "ko",
+    "audit_script": "audit.mjs",
+    "audit_prompt": "templates/audit-prompt.md",
+    "respond_script": "respond.mjs",
+    "ack_file": "ack.timestamp",
+    "session_file": "session.id",
+    "debug_log": "debug.log",
+    "fix_prompt": "templates/fix-prompt.md",
+    "respond_file": "gpt.md",
+    "retro_script": "retrospective.mjs",
+    "retro_prompt": "templates/retro-prompt.md",
+    "handoff_file": ".claude/session-handoff.md",
+
+    "_hooks_enabled_readme": "Toggle individual hook behaviors. All default to true if omitted.",
+    "hooks_enabled": {
+      "audit": true,
+      "session_gate": true,
+      "quality_rules": true,
+      "pre_compact": true
+    }
+  },
+  "consensus": {
+    "watch_file": "docs/feedback/claude.md",
+    "trigger_tag": "[REVIEW_NEEDED]",
+    "agree_tag": "[APPROVED]",
+    "pending_tag": "[CHANGES_REQUESTED]",
+    "planning_dirs": [
+      "docs/ko/design/improved"
+    ],
+    "sections": {
+      "audit_scope":         "Audit Scope",
+      "final_verdict":       "Final Verdict",
+      "agreed_anchor":       "Agreed",
+      "reset_criteria":      "Reset Criteria",
+      "reject_codes":        "Rejection Codes",
+      "additional_tasks":    "Additional Tasks",
+      "next_task":           "Next Task",
+      "promotion_target":    "Current Promotion Target",
+      "deprecated_protocol": "Deprecated Protocol",
+      "changed_files":       "Changed Files"
+    },
+    "doc_patterns": {
+      "empty_markers":        "해당 없음|없음|none|n\\/a",
+      "completion_suffix":    ":\\s*(완료|done)\\s*\\/?",
+      "design_prefix":        "설계|Design",
+      "pending_focus_fallback": "current pending items",
+      "no_next_task":         "no next task registered",
+      "none_item":            "- none",
+      "reset_criteria_text":  "The scope must confirm that `{focus}` corrections and related lint/test re-passes are verified before promoting to `{agree_tag}`."
+    }
+  },
+  "quality_rules": [
+    {
+      "match": { "extension": ".ts", "path_contains": ["/src/", "/tests/"] },
+      "label": "eslint",
+      "command": "npx eslint --no-error-on-unmatched-pattern \"{file}\""
+    },
+    {
+      "match": { "extension": ".ts", "path_contains": ["/src/"] },
+      "label": "tsc",
+      "command": "npx tsc --noEmit --pretty 2>&1 | head -20"
+    },
+    {
+      "match": { "filenames": ["package.json", "package-lock.json"] },
+      "label": "npm-audit",
+      "command": "npm audit --audit-level=high"
+    }
+  ]
+}

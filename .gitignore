@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.session-state/
+test-harness/node_modules/
+retrospect-workspace/
+.claude/compaction-snapshot.json

@@ -1,0 +1,75 @@
+{
+  "_readme": "Copy this file as config.json in the plugin root. Customize consensus/quality_rules for your project.",
+
+  "plugin": {
+    "_readme": "Plugin-internal filenames only — resolved relative to the plugin directory. Do not use paths here.",
+    "audit_script": "audit.mjs",
+    "audit_prompt": "audit-prompt.md",
+    "respond_script": "respond.mjs",
+    "ack_file": "ack.timestamp",
+    "session_file": "session.id",
+    "debug_log": "debug.log",
+    "fix_prompt": "fix-prompt.md",
+    "respond_file": "gpt.md",
+    "retro_script": "retrospective.mjs",
+    "retro_prompt": "templates/retro-prompt.md"
+  },
+
+  "consensus": {
+    "_readme": "Repo-scoped paths — resolved relative to the repository root.",
+    "watch_file": "docs/review/author.md",
+    "trigger_tag": "[REVIEW_NEEDED]",
+    "agree_tag": "[APPROVED]",
+    "pending_tag": "[CHANGES_REQUESTED]",
+    "planning_files": [
+      "docs/ko/design/improved/feedback-promotion.plan.json"
+    ],
+    "planning_dirs": [
+      "docs/design"
+    ],
+    "sections": {
+      "_readme": "Section heading strings used to parse consensus documents. Must match the actual headings in your watch_file.",
+      "audit_scope":         "Audit Scope",
+      "final_verdict":       "Final Verdict",
+      "agreed_anchor":       "Agreed",
+      "reset_criteria":      "Reset Criteria",
+      "reject_codes":        "Reject Codes",
+      "additional_tasks":    "Additional Tasks",
+      "next_task":           "Next Task",
+      "promotion_target":    "Current Promotion Target",
+      "deprecated_protocol": "Deprecated Protocol",
+      "changed_files":       "Changed Files"
+    },
+    "doc_patterns": {
+      "_readme": "Regex patterns and template strings for parsing and generating consensus document content.",
+      "empty_markers":          "none|n/a",
+      "completion_suffix":      ":\\s*done\\s*\\/?",
+      "design_prefix":          "Design",
+      "pending_focus_fallback": "current pending items",
+      "no_next_task":           "no next task registered",
+      "none_item":              "- none",
+      "reset_criteria_text":    "The current scope requires `{focus}` correction and related lint/test re-pass before promoting to `{agree_tag}`."
+    }
+  },
+
+  "quality_rules": [
+    {
+      "_readme": "Run ESLint on edited TypeScript files under src/ or tests/.",
+      "match": { "extension": ".ts", "path_contains": ["/src/", "/tests/"] },
+      "label": "eslint",
+      "command": "npx eslint --no-error-on-unmatched-pattern \"{file}\""
+    },
+    {
+      "_readme": "Run npm audit when package.json or lockfile is edited.",
+      "match": { "filenames": ["package.json", "package-lock.json"] },
+      "label": "npm-audit",
+      "command": "npm audit --audit-level=high"
+    },
+    {
+      "_readme": "Example: run Rust clippy on .rs files under src/.",
+      "match": { "extension": ".rs", "path_contains": ["/src/"] },
+      "label": "clippy",
+      "command": "cargo clippy --quiet -- -D warnings"
+    }
+  ]
+}
