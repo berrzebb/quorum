@@ -59,7 +59,7 @@ export type EventType =
 
 export interface AuditVerdictPayload {
   itemId: string;
-  verdict: "approved" | "changes_requested";
+  verdict: "approved" | "changes_requested" | "infra_failure";
   codes?: string[];
   summary?: string;
 }

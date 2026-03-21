@@ -41,19 +41,42 @@ try {
   REPO_ROOT = process.cwd();
 }
 
-const worktreeDir = resolve(REPO_ROOT, ".claude", "worktrees", name);
+// ── Invariant: worktree depth = 1 (no nesting) ──────────────
+// If REPO_ROOT is already inside a worktree, resolve to the real main repo.
+let MAIN_ROOT = REPO_ROOT;
+try {
+  const gitDir = execSync("git rev-parse --git-dir", { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+  // Worktrees have gitdir like: /path/to/main/.git/worktrees/<name>
+  if (gitDir.includes("/worktrees/") || gitDir.includes("\\worktrees\\")) {
+    const commonDir = execSync("git rev-parse --git-common-dir", { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+    MAIN_ROOT = resolve(REPO_ROOT, commonDir, "..");
+    console.error(`[worktree-create] Detected nested context — resolving to main repo: ${MAIN_ROOT}`);
+  }
+} catch { /* not a worktree — MAIN_ROOT stays as REPO_ROOT */ }
+
+const worktreeDir = resolve(MAIN_ROOT, ".claude", "worktrees", name);
 const branchName = `worktree/${name}`;
+
+// Guard: reject if target path already contains .claude/worktrees/
+if (worktreeDir.includes(".claude/worktrees/") || worktreeDir.includes(".claude\\worktrees\\")) {
+  const segments = worktreeDir.split(/[/\\]/).filter(s => s === "worktrees").length;
+  if (segments > 1) {
+    console.error(`[worktree-create] BLOCKED: nested worktree detected (depth ${segments}). Worktree depth must be 1.`);
+    process.exit(1);
+  }
+}
 
 // ── Create worktree ──────────────────────────────────────────
 try {
-  if (!existsSync(resolve(REPO_ROOT, ".claude", "worktrees"))) {
-    mkdirSync(resolve(REPO_ROOT, ".claude", "worktrees"), { recursive: true });
+  if (!existsSync(resolve(MAIN_ROOT, ".claude", "worktrees"))) {
+    mkdirSync(resolve(MAIN_ROOT, ".claude", "worktrees"), { recursive: true });
   }
 
-  // Create worktree with a new branch from current HEAD
+  // Create worktree with a new branch from current HEAD (always from main repo)
   execSync(`git worktree add -b "${branchName}" "${worktreeDir}" HEAD`, {
-    cwd: REPO_ROOT,
+    cwd: MAIN_ROOT,
     stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
   });
 
   console.error(`[worktree-create] Created worktree: ${worktreeDir} (branch: ${branchName})`);
@@ -64,7 +87,7 @@ try {
 
 // ── Copy quorum config + templates ───────────────────
 try {
-  const projectConfigDir = resolve(REPO_ROOT, ".claude", "quorum");
+  const projectConfigDir = resolve(MAIN_ROOT, ".claude", "quorum");
   const worktreeConfigDir = resolve(worktreeDir, ".claude", "quorum");
 
   if (existsSync(projectConfigDir)) {
@@ -98,7 +121,7 @@ try {
   // Instead of bypassPermissions, inject explicit allow list so deny rules still work.
   const claudeDir = resolve(worktreeDir, ".claude");
   mkdirSync(claudeDir, { recursive: true });
-  const settingsSrc = resolve(REPO_ROOT, ".claude", "settings.json");
+  const settingsSrc = resolve(MAIN_ROOT, ".claude", "settings.json");
   const parentSettings = existsSync(settingsSrc)
     ? JSON.parse(readFileSync(settingsSrc, "utf8"))
     : {};
@@ -117,7 +140,7 @@ try {
   );
   console.error(`[worktree-create] Generated .claude/settings.json (${mergedAllow.length} allow rules)`);
 
-  const settingsLocalSrc = resolve(REPO_ROOT, ".claude", "settings.local.json");
+  const settingsLocalSrc = resolve(MAIN_ROOT, ".claude", "settings.local.json");
   if (existsSync(settingsLocalSrc)) {
     cpSync(settingsLocalSrc, resolve(claudeDir, "settings.local.json"));
     console.error("[worktree-create] Copied .claude/settings.local.json");
@@ -129,7 +152,7 @@ try {
     name,
     branch: branchName,
     created_at: new Date().toISOString(),
-    parent_repo: REPO_ROOT,
+    parent_repo: MAIN_ROOT,
   }, null, 2), "utf8");
 
 } catch (e) {

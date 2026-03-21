@@ -50,7 +50,7 @@
     },
     "doc_patterns": {
       "_readme": "Regex patterns and template strings used when generating document sections. Adjust for your language.",
-      "empty_markers":        "해당 없음|없음|none|n\\/a",
+      "empty_markers":        "none|n\\/a",
       "completion_suffix":    ":\\s*done\\s*\\/?",
       "design_prefix":        "Design",
       "pending_focus_fallback": "current pending items",

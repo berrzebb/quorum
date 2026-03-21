@@ -1,6 +1,6 @@
 {
   "name": "quorum-audit",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "description": "Cross-model audit gate with structural enforcement. Edit → audit → agree → retro → commit.",
   "type": "module",
   "author": {
@@ -46,6 +46,7 @@
   "dependencies": {
     "better-sqlite3": "^12.8.0",
     "ink": "^6.0.0",
+    "quorum-audit": "^0.2.5",
     "react": "^19.0.0"
   },
   "devDependencies": {

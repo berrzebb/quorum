@@ -45,10 +45,11 @@ Detects: **implementation gaps, missing tests, unconnected outputs**
 | **Test Case** | scout → implementer | Test file:line, `self` if row IS a test, — if absent |
 | **Test Result** | implementer | ✓ pass / ✗ fail / — pending |
 | **Connected** | scout | Downstream consumer `Req ID:file` via import tracing |
-| **Coverage** | coverage_map tool | stmt% / br% / fn% from vitest coverage JSON |
+| **Coverage** | coverage_map tool | stmt% / br% / fn% from test coverage JSON |
 | **Invariant** | test-strategy.md | Core invariant for this row. `—` = not applicable |
 | **Inv Test** | scout → auditor | ✅ semantic assertion exists / ⚠️ existence only / ❌ missing / — N/A |
-| **Status** | all | open → wip → fixed → verified / invariant-gap (test exists but invariant not verified) |
+| **Runtime** | scout → auditor | ✅ consumed at runtime / ⚠️ instantiated only / ❌ unwired / — N/A |
+| **Status** | all | open → wip → fixed → verified / invariant-gap / **integration-gap** (impl exists, runtime unwired) |
 
 ### Impl Status Definitions
 

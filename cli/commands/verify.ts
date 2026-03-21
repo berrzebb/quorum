@@ -6,7 +6,7 @@
 
 import { spawnSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -16,11 +16,25 @@ export async function run(args: string[]): Promise<void> {
 
   console.log("\n\x1b[36mquorum verify\x1b[0m — done-criteria checks\n");
 
-  const checks = [
-    { label: "CQ", name: "Code Quality", bin: "npx", args: ["eslint", "--no-error-on-unmatched-pattern", "src/"] },
-    { label: "T", name: "TypeScript", bin: "npx", args: ["tsc", "--noEmit"] },
-    { label: "TEST", name: "Tests", bin: "npm", args: ["test"] },
-  ];
+  // Load checks from quality_rules presets (language-aware)
+  const checks: Array<{ label: string; name: string; bin: string; args: string[] }> = [];
+  try {
+    const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
+    if (existsSync(configPath)) {
+      const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+      const presets = cfg.quality_rules?.presets ?? [];
+      for (const preset of presets) {
+        if (!existsSync(resolve(repoRoot, preset.detect))) continue;
+        for (const check of preset.checks ?? []) {
+          const parts = check.command.split(/\s+/);
+          checks.push({ label: check.id, name: check.label, bin: parts[0], args: parts.slice(1) });
+        }
+      }
+    }
+  } catch { /* config read error */ }
+  if (checks.length === 0) {
+    console.log("  No quality_rules presets matched — skipping CQ/T checks\n");
+  }
 
   const category = args[0]?.toUpperCase();
 
@@ -51,6 +65,18 @@ export async function run(args: string[]): Promise<void> {
   // Special: dependency audit
   if (category === "DEP") {
     await runDepAudit(repoRoot);
+    return;
+  }
+
+  // Special: template consistency check
+  if (category === "TEMPLATE" || category === "TPL") {
+    await runTemplateCheck();
+    return;
+  }
+
+  // Special: runtime contract check (schema mismatch, identifier normalization)
+  if (category === "RC" || category === "RUNTIME") {
+    await runRuntimeContractCheck(repoRoot);
     return;
   }
 
@@ -277,5 +303,122 @@ async function runDepAudit(repoRoot: string): Promise<boolean> {
   } catch {
     console.log("\x1b[2mSKIP\x1b[0m");
     return true;
+  }
+}
+
+// ── Template consistency check ──────────────────────────────
+
+async function runTemplateCheck(): Promise<void> {
+  console.log("\n\x1b[36mquorum verify TEMPLATE\x1b[0m — template consistency check\n");
+
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
+    ?? resolve(__dirname, "..", "..");
+  const coreRoot = resolve(pluginRoot, "..", "..", "core");
+
+  const forbidden = [
+    /npx\s+eslint/,
+    /npx\s+tsc/,
+    /npx\s+vitest/,
+    /cargo\s+test(?!\s+runner)/,
+    /cargo\s+check/,
+    /cargo\s+clippy/,
+    /ruff\s+check/,
+    /go\s+vet/,
+    /go\s+test/,
+  ];
+
+  const allowPatterns = [
+    /^\s*#/,             // comment lines
+    /allowed-tools/,     // skill frontmatter
+    /Do NOT run/,        // prohibition text
+    /import\s/,          // JS import
+    /e\.g\./,            // example refs
+    /quality_rules/,     // already referencing presets
+  ];
+
+  const scanDirs = [
+    resolve(coreRoot, "templates"),
+    resolve(pluginRoot, "agents"),
+    resolve(pluginRoot, "skills"),
+  ].filter(d => existsSync(d));
+
+  let issues = 0;
+
+  function scanDir(dir: string): void {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) { scanDir(full); continue; }
+      if (!entry.name.endsWith(".md")) continue;
+      if (full.includes("evidence-format")) continue;
+
+      const lines = readFileSync(full, "utf8").split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        if (allowPatterns.some(p => p.test(line))) continue;
+        for (const pattern of forbidden) {
+          if (pattern.test(line)) {
+            issues++;
+            const rel = full.replace(/\\/g, "/");
+            console.log(`  \x1b[31mFAIL\x1b[0m ${rel}:${i + 1} — ${line.trim().slice(0, 80)}`);
+          }
+        }
+      }
+    }
+  }
+
+  for (const dir of scanDirs) scanDir(dir);
+
+  if (issues === 0) {
+    console.log("  \x1b[32mPASS\x1b[0m No hardcoded tool commands found.");
+  } else {
+    console.log(`\n  \x1b[31m${issues} issue(s)\x1b[0m — replace with quality_rules.presets reference`);
+  }
+}
+
+// ── Runtime contract check ──────────────────────────────────
+
+async function runRuntimeContractCheck(repoRoot: string): Promise<void> {
+  console.log("\n\x1b[36mquorum verify RUNTIME\x1b[0m — runtime contract checks\n");
+
+  let issues = 0;
+
+  // Schema contract: check save/load boundary type mismatches in Python
+  // Use Glob instead of Unix find for cross-platform compatibility
+  const pyFiles: string[] = [];
+  function collectPyFiles(dir: string): void {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "__pycache__" && entry.name !== "node_modules") {
+        collectPyFiles(full);
+      } else if (entry.name.endsWith(".py")) {
+        pyFiles.push(full);
+      }
+    }
+  }
+  collectPyFiles(repoRoot);
+  for (const file of pyFiles) {
+    const content = readFileSync(file, "utf8");
+    const dictTypes = content.match(/dict\[.*?\]/gi) ?? [];
+    const uniqueTypes = [...new Set(dictTypes.map((t: string) => t.toLowerCase()))];
+    if (uniqueTypes.length > 1 && content.includes("save") && content.includes("load")) {
+      issues++;
+      const rel = file.replace(repoRoot, "").replace(/\\/g, "/");
+      console.log(`  \x1b[33mWARN\x1b[0m ${rel} — multiple dict types at save/load boundary: ${uniqueTypes.join(", ")}`);
+    }
+  }
+
+  // Entrypoint closure: check main.py imports
+  const mainPy = resolve(repoRoot, "main.py");
+  if (existsSync(mainPy)) {
+    const content = readFileSync(mainPy, "utf8");
+    const imports = content.match(/from\s+\S+\s+import\s+.+/g) ?? [];
+    console.log(`  \x1b[36mINFO\x1b[0m main.py imports ${imports.length} modules`);
+  }
+
+  if (issues === 0) {
+    console.log("  \x1b[32mPASS\x1b[0m No runtime contract issues detected.");
+  } else {
+    console.log(`\n  \x1b[33m${issues} warning(s)\x1b[0m — review save/load boundaries`);
   }
 }

@@ -25,8 +25,13 @@ The following is the authoritative list of changed files for CC-2 verification. 
 - **Test Case**: Does the test file exist and import the source file?
 - **Test Result**: Re-execute the test command — does it pass?
 - **Connected**: If a downstream consumer is listed, verify the import chain exists.
+- **Runtime**: Verify the implementation is actually consumed at runtime, not just instantiated:
+  - ✅ consumed: the class/function is called in the actual execution path (game loop, main entry, request handler)
+  - ⚠️ instantiated only: created but `.update()`, `.run()`, or equivalent is never called
+  - ❌ unwired: exists in source but no runtime consumer imports or calls it
+  - **Phase-aware judgment**: If the WB does NOT have `integration_owner: true` in the work breakdown, then `integration-gap` is a **warning only** — record it in the verdict but do NOT use it as a reject reason. Runtime consumers are expected to appear later when the convergence point WB (e.g. the main game loop, the app entry point) is implemented. Only reject for `integration-gap` when auditing a WB that IS the `integration_owner`.
 4. Verify each done-criteria item in order against the RTM rows:
-- CQ: `npx eslint <file>` per changed file + `npx tsc --noEmit`
+- CQ: Read `.claude/quorum/config.json` → `quality_rules.presets[]`. Find presets whose `detect` file exists in the project root. Run only those presets' `checks[]`. If no preset matches, skip CQ. Do NOT run npm/npx/cargo commands unless the matching preset specifies them.
 - T: Re-execute evidence test commands directly + verify direct tests exist per RTM row
 - CC: RTM rows must match the actual changed files. Use the pre-computed diff scope in the "Pre-computed Diff Scope (CC-2)" section above — do NOT run your own `git diff`. Files in that list but not in RTM (or vice versa) trigger `scope-mismatch`
 - CL: Cross-layer contracts documented (BE→FE fields, interface consumers — check RTM Connected column)

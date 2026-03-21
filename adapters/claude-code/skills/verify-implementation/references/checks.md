@@ -3,11 +3,9 @@
 ## Step 2: Code Quality (CQ)
 
 ```bash
-# CQ-1: Per-file eslint
-for file in <changed_files>; do npx eslint "$file"; done
-
-# CQ-2: Type check
-npx tsc --noEmit
+# CQ-1 + CQ-2: Read .claude/quorum/config.json → quality_rules.presets
+# Run per_file:true checks for each changed file, per_file:false checks once
+# Skip if no matching preset for this project type
 
 # CQ-4: No forbidden patterns in new code
 node ${CLAUDE_PLUGIN_ROOT}/core/tools/audit-scan.mjs type-safety
@@ -21,8 +19,8 @@ Record: PASS or FAIL with file:line for each failure.
 # T-1: Execute evidence test commands exactly as written
 <test_command_from_evidence>
 
-# T-3: Check for regressions in related scope
-npx vitest run <related_test_dirs>
+# T-3: Check for regressions in related scope (use test command from quality_rules.presets)
+<test_runner> <related_test_dirs>
 ```
 
 For T-2 (direct test exists): Grep for test files that import/reference changed modules.
@@ -73,7 +71,7 @@ Check: page loads, elements exist in DOM, no console errors, build succeeds.
 
 ## Step 8.5: Coverage Verification (CV)
 
-Requires `npm run test:coverage` to have been run.
+Requires test coverage to have been generated (e.g. `npm run test:coverage`, `pytest --cov`, etc.).
 
 ```bash
 # Per-file coverage via tool-runner

@@ -79,6 +79,7 @@ try {
     execSync(`git worktree remove --force "${worktreePath}"`, {
       cwd: REPO_ROOT,
       stdio: ["pipe", "pipe", "pipe"],
+      shell: true,
     });
     console.error(`[worktree-remove] Removed worktree: ${worktreePath}`);
   }
@@ -93,6 +94,7 @@ try {
     const log = execSync(`git log --oneline "main..${meta.branch}" 2>/dev/null`, {
       cwd: REPO_ROOT,
       encoding: "utf8",
+      shell: true,
     }).trim();
 
     if (!log) {
@@ -100,6 +102,7 @@ try {
       execSync(`git branch -d "${meta.branch}" 2>/dev/null`, {
         cwd: REPO_ROOT,
         stdio: ["pipe", "pipe", "pipe"],
+        shell: true,
       });
       console.error(`[worktree-remove] Cleaned up empty branch: ${meta.branch}`);
     } else {

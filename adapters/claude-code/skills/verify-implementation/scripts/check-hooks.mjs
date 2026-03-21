@@ -35,7 +35,7 @@ let failed = 0;
 for (const f of files) {
   const path = resolve(hooksDir, f);
   try {
-    execSync(`node --check "${path}"`, { stdio: "pipe" });
+    execSync(`node --check "${path}"`, { stdio: "pipe", shell: true });
     console.log(`  ✓ ${f}`);
   } catch {
     console.error(`  ✗ ${f}`);

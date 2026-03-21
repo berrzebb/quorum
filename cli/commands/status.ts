@@ -136,7 +136,7 @@ interface EvidencePath {
 
 interface EvidenceItem {
   title: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "infra_failure";
 }
 
 function findAllEvidence(repoRoot: string, watchFile: string): EvidencePath[] {
@@ -174,6 +174,7 @@ function parseEvidenceItems(content: string): EvidenceItem[] {
     let status: EvidenceItem["status"] = "pending";
     if (tag === "APPROVED" || tag === "합의완료") status = "approved";
     else if (tag === "CHANGES_REQUESTED" || tag === "계류") status = "rejected";
+    else if (tag === "INFRA_FAILURE") status = "infra_failure";
 
     items.push({ title, status });
   }

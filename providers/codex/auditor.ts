@@ -28,7 +28,17 @@ export class CodexAuditor implements Auditor {
   private cwd: string;
 
   constructor(config: CodexAuditorConfig = {}) {
-    this.bin = config.bin ?? process.env.CODEX_BIN ?? "codex";
+    // On Windows, prefer .cmd wrapper to prevent Git Bash msys-2.0.dll crash
+    let defaultBin = "codex";
+    if (process.platform === "win32") {
+      for (const ext of [".cmd", ".exe", ".bat"]) {
+        try {
+          const r = spawnSync("where", [`codex${ext}`], { encoding: "utf8", timeout: 3000 });
+          if (r.status === 0) { defaultBin = r.stdout.trim().split("\n")[0]!; break; }
+        } catch { /* skip */ }
+      }
+    }
+    this.bin = config.bin ?? process.env.CODEX_BIN ?? defaultBin;
     this.model = config.model ?? process.env.CODEX_MODEL ?? "codex";
     this.timeout = config.timeout ?? 120_000;
     this.cwd = config.cwd ?? process.cwd();
@@ -38,11 +48,14 @@ export class CodexAuditor implements Auditor {
     const start = Date.now();
     const prompt = buildCodexPrompt(request);
 
-    const result = spawnSync(this.bin, ["exec", prompt], {
+    // Pass prompt via stdin (not argv) to avoid shell interpretation risk on Windows .cmd wrappers
+    const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(this.bin);
+    const result = spawnSync(this.bin, ["exec", "-"], {
+      input: prompt,
       encoding: "utf8",
       cwd: this.cwd,
       timeout: this.timeout,
-      shell: process.platform === "win32",
+      shell: needsShell,
       env: {
         ...process.env,
         CODEX_MODEL: this.model,
@@ -54,9 +67,9 @@ export class CodexAuditor implements Auditor {
 
     if (result.error || result.status !== 0) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
-        summary: `Codex exec failed: ${result.stderr?.slice(0, 200) ?? result.error?.message ?? "unknown"}`,
+        summary: `Codex exec failed (exit ${result.status}): ${result.stderr?.slice(0, 200) ?? result.error?.message ?? "unknown"}`,
         raw: raw || result.stderr || "",
         duration,
       };
@@ -67,9 +80,11 @@ export class CodexAuditor implements Auditor {
 
   async available(): Promise<boolean> {
     try {
+      const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(this.bin);
       const result = spawnSync(this.bin, ["--version"], {
         encoding: "utf8",
         timeout: 5000,
+        shell: needsShell,
       });
       return result.status === 0;
     } catch {
@@ -93,7 +108,7 @@ ${request.files.map((f) => `- ${f}`).join("\n")}
 
 Respond with ONLY a JSON object:
 {
-  "verdict": "approved" | "changes_requested",
+  "verdict": "approved" | "changes_requested" | "infra_failure",
   "codes": ["rejection-code-if-any"],
   "summary": "your analysis"
 }`;
@@ -106,7 +121,7 @@ function parseCodexResponse(raw: string, duration: number): AuditResult {
 
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       summary: parsed.summary ?? "",
       raw,

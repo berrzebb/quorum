@@ -92,10 +92,19 @@ export class CodexProvider implements QuorumProvider {
 
   static isAvailable(): boolean {
     try {
-      const bin = process.env.CODEX_BIN ?? "codex";
+      // Use resolveBinary logic: on Windows, prefer .cmd/.exe over extensionless POSIX scripts
+      let bin = process.env.CODEX_BIN ?? "codex";
+      if (process.platform === "win32" && !bin.includes(".")) {
+        // Check for .cmd wrapper first (prevents Git Bash msys-2.0.dll crash)
+        for (const ext of [".cmd", ".exe", ".bat"]) {
+          const candidate = bin + ext;
+          try { const r = spawnSync("where", [candidate], { encoding: "utf8", timeout: 3000 }); if (r.status === 0) { bin = r.stdout.trim().split("\n")[0]; break; } } catch { /* skip */ }
+        }
+      }
       const result = spawnSync(bin, ["--version"], {
         encoding: "utf8",
         timeout: 5000,
+        shell: process.platform === "win32",
       });
       return result.status === 0;
     } catch {

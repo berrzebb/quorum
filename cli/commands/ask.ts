@@ -6,19 +6,43 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { extname, join, isAbsolute, delimiter } from "node:path";
 
-const PROVIDER_BINS: Record<string, { bin: string; args: (prompt: string) => string[] }> = {
+/** Resolve binary: on Windows, prefer .cmd/.exe/.bat over extensionless POSIX scripts. */
+function resolveWinBinary(command: string, envVar?: string): string {
+  const override = envVar ? process.env[envVar] : undefined;
+  if (override) return override;
+  if (process.platform !== "win32") return command;
+
+  const exts = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").map(e => e.trim().toLowerCase()).filter(Boolean);
+  const dirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const candidate = join(dir, `${command}${ext}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return command;
+}
+
+// stdin: true means prompt is passed via stdin (not argv) to avoid shell interpretation
+const PROVIDER_BINS: Record<string, { bin: string; args: () => string[]; stdin: boolean }> = {
   codex: {
-    bin: "codex",
-    args: (prompt) => ["exec", prompt],
+    bin: resolveWinBinary("codex", "CODEX_BIN"),
+    args: () => ["exec", "-"],
+    stdin: true,
   },
   claude: {
-    bin: "claude",
-    args: (prompt) => ["-p", prompt],
+    bin: resolveWinBinary("claude"),
+    args: () => ["-p", "-"],
+    stdin: true,
   },
   gemini: {
-    bin: "gemini",
-    args: (prompt) => ["-p", prompt],
+    bin: resolveWinBinary("gemini"),
+    args: () => ["-p", "-"],
+    stdin: true,
   },
 };
 
@@ -54,11 +78,14 @@ export async function run(args: string[]): Promise<void> {
 
   console.log(`\x1b[2m[quorum] Asking ${provider}...\x1b[0m\n`);
 
-  const result = spawnSync(config.bin, config.args(prompt), {
-    stdio: "inherit",
+  // Prompt is passed via stdin to avoid shell interpretation risk on .cmd wrappers
+  const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(config.bin);
+  const result = spawnSync(config.bin, config.args(), {
+    input: config.stdin ? prompt : undefined,
+    stdio: config.stdin ? ["pipe", "inherit", "inherit"] : "inherit",
     cwd: process.cwd(),
     env: { ...process.env },
-    shell: process.platform === "win32",
+    shell: needsShell,
   });
 
   if (result.error) {
