@@ -44,9 +44,9 @@ export class ClaudeAuditor implements Auditor {
 
     if (result.error || result.status !== 0) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
-        summary: `Claude CLI failed: ${result.stderr?.slice(0, 200) ?? result.error?.message ?? "unknown"}`,
+        summary: `Claude CLI failed (exit ${result.status}): ${result.stderr?.slice(0, 200) ?? result.error?.message ?? "unknown"}`,
         raw: raw || result.stderr || "",
         duration,
       };
@@ -69,7 +69,7 @@ export class ClaudeAuditor implements Auditor {
 }
 
 function formatPrompt(request: AuditRequest): string {
-  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with ONLY a JSON object:\n{"verdict": "approved" | "changes_requested", "codes": [], "summary": "..."}`;
+  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with ONLY a JSON object:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
 }
 
 function parseResponse(raw: string, duration: number): AuditResult {
@@ -78,7 +78,7 @@ function parseResponse(raw: string, duration: number): AuditResult {
     if (!jsonMatch) throw new Error("No JSON");
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       summary: parsed.summary ?? "",
       raw,

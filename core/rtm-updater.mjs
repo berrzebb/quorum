@@ -111,7 +111,7 @@ function scanAndUpdate(dir, repoRoot, results) {
       const fullPath = resolve(dir, entry.name);
       if (entry.isDirectory()) {
         scanAndUpdate(fullPath, repoRoot, results);
-      } else if (entry.name.startsWith("rtm") && entry.name.endsWith(".md")) {
+      } else if (entry.name.toLowerCase().startsWith("rtm") && entry.name.toLowerCase().endsWith(".md")) {
         const result = updateRtmStatus(fullPath, repoRoot);
         if (result.updated > 0) {
           results.push({ path: fullPath, ...result });

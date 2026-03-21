@@ -32,7 +32,7 @@ export class OpenAIAuditor implements Auditor {
 
     if (!this.apiKey) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
         summary: "OPENAI_API_KEY not set",
         raw: "",
@@ -69,7 +69,7 @@ export class OpenAIAuditor implements Auditor {
       if (!response.ok) {
         const err = await response.text();
         return {
-          verdict: "changes_requested",
+          verdict: "infra_failure",
           codes: ["auditor-error"],
           summary: `OpenAI API ${response.status}: ${err.slice(0, 200)}`,
           raw: err,
@@ -82,7 +82,7 @@ export class OpenAIAuditor implements Auditor {
       return parseResponse(raw, Date.now() - start);
     } catch (err) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
         summary: `OpenAI API error: ${(err as Error).message}`,
         raw: "",
@@ -97,14 +97,14 @@ export class OpenAIAuditor implements Auditor {
 }
 
 function formatPrompt(request: AuditRequest): string {
-  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON:\n{"verdict": "approved" | "changes_requested", "codes": [], "summary": "..."}`;
+  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
 }
 
 function parseResponse(raw: string, duration: number): AuditResult {
   try {
     const parsed = JSON.parse(raw);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       summary: parsed.summary ?? "",
       raw,

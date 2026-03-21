@@ -8,6 +8,64 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+
+interface QualityPreset {
+  detect: string;
+  root: string;
+  label: string;
+  precedence: number;
+  checks: Array<{ id: string; label: string; command: string; per_file: boolean; optional?: boolean }>;
+  artifacts: string[];
+  result_normalization: string;
+}
+
+const ALL_PRESETS: QualityPreset[] = [
+  {
+    detect: "tsconfig.json", root: ".", label: "typescript", precedence: 10,
+    checks: [
+      { id: "CQ-1", label: "eslint", command: "npx eslint --no-error-on-unmatched-pattern \"{file}\"", per_file: true },
+      { id: "CQ-2", label: "tsc", command: "npx tsc --noEmit", per_file: false },
+      { id: "T-1", label: "test", command: "npm test -- --run", per_file: false },
+    ],
+    artifacts: ["node_modules"], result_normalization: "exit_code",
+  },
+  {
+    detect: "pyproject.toml", root: ".", label: "python", precedence: 10,
+    checks: [
+      { id: "CQ-1", label: "ruff", command: "ruff check \"{file}\"", per_file: true, optional: true },
+      { id: "T-1", label: "pytest", command: "python -m pytest -x -q", per_file: false },
+    ],
+    artifacts: ["__pycache__", ".pytest_cache"], result_normalization: "exit_code",
+  },
+  {
+    detect: "setup.py", root: ".", label: "python-legacy", precedence: 20,
+    checks: [
+      { id: "T-1", label: "pytest", command: "python -m pytest -x -q", per_file: false },
+    ],
+    artifacts: ["__pycache__"], result_normalization: "exit_code",
+  },
+  {
+    detect: "Cargo.toml", root: ".", label: "rust", precedence: 10,
+    checks: [
+      { id: "CQ-1", label: "cargo-check", command: "cargo check", per_file: false },
+      { id: "CQ-2", label: "clippy", command: "cargo clippy -- -D warnings", per_file: false },
+      { id: "T-1", label: "cargo-test", command: "cargo test", per_file: false },
+    ],
+    artifacts: ["target"], result_normalization: "exit_code",
+  },
+  {
+    detect: "go.mod", root: ".", label: "go", precedence: 10,
+    checks: [
+      { id: "CQ-1", label: "go-vet", command: "go vet ./...", per_file: false },
+      { id: "T-1", label: "go-test", command: "go test ./...", per_file: false },
+    ],
+    artifacts: [], result_normalization: "exit_code",
+  },
+];
+
+function detectPresets(repoRoot: string): QualityPreset[] {
+  return ALL_PRESETS.filter(p => existsSync(resolve(repoRoot, p.detect)));
+}
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,10 +109,10 @@ export async function run(args: string[]): Promise<void> {
         pending_tag: "[CHANGES_REQUESTED]",
         planning_dirs: ["docs/design"],
       },
-      quality_rules: [],
+      quality_rules: { presets: detectPresets(repoRoot), overrides: [] },
     };
     writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n");
-    steps.push({ label: "Generated config.json", ok: true });
+    steps.push({ label: `Generated config.json (detected: ${defaultConfig.quality_rules.presets.map(p => p.label).join(", ") || "none"})`, ok: true });
   } else {
     steps.push({ label: "config.json exists", ok: true });
   }

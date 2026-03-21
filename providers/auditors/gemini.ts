@@ -31,7 +31,7 @@ export class GeminiAuditor implements Auditor {
 
     if (!this.apiKey) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
         summary: "GEMINI_API_KEY not set",
         raw: "",
@@ -61,7 +61,7 @@ export class GeminiAuditor implements Auditor {
       if (!response.ok) {
         const err = await response.text();
         return {
-          verdict: "changes_requested",
+          verdict: "infra_failure",
           codes: ["auditor-error"],
           summary: `Gemini API ${response.status}: ${err.slice(0, 200)}`,
           raw: err,
@@ -74,7 +74,7 @@ export class GeminiAuditor implements Auditor {
       return parseResponse(raw, Date.now() - start);
     } catch (err) {
       return {
-        verdict: "changes_requested",
+        verdict: "infra_failure",
         codes: ["auditor-error"],
         summary: `Gemini API error: ${(err as Error).message}`,
         raw: "",
@@ -89,7 +89,7 @@ export class GeminiAuditor implements Auditor {
 }
 
 function formatPrompt(request: AuditRequest): string {
-  return `You are a code auditor.\n\n${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON only:\n{"verdict": "approved" | "changes_requested", "codes": [], "summary": "..."}`;
+  return `You are a code auditor.\n\n${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON only:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
 }
 
 function parseResponse(raw: string, duration: number): AuditResult {
@@ -98,7 +98,7 @@ function parseResponse(raw: string, duration: number): AuditResult {
     if (!jsonMatch) throw new Error("No JSON");
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       summary: parsed.summary ?? "",
       raw,

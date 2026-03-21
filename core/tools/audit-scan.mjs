@@ -46,7 +46,7 @@ for (const key of targets) {
   if (!scan) { console.error(`Unknown category: ${key}`); continue; }
   console.log(`\n=== ${scan.label} ===`);
   try {
-    const result = execSync(scan.cmd, { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+    const result = execSync(scan.cmd, { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: true });
     console.log(result || "  (none found)");
   } catch {
     console.log("  (none found)");

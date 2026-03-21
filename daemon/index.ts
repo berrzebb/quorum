@@ -111,6 +111,14 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
         bootstrap: true,
       }));
     }
+    const infraFailures = (content.match(/\[INFRA_FAILURE\]/g) ?? []).length;
+    if (infraFailures > 0) {
+      bus.emit(createEvent("audit.verdict", "claude-code", {
+        verdict: "infra_failure",
+        count: infraFailures,
+        bootstrap: true,
+      }));
+    }
   }
 
   // 2. Audit lock — active audit
@@ -200,7 +208,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
 
         // Read evidence from this worktree
         let trackName = branch;
-        let evidenceStatus: "pending" | "approved" | "rejected" = "pending";
+        let evidenceStatus: "pending" | "approved" | "rejected" | "infra_failure" = "pending";
         const wtWatchPath = resolve(wtPath, config.watchFile);
         if (existsSync(wtWatchPath)) {
           const content = readFileSync(wtWatchPath, "utf8");
@@ -210,6 +218,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
             trackName = heading[2]!.trim();
             if (tag === "APPROVED") evidenceStatus = "approved";
             else if (tag === "CHANGES_REQUESTED") evidenceStatus = "rejected";
+            else if (tag === "INFRA_FAILURE") evidenceStatus = "infra_failure";
           }
         }
 
@@ -225,7 +234,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
         // Evidence event for this worktree
         if (evidenceStatus !== "pending") {
           bus.emit(createEvent("audit.verdict", "claude-code", {
-            verdict: evidenceStatus === "approved" ? "approved" : "changes_requested",
+            verdict: evidenceStatus === "approved" ? "approved" : evidenceStatus === "infra_failure" ? "infra_failure" : "changes_requested",
             track: trackName,
             worktree: wtPath,
             bootstrap: true,

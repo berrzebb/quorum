@@ -92,4 +92,4 @@ try {
     const total = results.reduce((s, r) => s + r.updated, 0);
     process.stderr.write(`[quorum] RTM auto-updated: ${total} row(s) across ${results.length} file(s)\n`);
   }
-} catch { /* rtm-updater non-critical */ }
+} catch (e) { process.stderr.write(`[quorum] RTM update warning: ${e.message}\n`); }

@@ -2,7 +2,6 @@
 name: implementer
 description: Headless worker for quorum — receives task + context, implements code, runs tests, submits evidence to watch file, handles audit corrections. Use when the orchestrator needs to delegate a coding task to a worker agent.
 model: claude-sonnet-4-6
-isolation: worktree
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 skills:
   - quorum:verify
@@ -65,7 +64,7 @@ Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
 
 Check every done-criteria item. Key checks:
 
-- **CQ**: `npx eslint <changed-file>` per file + `npx tsc --noEmit`
+- **CQ**: Read `.claude/quorum/config.json` → `quality_rules.presets[]`. Find presets whose `detect` file exists. Run their `checks[]` (`per_file: true` per changed file, `per_file: false` once). If no preset matches, skip CQ.
 - **T**: Run test commands, verify direct tests exist for each claim
 - **CC**: Changed Files match the diff scope (use evidence diff basis commit range if available, otherwise `git diff --name-only`)
 - **CL**: If BE change → document what FE needs. If new interface → verify consumer exists.
@@ -86,7 +85,9 @@ After fixing each target, update the row:
 
 The updated RTM rows become the **evidence** — the auditor verifies each row.
 
-### 5. Submit Evidence
+### 5. Submit Evidence (MANDATORY — no exceptions)
+
+**Evidence submission is required regardless of Tier, audit availability, or infra status.** This is the no-abandon policy: every implementation must leave a traceable record. Skipping evidence is a protocol violation equal to committing without tests.
 
 **Worktree isolation**: Write evidence to the watch file **in your worktree** (not the main repo). The path is the same (`consensus.watch_file` from config), but resolved relative to the worktree root. This prevents parallel workers from overwriting each other's evidence.
 
@@ -101,15 +102,31 @@ Key rules:
 
 ### 6. Wait for Audit Result
 
-After submitting evidence, **WAIT** for the auditor to write a verdict. Do NOT proceed to commit.
+After submitting evidence, wait for the auditor verdict using a **two-phase timeout**.
 
-1. Check if `.claude/audit.lock` exists → audit is in progress, wait
-2. When audit completes, read the respond file (from config `plugin.respond_file` relative to watch_file dir)
-3. Parse the verdict:
-   - **[agree_tag]** → proceed to step 6 (WIP commit)
-   - **[pending_tag]** → read rejection codes → fix → resubmit (return to step 3). **You MUST NOT exit with `[pending_tag]` active.** The correction loop continues until `[agree_tag]` or the orchestrator explicitly cancels via SendMessage.
+**Phase 1 — Soft timeout (2 min, 4 polls × 30s):**
+1. Poll for the respond file or `audit.lock` changes
+2. If `audit.lock` exists → audit is running, continue polling
+3. If respond file updated → parse verdict (see below)
+4. If no activity after 4 polls → enter Phase 2
 
-If the audit takes too long (> 5 minutes), check `audit.lock` liveness and report to orchestrator. Do NOT exit silently.
+**Phase 2 — Hard timeout (3 more min, 6 polls × 30s):**
+1. Log diagnostic: check `audit.lock` liveness, `audit-bg.log` last lines
+2. Continue polling for respond file
+3. If respond file updated → parse verdict
+4. If no response after 6 additional polls → **infra_failure** (see below)
+
+**Parse verdict:**
+- **[agree_tag]** → proceed to step 7 (WIP commit)
+- **[pending_tag]** → read rejection codes → fix → resubmit (return to step 3)
+- **[INFRA_FAILURE]** → same as hard timeout (see below)
+
+**On infra_failure (hard timeout OR `[INFRA_FAILURE]` verdict):**
+1. `git stash` all changes (preserves work without creating a result commit)
+2. Output the Completion Gate checklist marking audit as `🔴 infra_failure`
+3. Exit with status message: `INFRA_FAILURE: audit unreachable — work stashed, not committed`
+4. **Do NOT WIP commit** — infra_failure is NOT approval. It means no review happened.
+5. **Do NOT treat as approved** — the orchestrator must diagnose and re-trigger or manually review
 
 ### 7. WIP Commit (MANDATORY after [agree_tag])
 
@@ -127,11 +144,11 @@ If the audit takes too long (> 5 minutes), check `audit.lock` liveness and repor
 | # | Condition | Verification |
 |---|-----------|-------------|
 | 1 | Code changes exist | `git diff --name-only` shows target files |
-| 2 | CQ passed | eslint + tsc exit code 0 |
+| 2 | CQ passed | project-appropriate linter/type check exit code 0 |
 | 3 | Tests passed | test runner exit code 0 |
 | 4 | Evidence submitted | watch_file contains `[trigger_tag]` or auditor already responded |
 | 5 | Audit approved | respond_file contains `[agree_tag]` |
-| 6 | WIP committed | `git log -1 --oneline` shows WIP commit after evidence submission |
+| 6 | WIP committed | `git log -1 --oneline` shows WIP commit after `[agree_tag]` |
 
 Before exiting, run this self-check and output the checklist with ✅/❌ status for each row.
 
@@ -140,7 +157,7 @@ Before exiting, run this self-check and output the checklist with ✅/❌ status
 | Exit | Condition |
 |------|-----------|
 | ✅ Normal | All 6 conditions met |
-| ⏳ Blocked | Audit unresponsive > 5 min — report status to orchestrator with all completed steps, do NOT exit silently |
+| 🔴 Infra failure | Audit unreachable after 5 min — work stashed (not committed), orchestrator notified |
 | 🛑 Cancelled | Orchestrator explicitly sends cancellation via SendMessage |
 
 **Prohibited exits:**

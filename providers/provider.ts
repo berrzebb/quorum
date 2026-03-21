@@ -88,7 +88,7 @@ export interface AuditRequest {
 }
 
 export interface AuditResult {
-  verdict: "approved" | "changes_requested";
+  verdict: "approved" | "changes_requested" | "infra_failure";
   codes: string[];
   summary: string;
   raw: string;

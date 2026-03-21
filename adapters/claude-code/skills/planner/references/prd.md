@@ -59,6 +59,32 @@ Each scenario has a trigger, steps, and expected outcome.
 |----|-------|----------|-------------|--------|
 | NFR-1 | OR | Performance | Description | Threshold |
 
+### Core Invariant
+
+Behavioral conditions that must hold throughout the implementation. These are NOT features — they are constraints that define correctness.
+
+| Invariant | Related FR | Must Hold | Must Fail If |
+|-----------|-----------|-----------|--------------|
+| Example: Hold is once per turn | FR-17 | Second hold attempt returns None within same drop cycle | Second hold succeeds in same turn |
+
+Each invariant generates a test obligation: a test case that **directly asserts Must Fail If** — not just feature existence.
+
+### Integration Invariant
+
+Cross-WB conditions that must hold when modules are combined. These prevent "each module works alone but the product doesn't work" failures.
+
+| Category | Kind | Question | Must Hold | Must Fail If |
+|----------|------|----------|-----------|--------------|
+| Runtime Entry Closure | — | Are all PRD features reachable from the actual entry point? | Every feature is reachable via UI/CLI/API | Feature exists in code but unreachable from entry point |
+| Consumer Exists | — | Is every implemented class/function actually called at runtime? | Producer's public API is invoked in the consumer's execution path | Class instantiated but key methods never called |
+| State Transition Integrity | `state_transition` | Are state machines consistent across module boundaries? | State flags persist correctly when crossing WB boundaries | State reset/bypass occurs at integration seam |
+| Persistence Applied | `schema_contract` | Do saved values affect runtime with correct types? | Types match at save/load boundary (producer schema = consumer schema) | Save as dict[str,int], load expects dict[int,Action] → silent failure |
+| Persistence Applied | `identifier_normalization` | Are identifiers consistent across persistence/UI/routing? | Same normalized key used everywhere | "Sprint" in class, "sprint" in storage → lookup miss |
+| Consumer Exists | `state_machine` | Do all state machine transitions have both entry and exit paths? | key_down + key_up both wired in consumer | key_down called but key_up never called → stuck state |
+| Must-Fail-If-Unwired | — | Does an integration test fail if wiring is removed? | Removing the call site causes test failure | All tests pass even when producer is disconnected |
+
+**Integration owner**: The convergence point WB (the final integrator that consumes multiple upstream WBs) is responsible for wiring all producers. Mark this in the Work Breakdown with `integration_owner: true`.
+
 ## 5. Technical Considerations
 - System constraints and infrastructure dependencies
 - Known risks with mitigation strategies

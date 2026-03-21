@@ -27,7 +27,7 @@ export interface ConsensusConfig {
 
 export interface RoleOpinion {
   role: "advocate" | "devil";
-  verdict: "approved" | "changes_requested";
+  verdict: "approved" | "changes_requested" | "infra_failure";
   reasoning: string;
   codes: string[];
   confidence: number;
@@ -35,7 +35,7 @@ export interface RoleOpinion {
 
 export interface ConsensusVerdict {
   mode: "simple" | "deliberative";
-  finalVerdict: "approved" | "changes_requested";
+  finalVerdict: "approved" | "changes_requested" | "infra_failure";
   opinions: RoleOpinion[];
   judgeSummary: string;
   duration: number;
@@ -61,7 +61,7 @@ Be fair but look for reasons to APPROVE. If issues exist, assess whether they ar
 
 Respond with JSON:
 {
-  "verdict": "approved" | "changes_requested",
+  "verdict": "approved" | "changes_requested" | "infra_failure",
   "reasoning": "your analysis",
   "codes": ["rejection-code-if-any"],
   "confidence": 0.0-1.0
@@ -88,7 +88,7 @@ Be thorough. If the submission is genuinely solid, say so — but look hard.
 
 Respond with JSON:
 {
-  "verdict": "approved" | "changes_requested",
+  "verdict": "approved" | "changes_requested" | "infra_failure",
   "reasoning": "your analysis",
   "codes": ["rejection-code-if-any"],
   "confidence": 0.0-1.0
@@ -129,7 +129,7 @@ ${devilOpinion.codes.length > 0 ? `Codes: ${devilOpinion.codes.join(", ")}` : ""
 
 Respond with JSON:
 {
-  "verdict": "approved" | "changes_requested",
+  "verdict": "approved" | "changes_requested" | "infra_failure",
   "summary": "your final reasoning",
   "codes": ["final-rejection-codes-if-any"]
 }`,
@@ -145,7 +145,7 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
     const parsed = JSON.parse(jsonMatch[0]);
     return {
       role,
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       reasoning: parsed.reasoning ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
@@ -161,13 +161,13 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
   }
 }
 
-function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_requested"; summary: string; codes: string[] } {
+function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_requested" | "infra_failure"; summary: string; codes: string[] } {
   try {
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON found");
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : "changes_requested",
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       summary: parsed.summary ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
     };

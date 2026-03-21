@@ -90,4 +90,4 @@ try {
     const total = results.reduce((s, r) => s + r.updated, 0);
     console.error(`[quorum] RTM auto-updated: ${total} row(s)`);
   }
-} catch { /* non-critical */ }
+} catch (e) { console.error(`[quorum] RTM update warning: ${e.message}`); }
