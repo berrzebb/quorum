@@ -76,6 +76,10 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "Squash-merge worktree branch",
     handler: () => import("./commands/merge.js").then((m) => m.run(args)),
   },
+  doctor: {
+    description: "Diagnose issues that could trap agents",
+    handler: () => import("./commands/doctor.js").then((m) => m.run(args)),
+  },
   migrate: {
     description: "Import consensus-loop data into quorum",
     handler: () => import("./commands/migrate.js").then((m) => m.run(args)),

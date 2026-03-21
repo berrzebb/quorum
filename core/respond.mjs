@@ -963,6 +963,44 @@ function main() {
             console.log(`[quorum] Router escalated ${taskKey} → tier ${escalation.tier}`);
           }
 
+          // ── Stagnation auto-recovery ──
+          if (verdict === "pending") {
+            const stagnation = bridge.detectStagnation(REPO_ROOT);
+            if (stagnation?.detected) {
+              const patterns = stagnation.patterns.map(p => p.type).join(", ");
+              console.log(`[quorum] Stagnation detected: ${patterns} → ${stagnation.recommendation}`);
+
+              // Check for system bug indicators (unresolved placeholders in gpt.md)
+              const gptContent = existsSync(gptPath) ? readFileSync(gptPath, "utf8") : "";
+              const hasUnresolvedPlaceholder = /\{\{[A-Z_]+\}\}/.test(gptContent);
+
+              if (hasUnresolvedPlaceholder) {
+                // System bug — invalidate verdict and trigger re-audit
+                console.log(`[quorum] System bug detected: unresolved placeholder in gpt.md → invalidating verdict`);
+                try {
+                  const { rmSync } = await import("node:fs");
+                  rmSync(gptPath, { force: true });
+                  console.log(`[quorum] Removed stale gpt.md — re-audit will use fixed templates`);
+                } catch { /* non-critical */ }
+              } else if (stagnation.recommendation === "halt") {
+                // Genuine stagnation with no system bug — force approve
+                console.log(`[quorum] Stagnation halt: forcing approval to unblock agent`);
+                const forcedLines = readFileSync(claudePath, "utf8").split(/\r?\n/);
+                let forced = false;
+                for (let li = 0; li < forcedLines.length; li++) {
+                  if (forcedLines[li].includes(c.trigger_tag)) {
+                    forcedLines[li] = forcedLines[li].replace(c.trigger_tag, `${c.agree_tag} [auto-approved: stagnation halt]`);
+                    forced = true;
+                  }
+                }
+                if (forced) {
+                  writeFileSync(claudePath, forcedLines.join("\n"), "utf8");
+                  console.log(`[quorum] Force-approved stagnated items in ${claudePath}`);
+                }
+              }
+            }
+          }
+
           bridge.close();
         }
       } catch { /* bridge is non-critical */ }

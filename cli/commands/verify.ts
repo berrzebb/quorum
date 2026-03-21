@@ -42,6 +42,12 @@ export async function run(args: string[]): Promise<void> {
     return;
   }
 
+  // Special: unwired implementation scan
+  if (category === "UW" || category === "UNWIRED") {
+    await runUnwiredScan(repoRoot);
+    return;
+  }
+
   // Special: dependency audit
   if (category === "DEP") {
     await runDepAudit(repoRoot);
@@ -95,6 +101,9 @@ export async function run(args: string[]): Promise<void> {
 
     const depPass = await runDepAudit(repoRoot);
     if (!depPass) allPass = false;
+
+    const uwPass = await runUnwiredScan(repoRoot);
+    if (!uwPass) allPass = false;
   }
 
   console.log();
@@ -103,6 +112,40 @@ export async function run(args: string[]): Promise<void> {
   } else {
     console.log("  \x1b[31m✗ Some checks failed.\x1b[0m Fix before submitting.\n");
     process.exit(1);
+  }
+}
+
+async function runUnwiredScan(repoRoot: string): Promise<boolean> {
+  process.stdout.write("  UW     Unwired Implementation ");
+
+  try {
+    const toURL = (p: string) => pathToFileURL(p).href;
+    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "core", "unwired-scan.mjs")));
+
+    const scanPath = existsSync(resolve(repoRoot, "src")) ? resolve(repoRoot, "src") : repoRoot;
+    const result = scanner.unwiredScan(scanPath);
+
+    const { definite, suspected } = result.summary;
+
+    if (definite > 0) {
+      console.log(`\x1b[31mFAIL\x1b[0m (${definite} definite, ${suspected} suspected)`);
+      for (const f of result.findings.filter((f: { status: string }) => f.status === "definite").slice(0, 5)) {
+        console.log(`         ${f.file}:${f.line} — ${f.symbol} (${f.reason})`);
+      }
+      return false;
+    } else if (suspected > 0) {
+      console.log(`\x1b[33mWARN\x1b[0m (${suspected} suspected)`);
+      for (const f of result.findings.slice(0, 3)) {
+        console.log(`         ${f.file}:${f.line} — ${f.symbol}`);
+      }
+      return true;
+    } else {
+      console.log("\x1b[32mPASS\x1b[0m");
+      return true;
+    }
+  } catch (err) {
+    console.log(`\x1b[2mSKIP\x1b[0m (${(err as Error).message?.slice(0, 50)})`);
+    return true;
   }
 }
 

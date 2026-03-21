@@ -118,12 +118,34 @@ function statusIcon(status: TaskItem["status"]): string {
 
 function loadRtmStatus(repoRoot: string): Map<string, TaskItem["status"]> {
   const status = new Map<string, TaskItem["status"]>();
-  const searchDirs = [resolve(repoRoot, "docs"), resolve(repoRoot, "plans")];
 
+  // Main repo
+  const searchDirs = [resolve(repoRoot, "docs"), resolve(repoRoot, "plans")];
   for (const dir of searchDirs) {
     if (!existsSync(dir)) continue;
     scanForRtm(dir, status);
   }
+
+  // Worktrees — scan for RTMs that may be newer than main
+  try {
+    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+    const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    let wtPath = "";
+    for (const line of wtOutput.split("\n")) {
+      if (line.startsWith("worktree ")) {
+        wtPath = line.slice(9).trim();
+      } else if (line.startsWith("branch ") && wtPath && wtPath !== repoRoot) {
+        for (const sub of ["docs", "plans"]) {
+          const wtDir = resolve(wtPath, sub);
+          if (existsSync(wtDir)) scanForRtm(wtDir, status);
+        }
+        wtPath = "";
+      }
+    }
+  } catch { /* git worktree not available */ }
 
   return status;
 }
