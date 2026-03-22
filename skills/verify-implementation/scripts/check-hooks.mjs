@@ -19,7 +19,7 @@ function findHooksDir() {
 
   // Fallback: git root
   try {
-    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
     const fromRoot = resolve(root, ".claude", "hooks", "quorum");
     if (existsSync(resolve(fromRoot, "index.mjs"))) return fromRoot;
   } catch { /* git unavailable */ }
@@ -35,7 +35,7 @@ let failed = 0;
 for (const f of files) {
   const path = resolve(hooksDir, f);
   try {
-    execSync(`node --check "${path}"`, { stdio: "pipe" });
+    execSync(`node --check "${path}"`, { stdio: "pipe", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true });
     console.log(`  ✓ ${f}`);
   } catch {
     console.error(`  ✗ ${f}`);

@@ -27,7 +27,7 @@ Key rules:
 - **Test Result** must be actual terminal output, not summaries
 - **Claim** must match the actual code changes
 - **Changed Files** paths must use backtick formatting
-- Every changed file must pass eslint individually
+- Every changed file must pass the per-file checks from `quality_rules.presets`
 - Use a single **Write** to the watch file (not sequential Edits)
 
 ## Step 2: Tag Lifecycle

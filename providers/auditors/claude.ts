@@ -37,6 +37,7 @@ export class ClaudeAuditor implements Auditor {
       cwd: this.cwd,
       timeout: this.timeout,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     const raw = result.stdout ?? "";
@@ -60,6 +61,7 @@ export class ClaudeAuditor implements Auditor {
       const result = spawnSync(this.bin, ["--version"], {
         encoding: "utf8",
         timeout: 5000,
+        windowsHide: true,
       });
       return result.status === 0;
     } catch {

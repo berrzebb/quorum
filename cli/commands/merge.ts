@@ -32,6 +32,7 @@ export async function run(args: string[]): Promise<void> {
   const check = spawnSync("git", ["rev-parse", "--verify", branch], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
   if (check.status !== 0) {
@@ -43,6 +44,7 @@ export async function run(args: string[]): Promise<void> {
   const result = spawnSync("git", ["merge", "--squash", branch], {
     encoding: "utf8",
     stdio: "inherit",
+    windowsHide: true,
   });
 
   if (result.status !== 0) {

@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 function resolveRepoRoot() {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     }).trim();
   } catch { /* fallback */ }
   const legacy = resolve(__dirname, "..", "..", "..");

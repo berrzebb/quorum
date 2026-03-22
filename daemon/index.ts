@@ -196,7 +196,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
 
     let wtPath = "";
@@ -250,7 +250,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const log = execFileSync("git", ["log", "--oneline", "-10"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
     for (const line of log.trim().split("\n").filter(Boolean)) {
       bus.emit(createEvent("evidence.sync", "claude-code", {

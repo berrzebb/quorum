@@ -158,6 +158,7 @@ function isSemgrepAvailable() {
       encoding: "utf8",
       timeout: 5000,
       shell: process.platform === "win32",
+      windowsHide: true,
     });
     return result.status === 0;
   } catch {
@@ -176,6 +177,7 @@ function runSemgrep(targetPath) {
       encoding: "utf8",
       timeout: 120000,
       shell: process.platform === "win32",
+      windowsHide: true,
     });
 
     const data = JSON.parse(result.stdout || "{}");
@@ -294,6 +296,7 @@ export function gitleaksScan(repoRoot) {
         encoding: "utf8",
         timeout: 60000,
         shell: process.platform === "win32",
+        windowsHide: true,
       });
       const findings = JSON.parse(result.stdout || "[]");
       return {
@@ -316,7 +319,7 @@ export function gitleaksScan(repoRoot) {
   const findings = [];
   try {
     const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     }).trim().split("\n").filter(Boolean);
 
     const SECRET_RE = /(?:AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{48}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----|eyJ[a-zA-Z0-9_-]{20,}\.eyJ)/;
@@ -358,6 +361,7 @@ export function duplicateScan(targetPath) {
       encoding: "utf8",
       timeout: 60000,
       shell: process.platform === "win32",
+      windowsHide: true,
     });
 
     const data = JSON.parse(result.stdout || "{}");
@@ -385,6 +389,7 @@ export function depAuditScan(repoRoot) {
       encoding: "utf8",
       timeout: 30000,
       shell: process.platform === "win32",
+      windowsHide: true,
     });
 
     const data = JSON.parse(result.stdout || "{}");
@@ -413,6 +418,7 @@ export function cycleScan(targetPath) {
     ], {
       encoding: "utf8",
       timeout: 30000,
+      windowsHide: true,
     });
 
     const data = JSON.parse(result.stdout || "{}");
@@ -439,6 +445,7 @@ function isToolAvailable(name) {
     const result = spawnSync(name, ["--version"], {
       encoding: "utf8", timeout: 5000,
       shell: process.platform === "win32",
+      windowsHide: true,
     });
     return result.status === 0;
   } catch {

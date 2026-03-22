@@ -105,10 +105,10 @@ export class ProcessMux extends EventEmitter {
 
     switch (this.backend) {
       case "tmux":
-        spawnSync("tmux", ["send-keys", "-t", session.name, input, "Enter"]);
+        spawnSync("tmux", ["send-keys", "-t", session.name, input, "Enter"], { windowsHide: true });
         break;
       case "psmux":
-        spawnSync("psmux", ["send", session.name, input]);
+        spawnSync("psmux", ["send", session.name, input], { windowsHide: true });
         break;
       case "raw": {
         const proc = this.processes.get(sessionId);
@@ -132,10 +132,10 @@ export class ProcessMux extends EventEmitter {
 
     switch (this.backend) {
       case "tmux":
-        spawnSync("tmux", ["kill-session", "-t", session.name]);
+        spawnSync("tmux", ["kill-session", "-t", session.name], { windowsHide: true });
         break;
       case "psmux":
-        spawnSync("psmux", ["kill", session.name]);
+        spawnSync("psmux", ["kill", session.name], { windowsHide: true });
         break;
       case "raw": {
         const proc = this.processes.get(sessionId);
@@ -180,6 +180,7 @@ export class ProcessMux extends EventEmitter {
     ], {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
+      windowsHide: true,
     });
 
     if (result.status !== 0) {
@@ -190,7 +191,7 @@ export class ProcessMux extends EventEmitter {
   private captureTmux(session: MuxSession, tailLines: number): CaptureResult {
     const result = spawnSync("tmux", [
       "capture-pane", "-t", session.name, "-p", "-S", `-${tailLines}`,
-    ], { encoding: "utf8" });
+    ], { encoding: "utf8", windowsHide: true });
 
     const output = result.stdout ?? "";
     return { output, lines: output.split("\n").length };
@@ -203,6 +204,7 @@ export class ProcessMux extends EventEmitter {
     const result = spawnSync("psmux", ["new", session.name, cmd], {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
+      windowsHide: true,
     });
 
     if (result.status !== 0) {
@@ -213,7 +215,7 @@ export class ProcessMux extends EventEmitter {
   private capturePsmux(session: MuxSession, tailLines: number): CaptureResult {
     const result = spawnSync("psmux", [
       "capture", session.name, "--tail", String(tailLines),
-    ], { encoding: "utf8" });
+    ], { encoding: "utf8", windowsHide: true });
 
     const output = result.stdout ?? "";
     return { output, lines: output.split("\n").length };
@@ -226,6 +228,7 @@ export class ProcessMux extends EventEmitter {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
 
     session.pid = proc.pid;
@@ -274,12 +277,12 @@ export class ProcessMux extends EventEmitter {
 function detectBackend(): MuxBackend {
   if (platform() === "win32") {
     try {
-      const result = spawnSync("psmux", ["--version"], { encoding: "utf8", timeout: 3000 });
+      const result = spawnSync("psmux", ["--version"], { encoding: "utf8", timeout: 3000, windowsHide: true });
       if (result.status === 0) return "psmux";
     } catch { /* not available */ }
   } else {
     try {
-      const result = spawnSync("tmux", ["-V"], { encoding: "utf8", timeout: 3000 });
+      const result = spawnSync("tmux", ["-V"], { encoding: "utf8", timeout: 3000, windowsHide: true });
       if (result.status === 0) return "tmux";
     } catch { /* not available */ }
   }
@@ -343,7 +346,7 @@ export async function ensureMuxBackend(): Promise<MuxBackend> {
 
   console.log(`\nInstalling ${info.name}...`);
   try {
-    execSync(info.install, { stdio: "inherit" });
+    execSync(info.install, { stdio: "inherit", windowsHide: true });
     console.log(`\x1b[32m✓ ${info.name} installed successfully.\x1b[0m\n`);
     return detectBackend();
   } catch {

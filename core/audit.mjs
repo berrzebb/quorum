@@ -360,7 +360,7 @@ function runTscLocally(root) {
   if (!existsSync(resolve(root, "tsconfig.json"))) return results.join("\n");
 
   const rootTsc = spawnSync("npx", ["tsc", "--noEmit"], {
-    cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: true,
+    cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
   });
   results.push(`**Root \`npx tsc --noEmit\`**: ${rootTsc.status === 0 ? "✅ 0 errors" : "❌ FAILED"}`);
   if (rootTsc.status !== 0) {
@@ -371,7 +371,7 @@ function runTscLocally(root) {
   const webTsconfig = resolve(root, "web", "tsconfig.json");
   if (existsSync(webTsconfig)) {
     const webTsc = spawnSync("npx", ["tsc", "--noEmit", "-p", "web/tsconfig.json"], {
-      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: true,
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     });
     results.push(`**Web \`npx tsc --noEmit -p web/tsconfig.json\`**: ${webTsc.status === 0 ? "✅ 0 errors" : "❌ FAILED"}`);
     if (webTsc.status !== 0) {
@@ -398,7 +398,7 @@ function runEslintLocally(files, root) {
     if (!existsSync(fullPath)) continue;
 
     const lint = spawnSync("npx", ["eslint", file, "--no-warn-ignored"], {
-      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, shell: true,
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     });
     if (lint.status !== 0) {
       allPassed = false;
@@ -428,7 +428,7 @@ function runTestsLocally(cmds, root) {
     const parts = cmd.split(/\s+/);
     const child = spawnSync(parts[0], parts.slice(1), {
       cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120000, shell: true,
+      timeout: 120000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     });
 
     const passed = child.status === 0;
@@ -462,17 +462,17 @@ function computeChangedFiles(markdown, root) {
     let useMergeBase = false;
     try {
       const mainBranch = (() => {
-        const r = spawnSync("git", ["rev-parse", "--verify", "main"], { cwd, stdio: "pipe" });
+        const r = spawnSync("git", ["rev-parse", "--verify", "main"], { cwd, stdio: "pipe", windowsHide: true });
         return r.status === 0 ? "main" : "master";
       })();
       const mergeBase = spawnSync("git", ["merge-base", "HEAD", mainBranch], {
-        cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+        cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
       });
       if (mergeBase.status === 0 && mergeBase.stdout.trim()) {
         const base = mergeBase.stdout.trim().slice(0, 10);
         const testCmd = `git diff --name-only ${base}..HEAD`;
         const testResult = spawnSync("git", ["diff", "--name-only", `${base}..HEAD`], {
-          cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+          cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
         });
         const testFiles = (testResult.stdout || "").trim().split("\n").filter(Boolean);
         if (testFiles.length > 0) {
@@ -485,7 +485,7 @@ function computeChangedFiles(markdown, root) {
     if (!useMergeBase) {
       try {
         const log = spawnSync("git", ["log", "--oneline", "-10", "--format=%H"], {
-          cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+          cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
         });
         if (log.status === 0) {
           const hashes = log.stdout.trim().split("\n").filter(Boolean);
@@ -499,10 +499,23 @@ function computeChangedFiles(markdown, root) {
   }
 
   const result = spawnSync("git", diffCmd.replace("git ", "").split(" "), {
-    cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+    cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
   });
 
-  const files = (result.status === 0 ? result.stdout : "").trim().split("\n").filter(Boolean);
+  let files = (result.status === 0 ? result.stdout : "").trim().split("\n").filter(Boolean);
+
+  // Fallback: staged new files (first commit in worktree — no unstaged diff, no merge-base)
+  if (files.length === 0) {
+    const staged = spawnSync("git", ["diff", "--cached", "--name-only"], {
+      cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+    });
+    const stagedFiles = (staged.status === 0 ? staged.stdout : "").trim().split("\n").filter(Boolean);
+    if (stagedFiles.length > 0) {
+      diffCmd = "git diff --cached --name-only";
+      files = stagedFiles;
+    }
+  }
+
   const fileList = files.length > 0
     ? files.map(f => `- \`${f}\``).join("\n")
     : "(no changed files detected)";
@@ -694,6 +707,7 @@ function runRespond(args) {
     cwd: respondCwd,
     stdio: "inherit",
     encoding: "utf8",
+    windowsHide: true,
   });
 
   if (result.error) {
@@ -713,6 +727,58 @@ function deriveAuditCwd(watchFile) {
   const worktreeMatch = watchFile.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
   if (worktreeMatch) return worktreeMatch[1];
   return REPO_ROOT;
+}
+
+/** Generate verdict from pre-verification results only (solo audit mode). */
+function generateSoloVerdict(preVerified) {
+  const failures = [];
+
+  // CQ-2 (tsc) failure
+  if (preVerified.includes("❌ FAILED") && preVerified.includes("CQ-2")) {
+    failures.push("[CQ-2] TypeScript compilation failed");
+  }
+  // CQ-1 (eslint) failure
+  if (preVerified.includes("❌") && preVerified.includes("CQ-1")) {
+    failures.push("[CQ-1] ESLint errors detected");
+  }
+  // T-1 (test) failure
+  if (preVerified.includes("❌ FAIL") && preVerified.includes("T-1")) {
+    failures.push("[T-1] Test failures detected");
+  }
+  // CC-2 (scope) empty
+  if (preVerified.includes("(no changed files detected)")) {
+    failures.push("[CC-2] No changed files in scope");
+  }
+
+  if (failures.length === 0) {
+    return [
+      `## [APPROVED]`,
+      ``,
+      `### Audit Mode`,
+      `Solo (pre-verification only — no external model)`,
+      ``,
+      `### Pre-Verified Results`,
+      preVerified,
+      ``,
+      `### Final Verdict`,
+      `- Status: approved (all mechanical checks passed)`,
+      `- Mode: solo — CL/S/I/CV not evaluated`,
+      `- Note: security and architecture review skipped`,
+    ].join("\n");
+  }
+
+  return [
+    `## [CHANGES_REQUESTED]`,
+    ``,
+    `### Audit Mode`,
+    `Solo (pre-verification only — no external model)`,
+    ``,
+    `### Failures`,
+    ...failures.map(f => `- ${f}`),
+    ``,
+    `### Pre-Verified Results`,
+    preVerified,
+  ].join("\n");
 }
 
 async function main() {
@@ -758,6 +824,17 @@ async function main() {
   const preVerified = runPreVerification(claudeMd, auditCwd);
   const promotionHint = loadPromotionHint();
   const diffScope = computeChangedFiles(claudeMd, auditCwd);
+  // Solo audit mode: skip external model, use pre-verification results only
+  const auditMode = cfg.consensus?.audit_mode || "external";
+  if (auditMode === "solo") {
+    console.log("[audit] Solo mode — generating verdict from pre-verification only");
+    const verdict = generateSoloVerdict(preVerified);
+    writeFileSync(gptPath, verdict, "utf8");
+    runRespond(args);
+    stampAuditCompleted(gptPath);
+    return;
+  }
+
   let prompt = buildPrompt(scopeText, promotionHint, preVerified, diffScope);
 
   // Guard: truncate prompt if too large — prevents Codex STATUS_HEAP_CORRUPTION crash
@@ -806,6 +883,16 @@ async function main() {
   const { threadId, exitCode } = await streamCodexOutput(child, args.json);
 
   if (exitCode !== 0) {
+    // Auto mode: fall back to solo verdict instead of infra_failure
+    if (auditMode === "auto") {
+      console.error("[audit] External auditor failed (exit " + exitCode + ") — falling back to solo mode");
+      const verdict = generateSoloVerdict(preVerified);
+      writeFileSync(gptPath, verdict, "utf8");
+      runRespond(args);
+      stampAuditCompleted(gptPath);
+      return;
+    }
+
     // Do NOT call process.exit() here — it skips .finally() lock cleanup.
     // Instead, write an infra_failure verdict so the worker can proceed.
     const failureVerdict = [

@@ -86,6 +86,7 @@ export async function run(args: string[]): Promise<void> {
     cwd: process.cwd(),
     env: { ...process.env },
     shell: needsShell,
+    windowsHide: true,
   });
 
   if (result.error) {

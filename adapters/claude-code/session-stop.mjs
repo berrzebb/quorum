@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // cwd-based git resolution (worktree-aware) — legacy layout as fallback
 function resolveRepoRoot() {
   try {
-    const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
     if (r.status === 0) return r.stdout.trim();
   } catch { /* git unavailable */ }
   const legacy = resolve(__dirname, "..", "..", "..");
@@ -38,7 +38,7 @@ const handoffFile = cfg.plugin?.handoff_file ?? ".claude/session-handoff.md";
 /** Run git with args array — no shell interpolation, no injection. */
 function git(args, cwd) {
   try {
-    const r = spawnSync("git", args, { cwd: cwd ?? REPO_ROOT, encoding: "utf8", stdio: "pipe" });
+    const r = spawnSync("git", args, { cwd: cwd ?? REPO_ROOT, encoding: "utf8", stdio: "pipe", windowsHide: true });
     return r.status === 0 ? (r.stdout || "").trim() : null;
   } catch {
     return null;

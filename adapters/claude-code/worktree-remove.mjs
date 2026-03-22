@@ -36,7 +36,7 @@ const worktreeName = basename(worktreePath);
 let REPO_ROOT;
 try {
   // WorktreeRemove fires from main session, so cwd is the main repo
-  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -79,7 +79,7 @@ try {
     execSync(`git worktree remove --force "${worktreePath}"`, {
       cwd: REPO_ROOT,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: true,
+      shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     });
     console.error(`[worktree-remove] Removed worktree: ${worktreePath}`);
   }
@@ -94,7 +94,7 @@ try {
     const log = execSync(`git log --oneline "main..${meta.branch}" 2>/dev/null`, {
       cwd: REPO_ROOT,
       encoding: "utf8",
-      shell: true,
+      shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     }).trim();
 
     if (!log) {
@@ -102,7 +102,7 @@ try {
       execSync(`git branch -d "${meta.branch}" 2>/dev/null`, {
         cwd: REPO_ROOT,
         stdio: ["pipe", "pipe", "pipe"],
-        shell: true,
+        shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
       });
       console.error(`[worktree-remove] Cleaned up empty branch: ${meta.branch}`);
     } else {

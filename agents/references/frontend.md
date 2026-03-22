@@ -110,7 +110,7 @@ Use `Intl.NumberFormat` and `Intl.DateTimeFormat` for locale-aware formatting.
 - **Both locales** — every new key must exist in `ko.json` AND `en.json`
 - Use the bundled script to add keys:
   ```bash
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/add-locale-key.mjs" "key.path" "한국어 값" "English value"
+  node "${CLAUDE_PLUGIN_ROOT}/core/tools/add-locale-key.mjs" "key.path" "한국어 값" "English value"
   ```
 
 ### Key Naming Convention

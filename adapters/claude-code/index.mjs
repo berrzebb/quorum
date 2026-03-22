@@ -87,11 +87,11 @@ function validate_evidence_format(content) {
   // ── 간이 감사: git diff와 Changed Files 비교 ──
   if (/### Changed Files/.test(triggerSection)) {
     try {
-      const diffFiles = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8" })
+      const diffFiles = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
         .trim().split("\n").filter(Boolean);
       if (diffFiles.length === 0) {
         // staged 없으면 unstaged 확인
-        const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8" })
+        const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
           .trim().split("\n").filter(Boolean);
         if (unstaged.length > 0) {
           const filesSection = triggerSection.split(/### Changed Files/i)[1]?.split(/### /)[0] || "";
@@ -130,6 +130,7 @@ function run_script(absPath, args = []) {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     env: { ...process.env, FEEDBACK_LOOP_ACTIVE: "1" },
+    windowsHide: true,
   });
   if (result.error) { log(`ERROR: ${result.error.message}`); return null; }
   const err = (result.stderr || "").trim();
@@ -194,6 +195,7 @@ function run_audit(watchFilePath) {
       detached: true,
       stdio: ["ignore", logFd, logFd],
       env: { ...process.env, FEEDBACK_LOOP_ACTIVE: "1" },
+      windowsHide: true,
     });
   } catch (err) {
     closeSync(logFd);

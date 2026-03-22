@@ -11,7 +11,7 @@ import { execSync } from "child_process";
 
 function getRepoRoot() {
   try {
-    return execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+    return execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
   } catch {
     return process.cwd();
   }
@@ -46,7 +46,7 @@ for (const key of targets) {
   if (!scan) { console.error(`Unknown category: ${key}`); continue; }
   console.log(`\n=== ${scan.label} ===`);
   try {
-    const result = execSync(scan.cmd, { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: true });
+    const result = execSync(scan.cmd, { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true });
     console.log(result || "  (none found)");
   } catch {
     console.log("  (none found)");

@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function resolveRepoRoot() {
   try {
-    return execSync("git rev-parse --show-toplevel", { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execSync("git rev-parse --show-toplevel", { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
   } catch { /* git unavailable */ }
   const legacy = resolve(__dirname, "..", "..", "..");
   if (existsSync(resolve(legacy, ".git"))) return legacy;
@@ -118,7 +118,7 @@ if (existsSync(handoff)) {
 
 // ── 2. Recent git commits ───────────────────────────────────
 try {
-  const commits = execSync("git log --oneline -10", { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+  const commits = execSync("git log --oneline -10", { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
 } catch { /* git unavailable */ }
 

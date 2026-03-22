@@ -237,6 +237,7 @@ export function toolAuditScan(params) {
       cwd: process.cwd(),
       encoding: "utf8",
       timeout: 30000,
+      windowsHide: true,
     });
     return { text: output.trim() };
   } catch (err) {

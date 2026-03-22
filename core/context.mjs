@@ -37,6 +37,7 @@ function resolveRepoRoot() {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     }).trim();
   } catch { /* git not available or not in a repo */ }
 

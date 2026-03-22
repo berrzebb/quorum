@@ -132,7 +132,7 @@ export function getCommitMap(repoRoot, since) {
     const args = ["log", "--name-only", "--pretty=format:%H|%aI|%s"];
     if (since) args.push(`--since=${since}`);
     const output = execFileSync("git", args, {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
 
     const map = new Map(); // file → { hash, date, message }
@@ -239,7 +239,7 @@ export function getProgressFromGit(repoRoot, rtmPaths) {
   // Recent commits (last 10)
   try {
     const log = execFileSync("git", ["log", "--oneline", "-10"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
     progress.recentCommits = log.trim().split("\n").filter(Boolean);
   } catch { /* skip */ }

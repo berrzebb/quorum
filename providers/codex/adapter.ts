@@ -98,13 +98,14 @@ export class CodexProvider implements QuorumProvider {
         // Check for .cmd wrapper first (prevents Git Bash msys-2.0.dll crash)
         for (const ext of [".cmd", ".exe", ".bat"]) {
           const candidate = bin + ext;
-          try { const r = spawnSync("where", [candidate], { encoding: "utf8", timeout: 3000 }); if (r.status === 0) { bin = r.stdout.trim().split("\n")[0]; break; } } catch { /* skip */ }
+          try { const r = spawnSync("where", [candidate], { encoding: "utf8", timeout: 3000, windowsHide: true }); if (r.status === 0) { bin = r.stdout.trim().split("\n")[0]; break; } } catch { /* skip */ }
         }
       }
       const result = spawnSync(bin, ["--version"], {
         encoding: "utf8",
         timeout: 5000,
         shell: process.platform === "win32",
+        windowsHide: true,
       });
       return result.status === 0;
     } catch {

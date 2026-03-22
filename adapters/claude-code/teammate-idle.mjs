@@ -38,7 +38,7 @@ if (!teammateName.includes("implementer")) {
 // ── Resolve repo root ────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -49,7 +49,7 @@ try {
   const diff = execSync("git diff --name-only && git diff --cached --name-only", {
     cwd: REPO_ROOT,
     encoding: "utf8",
-    shell: true,
+    shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
   }).trim();
   if (diff) {
     changedFiles = [...new Set(diff.split("\n").filter(Boolean))];
@@ -92,7 +92,7 @@ if (activePresets.length > 0) {
               encoding: "utf8",
               stdio: ["pipe", "pipe", "pipe"],
               timeout: 30000,
-              shell: true,
+              shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
             });
           } catch (e) {
             if (check.optional) continue;
@@ -107,7 +107,7 @@ if (activePresets.length > 0) {
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
             timeout: 60000,
-            shell: true,
+            shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
           });
         } catch (e) {
           if (check.optional) continue;

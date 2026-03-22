@@ -180,7 +180,7 @@ function checkAuditStagnation(repoRoot, issues) {
 function checkZombieWorktrees(repoRoot, issues) {
   try {
     const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
 
     let wtPath = "";
@@ -256,7 +256,7 @@ function checkConfig(repoRoot, issues) {
 function checkWorktreeVerdicts(repoRoot, issues) {
   try {
     const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
 
     let wtPath = "";
