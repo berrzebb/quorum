@@ -265,7 +265,7 @@ function run_quality_checks(filePath) {
           const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
           const cmd = check.command.replace("{file}", envRef);
           const result = spawnSync(cmd, {
-            cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true,
+            cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
             env: { ...process.env, HOOK_TARGET_FILE: filePath },
           });
           const output = ((result.stdout || "") + (result.stderr || "")).trim();
@@ -288,7 +288,7 @@ function run_quality_checks(filePath) {
     const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
     const cmd = rule.command.replace("{file}", envRef);
     const result = spawnSync(cmd, {
-      cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true,
+      cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
       env: { ...process.env, HOOK_TARGET_FILE: filePath },
     });
     const output = ((result.stdout || "") + (result.stderr || "")).trim();
