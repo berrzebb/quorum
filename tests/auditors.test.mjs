@@ -150,17 +150,17 @@ describe("listAuditorProviders", () => {
 // ═══ 6. Error handling (no real API calls) ════════════════════════════
 
 describe("auditor error handling", () => {
-  it("OpenAI returns error without key", async () => {
+  it("OpenAI returns infra_failure without key", async () => {
     const auditor = new OpenAIAuditor({ apiKey: "" });
     const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
-    assert.equal(result.verdict, "changes_requested");
+    assert.equal(result.verdict, "infra_failure");
     assert.ok(result.codes.includes("auditor-error"));
   });
 
-  it("Gemini returns error without key", async () => {
+  it("Gemini returns infra_failure without key", async () => {
     const auditor = new GeminiAuditor({ apiKey: "" });
     const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
-    assert.equal(result.verdict, "changes_requested");
+    assert.equal(result.verdict, "infra_failure");
     assert.ok(result.codes.includes("auditor-error"));
   });
 });
