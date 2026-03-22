@@ -1,6 +1,6 @@
 ---
 name: cl-guide
-description: "Shortcut for /consensus-loop:guide — evidence writing guide"
+description: "Shortcut for /quorum:guide — evidence writing guide"
 ---
 
-Invoke the guide skill: `/consensus-loop:guide`
+Invoke the guide skill: `/quorum:guide`

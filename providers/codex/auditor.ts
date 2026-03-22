@@ -33,7 +33,7 @@ export class CodexAuditor implements Auditor {
     if (process.platform === "win32") {
       for (const ext of [".cmd", ".exe", ".bat"]) {
         try {
-          const r = spawnSync("where", [`codex${ext}`], { encoding: "utf8", timeout: 3000 });
+          const r = spawnSync("where", [`codex${ext}`], { encoding: "utf8", timeout: 3000, windowsHide: true });
           if (r.status === 0) { defaultBin = r.stdout.trim().split("\n")[0]!; break; }
         } catch { /* skip */ }
       }
@@ -60,6 +60,7 @@ export class CodexAuditor implements Auditor {
         ...process.env,
         CODEX_MODEL: this.model,
       },
+      windowsHide: true,
     });
 
     const raw = result.stdout ?? "";
@@ -85,6 +86,7 @@ export class CodexAuditor implements Auditor {
         encoding: "utf8",
         timeout: 5000,
         shell: needsShell,
+        windowsHide: true,
       });
       return result.status === 0;
     } catch {

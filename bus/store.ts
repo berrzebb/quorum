@@ -87,8 +87,8 @@ export class EventStore {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
-      event.payload.aggregateType as string ?? null,
-      event.payload.aggregateId as string ?? null,
+      (event.payload.aggregateType ?? null) as string | null,
+      (event.payload.aggregateId ?? null) as string | null,
       event.type,
       event.source,
       event.sessionId ?? null,
@@ -113,8 +113,8 @@ export class EventStore {
         const id = randomUUID();
         insert.run(
           id,
-          event.payload.aggregateType as string ?? null,
-          event.payload.aggregateId as string ?? null,
+          (event.payload.aggregateType ?? null) as string | null,
+          (event.payload.aggregateId ?? null) as string | null,
           event.type,
           event.source,
           event.sessionId ?? null,

@@ -100,7 +100,7 @@ export async function run(_args: string[]): Promise<void> {
   // ── Git progress ────────────────────────────
   try {
     const output = execFileSync("git", ["log", "--oneline", "-5"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
     const commits = output.trim().split("\n").filter(Boolean);
     if (commits.length > 0) {
@@ -193,6 +193,7 @@ function getActiveWorktrees(repoRoot: string): Worktree[] {
       cwd: repoRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     });
 
     const worktrees: Worktree[] = [];

@@ -113,7 +113,8 @@ export class AgentLoader {
   private addToCache(name: string, persona: AgentPersona): void {
     if (this.cache.has(name)) {
       // Move to end (most recent)
-      this.cacheOrder = this.cacheOrder.filter((n) => n !== name);
+      const idx = this.cacheOrder.indexOf(name);
+      if (idx !== -1) this.cacheOrder.splice(idx, 1);
     } else if (this.cacheOrder.length >= this.cacheSize) {
       // Evict least recently used
       const evict = this.cacheOrder.shift()!;

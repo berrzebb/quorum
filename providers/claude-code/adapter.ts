@@ -91,19 +91,32 @@ export class ClaudeCodeProvider implements QuorumProvider {
   // ── Internal watchers ─────────────────────────────
 
   private pollInbox(inboxPath: string): void {
+    let lastLineCount = 0;
     let lastSize = existsSync(inboxPath) ? statSync(inboxPath).size : 0;
+
+    // Initialize line count from existing file
+    if (lastSize > 0) {
+      try {
+        lastLineCount = readFileSync(inboxPath, "utf8").trim().split(/\r?\n/).length;
+      } catch { /* start from 0 */ }
+    }
 
     this.intervals.push(setInterval(() => {
       if (!existsSync(inboxPath) || !this.bus) return;
 
       const currentSize = statSync(inboxPath).size;
-      if (currentSize <= lastSize) return;
+      if (currentSize === lastSize) return;
 
-      // Read only new lines
+      // File was truncated/rewritten — reset tracking
+      if (currentSize < lastSize) {
+        lastLineCount = 0;
+      }
+
       const content = readFileSync(inboxPath, "utf8");
-      const lines = content.trim().split("\n");
-      const newLines = lines.slice(-Math.ceil((currentSize - lastSize) / 100));
+      const lines = content.trim().split(/\r?\n/).filter(Boolean);
 
+      // Process only lines after lastLineCount
+      const newLines = lines.slice(lastLineCount);
       for (const line of newLines) {
         try {
           const event = JSON.parse(line);
@@ -114,6 +127,7 @@ export class ClaudeCodeProvider implements QuorumProvider {
         }
       }
 
+      lastLineCount = lines.length;
       lastSize = currentSize;
     }, 1000));
   }
@@ -128,7 +142,8 @@ export class ClaudeCodeProvider implements QuorumProvider {
       lastMtime = curr.mtimeMs;
 
       const content = readFileSync(watchPath, "utf8");
-      const hasTrigger = content.includes("[REVIEW_NEEDED]");
+      const tag = this.config?.triggerTag ?? "[REVIEW_NEEDED]";
+      const hasTrigger = content.includes(tag);
 
       if (hasTrigger) {
         this.bus.emit(createEvent("audit.submit", "claude-code", {

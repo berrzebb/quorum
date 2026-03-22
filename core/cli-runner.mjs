@@ -9,13 +9,14 @@
  *
  * spawnResolved(binary, args, options)
  *   Wraps spawnSync with Windows-specific handling:
- *   - .cmd/.bat → shell: true
+ *   - .cmd/.bat → shell: COMSPEC, windowsHide: true
  *   - .ps1      → delegates to pwsh / powershell
+ *   - all paths → windowsHide: true on Windows (prevents console popups)
  */
 
 import { existsSync } from "node:fs";
 import { delimiter, extname, isAbsolute, join } from "node:path";
-import { spawnSync, spawn } from "node:child_process";
+import { spawnSync, spawn, execSync as nodeExecSync, execFileSync as nodeExecFileSync } from "node:child_process";
 
 function normalizeExecutablePath(value) {
   if (!value) {
@@ -112,10 +113,12 @@ function quoteForCmd(value) {
 }
 
 export function spawnResolved(binary, args, options = {}) {
+  const opts = process.platform === "win32" ? { ...options, windowsHide: true } : options;
+
   if (process.platform === "win32") {
     if (/\.(cmd|bat)$/i.test(binary)) {
       const line = [binary, ...args].map(quoteForCmd).join(" ");
-      return spawnSync(line, { ...options, shell: true });
+      return spawnSync(line, { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
     }
 
     if (/\.ps1$/i.test(binary)) {
@@ -123,20 +126,22 @@ export function spawnResolved(binary, args, options = {}) {
       return spawnSync(
         shell,
         ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", binary, ...args],
-        options,
+        opts,
       );
     }
   }
 
-  return spawnSync(binary, args, options);
+  return spawnSync(binary, args, opts);
 }
 
 /** Async spawn — Windows .cmd/.bat/.ps1 처리 포함, ChildProcess 반환. */
 export function spawnResolvedAsync(binary, args, options = {}) {
+  const opts = process.platform === "win32" ? { ...options, windowsHide: true } : options;
+
   if (process.platform === "win32") {
     if (/\.(cmd|bat)$/i.test(binary)) {
       const line = [binary, ...args].map(quoteForCmd).join(" ");
-      return spawn(line, [], { ...options, shell: true });
+      return spawn(line, [], { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
     }
 
     if (/\.ps1$/i.test(binary)) {
@@ -144,10 +149,41 @@ export function spawnResolvedAsync(binary, args, options = {}) {
       return spawn(
         shell,
         ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", binary, ...args],
-        options,
+        opts,
       );
     }
   }
 
-  return spawn(binary, args, options);
+  return spawn(binary, args, opts);
+}
+
+// ── Shell command helpers ─────────────────────
+
+/** Default shell options for Windows (COMSPEC) and Unix (true). */
+function shellOpts(options = {}) {
+  const base = process.platform === "win32"
+    ? { ...options, shell: process.env.COMSPEC || "cmd.exe", windowsHide: true }
+    : { ...options, shell: true };
+  return base;
+}
+
+/**
+ * execSync wrapper — runs a shell command string with cross-platform defaults.
+ * Automatically uses COMSPEC on Windows and sets windowsHide: true.
+ */
+export function execResolved(cmd, options = {}) {
+  return nodeExecSync(cmd, shellOpts(options));
+}
+
+/**
+ * Git command helper — runs `git <args>` via execFileSync (no shell needed).
+ * Avoids mingw entirely by not going through any shell.
+ *
+ * @param {string[]} args  Git subcommand + arguments, e.g. ["diff", "--name-only"]
+ * @param {object}   opts  Node execFileSync options (cwd, encoding, etc.)
+ * @returns {string}       Trimmed stdout
+ */
+export function gitSync(args, opts = {}) {
+  const options = { encoding: "utf8", windowsHide: true, ...opts };
+  return nodeExecFileSync("git", args, options).trim();
 }

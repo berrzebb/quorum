@@ -8,6 +8,7 @@
  * All functions are side-effect-free: params → { text, summary, json? } | { error }.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readJsonlFile } from "../context.mjs";
 import { resolve, relative, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -71,7 +72,10 @@ function findEndLine(lines, startIdx) {
 
 function parseFile(filePath, filters) {
   let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  try { content = readFileSync(filePath, "utf8"); } catch (err) {
+    if (process.env.QUORUM_DEBUG) console.error(`[tool-core] parseFile: cannot read ${filePath}: ${err.message}`);
+    return [];
+  }
   const lines = content.split(/\r?\n/);
   const symbols = [];
 
@@ -110,7 +114,10 @@ function walkDir(dir, extensions, maxDepth, depth = 0) {
   if (depth > maxDepth) return [];
   const files = [];
   let entries;
-  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch (err) {
+    if (process.env.QUORUM_DEBUG) console.error(`[tool-core] walkDir: cannot read ${dir}: ${err.message}`);
+    return [];
+  }
   for (const e of entries) {
     if (e.name.startsWith(".") || e.name === "node_modules" || e.name === "dist") continue;
     const full = resolve(dir, e.name);
@@ -158,7 +165,11 @@ function formatOverviewMatrix(fileSymbols, cwd) {
   for (const { file, symbols } of fileSymbols) {
     const rel = relative(cwd, file).replace(/\\/g, "/");
     let lineCount = 0;
-    try { lineCount = readFileSync(file, "utf8").split("\n").length; } catch { /* skip */ }
+    try {
+      const buf = readFileSync(file);
+      lineCount = 1;
+      for (let i = 0; i < buf.length; i++) { if (buf[i] === 0x0A) lineCount++; }
+    } catch { /* skip */ }
 
     const counts = { fn: 0, method: 0, class: 0, iface: 0, type: 0, enum: 0 };
     for (const s of symbols) {
@@ -237,6 +248,7 @@ export function toolAuditScan(params) {
       cwd: process.cwd(),
       encoding: "utf8",
       timeout: 30000,
+      windowsHide: true,
     });
     return { text: output.trim() };
   } catch (err) {
@@ -294,7 +306,10 @@ const DYNAMIC_IMPORT_RE = /import\s*\(\s*["']([^"']+)["']\s*\)/;
 
 function extractImports(filePath) {
   let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  try { content = readFileSync(filePath, "utf8"); } catch (err) {
+    if (process.env.QUORUM_DEBUG) console.error(`[tool-core] extractImports: cannot read ${filePath}: ${err.message}`);
+    return [];
+  }
   const imports = [];
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -774,12 +789,7 @@ export function toolAuditHistory(params) {
     return { text: `No audit history yet. The file ${fullPath} will be created automatically after the first audit verdict (respond.mjs appends to it).`, summary: "0 entries", json: { total: 0 } };
   }
 
-  const content = readFileSync(fullPath, "utf8");
-  const lines = content.split(/\r?\n/).filter(l => l.trim());
-  let entries = [];
-  for (const line of lines) {
-    try { entries.push(JSON.parse(line)); } catch { /* skip malformed */ }
-  }
+  let entries = readJsonlFile(fullPath);
 
   if (track) {
     entries = entries.filter(e => (e.track || "").toLowerCase().includes(track.toLowerCase()));
@@ -918,12 +928,7 @@ export function toolActAnalyze(params) {
     : resolve(cwd, ".claude", "audit-history.jsonl");
 
   if (existsSync(histPath)) {
-    const content = readFileSync(histPath, "utf8");
-    const lines = content.split(/\r?\n/).filter(l => l.trim());
-    let entries = [];
-    for (const line of lines) {
-      try { entries.push(JSON.parse(line)); } catch { /* skip */ }
-    }
+    let entries = readJsonlFile(histPath);
     if (track) {
       entries = entries.filter(e => (e.track || "").toLowerCase().includes(track.toLowerCase()));
     }

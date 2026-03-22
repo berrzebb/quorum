@@ -54,7 +54,7 @@ try {
   const watchPath = findWatchFile();
   if (watchPath && existsSync(watchPath)) {
     const watchContent = readFileSync(watchPath, "utf8");
-    const lines = watchContent.split("\n");
+    const lines = watchContent.split(/\r?\n/);
 
     // Extract diff basis from evidence
     for (const line of lines) {
@@ -80,7 +80,7 @@ try {
     const respondContent = readFileSync(respondPath, "utf8");
     // Extract rejection codes from pending items
     const rejections = [];
-    for (const line of respondContent.split("\n")) {
+    for (const line of respondContent.split(/\r?\n/)) {
       if (line.includes(consensus.pending_tag)) {
         rejections.push(line.trim());
       }
@@ -95,7 +95,7 @@ try {
   if (existsSync(handoffPath)) {
     const handoff = readFileSync(handoffPath, "utf8");
     const inProgress = [];
-    for (const line of handoff.split("\n")) {
+    for (const line of handoff.split(/\r?\n/)) {
       if (line.includes("진행 중") || line.includes("in-progress")) {
         inProgress.push(line.trim());
       }

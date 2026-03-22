@@ -207,7 +207,7 @@ function deriveRecommendation(patterns: DetectedPattern[]): StagnationResult["re
   if (patterns.length === 0) return "continue";
 
   const types = new Set(patterns.map((p) => p.type));
-  const maxConfidence = Math.max(...patterns.map((p) => p.confidence));
+  const maxConfidence = patterns.length > 0 ? Math.max(...patterns.map((p) => p.confidence)) : 0;
 
   // Spinning + oscillation = likely stuck → halt
   if (types.has("spinning") && types.has("oscillation")) return "halt";

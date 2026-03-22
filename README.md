@@ -247,7 +247,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 356 tests
+npm test                # 387 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```

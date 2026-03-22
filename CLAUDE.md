@@ -43,7 +43,8 @@ providers/
 
 core/
   ├→ bridge.mjs         ← MJS hooks ↔ TS modules bridge
-  ├→ context.mjs        ← config, paths, parser, i18n
+  ├→ context.mjs        ← config, paths, parser, i18n, readJsonlFile
+  ├→ cli-runner.mjs     ← cross-platform spawn (resolveBinary, execResolved, gitSync)
   ├→ audit.mjs          ← pre-verification + auditor spawn
   ├→ respond.mjs        ← tag sync + verdict recording
   ├→ enforcement.mjs    ← structural enforcement
@@ -69,7 +70,7 @@ adapters/claude-code/
 ## Testing
 
 ```bash
-npm test                              # all (336 tests)
+npm test                              # all (387 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

@@ -19,6 +19,7 @@ export async function run(args: string[]): Promise<void> {
     const result = spawnSync(process.execPath, [toolRunner, "audit_history", "--path", historyPath, ...args.slice(1)], {
       stdio: "inherit",
       cwd: repoRoot,
+      windowsHide: true,
     });
     process.exit(result.status ?? 0);
     return;
@@ -69,6 +70,7 @@ export async function run(args: string[]): Promise<void> {
     stdio: "inherit",
     cwd: repoRoot,
     env: { ...process.env, FEEDBACK_HOOK_DRY_RUN: args.includes("--dry-run") ? "1" : "" },
+    windowsHide: true,
   });
 
   if (result.status === 0) {

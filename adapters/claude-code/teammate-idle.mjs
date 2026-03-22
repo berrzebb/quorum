@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execResolved, gitSync } from "../../core/cli-runner.mjs";
 
 // ── Read stdin ───────────────────────────────────────────────
 let input;
@@ -38,7 +38,7 @@ if (!teammateName.includes("implementer")) {
 // ── Resolve repo root ────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+  REPO_ROOT = gitSync(["rev-parse", "--show-toplevel"]);
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -46,13 +46,11 @@ try {
 // ── Check for uncommitted or staged changes ──────────────────
 let changedFiles = [];
 try {
-  const diff = execSync("git diff --name-only && git diff --cached --name-only", {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    shell: true,
-  }).trim();
+  const unstaged = gitSync(["diff", "--name-only"], { cwd: REPO_ROOT });
+  const staged = gitSync(["diff", "--cached", "--name-only"], { cwd: REPO_ROOT });
+  const diff = `${unstaged}\n${staged}`.trim();
   if (diff) {
-    changedFiles = [...new Set(diff.split("\n").filter(Boolean))];
+    changedFiles = [...new Set(diff.split(/\r?\n/).filter(Boolean))];
   }
 } catch { /* no changes — pass */ }
 
@@ -87,12 +85,11 @@ if (activePresets.length > 0) {
           if (!existsSync(fullPath)) continue;
           const cmd = check.command.replace("{file}", file);
           try {
-            execSync(cmd, {
+            execResolved(cmd, {
               cwd: REPO_ROOT,
               encoding: "utf8",
               stdio: ["pipe", "pipe", "pipe"],
               timeout: 30000,
-              shell: true,
             });
           } catch (e) {
             if (check.optional) continue;
@@ -102,12 +99,11 @@ if (activePresets.length > 0) {
         }
       } else {
         try {
-          execSync(check.command, {
+          execResolved(check.command, {
             cwd: REPO_ROOT,
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
             timeout: 60000,
-            shell: true,
           });
         } catch (e) {
           if (check.optional) continue;

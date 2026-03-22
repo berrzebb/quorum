@@ -79,16 +79,17 @@ function getDiffFiles(repoRoot, baseBranch) {
       cwd: repoRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     });
     return output.trim().split("\n").filter(Boolean);
   } catch {
     // Fallback: staged + unstaged
     try {
       const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
-        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
       }).trim();
       const unstaged = execFileSync("git", ["diff", "--name-only"], {
-        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
       }).trim();
       const all = new Set([...staged.split("\n"), ...unstaged.split("\n")].filter(Boolean));
       return [...all];

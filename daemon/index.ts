@@ -23,6 +23,7 @@ function loadConfig(repoRoot: string): ProviderConfig {
   let watchFile = "docs/feedback/claude.md";
   let respondFile = "docs/feedback/gpt.md";
   let auditorModel = "codex";
+  let triggerTag = "[REVIEW_NEEDED]";
 
   if (existsSync(configPath)) {
     try {
@@ -32,6 +33,7 @@ function loadConfig(repoRoot: string): ProviderConfig {
         ? watchFile.replace(/[^/]+$/, cfg.plugin.respond_file)
         : respondFile;
       auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
+      triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
     } catch { /* use defaults */ }
   }
 
@@ -39,6 +41,7 @@ function loadConfig(repoRoot: string): ProviderConfig {
     repoRoot,
     watchFile,
     respondFile,
+    triggerTag,
     auditor: { model: auditorModel, timeout: 120_000 },
   };
 }
@@ -196,7 +199,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
 
     let wtPath = "";
@@ -250,7 +253,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const log = execFileSync("git", ["log", "--oneline", "-10"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
     for (const line of log.trim().split("\n").filter(Boolean)) {
       bus.emit(createEvent("evidence.sync", "claude-code", {

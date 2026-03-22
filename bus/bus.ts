@@ -43,10 +43,10 @@ export class QuorumBus {
 
   /** Emit an event to all subscribers + persist. */
   emit(event: QuorumEvent): void {
-    // Ring buffer
+    // Ring buffer — trim in bulk when 2× capacity to amortize O(n) cost
     this.buffer.push(event);
-    if (this.buffer.length > this.bufferSize) {
-      this.buffer.shift();
+    if (this.buffer.length > this.bufferSize * 2) {
+      this.buffer = this.buffer.slice(-this.bufferSize);
     }
 
     // Persist
@@ -78,7 +78,7 @@ export class QuorumBus {
 
   /** Get recent events from memory buffer or store. */
   recent(count?: number): QuorumEvent[] {
-    const n = count ?? this.buffer.length;
+    const n = Math.min(count ?? this.bufferSize, this.buffer.length);
     return this.buffer.slice(-n);
   }
 
@@ -104,8 +104,11 @@ export class QuorumBus {
         if (!line) continue;
         try {
           events.push(JSON.parse(line) as QuorumEvent);
-        } catch {
-          // Skip malformed lines
+        } catch (err) {
+          // Skip malformed lines — log for debugging
+          if (process.env.QUORUM_DEBUG) {
+            console.error(`[QuorumBus] Malformed JSONL line skipped: ${(err as Error).message}`);
+          }
         }
       }
     } else {

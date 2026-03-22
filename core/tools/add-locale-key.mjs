@@ -20,7 +20,7 @@ function findLocalesDir() {
 
   // Fallback: git root + .claude/quorum/core/locales
   try {
-    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8" }).trim();
+    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
     const fromRoot = resolve(root, ".claude", "hooks", "quorum", "locales");
     if (existsSync(fromRoot)) return fromRoot;
   } catch { /* git unavailable */ }

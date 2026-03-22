@@ -1,6 +1,6 @@
 {
   "name": "quorum-audit",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "description": "Cross-model audit gate with structural enforcement. Edit → audit → agree → retro → commit.",
   "type": "module",
   "author": {

@@ -9,10 +9,11 @@
  *
  * All behavior is controlled by config.json.
  */
-import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync, openSync, closeSync, rmSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync, openSync, closeSync, rmSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync, spawn, execFileSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { execResolved } from "../../core/cli-runner.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus as c,
   findWatchFile, findRespondFile, t, isHookEnabled, configMissing,
@@ -87,11 +88,11 @@ function validate_evidence_format(content) {
   // ── 간이 감사: git diff와 Changed Files 비교 ──
   if (/### Changed Files/.test(triggerSection)) {
     try {
-      const diffFiles = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8" })
+      const diffFiles = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
         .trim().split("\n").filter(Boolean);
       if (diffFiles.length === 0) {
         // staged 없으면 unstaged 확인
-        const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8" })
+        const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
           .trim().split("\n").filter(Boolean);
         if (unstaged.length > 0) {
           const filesSection = triggerSection.split(/### Changed Files/i)[1]?.split(/### /)[0] || "";
@@ -130,6 +131,7 @@ function run_script(absPath, args = []) {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     env: { ...process.env, FEEDBACK_LOOP_ACTIVE: "1" },
+    windowsHide: true,
   });
   if (result.error) { log(`ERROR: ${result.error.message}`); return null; }
   const err = (result.stderr || "").trim();
@@ -172,6 +174,8 @@ function run_audit(watchFilePath) {
     } catch {
       log("INVALID_LOCK: removing corrupt audit.lock");
     }
+    // 만료·stale·손상 lock을 실제로 삭제 (위 분기에서 return하지 않은 모든 경우)
+    try { rmSync(lockPath, { force: true }); } catch { /* already gone */ }
   }
 
   const auditScript = resolve(HOOKS_DIR, plugin.audit_script);
@@ -194,6 +198,7 @@ function run_audit(watchFilePath) {
       detached: true,
       stdio: ["ignore", logFd, logFd],
       env: { ...process.env, FEEDBACK_LOOP_ACTIVE: "1" },
+      windowsHide: true,
     });
   } catch (err) {
     closeSync(logFd);
@@ -206,6 +211,7 @@ function run_audit(watchFilePath) {
   child.on("error", (err) => {
     log("CHILD_ERROR: " + (err.message ?? err));
     try { rmSync(lockPath, { force: true }); } catch { /* ignore */ }
+    try { closeSync(logFd); } catch { /* already closed by normal path */ }
   });
 
   writeFileSync(lockPath, JSON.stringify({ pid: child.pid, startedAt: Date.now() }), "utf8");
@@ -264,13 +270,16 @@ function run_quality_checks(filePath) {
         if (check.per_file) {
           const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
           const cmd = check.command.replace("{file}", envRef);
-          const result = spawnSync(cmd, {
-            cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true,
-            env: { ...process.env, HOOK_TARGET_FILE: filePath },
-          });
-          const output = ((result.stdout || "") + (result.stderr || "")).trim();
-          if (result.status !== 0 && output && !check.optional) {
-            process.stdout.write(t("index.check.error", { label: check.label, file: filename, output }));
+          try {
+            execResolved(cmd, {
+              cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8",
+              env: { ...process.env, HOOK_TARGET_FILE: filePath },
+            });
+          } catch (e) {
+            const output = ((e.stdout || "") + (e.stderr || "")).toString().trim();
+            if (output && !check.optional) {
+              process.stdout.write(t("index.check.error", { label: check.label, file: filename, output }));
+            }
           }
         }
       }
@@ -287,13 +296,16 @@ function run_quality_checks(filePath) {
 
     const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
     const cmd = rule.command.replace("{file}", envRef);
-    const result = spawnSync(cmd, {
-      cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: true,
-      env: { ...process.env, HOOK_TARGET_FILE: filePath },
-    });
-    const output = ((result.stdout || "") + (result.stderr || "")).trim();
-    if (result.status !== 0 && output) {
-      process.stdout.write(t("index.check.error", { label: rule.label, file: filename, output }));
+    try {
+      execResolved(cmd, {
+        cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8",
+        env: { ...process.env, HOOK_TARGET_FILE: filePath },
+      });
+    } catch (e) {
+      const output = ((e.stdout || "") + (e.stderr || "")).toString().trim();
+      if (output) {
+        process.stdout.write(t("index.check.error", { label: rule.label, file: filename, output }));
+      }
     }
   }
 }
@@ -358,7 +370,9 @@ async function main() {
 
     // 디바운스: 연속 Edit 시 마지막 Edit만 감사 트리거 (per-worktree)
     const DEBOUNCE_MS = 10_000;
-    const debouncePath = resolve(debounceRoot, ".claude", "audit-debounce.ts");
+    const debounceDir = resolve(debounceRoot, ".claude");
+    if (!existsSync(debounceDir)) { try { mkdirSync(debounceDir, { recursive: true }); } catch { /* race-safe */ } }
+    const debouncePath = resolve(debounceDir, "audit-debounce.ts");
     const now = Date.now();
     writeFileSync(debouncePath, String(now), "utf8");
     log(`DEBOUNCE: scheduled at ${now}, waiting ${DEBOUNCE_MS}ms`);

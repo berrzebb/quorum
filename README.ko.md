@@ -240,7 +240,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 356 tests
+npm test                # 387 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```

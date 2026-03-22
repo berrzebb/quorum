@@ -50,6 +50,7 @@ export async function run(args: string[]): Promise<void> {
   const result = spawnSync(process.execPath, [toolRunner, ...toolArgs], {
     stdio: "inherit",
     cwd: process.cwd(),
+    windowsHide: true,
   });
 
   process.exit(result.status ?? 1);

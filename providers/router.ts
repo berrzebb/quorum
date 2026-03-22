@@ -59,6 +59,7 @@ export class TierRouter {
   private failureCounters = new Map<string, number>();
   private successCounters = new Map<string, number>();
   private overrides = new Map<string, Tier>();
+  private baseTiers = new Map<string, Tier>();
   private escalationThreshold: number;
   private downgradeThreshold: number;
   private costs: Record<Tier, number>;
@@ -77,6 +78,7 @@ export class TierRouter {
   route(taskKey: string, ctx: TaskContext): RoutingDecision {
     const complexity = scoreComplexity(ctx);
     const baseTier = complexityToTier(complexity.total);
+    this.baseTiers.set(taskKey, baseTier);
     const override = this.overrides.get(taskKey);
     const tier = override ?? baseTier;
 
@@ -123,7 +125,7 @@ export class TierRouter {
     this.failureCounters.set(taskKey, failures);
 
     if (failures >= this.escalationThreshold) {
-      const current = this.overrides.get(taskKey) ?? "frugal";
+      const current = this.overrides.get(taskKey) ?? this.baseTiers.get(taskKey) ?? "frugal";
       const idx = TIER_ORDER.indexOf(current);
 
       if (idx < TIER_ORDER.length - 1) {

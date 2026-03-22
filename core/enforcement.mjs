@@ -11,6 +11,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readJsonlFile } from "./context.mjs";
 
 /**
  * Count pending verdicts for a track in audit history.
@@ -19,14 +20,10 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
  * @returns {number} Number of pending verdicts
  */
 export function countTrackPendings(historyPath, track) {
-  if (!existsSync(historyPath)) return 0;
-  const lines = readFileSync(historyPath, "utf8").split(/\r?\n/).filter(l => l.trim());
+  const entries = readJsonlFile(historyPath);
   let count = 0;
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-      if (entry.track === track && entry.verdict === "pending") count++;
-    } catch { /* skip malformed */ }
+  for (const entry of entries) {
+    if (entry.track === track && entry.verdict === "pending") count++;
   }
   return count;
 }
@@ -123,16 +120,8 @@ export function appendTechDebt(catalogPath, debts, track) {
  * @returns {{ needsReview: boolean, codes: string[] }}
  */
 export function checkFalsePositiveRate(historyPath, track, minRounds = 5) {
-  if (!existsSync(historyPath)) return { needsReview: false, codes: [] };
-  const lines = readFileSync(historyPath, "utf8").split(/\r?\n/).filter(l => l.trim());
-
-  const entries = [];
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-      if (entry.track === track) entries.push(entry);
-    } catch { /* skip */ }
-  }
+  const allEntries = readJsonlFile(historyPath);
+  const entries = allEntries.filter(e => e.track === track);
 
   if (entries.length < minRounds) return { needsReview: false, codes: [] };
 

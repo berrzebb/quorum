@@ -155,10 +155,10 @@ describe("E2E: full audit cycle", () => {
       summary: verdict.judgeSummary,
     }));
 
-    // Router escalates after 2 consecutive failures
+    // Router escalates after 2 consecutive failures (base tier is "standard" → escalates to "frontier")
     const escalation = router.recordResult("TN-1", false);
     assert.equal(escalation.escalated, true);
-    assert.equal(escalation.tier, "standard");
+    assert.equal(escalation.tier, "frontier");
 
     // Third rejection with same codes (needed for spinning detection threshold=3)
     bus.emit(createEvent("audit.verdict", "codex", {

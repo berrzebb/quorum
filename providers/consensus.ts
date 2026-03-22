@@ -136,13 +136,43 @@ Respond with JSON:
   };
 }
 
+// ── JSON extraction ──────────────────────────
+
+/**
+ * Extract the first complete JSON object from LLM output.
+ * Strategy: try ```json code block first, then balanced-bracket extraction.
+ */
+function extractJson(raw: string): string | null {
+  // 1. Try fenced code block (```json ... ```)
+  const codeBlock = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (codeBlock) return codeBlock[1]!;
+
+  // 2. Balanced bracket extraction — find first complete { ... }
+  const start = raw.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) return raw.slice(start, i + 1); }
+  }
+  return null;
+}
+
 // ── Parsers ───────────────────────────────────
 
 function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
   try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-    const parsed = JSON.parse(jsonMatch[0]);
+    const json = extractJson(raw);
+    if (!json) throw new Error("No JSON found");
+    const parsed = JSON.parse(json);
     return {
       role,
       verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
@@ -150,7 +180,10 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
     };
-  } catch {
+  } catch (err) {
+    if (process.env.QUORUM_DEBUG) {
+      console.error(`[consensus] Failed to parse ${role} opinion: ${(err as Error).message}`);
+    }
     return {
       role,
       verdict: "changes_requested",
@@ -163,17 +196,32 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
 
 function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_requested" | "infra_failure"; summary: string; codes: string[] } {
   try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-    const parsed = JSON.parse(jsonMatch[0]);
+    const json = extractJson(raw);
+    if (!json) throw new Error("No JSON found");
+    const parsed = JSON.parse(json);
     return {
       verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
       summary: parsed.summary ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
     };
-  } catch {
+  } catch (err) {
+    if (process.env.QUORUM_DEBUG) {
+      console.error(`[consensus] Failed to parse judge verdict: ${(err as Error).message}`);
+    }
     return { verdict: "changes_requested", summary: "Failed to parse judge response", codes: ["parse-error"] };
   }
+}
+
+/** Build a fallback opinion when an auditor fails (infra_failure). */
+function infraFailureOpinion(role: "advocate" | "devil", error: unknown): RoleOpinion {
+  const msg = error instanceof Error ? error.message : String(error);
+  return {
+    role,
+    verdict: "infra_failure",
+    reasoning: `${role} auditor failed: ${msg}`,
+    codes: ["infra-failure"],
+    confidence: 0,
+  };
 }
 
 // ── Consensus executor ────────────────────────
@@ -194,14 +242,18 @@ export class DeliberativeConsensus {
   async run(request: AuditRequest): Promise<ConsensusVerdict> {
     const start = Date.now();
 
-    // Round 1: parallel
-    const [advocateResult, devilResult] = await Promise.all([
+    // Round 1: parallel — one side failing doesn't block the other
+    const [advocateSettled, devilSettled] = await Promise.allSettled([
       this.config.advocate.audit(buildAdvocatePrompt(request)),
       this.config.devil.audit(buildDevilPrompt(request)),
     ]);
 
-    const advocateOpinion = parseOpinion(advocateResult.raw, "advocate");
-    const devilOpinion = parseOpinion(devilResult.raw, "devil");
+    const advocateOpinion = advocateSettled.status === "fulfilled"
+      ? parseOpinion(advocateSettled.value.raw, "advocate")
+      : infraFailureOpinion("advocate", advocateSettled.reason);
+    const devilOpinion = devilSettled.status === "fulfilled"
+      ? parseOpinion(devilSettled.value.raw, "devil")
+      : infraFailureOpinion("devil", devilSettled.reason);
     const opinions = [advocateOpinion, devilOpinion];
 
     // Round 2: judge

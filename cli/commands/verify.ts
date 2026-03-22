@@ -100,6 +100,7 @@ export async function run(args: string[]): Promise<void> {
       timeout: 60000,
       stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32",
+      windowsHide: true,
     });
 
     if (result.status === 0) {

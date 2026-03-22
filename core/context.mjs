@@ -37,6 +37,7 @@ function resolveRepoRoot() {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     }).trim();
   } catch { /* git not available or not in a repo */ }
 
@@ -397,4 +398,23 @@ export function mergeIdSets(...sets) {
   const merged = new Set();
   for (const s of sets) for (const v of s) merged.add(v);
   return merged;
+}
+
+/**
+ * Read a JSONL file and parse each line into an object.
+ * Skips malformed lines (fail-open). Returns empty array if file is missing or unreadable.
+ *
+ * @param {string} filePath  Absolute path to the JSONL file
+ * @returns {object[]}       Parsed entries
+ */
+export function readJsonlFile(filePath) {
+  if (!existsSync(filePath)) return [];
+  let content;
+  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  const entries = [];
+  for (const line of content.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try { entries.push(JSON.parse(line)); } catch { /* skip malformed */ }
+  }
+  return entries;
 }
