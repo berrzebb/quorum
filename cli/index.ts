@@ -16,10 +16,25 @@
  */
 
 import { resolve, dirname } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUORUM_ROOT = resolve(__dirname, "..");
+
+function getVersion(): string {
+  if (process.env.npm_package_version) return process.env.npm_package_version;
+  try {
+    // Try QUORUM_ROOT first, then one level up (dist/cli/.. → dist/, need dist/../package.json)
+    const candidates = [resolve(QUORUM_ROOT, "package.json"), resolve(QUORUM_ROOT, "..", "package.json")];
+    const pkgPath = candidates.find(p => { try { readFileSync(p); return true; } catch { return false; } });
+    if (!pkgPath) return "unknown";
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -112,7 +127,7 @@ function showHelp(): void {
   quorum ask codex "review"   Ask Codex to review
   quorum tool code_map        Run code_map analysis
 
-\x1b[2mv${process.env.npm_package_version ?? "0.2.0"}\x1b[0m
+\x1b[2mv${getVersion()}\x1b[0m
 `);
 }
 
