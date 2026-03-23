@@ -76,8 +76,17 @@ describe("deriveAuditCwd", () => {
 });
 
 // ── audit.mjs source code invariants ──
+// After split: read all sub-modules to get the combined source
 describe("audit.mjs worktree isolation invariants", () => {
-  const auditSource = readFileSync(resolve(CORE_DIR, "audit.mjs"), "utf8");
+  const auditDir = resolve(CORE_DIR, "audit");
+  const auditModules = ["index.mjs", "args.mjs", "session.mjs", "scope.mjs", "pre-verify.mjs", "codex-runner.mjs", "solo-verdict.mjs"];
+  let auditSource;
+  try {
+    auditSource = auditModules.map(f => readFileSync(resolve(auditDir, f), "utf8")).join("\n");
+  } catch {
+    // Fallback: original monolithic file (pre-split)
+    auditSource = readFileSync(resolve(CORE_DIR, "audit.mjs"), "utf8");
+  }
 
   it("has zero cwd:REPO_ROOT in audit chain functions", () => {
     // Find all `cwd: REPO_ROOT` occurrences

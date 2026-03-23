@@ -8,15 +8,21 @@
 
 import { resolve } from "node:path";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { platform } from "node:os";
 import React from "react";
 import { render } from "ink";
 import { QuorumBus } from "../bus/bus.js";
 import { EventStore } from "../bus/store.js";
+import { LockService } from "../bus/lock.js";
 import { createEvent } from "../bus/events.js";
 import { ClaudeCodeProvider } from "../providers/claude-code/adapter.js";
 import { registerProvider, listProviders } from "../providers/provider.js";
 import type { ProviderConfig } from "../providers/provider.js";
+import { ProcessMux, ensureMuxBackend } from "../bus/mux.js";
+import { StateReader } from "./state-reader.js";
 import { App } from "./app.js";
+
+const DASHBOARD_SESSION = "quorum-dashboard";
 
 function loadConfig(repoRoot: string): ProviderConfig {
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
@@ -49,6 +55,37 @@ function loadConfig(repoRoot: string): ProviderConfig {
 export default async function startDaemon(): Promise<void> {
   const repoRoot = process.cwd();
 
+  // ── Mux session wrapper ──
+  // If a mux backend is available and we're NOT already inside a session,
+  // create a mux session and re-launch the daemon inside it.
+  // This enables remote attach/capture via `quorum status --attach`.
+  if (!process.env.QUORUM_IN_MUX_SESSION) {
+    const backend = await ensureMuxBackend();
+    if (backend !== "raw") {
+      const inSession = (backend === "tmux" && process.env.TMUX)
+        || (backend === "psmux" && process.env.PSMUX_SESSION);
+
+      if (!inSession) {
+        const mux = new ProcessMux(backend);
+        try {
+          await mux.spawn({
+            name: DASHBOARD_SESSION,
+            command: process.execPath,
+            args: [resolve(__dirname, "index.js")],
+            cwd: repoRoot,
+            env: { QUORUM_IN_MUX_SESSION: "1" },
+          });
+          console.log(`Dashboard running in ${backend} session: ${DASHBOARD_SESSION}`);
+          console.log(`Attach: ${backend === "tmux" ? "tmux attach -t" : "psmux attach"} ${DASHBOARD_SESSION}`);
+          return;
+        } catch {
+          // Mux spawn failed — fall through to direct TUI rendering
+          console.log("Mux session creation failed — running TUI directly.");
+        }
+      }
+    }
+  }
+
   // Initialize SQLite event store + bus
   const dbPath = resolve(repoRoot, ".claude", "quorum-events.db");
   const store = new EventStore({ dbPath });
@@ -65,14 +102,38 @@ export default async function startDaemon(): Promise<void> {
   registerProvider(claude);
   await claude.start(bus, config);
 
-  // Bootstrap: scan current file state → emit initial events
-  bootstrapFromFiles(repoRoot, config, bus);
+  // StateReader for SQLite-only state queries (new panels)
+  const stateReader = new StateReader(store);
 
-  // Render TUI
-  const { waitUntilExit } = render(React.createElement(App, { bus }));
+  // Bootstrap: only scan files if SQLite has no prior events.
+  // When SQLite has data (normal operation), StateReader handles everything.
+  const hasExistingData = store.query({ limit: 1 }).length > 0;
+  if (!hasExistingData) {
+    bootstrapFromFiles(repoRoot, config, bus);
+  }
+  const lockService = new LockService(store.getDb());
+
+  // Periodic maintenance: clean expired locks
+  const maintenanceInterval = setInterval(() => {
+    try { lockService.cleanExpired(); } catch { /* non-critical */ }
+  }, 10_000);
+
+  // Config refresh (lazy import to avoid circular deps with MJS module)
+  setInterval(async () => {
+    try {
+      const { refreshConfigIfChanged } = await import("../core/context.mjs" as any);
+      refreshConfigIfChanged();
+    } catch { /* non-critical */ }
+  }, 10_000);
+
+  // Render TUI with stateReader
+  const { waitUntilExit } = render(
+    React.createElement(App, { bus, stateReader }),
+  );
 
   // Graceful shutdown
   await waitUntilExit();
+  clearInterval(maintenanceInterval);
   for (const provider of listProviders()) {
     await provider.stop();
   }

@@ -1,9 +1,12 @@
 /**
  * Consensus Trigger — decides whether to run simple or deliberative audit.
  *
- * Evaluates 6 conditions to determine if full deliberative consensus is needed.
+ * Evaluates 6 base conditions + optional domain signals to determine
+ * if full deliberative consensus is needed.
  * Maps to complexity tiers: T1 (skip), T2 (simple), T3 (deliberative).
  */
+
+import type { DetectedDomains } from "./domain-detect.js";
 
 export type ConsensusMode = "skip" | "simple" | "deliberative";
 
@@ -20,6 +23,8 @@ export interface TriggerContext {
   crossLayerChange: boolean;
   /** Whether the change is a rollback or revert. */
   isRevert: boolean;
+  /** Detected specialist domains (optional — enhances tier routing). */
+  domains?: DetectedDomains;
 }
 
 export interface TriggerResult {
@@ -27,6 +32,8 @@ export interface TriggerResult {
   tier: "T1" | "T2" | "T3";
   reasons: string[];
   score: number;
+  /** Domains that were detected (empty if not provided). */
+  activeDomains: (keyof DetectedDomains)[];
 }
 
 /**
@@ -85,6 +92,36 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     reasons.push("revert (reduced risk)");
   }
 
+  // 7. Domain-aware scoring (optional, 0-0.15 total)
+  const activeDomains: (keyof DetectedDomains)[] = [];
+  if (ctx.domains) {
+    // High-risk domains push toward higher tiers
+    const HIGH_RISK_DOMAINS: (keyof DetectedDomains)[] = ["migration", "compliance", "concurrency"];
+    const MID_RISK_DOMAINS: (keyof DetectedDomains)[] = ["performance", "accessibility", "infrastructure"];
+
+    for (const domain of HIGH_RISK_DOMAINS) {
+      if (ctx.domains[domain]) {
+        score += 0.1;
+        activeDomains.push(domain);
+        reasons.push(`${domain} domain affected (high-risk)`);
+      }
+    }
+    for (const domain of MID_RISK_DOMAINS) {
+      if (ctx.domains[domain]) {
+        score += 0.05;
+        activeDomains.push(domain);
+        reasons.push(`${domain} domain affected`);
+      }
+    }
+    // Low-risk domains: observability, documentation, i18n — detected but don't increase score
+    const LOW_RISK_DOMAINS: (keyof DetectedDomains)[] = ["observability", "documentation", "i18n"];
+    for (const domain of LOW_RISK_DOMAINS) {
+      if (ctx.domains[domain]) {
+        activeDomains.push(domain);
+      }
+    }
+  }
+
   // Clamp
   score = Math.min(1, Math.max(0, score));
 
@@ -103,5 +140,5 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     tier = "T3";
   }
 
-  return { mode, tier, reasons, score };
+  return { mode, tier, reasons, score, activeDomains };
 }

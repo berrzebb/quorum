@@ -35,6 +35,10 @@ export type EventType =
   | "audit.start"
   | "audit.verdict"
   | "audit.correction"
+  // Specialist domain review
+  | "specialist.detect"
+  | "specialist.tool"
+  | "specialist.review"
   // Retrospective
   | "retro.start"
   | "retro.complete"
@@ -66,9 +70,11 @@ export interface AuditVerdictPayload {
 
 export interface AgentSpawnPayload {
   name: string;
-  role: "implementer" | "scout" | "reviewer" | "planner";
+  role: "implementer" | "scout" | "reviewer" | "planner" | "specialist";
   model?: string;
   worktree?: string;
+  /** Specialist domain (only when role is "specialist"). */
+  domain?: string;
 }
 
 export interface TrackProgressPayload {
@@ -83,6 +89,32 @@ export interface QualityCheckPayload {
   label: string;
   passed: boolean;
   output?: string;
+}
+
+export interface SpecialistDetectPayload {
+  /** Number of active domains detected. */
+  activeCount: number;
+  /** List of active domain names. */
+  domains: string[];
+  /** Number of tools to run. */
+  toolCount: number;
+  /** Number of LLM agents to invoke. */
+  agentCount: number;
+}
+
+export interface SpecialistToolPayload {
+  tool: string;
+  domain: string;
+  status: "pass" | "fail" | "warn" | "error" | "skip";
+  duration: number;
+}
+
+export interface SpecialistReviewPayload {
+  agent: string;
+  domain: string;
+  verdict: "approved" | "changes_requested";
+  codes: string[];
+  confidence: number;
 }
 
 // ── Factory ───────────────────────────────────────────

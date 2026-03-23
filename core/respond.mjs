@@ -710,48 +710,43 @@ function main() {
   let gptMd = readFileSync(gptPath, "utf8");
   const claudeMd = existsSync(claudePath) ? readFileSync(claudePath, "utf8") : "";
 
+  // ── Normalize gpt.md in-memory (batch all changes, write once at end) ──
+  let gptDirty = false;
+
   const withoutProtocolSection = removeSection(gptMd, SEC.deprecatedProtocol);
   if (withoutProtocolSection !== gptMd) {
     gptMd = withoutProtocolSection;
-    if (!args.dryRun) {
-      writeFileSync(gptPath, gptMd, "utf8");
-      console.log(t("respond.removed_deprecated", { section: SEC.deprecatedProtocol }));
-    } else {
-      console.log(t("respond.removed_deprecated.dryrun", { section: SEC.deprecatedProtocol }));
-    }
+    gptDirty = true;
+    console.log(args.dryRun
+      ? t("respond.removed_deprecated.dryrun", { section: SEC.deprecatedProtocol })
+      : t("respond.removed_deprecated", { section: SEC.deprecatedProtocol }));
   }
 
   const auditScopeSync = normalizeGptAuditScopeStatus(gptMd);
   if (auditScopeSync.changed) {
     gptMd = auditScopeSync.updated;
-    if (!args.dryRun) {
-      writeFileSync(gptPath, gptMd, "utf8");
-      console.log(t("respond.normalized.audit_scope"));
-    } else {
-      console.log(t("respond.normalized.audit_scope.dryrun"));
-    }
+    gptDirty = true;
+    console.log(args.dryRun
+      ? t("respond.normalized.audit_scope.dryrun")
+      : t("respond.normalized.audit_scope"));
   }
 
   const resetCriteriaSync = normalizeResetCriteriaSection(gptMd);
   if (resetCriteriaSync.changed) {
     gptMd = resetCriteriaSync.updated;
-    if (!args.dryRun) {
-      writeFileSync(gptPath, gptMd, "utf8");
-      console.log(t("respond.normalized.reset_criteria", { section: SEC.resetCriteria }));
-    } else {
-      console.log(t("respond.normalized.reset_criteria.dryrun", { section: SEC.resetCriteria }));
-    }
+    gptDirty = true;
+    console.log(args.dryRun
+      ? t("respond.normalized.reset_criteria.dryrun", { section: SEC.resetCriteria })
+      : t("respond.normalized.reset_criteria", { section: SEC.resetCriteria }));
   }
 
   const additionalTasksSync = normalizeAdditionalTasksSection(gptMd);
   if (additionalTasksSync.changed) {
     gptMd = additionalTasksSync.updated;
-    if (!args.dryRun) {
-      writeFileSync(gptPath, gptMd, "utf8");
-      console.log(t("respond.normalized.additional_tasks", { section: SEC.additionalTasks }));
-    } else {
-      console.log(t("respond.normalized.additional_tasks.dryrun", { section: SEC.additionalTasks }));
-    }
+    gptDirty = true;
+    console.log(args.dryRun
+      ? t("respond.normalized.additional_tasks.dryrun", { section: SEC.additionalTasks })
+      : t("respond.normalized.additional_tasks", { section: SEC.additionalTasks }));
   }
 
   const claudeItems = parseStatusLines(claudeMd);
@@ -770,6 +765,21 @@ function main() {
   if (synced.length > 0) {
     console.log(t("respond.syncing", { count: synced.length, tag: cfg.consensus.agree_tag }));
     for (const s of synced) console.log(t("respond.sync_item", { item: s }));
+
+    // ── Dual-write: record state transitions to SQLite ──
+    try {
+      for (const label of synced) {
+        const ids = collectIdsFromLine(label);
+        for (const id of ids) {
+          bridge.recordTransition(
+            "audit_item", id,
+            "review_needed", "approved",
+            "codex",
+            { label, syncedAt: Date.now() },
+          );
+        }
+      }
+    } catch { /* bridge is non-critical */ }
   } else if (unverified.length === 0) {
     console.log(t("respond.no_trigger_items", { tag: cfg.consensus.trigger_tag }));
   }
@@ -782,13 +792,34 @@ function main() {
       : t("respond.removed_next_task", { section: SEC.nextTask }));
   }
 
-  if (updated !== claudeMd) {
-    if (!args.dryRun) {
-      writeFileSync(claudePath, updated, "utf8");
-      console.log(t("respond.updated", { path: claudePath }));
+  // ── Atomic write: claude.md + gpt.md via TransactionalUnitOfWork ──
+  const claudeChanged = updated !== claudeMd;
+  if (!args.dryRun && (claudeChanged || gptDirty)) {
+    const uow = bridge.createUnitOfWork();
+    if (uow) {
+      // Use TransactionalUnitOfWork for atomic file writes + SQLite transitions
+      try {
+        if (claudeChanged) uow.stageProjection({ path: claudePath, content: updated });
+        if (gptDirty) uow.stageProjection({ path: gptPath, content: gptMd });
+        uow.commit();
+        if (claudeChanged) console.log(t("respond.updated", { path: claudePath }));
+      } catch (err) {
+        // UoW failed — fall back to direct writes
+        console.log(`[respond] UoW commit failed, falling back to direct writes: ${err?.message ?? err}`);
+        if (claudeChanged) writeFileSync(claudePath, updated, "utf8");
+        if (gptDirty) writeFileSync(gptPath, gptMd, "utf8");
+        if (claudeChanged) console.log(t("respond.updated", { path: claudePath }));
+      }
     } else {
-      console.log(t("respond.dryrun_no_write"));
+      // Bridge unavailable — direct writes (legacy path)
+      if (claudeChanged) {
+        writeFileSync(claudePath, updated, "utf8");
+        console.log(t("respond.updated", { path: claudePath }));
+      }
+      if (gptDirty) writeFileSync(gptPath, gptMd, "utf8");
     }
+  } else if (args.dryRun && claudeChanged) {
+    console.log(t("respond.dryrun_no_write"));
   }
 
   const effectiveClaudeMd = updated;
@@ -832,6 +863,21 @@ function main() {
   if (corrections.length > 0) {
     console.log(t("respond.pending_corrections", { tag: cfg.consensus.pending_tag, count: corrections.length }));
     for (const c of corrections) console.log(t("respond.correction_item", { item: c }));
+
+    // ── Dual-write: record rejection transitions to SQLite ──
+    try {
+      for (const label of corrections) {
+        const ids = collectIdsFromLine(label);
+        for (const id of ids) {
+          bridge.recordTransition(
+            "audit_item", id,
+            "review_needed", "changes_requested",
+            "codex",
+            { label, codes: corrections, rejectedAt: Date.now() },
+          );
+        }
+      }
+    } catch { /* bridge is non-critical */ }
 
     if (args.autoFix) {
       console.log(t("respond.invoking_claude"));

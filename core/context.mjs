@@ -6,7 +6,7 @@
  * duplicate config parsing, path resolution, and function implementations.
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -107,6 +107,29 @@ export const cfg = _configPath
   : DEFAULT_CONFIG;
 export const plugin = cfg.plugin ?? DEFAULT_CONFIG.plugin;
 export const consensus = cfg.consensus ?? DEFAULT_CONFIG.consensus;
+
+/**
+ * Re-read config.json if the file has been modified since last read.
+ * Returns true if config was refreshed, false if unchanged.
+ * Called by daemon periodic timer and optionally by hooks.
+ */
+let _configMtime = _configPath ? statSync(_configPath).mtimeMs : 0;
+export function refreshConfigIfChanged() {
+  if (!_configPath) return false;
+  try {
+    const mtime = statSync(_configPath).mtimeMs;
+    if (mtime <= _configMtime) return false;
+    _configMtime = mtime;
+    const newCfg = JSON.parse(readFileSync(_configPath, "utf8"));
+    // Merge into existing objects so references stay valid
+    Object.assign(cfg, newCfg);
+    Object.assign(plugin, newCfg.plugin ?? DEFAULT_CONFIG.plugin);
+    Object.assign(consensus, newCfg.consensus ?? DEFAULT_CONFIG.consensus);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Resolve a plugin-relative path, checking project config dir first.

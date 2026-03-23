@@ -1112,6 +1112,737 @@ export function toolActAnalyze(params) {
   };
 }
 
+// ═══ Tool: perf_scan ════════════════════════════════════════════════════
+
+/**
+ * Scan for performance anti-patterns: O(n²) loops, sync I/O in hot paths,
+ * missing pagination, unbounded queries, large bundle imports.
+ */
+export function toolPerfScan(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
+
+  const findings = [];
+
+  const PERF_PATTERNS = [
+    { re: /\.forEach\s*\([^)]*=>\s*\{[\s\S]{0,200}\.forEach/m, label: "nested-loop", severity: "high", msg: "Nested .forEach() — potential O(n²)" },
+    { re: /\.filter\([^)]*\)\s*\.map\(/m, label: "chain-inefficiency", severity: "low", msg: "filter().map() — consider single reduce()" },
+    { re: /readFileSync|writeFileSync|execSync/m, label: "sync-io", severity: "medium", msg: "Synchronous I/O — blocks event loop" },
+    { re: /new RegExp\([^)]+\)/m, label: "dynamic-regex", severity: "low", msg: "Dynamic RegExp construction in potential hot path" },
+    { re: /SELECT\s+\*\s+FROM/im, label: "select-star", severity: "medium", msg: "SELECT * — fetch only needed columns" },
+    { re: /(?:import|require)\s*\(\s*["']lodash["']\s*\)/m, label: "heavy-import", severity: "medium", msg: "Full lodash import — use lodash/specific" },
+    { re: /JSON\.parse\(.*readFileSync/m, label: "sync-json", severity: "medium", msg: "Sync file read + JSON.parse — consider async" },
+    { re: /\.findAll\s*\(\s*\)/m, label: "unbounded-query", severity: "high", msg: "Unbounded findAll() — add limit/pagination" },
+    { re: /while\s*\(\s*true\s*\)/m, label: "busy-loop", severity: "high", msg: "while(true) — potential busy loop" },
+  ];
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      for (const pat of PERF_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (findings.length === 0) {
+    return { text: "perf_scan: pass — no performance anti-patterns detected.", summary: `${files.length} files scanned, 0 findings` };
+  }
+
+  const rows = ["## Performance Scan Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} high-severity issue(s)` : `warn — ${findings.length} finding(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: compat_check ═════════════════════════════════════════════════
+
+/**
+ * Check for breaking API changes: removed exports, changed function signatures,
+ * deprecated usage, version constraint issues.
+ */
+export function toolCompatCheck(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
+
+  const findings = [];
+
+  const COMPAT_PATTERNS = [
+    { re: /@deprecated/m, label: "deprecated-usage", severity: "medium", msg: "Contains @deprecated annotation" },
+    { re: /\/\*\*[\s\S]*?@breaking[\s\S]*?\*\//m, label: "breaking-change", severity: "high", msg: "Marked as @breaking change" },
+    { re: /(?:module\.exports|exports\.)\s*=\s*/m, label: "cjs-export", severity: "low", msg: "CommonJS export in ESM project" },
+    { re: /require\s*\(\s*["'][^"']+["']\s*\)/m, label: "cjs-require", severity: "low", msg: "CommonJS require() in ESM project" },
+    { re: /\/\/\s*TODO.*(?:remove|delete|deprecat)/im, label: "pending-removal", severity: "medium", msg: "Pending removal marked in TODO" },
+  ];
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      for (const pat of COMPAT_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  // Check package.json for version constraints
+  const pkgPath = resolve(cwd, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      for (const [name, ver] of Object.entries(deps)) {
+        if (typeof ver === "string" && ver.startsWith("*")) {
+          findings.push({ file: "package.json", line: 0, severity: "high", label: "wildcard-dep", msg: `Wildcard version for ${name}: ${ver}` });
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (findings.length === 0) {
+    return { text: "compat_check: pass — no compatibility issues detected.", summary: `${files.length} files scanned, 0 findings` };
+  }
+
+  const rows = ["## Compatibility Check Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} breaking issue(s)` : `warn — ${findings.length} compatibility note(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: a11y_scan ════════════════════════════════════════════════════
+
+/**
+ * Scan JSX/TSX files for accessibility anti-patterns:
+ * missing alt, missing aria-label, onClick without keyboard, no role, etc.
+ */
+export function toolA11yScan(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const extSet = new Set([".tsx", ".jsx"]);
+  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
+
+  if (files.length === 0) {
+    return { text: "a11y_scan: skip — no JSX/TSX files found.", summary: "0 JSX files" };
+  }
+
+  const findings = [];
+
+  const A11Y_PATTERNS = [
+    { re: /<img\s+(?![^>]*alt\s*=)/m, label: "img-no-alt", severity: "high", msg: "<img> missing alt attribute" },
+    { re: /<(?!button\b)\w+\s+onClick/m, label: "click-no-keyboard", severity: "medium", msg: "Non-button element with onClick — add keyboard handler or use <button>" },
+    { re: /<div\s+onClick/m, label: "div-click", severity: "medium", msg: "<div> with onClick — use <button> or add role" },
+    { re: /<(?:input|textarea|select)\s+(?![^>]*(?:aria-label|aria-labelledby|id\s*=))/m, label: "form-no-label", severity: "high", msg: "Form element missing label association" },
+    { re: /tabIndex\s*=\s*\{?\s*-1/m, label: "negative-tabindex", severity: "low", msg: "Negative tabIndex removes from tab order" },
+    { re: /aria-hidden\s*=\s*["']true["'][\s\S]{0,50}onClick/m, label: "hidden-interactive", severity: "high", msg: "aria-hidden on interactive element" },
+    { re: /<a\s+(?![^>]*href)/m, label: "anchor-no-href", severity: "medium", msg: "<a> without href — not keyboard accessible" },
+    { re: /style\s*=\s*\{\s*\{[^}]*display\s*:\s*["']?none/m, label: "css-hidden", severity: "low", msg: "CSS display:none — verify not hiding from assistive tech" },
+  ];
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      for (const pat of A11Y_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (findings.length === 0) {
+    return { text: "a11y_scan: pass — no accessibility issues detected.", summary: `${files.length} JSX files scanned, 0 findings` };
+  }
+
+  const rows = ["## Accessibility Scan Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} critical a11y violation(s)` : `warn — ${findings.length} a11y issue(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} JSX files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: license_scan ═════════════════════════════════════════════════
+
+/**
+ * Check dependency licenses for copyleft/unknown risks,
+ * PII patterns in source, and security-sensitive imports.
+ */
+export function toolLicenseScan(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+
+  const findings = [];
+
+  // 1. Check package.json license field
+  const pkgPath = resolve(target, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      if (!pkg.license) {
+        findings.push({ file: "package.json", line: 0, severity: "medium", label: "no-license", msg: "No license field in package.json" });
+      }
+
+      // Check dependencies for known copyleft
+      const COPYLEFT = /GPL|AGPL|SSPL|EUPL|CC-BY-SA/i;
+      const PERMISSIVE = /MIT|ISC|BSD|Apache|Unlicense|0BSD/i;
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+      // Read node_modules package.json for license info
+      for (const depName of Object.keys(deps)) {
+        const depPkgPath = resolve(target, "node_modules", depName, "package.json");
+        if (!existsSync(depPkgPath)) continue;
+        try {
+          const depPkg = JSON.parse(readFileSync(depPkgPath, "utf8"));
+          const lic = depPkg.license || depPkg.licenses?.[0]?.type || "";
+          if (COPYLEFT.test(lic)) {
+            findings.push({ file: `node_modules/${depName}`, line: 0, severity: "high", label: "copyleft-dep", msg: `Copyleft license: ${lic}` });
+          } else if (!PERMISSIVE.test(lic) && lic) {
+            findings.push({ file: `node_modules/${depName}`, line: 0, severity: "low", label: "unknown-license", msg: `Non-standard license: ${lic}` });
+          }
+        } catch { /* skip */ }
+      }
+    } catch { /* skip */ }
+  }
+
+  // 2. Scan source for PII patterns
+  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  const files = stat_?.isDirectory() ? walkDir(target, extSet, 5) : [];
+
+  const PII_PATTERNS = [
+    { re: /(?:password|passwd|secret|api_?key|token)\s*[:=]\s*["'][^"']{3,}/im, label: "hardcoded-secret", severity: "high", msg: "Potential hardcoded secret" },
+    { re: /\b\d{3}-\d{2}-\d{4}\b/m, label: "ssn-pattern", severity: "high", msg: "SSN-like pattern in source" },
+    { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/im, label: "email-literal", severity: "low", msg: "Hardcoded email address" },
+  ];
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trimStart().startsWith("//") || lines[i].trimStart().startsWith("*")) continue;
+      for (const pat of PII_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (findings.length === 0) {
+    return { text: "license_scan: pass — no compliance issues detected.", summary: `${files.length} files scanned, 0 findings` };
+  }
+
+  const rows = ["## License & Compliance Scan Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} compliance violation(s)` : `warn — ${findings.length} note(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} source files + deps, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: i18n_validate ════════════════════════════════════════════════
+
+/**
+ * Validate i18n locale parity: ensure all keys exist in all locale files,
+ * detect hardcoded user-facing strings in components.
+ */
+export function toolI18nValidate(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+
+  const findings = [];
+
+  // 1. Find locale JSON files
+  const localeFiles = [];
+  const localeDirs = [
+    resolve(target, "locales"),
+    resolve(target, "src", "locales"),
+    resolve(target, "public", "locales"),
+    resolve(target, "web", "src", "locales"),
+  ];
+
+  for (const dir of localeDirs) {
+    if (!existsSync(dir)) continue;
+    try {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isFile() && e.name.endsWith(".json")) {
+          localeFiles.push({ path: resolve(dir, e.name), name: e.name });
+        }
+        // Also check subdirectory pattern (locales/en/translation.json)
+        if (e.isDirectory()) {
+          const nested = resolve(dir, e.name);
+          try {
+            for (const f of readdirSync(nested)) {
+              if (f.endsWith(".json")) {
+                localeFiles.push({ path: resolve(nested, f), name: `${e.name}/${f}` });
+              }
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (localeFiles.length >= 2) {
+    // Compare key sets across locale files
+    const keysByFile = new Map();
+
+    function flattenKeys(obj, prefix = "") {
+      const keys = [];
+      for (const [k, v] of Object.entries(obj)) {
+        const full = prefix ? `${prefix}.${k}` : k;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          keys.push(...flattenKeys(v, full));
+        } else {
+          keys.push(full);
+        }
+      }
+      return keys;
+    }
+
+    for (const lf of localeFiles) {
+      try {
+        const data = JSON.parse(readFileSync(lf.path, "utf8"));
+        keysByFile.set(lf.name, new Set(flattenKeys(data)));
+      } catch {
+        findings.push({ file: lf.name, line: 0, severity: "medium", label: "parse-error", msg: "Failed to parse locale file" });
+      }
+    }
+
+    // Cross-compare
+    const allFiles = [...keysByFile.keys()];
+    for (let i = 0; i < allFiles.length; i++) {
+      for (let j = i + 1; j < allFiles.length; j++) {
+        const keysA = keysByFile.get(allFiles[i]);
+        const keysB = keysByFile.get(allFiles[j]);
+        if (!keysA || !keysB) continue;
+
+        for (const k of keysA) {
+          if (!keysB.has(k)) {
+            findings.push({ file: allFiles[j], line: 0, severity: "high", label: "i18n-parity", msg: `Missing key: "${k}" (exists in ${allFiles[i]})` });
+          }
+        }
+        for (const k of keysB) {
+          if (!keysA.has(k)) {
+            findings.push({ file: allFiles[i], line: 0, severity: "high", label: "i18n-parity", msg: `Missing key: "${k}" (exists in ${allFiles[j]})` });
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Scan for hardcoded strings in JSX
+  const jsxExt = new Set([".tsx", ".jsx"]);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  const jsxFiles = stat_?.isDirectory() ? walkDir(target, jsxExt, 5) : [];
+
+  const HARDCODED_RE = />\s*[A-Z가-힣][A-Za-z가-힣\s]{2,30}\s*</m;
+
+  for (const file of jsxFiles) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (HARDCODED_RE.test(lines[i]) && !lines[i].includes("t(") && !lines[i].includes("i18n")) {
+        findings.push({
+          file: relative(cwd, file).replace(/\\/g, "/"),
+          line: i + 1,
+          severity: "medium",
+          label: "i18n-hardcoded",
+          msg: "Possible hardcoded UI text — use i18n key",
+        });
+      }
+    }
+  }
+
+  const scannedCount = localeFiles.length + jsxFiles.length;
+
+  if (findings.length === 0) {
+    return { text: "i18n_validate: pass — locale parity OK, no hardcoded strings.", summary: `${scannedCount} files scanned, 0 findings` };
+  }
+
+  const rows = ["## i18n Validation Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings.slice(0, 100)) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+  if (findings.length > 100) rows.push(`\n... and ${findings.length - 100} more`);
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} parity violation(s)` : `warn — ${findings.length} i18n issue(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${scannedCount} files, ${findings.length} findings (${highCount} parity)`,
+    json: { total: findings.length, high: highCount, localeFiles: localeFiles.length, findings: findings.slice(0, 100) },
+  };
+}
+
+// ═══ Tool: infra_scan ═══════════════════════════════════════════════════
+
+/**
+ * Scan infrastructure files (Dockerfile, docker-compose, CI configs)
+ * for security and reliability anti-patterns.
+ */
+export function toolInfraScan(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+
+  const findings = [];
+
+  // Find infra files
+  const infraPatterns = [
+    "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
+    ".github/workflows", ".gitlab-ci.yml", "Jenkinsfile",
+    "nginx.conf", "Caddyfile", "terraform", ".env.example",
+  ];
+
+  const infraFiles = [];
+  const allExts = new Set([".yml", ".yaml", ".toml", ".conf", ".tf", ".sh", ".dockerfile"]);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+
+  // Direct file checks
+  for (const pat of infraPatterns) {
+    const p = resolve(target, pat);
+    const s = statSync(p, { throwIfNoEntry: false });
+    if (s?.isFile()) infraFiles.push(p);
+    if (s?.isDirectory()) {
+      try {
+        for (const e of readdirSync(p, { withFileTypes: true })) {
+          if (e.isFile()) infraFiles.push(resolve(p, e.name));
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  // Also check for Dockerfile* patterns
+  if (stat_?.isDirectory()) {
+    try {
+      for (const e of readdirSync(target)) {
+        if (e.startsWith("Dockerfile") || e.startsWith("docker-compose") || e === ".dockerignore") {
+          infraFiles.push(resolve(target, e));
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  if (infraFiles.length === 0) {
+    return { text: "infra_scan: skip — no infrastructure files found.", summary: "0 infra files" };
+  }
+
+  const INFRA_PATTERNS = [
+    { re: /FROM\s+[^:\s]+\s*$/m, label: "no-tag", severity: "high", msg: "Docker FROM without version tag (uses :latest)" },
+    { re: /FROM\s+\S+:latest/m, label: "latest-tag", severity: "high", msg: "Docker FROM uses :latest — pin version" },
+    { re: /RUN\s+.*curl.*\|\s*(?:sh|bash)/m, label: "pipe-install", severity: "high", msg: "curl | sh — unverified remote execution" },
+    { re: /EXPOSE\s+22\b/m, label: "ssh-exposed", severity: "medium", msg: "SSH port exposed in container" },
+    { re: /privileged:\s*true/m, label: "privileged", severity: "high", msg: "Privileged container — security risk" },
+    { re: /password|secret|api_key|token/im, label: "secret-in-config", severity: "high", msg: "Potential secret in config file" },
+    { re: /USER\s+root/m, label: "root-user", severity: "medium", msg: "Container runs as root — use non-root user" },
+    { re: /npm\s+install(?!\s+--production|\s+-P)/m, label: "dev-deps-in-prod", severity: "low", msg: "npm install without --production in Dockerfile" },
+  ];
+
+  for (const file of infraFiles) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trimStart().startsWith("#")) continue;
+      for (const pat of INFRA_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (findings.length === 0) {
+    return { text: "infra_scan: pass — no infrastructure issues detected.", summary: `${infraFiles.length} infra files scanned, 0 findings` };
+  }
+
+  const rows = ["## Infrastructure Scan Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} infrastructure violation(s)` : `warn — ${findings.length} issue(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${infraFiles.length} infra files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: observability_check ══════════════════════════════════════════
+
+/**
+ * Check for observability gaps: empty catch blocks, missing error logging,
+ * console.log in production code, missing metrics/tracing.
+ */
+export function toolObservabilityCheck(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
+
+  const findings = [];
+
+  const OBS_PATTERNS = [
+    { re: /catch\s*\(\s*\w*\s*\)\s*\{\s*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
+    { re: /catch\s*\{[\s\n]*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
+    { re: /catch\s*\(\s*\w+\s*\)\s*\{[\s\n]*\/\//m, label: "comment-only-catch", severity: "medium", msg: "Catch block with only comments — no error handling" },
+    { re: /console\.(log|info|debug)\s*\(/m, label: "console-log", severity: "low", msg: "console.log in source — use structured logger" },
+    { re: /catch\s*\([^)]*\)\s*\{[^}]*console\.error/m, label: "console-error-only", severity: "medium", msg: "catch uses console.error — no structured error reporting" },
+    { re: /process\.exit\s*\(\s*[^0)]/m, label: "hard-exit", severity: "medium", msg: "process.exit with error code — may skip cleanup" },
+    { re: /throw\s+new\s+Error\s*\(\s*\)/m, label: "empty-error", severity: "medium", msg: "throw new Error() with no message" },
+  ];
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      for (const pat of OBS_PATTERNS) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relative(cwd, file).replace(/\\/g, "/"),
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (findings.length === 0) {
+    return { text: "observability_check: pass — no observability gaps detected.", summary: `${files.length} files scanned, 0 findings` };
+  }
+
+  const rows = ["## Observability Check Results\n"];
+  rows.push("| File | Line | Severity | Issue |");
+  rows.push("|------|------|----------|-------|");
+  for (const f of findings) {
+    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+  }
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} observability gap(s)` : `warn — ${findings.length} issue(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
+}
+
+// ═══ Tool: doc_coverage ═════════════════════════════════════════════════
+
+/**
+ * Check documentation coverage: exported symbols without JSDoc,
+ * README staleness, missing API docs for public modules.
+ */
+export function toolDocCoverage(params) {
+  const { path: targetPath } = params;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const extSet = new Set([".ts", ".tsx", ".js", ".mjs"]);
+  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
+
+  const findings = [];
+  let totalExports = 0;
+  let documentedExports = 0;
+
+  const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|class|const|let|type|interface|enum)\s+(\w+)/;
+  const JSDOC_START = /\/\*\*/;
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(EXPORT_RE);
+      if (!m) continue;
+
+      totalExports++;
+
+      // Check if previous non-empty line is end of JSDoc
+      let hasDoc = false;
+      for (let j = i - 1; j >= Math.max(0, i - 15); j--) {
+        const trimmed = lines[j].trim();
+        if (trimmed === "") continue;
+        if (trimmed === "*/" || trimmed.endsWith("*/")) { hasDoc = true; break; }
+        if (trimmed.startsWith("*") || JSDOC_START.test(trimmed)) { hasDoc = true; break; }
+        break;
+      }
+
+      if (hasDoc) {
+        documentedExports++;
+      } else {
+        findings.push({
+          file: relative(cwd, file).replace(/\\/g, "/"),
+          line: i + 1,
+          severity: "medium",
+          label: "undocumented-export",
+          msg: `Exported "${m[1]}" has no JSDoc`,
+        });
+      }
+    }
+  }
+
+  const coveragePct = totalExports > 0 ? Math.round((documentedExports / totalExports) * 100) : 100;
+
+  const rows = ["## Documentation Coverage Results\n"];
+  rows.push(`- Files scanned: ${files.length}`);
+  rows.push(`- Exported symbols: ${totalExports}`);
+  rows.push(`- Documented: ${documentedExports} (${coveragePct}%)`);
+  rows.push(`- Undocumented: ${findings.length}\n`);
+
+  if (findings.length > 0) {
+    rows.push("| File | Line | Symbol |");
+    rows.push("|------|------|--------|");
+    for (const f of findings.slice(0, 50)) {
+      rows.push(`| ${f.file} | ${f.line} | ${f.msg} |`);
+    }
+    if (findings.length > 50) rows.push(`\n... and ${findings.length - 50} more`);
+  }
+
+  const verdict = coveragePct < 50 ? `fail — ${coveragePct}% documentation coverage` : coveragePct < 80 ? `warn — ${coveragePct}% coverage` : `pass — ${coveragePct}% coverage`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${totalExports} exports, ${documentedExports} documented (${coveragePct}%)`,
+    json: { totalExports, documentedExports, coverage: coveragePct, findings: findings.slice(0, 50) },
+  };
+}
+
 // ═══ Re-exports ═════════════════════════════════════════════════════════
 
 export { generateFvm, runFvmValidation };
@@ -1123,4 +1854,7 @@ export const TOOL_NAMES = [
   "dependency_graph", "rtm_parse", "rtm_merge",
   "audit_history", "fvm_generate", "fvm_validate",
   "act_analyze",
+  // Specialist domain tools
+  "perf_scan", "compat_check", "a11y_scan", "license_scan",
+  "i18n_validate", "infra_scan", "observability_check", "doc_coverage",
 ];

@@ -18,7 +18,30 @@ const MARKER_PATH = resolve(MARKER_DIR, "retro-marker.json");
 const COMPLETION_CMD = "session-self-improvement-complete";
 const ALLOWED_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "TodoWrite"];
 
+const KV_MARKER_KEY = "retro:marker";
+
+// Lazy bridge import — only loaded when needed (avoid overhead on non-retro path)
+let _bridge = null;
+async function getBridge() {
+  if (_bridge) return _bridge;
+  try {
+    _bridge = await import("../../core/bridge.mjs");
+    return _bridge;
+  } catch {
+    return null;
+  }
+}
+
 function read_marker() {
+  // Try SQLite KV first (atomic, no file race)
+  try {
+    if (_bridge) {
+      const kv = _bridge.getState(KV_MARKER_KEY);
+      if (kv !== null) return kv;
+    }
+  } catch { /* fall through to file */ }
+
+  // Fallback: JSON file
   try {
     return JSON.parse(readFileSync(MARKER_PATH, "utf8"));
   } catch {
@@ -27,11 +50,31 @@ function read_marker() {
 }
 
 function write_marker(data) {
+  // Write to SQLite KV (primary)
+  try {
+    if (_bridge) {
+      _bridge.setState(KV_MARKER_KEY, data);
+    }
+  } catch { /* fall through to file */ }
+
+  // Always write to JSON file too (backward compatibility + fallback)
   if (!existsSync(MARKER_DIR)) mkdirSync(MARKER_DIR, { recursive: true });
   writeFileSync(MARKER_PATH, JSON.stringify(data, null, 2), "utf8");
 }
 
-// Check marker — exit immediately if not retro_pending
+// Quick check: file marker first (no bridge overhead on normal path)
+const fileMarker = read_marker();
+if (!fileMarker || !fileMarker.retro_pending) {
+  process.exit(0);
+}
+
+// retro_pending detected — now init bridge for SQLite-backed state
+try {
+  const b = await getBridge();
+  if (b) await b.init(process.cwd());
+} catch { /* bridge optional */ }
+
+// Re-read marker with bridge available (SQLite may have more recent state)
 const marker = read_marker();
 if (!marker || !marker.retro_pending) {
   process.exit(0);

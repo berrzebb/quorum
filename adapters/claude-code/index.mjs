@@ -148,39 +148,59 @@ function run_audit(watchFilePath) {
     return;
   }
 
-  // Derive lock root: if watchFilePath is in a worktree, lock goes there (per-worktree isolation)
+  // Derive lock identity: worktree-specific if in a worktree
   let lockRoot = REPO_ROOT;
+  let worktreeId = "main";
   if (watchFilePath) {
-    const wMatch = watchFilePath.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
-    if (wMatch) lockRoot = wMatch[1];
-  }
-  const lockPath = resolve(lockRoot, ".claude", "audit.lock");
-  const LOCK_TTL_MS = 30 * 60 * 1000; // 30분 — PID 재활용 대비 최대 유효 시간
-  if (existsSync(lockPath)) {
-    try {
-      const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-      const age = Date.now() - (lock.startedAt ?? 0);
-      if (lock.pid && age < LOCK_TTL_MS) {
-        try {
-          process.kill(lock.pid, 0);
-          process.stdout.write(t("index.audit.already_running", { pid: lock.pid }));
-          return;
-        } catch {
-          log("STALE_LOCK: pid " + lock.pid + " no longer running — removing");
-        }
-      } else if (age >= LOCK_TTL_MS) {
-        log("EXPIRED_LOCK: age " + Math.round(age / 60000) + "min — removing");
-      }
-    } catch {
-      log("INVALID_LOCK: removing corrupt audit.lock");
+    const wMatch = watchFilePath.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/([^/]+))\//);
+    if (wMatch) {
+      lockRoot = wMatch[1];
+      worktreeId = wMatch[2];
     }
-    // 만료·stale·손상 lock을 실제로 삭제 (위 분기에서 return하지 않은 모든 경우)
-    try { rmSync(lockPath, { force: true }); } catch { /* already gone */ }
+  }
+  const lockName = `audit:${worktreeId}`;
+  const LOCK_TTL_MS = 30 * 60 * 1000;
+
+  // ── Try SQLite lock first (atomic, no TOCTOU) ──
+  const useSqliteLock = bridge.acquireLock(lockName, process.pid, undefined, LOCK_TTL_MS);
+  if (useSqliteLock) {
+    log(`LOCK_ACQUIRED: ${lockName} via SQLite (pid=${process.pid})`);
+  } else {
+    // Check if lock held by another process
+    const lockInfo = bridge.isLockHeld(lockName);
+    if (lockInfo.held) {
+      process.stdout.write(t("index.audit.already_running", { pid: lockInfo.owner }));
+      return;
+    }
+    // ── Fallback: JSON lock file (bridge unavailable) ──
+    log("LOCK_FALLBACK: SQLite lock unavailable, using JSON lock file");
+    const lockPath = resolve(lockRoot, ".claude", "audit.lock");
+    if (existsSync(lockPath)) {
+      try {
+        const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+        const age = Date.now() - (lock.startedAt ?? 0);
+        if (lock.pid && age < LOCK_TTL_MS) {
+          try {
+            process.kill(lock.pid, 0);
+            process.stdout.write(t("index.audit.already_running", { pid: lock.pid }));
+            return;
+          } catch {
+            log("STALE_LOCK: pid " + lock.pid + " no longer running — removing");
+          }
+        } else if (age >= LOCK_TTL_MS) {
+          log("EXPIRED_LOCK: age " + Math.round(age / 60000) + "min — removing");
+        }
+      } catch {
+        log("INVALID_LOCK: removing corrupt audit.lock");
+      }
+      try { rmSync(lockPath, { force: true }); } catch { /* already gone */ }
+    }
   }
 
   const auditScript = resolve(HOOKS_DIR, plugin.audit_script);
   if (!existsSync(auditScript)) {
     log("SKIP: " + auditScript + " not found");
+    bridge.releaseLock(lockName, process.pid);
     process.stdout.write(t("index.audit.failed"));
     return;
   }
@@ -202,6 +222,7 @@ function run_audit(watchFilePath) {
     });
   } catch (err) {
     closeSync(logFd);
+    bridge.releaseLock(lockName, process.pid);
     log("SPAWN_ERROR: " + (err.message ?? err));
     process.stdout.write(t("index.audit.failed"));
     return;
@@ -210,15 +231,20 @@ function run_audit(watchFilePath) {
   // spawn 에러 핸들링 (ENOENT 등 — 비동기 에러)
   child.on("error", (err) => {
     log("CHILD_ERROR: " + (err.message ?? err));
+    bridge.releaseLock(lockName, process.pid);
+    // Fallback cleanup for JSON lock
+    const lockPath = resolve(lockRoot, ".claude", "audit.lock");
     try { rmSync(lockPath, { force: true }); } catch { /* ignore */ }
     try { closeSync(logFd); } catch { /* already closed by normal path */ }
   });
 
+  // JSON lock file — still written for backward compatibility (other tools may check it)
+  const lockPath = resolve(lockRoot, ".claude", "audit.lock");
   writeFileSync(lockPath, JSON.stringify({ pid: child.pid, startedAt: Date.now() }), "utf8");
   child.unref();
   closeSync(logFd);
 
-  log("AUDIT_STARTED: pid=" + child.pid);
+  log("AUDIT_STARTED: pid=" + child.pid + " lock=" + lockName);
   process.stdout.write(t("index.audit.started_async", { tag: c.trigger_tag, pid: child.pid, log: logPath }));
 }
 
@@ -417,6 +443,11 @@ async function main() {
       // Count changed files from evidence
       const changedFileSection = freshContent.match(/### Changed Files[\s\S]*?(?=###|$)/)?.[0] ?? "";
       const changedFileCount = (changedFileSection.match(/^- `/gm) ?? []).length;
+      const changedFilesRaw = (changedFileSection.match(/^- `([^`]+)`/gm) ?? [])
+        .map(m => m.replace(/^- `|`$/g, ""));
+
+      // Pre-detect domains for trigger context (enriches tier scoring)
+      const detectionResult = await bridge.detectDomains(changedFilesRaw, changedFileSection);
 
       // Check prior rejections
       const priorRejections = bridge.queryEvents({ eventType: "audit.verdict" })
@@ -429,6 +460,7 @@ async function main() {
         apiSurfaceChanged: /api|endpoint|route/i.test(changedFileSection),
         crossLayerChange: changedFileSection.includes("src/") && changedFileSection.includes("tests/"),
         isRevert: /revert|rollback/i.test(freshContent),
+        domains: detectionResult?.domains,
       });
 
       if (triggerResult) {
@@ -452,6 +484,41 @@ async function main() {
         if (triggerResult.mode === "skip" && minTier >= 2) {
           log(`OVERRIDE: T1 would skip, but minimum_tier=${minTier} forces audit`);
           process.stdout.write(`[quorum] minimum_tier=${minTier} — T1 skip overridden, audit forced.\n`);
+        }
+      }
+
+      // ── Domain detection + specialist tools ──
+      const activeDomainNames = detectionResult
+        ? Object.entries(detectionResult.domains).filter(([, v]) => v).map(([k]) => k)
+        : [];
+      if (detectionResult && activeDomainNames.length > 0) {
+        const tier = triggerResult?.tier ?? "T2";
+        const selection = await bridge.selectReviewers(detectionResult.domains, tier);
+
+        if (selection && selection.tools.length > 0) {
+          log(`SPECIALIST: ${selection.summary}`);
+          bridge.emitEvent("specialist.detect", "claude-code", {
+            domains: activeDomainNames,
+            tools: selection.tools,
+            agents: selection.agents,
+            tier,
+          }, { sessionId });
+
+          // Run deterministic tools (zero cost, <30s each)
+          const specialistResult = await bridge.runSpecialistTools(selection, freshContent, REPO_ROOT);
+          if (specialistResult) {
+            for (const tr of specialistResult.toolResults) {
+              bridge.emitEvent("specialist.tool", "claude-code", {
+                tool: tr.tool, domain: tr.domain, status: tr.status, duration: tr.duration,
+              }, { sessionId });
+            }
+
+            // If tools have findings, log them (non-blocking — auditor sees enriched evidence)
+            if (specialistResult.hasBlockingToolFailure) {
+              log(`SPECIALIST_FAIL: ${specialistResult.codes.join(",")}`);
+            }
+            log(`SPECIALIST_DONE: ${specialistResult.toolResults.length} tools, ${specialistResult.duration}ms`);
+          }
         }
       }
 

@@ -30,6 +30,14 @@ import {
   toolAuditHistory,
   generateFvm,
   runFvmValidation,
+  toolPerfScan,
+  toolCompatCheck,
+  toolA11yScan,
+  toolLicenseScan,
+  toolI18nValidate,
+  toolInfraScan,
+  toolObservabilityCheck,
+  toolDocCoverage,
   TOOL_NAMES,
 } from "./tool-core.mjs";
 
@@ -68,15 +76,24 @@ function parseArgs(args) {
 // ═══ Tool dispatcher ════════════════════════════════════════════════════
 
 const DISPATCH = {
-  code_map:         (p) => toolCodeMap(p),
-  audit_scan:       (p) => toolAuditScan(p),
-  coverage_map:     (p) => toolCoverageMap(p),
-  dependency_graph: (p) => toolDependencyGraph(p),
-  rtm_parse:        (p) => toolRtmParse(p),
-  rtm_merge:        (p) => toolRtmMerge(p),
-  audit_history:    (p) => toolAuditHistory(p),
-  fvm_generate:     (p) => generateFvm(p.path, p.format),
-  fvm_validate:     (p) => runFvmValidation(p),
+  code_map:            (p) => toolCodeMap(p),
+  audit_scan:          (p) => toolAuditScan(p),
+  coverage_map:        (p) => toolCoverageMap(p),
+  dependency_graph:    (p) => toolDependencyGraph(p),
+  rtm_parse:           (p) => toolRtmParse(p),
+  rtm_merge:           (p) => toolRtmMerge(p),
+  audit_history:       (p) => toolAuditHistory(p),
+  fvm_generate:        (p) => generateFvm(p.path, p.format),
+  fvm_validate:        (p) => runFvmValidation(p),
+  // Specialist domain tools
+  perf_scan:           (p) => toolPerfScan(p),
+  compat_check:        (p) => toolCompatCheck(p),
+  a11y_scan:           (p) => toolA11yScan(p),
+  license_scan:        (p) => toolLicenseScan(p),
+  i18n_validate:       (p) => toolI18nValidate(p),
+  infra_scan:          (p) => toolInfraScan(p),
+  observability_check: (p) => toolObservabilityCheck(p),
+  doc_coverage:        (p) => toolDocCoverage(p),
 };
 
 // ═══ Help text ══════════════════════════════════════════════════════════
@@ -114,6 +131,30 @@ Tools:
   fvm_validate      Execute FVM rows against live server
                     --fvm_path <fvm.md> --base_url <url> --credentials '{"role":{"username":"u","password":"p"}}'
                     [--filter_role <role>] [--filter_route <route>] [--timeout_ms N]
+
+  perf_scan         Performance anti-pattern scanner
+                    [--path <dir|file>]
+
+  compat_check      API compatibility and breaking change checker
+                    [--path <dir|file>]
+
+  a11y_scan         Accessibility issue scanner (JSX/TSX)
+                    [--path <dir|file>]
+
+  license_scan      License compliance and PII scanner
+                    [--path <dir|file>]
+
+  i18n_validate     i18n locale parity and hardcoded string checker
+                    [--path <dir|file>]
+
+  infra_scan        Infrastructure config scanner (Docker, CI, etc.)
+                    [--path <dir|file>]
+
+  observability_check  Observability gap detector (empty catch, logging, etc.)
+                    [--path <dir|file>]
+
+  doc_coverage      Documentation coverage for exported symbols
+                    [--path <dir|file>]
 
 Options:
   --help            Show this help message

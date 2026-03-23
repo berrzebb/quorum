@@ -37,6 +37,14 @@ import {
   generateFvm,
   runFvmValidation,
   toolActAnalyze,
+  toolPerfScan,
+  toolCompatCheck,
+  toolA11yScan,
+  toolLicenseScan,
+  toolI18nValidate,
+  toolInfraScan,
+  toolObservabilityCheck,
+  toolDocCoverage,
 } from "./tool-core.mjs";
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
@@ -188,6 +196,87 @@ const TOOLS = [
       },
     },
   },
+  // ── Specialist domain tools ──────────────────
+  {
+    name: "perf_scan",
+    description: "Scan for performance anti-patterns: nested loops, sync I/O, unbounded queries, heavy imports. Zero-cost static analysis — no LLM needed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory or file to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "compat_check",
+    description: "Check for API breaking changes: deprecated annotations, CJS/ESM mixing, pending removals, wildcard dependencies.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory or file to check (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "a11y_scan",
+    description: "Scan JSX/TSX for accessibility issues: missing alt, onClick without keyboard, form labels, aria violations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory or file to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "license_scan",
+    description: "Check dependency licenses for copyleft/unknown risks and scan source for hardcoded secrets or PII patterns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project root to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "i18n_validate",
+    description: "Validate i18n locale key parity across language files and detect hardcoded UI strings in JSX components.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project root to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "infra_scan",
+    description: "Scan infrastructure files (Dockerfile, CI configs, docker-compose) for security and reliability anti-patterns.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project root to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "observability_check",
+    description: "Detect observability gaps: empty catch blocks, missing error logging, console.log in production, hard exits without cleanup.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory or file to scan (default: cwd)" },
+      },
+    },
+  },
+  {
+    name: "doc_coverage",
+    description: "Measure documentation coverage: percentage of exported symbols with JSDoc comments. Returns undocumented exports list.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Directory or file to scan (default: cwd)" },
+      },
+    },
+  },
 ];
 
 // ═══ Request handler ════════════════════════════════════════════════════
@@ -287,6 +376,25 @@ async function handleRequest(req) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }
         return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
+      }
+
+      // ── Specialist domain tools (unified handler pattern) ──
+      const SPECIALIST_DISPATCH = {
+        perf_scan: toolPerfScan,
+        compat_check: toolCompatCheck,
+        a11y_scan: toolA11yScan,
+        license_scan: toolLicenseScan,
+        i18n_validate: toolI18nValidate,
+        infra_scan: toolInfraScan,
+        observability_check: toolObservabilityCheck,
+        doc_coverage: toolDocCoverage,
+      };
+      if (SPECIALIST_DISPATCH[name]) {
+        const result = SPECIALIST_DISPATCH[name](args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary || ""})` }] };
       }
 
       return { content: [{ type: "text", text: `Unknown tool: ${name}` }], isError: true };

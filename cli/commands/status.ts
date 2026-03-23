@@ -5,9 +5,18 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
-export async function run(_args: string[]): Promise<void> {
+export async function run(args: string[]): Promise<void> {
+  // --attach: connect to running daemon TUI session via tmux/psmux
+  if (args.includes("--attach")) {
+    return attachToDashboard();
+  }
+  // --capture: grab a snapshot of the running daemon TUI
+  if (args.includes("--capture")) {
+    return captureDashboard();
+  }
+
   const repoRoot = process.cwd();
 
   console.log("\n\x1b[36mquorum status\x1b[0m\n");
@@ -212,5 +221,77 @@ function getActiveWorktrees(repoRoot: string): Worktree[] {
     return worktrees;
   } catch {
     return [];
+  }
+}
+
+// ── ProcessMux remote view ──────────────────
+
+const DASHBOARD_SESSION = "quorum-dashboard";
+
+function detectMuxBackend(): "tmux" | "psmux" | null {
+  if (process.platform === "win32") {
+    try {
+      spawnSync("psmux", ["--version"], { stdio: "ignore", timeout: 3000, windowsHide: true });
+      return "psmux";
+    } catch { return null; }
+  }
+  try {
+    spawnSync("tmux", ["-V"], { stdio: "ignore", timeout: 3000 });
+    return "tmux";
+  } catch { return null; }
+}
+
+function attachToDashboard(): void {
+  const backend = detectMuxBackend();
+  if (!backend) {
+    console.log("No mux backend available (tmux or psmux). Run 'quorum daemon' directly.");
+    return;
+  }
+
+  // Check if session exists
+  if (backend === "tmux") {
+    const check = spawnSync("tmux", ["has-session", "-t", DASHBOARD_SESSION], { stdio: "ignore" });
+    if (check.status !== 0) {
+      console.log(`No dashboard session '${DASHBOARD_SESSION}' found. Start with 'quorum daemon'.`);
+      return;
+    }
+    console.log(`Attaching to ${DASHBOARD_SESSION}...`);
+    spawnSync("tmux", ["attach", "-t", DASHBOARD_SESSION], { stdio: "inherit" });
+  } else {
+    const check = spawnSync("psmux", ["list"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+    if (!check.stdout?.includes(DASHBOARD_SESSION)) {
+      console.log(`No dashboard session '${DASHBOARD_SESSION}' found. Start with 'quorum daemon'.`);
+      return;
+    }
+    console.log(`Attaching to ${DASHBOARD_SESSION}...`);
+    spawnSync("psmux", ["attach", DASHBOARD_SESSION], { stdio: "inherit", windowsHide: true });
+  }
+}
+
+function captureDashboard(): void {
+  const backend = detectMuxBackend();
+  if (!backend) {
+    console.log("No mux backend available.");
+    return;
+  }
+
+  if (backend === "tmux") {
+    const result = spawnSync("tmux", ["capture-pane", "-t", DASHBOARD_SESSION, "-p"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (result.status === 0 && result.stdout) {
+      console.log(result.stdout);
+    } else {
+      console.log(`No dashboard session '${DASHBOARD_SESSION}' found.`);
+    }
+  } else {
+    const result = spawnSync("psmux", ["capture", DASHBOARD_SESSION, "--tail", "50"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+    });
+    if (result.status === 0 && result.stdout) {
+      console.log(result.stdout);
+    } else {
+      console.log(`No dashboard session '${DASHBOARD_SESSION}' found.`);
+    }
   }
 }

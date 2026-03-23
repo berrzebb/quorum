@@ -53,10 +53,14 @@ describe("implementer persona", () => {
     assert.equal(persona.name, "implementer");
   });
 
-  it("contains frontmatter with model and isolation", () => {
+  it("contains frontmatter with model (no isolation — orchestrator creates worktree)", () => {
     const persona = loader.load("implementer");
     assert.ok(persona.content.includes("model: claude-sonnet-4-6"));
-    assert.ok(persona.content.includes("isolation: worktree"));
+    // implementer does NOT have isolation: worktree in frontmatter.
+    // The orchestrator creates the worktree; implementer runs inside it.
+    // Having isolation: worktree would cause double worktree creation.
+    const frontmatter = persona.content.match(/---[\s\S]*?---/)?.[0] ?? "";
+    assert.doesNotMatch(frontmatter, /isolation/);
   });
 
   it("has Setup section", () => {
