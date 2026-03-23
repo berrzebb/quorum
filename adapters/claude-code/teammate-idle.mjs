@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execResolved, gitSync } from "../../core/cli-runner.mjs";
+import { execSync, spawnSync } from "node:child_process";
 
 // ── Read stdin ───────────────────────────────────────────────
 let input;
@@ -38,7 +38,7 @@ if (!teammateName.includes("implementer")) {
 // ── Resolve repo root ────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = gitSync(["rev-parse", "--show-toplevel"]);
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -46,9 +46,11 @@ try {
 // ── Check for uncommitted or staged changes ──────────────────
 let changedFiles = [];
 try {
-  const unstaged = gitSync(["diff", "--name-only"], { cwd: REPO_ROOT });
-  const staged = gitSync(["diff", "--cached", "--name-only"], { cwd: REPO_ROOT });
-  const diff = `${unstaged}\n${staged}`.trim();
+  const diff = execSync("git diff --name-only && git diff --cached --name-only", {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+  }).trim();
   if (diff) {
     changedFiles = [...new Set(diff.split(/\r?\n/).filter(Boolean))];
   }
@@ -85,11 +87,12 @@ if (activePresets.length > 0) {
           if (!existsSync(fullPath)) continue;
           const cmd = check.command.replace("{file}", file);
           try {
-            execResolved(cmd, {
+            spawnSync(cmd, {
               cwd: REPO_ROOT,
               encoding: "utf8",
               stdio: ["pipe", "pipe", "pipe"],
               timeout: 30000,
+              shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
             });
           } catch (e) {
             if (check.optional) continue;
@@ -99,11 +102,12 @@ if (activePresets.length > 0) {
         }
       } else {
         try {
-          execResolved(check.command, {
+          spawnSync(check.command, {
             cwd: REPO_ROOT,
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
             timeout: 60000,
+            shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
           });
         } catch (e) {
           if (check.optional) continue;

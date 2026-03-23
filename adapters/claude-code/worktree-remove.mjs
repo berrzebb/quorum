@@ -13,6 +13,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, basename, dirname } from "node:path";
+import { execSync } from "node:child_process";
 import { gitSync } from "../../core/cli-runner.mjs";
 
 // ── Read stdin ───────────────────────────────────────────────
@@ -36,7 +37,7 @@ const worktreeName = basename(worktreePath);
 let REPO_ROOT;
 try {
   // WorktreeRemove fires from main session, so cwd is the main repo
-  REPO_ROOT = gitSync(["rev-parse", "--show-toplevel"]);
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -79,6 +80,7 @@ try {
     gitSync(["worktree", "remove", "--force", worktreePath], {
       cwd: REPO_ROOT,
       stdio: ["pipe", "pipe", "pipe"],
+      shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     });
     console.error(`[worktree-remove] Removed worktree: ${worktreePath}`);
   }
@@ -90,13 +92,18 @@ try {
 try {
   if (meta?.branch) {
     // Check if branch has any commits beyond the parent
-    const log = gitSync(["log", "--oneline", `main..${meta.branch}`], { cwd: REPO_ROOT });
+    const log = execSync(`git log --oneline "main..${meta.branch}" 2>/dev/null`, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    }).trim();
 
     if (!log) {
       // No unique commits — safe to delete the branch
       gitSync(["branch", "-d", meta.branch], {
         cwd: REPO_ROOT,
         stdio: ["pipe", "pipe", "pipe"],
+        shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
       });
       console.error(`[worktree-remove] Cleaned up empty branch: ${meta.branch}`);
     } else {

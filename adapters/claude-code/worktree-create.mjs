@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, cpSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 import { gitSync } from "../../core/cli-runner.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,7 +37,7 @@ const name = input.name || `agent-${Date.now().toString(36)}`;
 // ── Resolve paths ────────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = gitSync(["rev-parse", "--show-toplevel"]);
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -45,10 +46,10 @@ try {
 // If REPO_ROOT is already inside a worktree, resolve to the real main repo.
 let MAIN_ROOT = REPO_ROOT;
 try {
-  const gitDir = gitSync(["rev-parse", "--git-dir"], { cwd: REPO_ROOT });
+  const gitDir = execSync("git rev-parse --git-dir", { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
   // Worktrees have gitdir like: /path/to/main/.git/worktrees/<name>
   if (gitDir.includes("/worktrees/") || gitDir.includes("\\worktrees\\")) {
-    const commonDir = gitSync(["rev-parse", "--git-common-dir"], { cwd: REPO_ROOT });
+    const commonDir = execSync("git rev-parse --git-common-dir", { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
     MAIN_ROOT = resolve(REPO_ROOT, commonDir, "..");
     console.error(`[worktree-create] Detected nested context — resolving to main repo: ${MAIN_ROOT}`);
   }
@@ -76,6 +77,7 @@ try {
   gitSync(["worktree", "add", "-b", branchName, worktreeDir, "HEAD"], {
     cwd: MAIN_ROOT,
     stdio: ["pipe", "pipe", "pipe"],
+    shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
   });
 
   console.error(`[worktree-create] Created worktree: ${worktreeDir} (branch: ${branchName})`);

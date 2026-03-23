@@ -12,7 +12,7 @@
 import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync, openSync, closeSync, rmSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { execResolved } from "../../core/cli-runner.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus as c,
@@ -296,16 +296,13 @@ function run_quality_checks(filePath) {
         if (check.per_file) {
           const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
           const cmd = check.command.replace("{file}", envRef);
-          try {
-            execResolved(cmd, {
-              cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8",
-              env: { ...process.env, HOOK_TARGET_FILE: filePath },
-            });
-          } catch (e) {
-            const output = ((e.stdout || "") + (e.stderr || "")).toString().trim();
-            if (output && !check.optional) {
-              process.stdout.write(t("index.check.error", { label: check.label, file: filename, output }));
-            }
+          const result = spawnSync(cmd, {
+            cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+            env: { ...process.env, HOOK_TARGET_FILE: filePath },
+          });
+          const output = ((result.stdout || "") + (result.stderr || "")).trim();
+          if (result.status !== 0 && output && !check.optional) {
+            process.stdout.write(t("index.check.error", { label: check.label, file: filename, output }));
           }
         }
       }
@@ -322,16 +319,13 @@ function run_quality_checks(filePath) {
 
     const envRef = process.platform === "win32" ? "%HOOK_TARGET_FILE%" : "$HOOK_TARGET_FILE";
     const cmd = rule.command.replace("{file}", envRef);
-    try {
-      execResolved(cmd, {
-        cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8",
-        env: { ...process.env, HOOK_TARGET_FILE: filePath },
-      });
-    } catch (e) {
-      const output = ((e.stdout || "") + (e.stderr || "")).toString().trim();
-      if (output) {
-        process.stdout.write(t("index.check.error", { label: rule.label, file: filename, output }));
-      }
+    const result = spawnSync(cmd, {
+      cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+      env: { ...process.env, HOOK_TARGET_FILE: filePath },
+    });
+    const output = ((result.stdout || "") + (result.stderr || "")).trim();
+    if (result.status !== 0 && output) {
+      process.stdout.write(t("index.check.error", { label: rule.label, file: filename, output }));
     }
   }
 }

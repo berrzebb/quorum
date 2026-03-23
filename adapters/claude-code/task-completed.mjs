@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execResolved, gitSync } from "../../core/cli-runner.mjs";
+import { execSync, spawnSync } from "node:child_process";
 
 // ── Read stdin ───────────────────────────────────────────────
 let input;
@@ -36,7 +36,7 @@ console.error(`[task-completed] Verifying: "${taskSubject}" by ${teammateName}`)
 // ── Resolve repo root ────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = gitSync(["rev-parse", "--show-toplevel"]);
+  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -44,15 +44,17 @@ try {
 // ── Detect changed files (staged + unstaged + recent commits) ─
 let changedFiles = [];
 try {
-  // Uncommitted changes (staged + unstaged via two git calls — no shell piping needed)
-  const unstaged = gitSync(["diff", "--name-only"], { cwd: REPO_ROOT });
-  const staged = gitSync(["diff", "--cached", "--name-only"], { cwd: REPO_ROOT });
-  const uncommitted = `${unstaged}\n${staged}`.trim();
+  // Uncommitted changes
+  const uncommitted = execSync("git diff --name-only && git diff --cached --name-only", {
+    cwd: REPO_ROOT, encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+  }).trim();
 
   // Recent commits (last 5) — covers worktree commit workflow
   let committed = "";
   try {
-    committed = gitSync(["diff", "--name-only", "HEAD~5..HEAD"], { cwd: REPO_ROOT });
+    committed = execSync("git diff --name-only HEAD~5..HEAD 2>/dev/null", {
+      cwd: REPO_ROOT, encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    }).trim();
   } catch { /* shallow repo or <5 commits — skip */ }
 
   const all = `${uncommitted}\n${committed}`.trim();
@@ -94,11 +96,12 @@ if (activePresets.length > 0) {
           if (!existsSync(fullPath)) continue;
           const cmd = check.command.replace("{file}", file);
           try {
-            execResolved(cmd, {
+            spawnSync(cmd, {
               cwd: REPO_ROOT,
               encoding: "utf8",
               stdio: ["pipe", "pipe", "pipe"],
               timeout: 30000,
+              shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
             });
           } catch (e) {
             if (check.optional) continue;
@@ -109,11 +112,12 @@ if (activePresets.length > 0) {
       } else {
         // Whole-project checks
         try {
-          execResolved(check.command, {
+          spawnSync(check.command, {
             cwd: REPO_ROOT,
             encoding: "utf8",
             stdio: ["pipe", "pipe", "pipe"],
             timeout: 60000,
+            shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
           });
         } catch (e) {
           if (check.optional) continue;
