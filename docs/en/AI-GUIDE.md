@@ -114,6 +114,16 @@ Use deterministic tools before LLM reasoning:
 | `rtm_parse` | Parse RTM markdown → structured rows |
 | `rtm_merge` | Row-level merge with conflict detection |
 | `audit_history` | Query audit verdicts and patterns |
+| `perf_scan` | Performance anti-patterns (O(n²), sync I/O, busy loops) |
+| `a11y_scan` | Accessibility (missing alt, non-keyboard onClick, aria) |
+| `compat_check` | Compatibility (@deprecated, @breaking, CJS/ESM) |
+| `license_scan` | License + PII (copyleft, secrets, SSN) |
+| `infra_scan` | Infrastructure security (Docker, CI/CD) |
+| `observability_check` | Observability (empty catch, missing logging) |
+| `i18n_validate` | i18n key synchronization |
+| `doc_coverage` | Documentation-code alignment (JSDoc gaps) |
+| `act_analyze` | PDCA Act analysis (improvement items) |
+| `ai_guide` | AI agent guide queries |
 
 ## Stagnation Detection
 

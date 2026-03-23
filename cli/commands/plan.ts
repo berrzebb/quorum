@@ -6,6 +6,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, basename } from "node:path";
+import { execFileSync } from "node:child_process";
 
 interface TaskItem {
   id: string;
@@ -128,7 +129,6 @@ function loadRtmStatus(repoRoot: string): Map<string, TaskItem["status"]> {
 
   // Worktrees — scan for RTMs that may be newer than main
   try {
-    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });

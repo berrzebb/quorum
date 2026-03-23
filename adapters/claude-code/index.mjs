@@ -32,6 +32,12 @@ function log(msg) {
 const find_watch_file = findWatchFile;
 const find_respond_file = findRespondFile;
 
+/** Pre-computed required section patterns (cached on first call). */
+let _cachedRequired = null;
+
+/** Cached plan doc existence check (stable within session). */
+let _hasPlanDoc = null;
+
 /** Pre-validate evidence package format — regex-based, zero tokens. */
 function validate_evidence_format(content) {
   const errors = [];
@@ -40,13 +46,16 @@ function validate_evidence_format(content) {
   if (!triggerSection) return { errors, warnings };
 
   // ── Required sections — configurable via consensus.evidence_sections, fallback to defaults ──
-  const configSections = c.evidence_sections ?? [];
-  const defaultSections = ["Claim", "Changed Files", "Test Command", "Test Result", "Residual Risk"];
-  const sectionNames = configSections.length > 0 ? configSections : defaultSections;
-  const required = sectionNames.map((label) => ({
-    label,
-    pattern: new RegExp(`### ${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"),
-  }));
+  if (!_cachedRequired) {
+    const configSections = c.evidence_sections ?? [];
+    const defaultSections = ["Claim", "Changed Files", "Test Command", "Test Result", "Residual Risk"];
+    const sectionNames = configSections.length > 0 ? configSections : defaultSections;
+    _cachedRequired = sectionNames.map((label) => ({
+      label,
+      pattern: new RegExp(`### ${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"),
+    }));
+  }
+  const required = _cachedRequired;
 
   for (const { label, pattern } of required) {
     if (!pattern.test(triggerSection)) {
@@ -447,6 +456,24 @@ async function main() {
       const priorRejections = bridge.queryEvents({ eventType: "audit.verdict" })
         .filter((e) => e.payload.verdict === "changes_requested").length;
 
+      // Check if plan docs exist (cached — directory presence is session-stable)
+      if (_hasPlanDoc === null) {
+        const planDirs = ["docs/plan", "docs/plans", "plans"];
+        _hasPlanDoc = planDirs.some(d => {
+          try { return existsSync(resolve(REPO_ROOT, d)); } catch { return false; }
+        });
+      }
+      const hasPlanDoc = _hasPlanDoc;
+
+      // Compute blast radius for changed files
+      let blastRadius;
+      if (changedFilesRaw.length > 0) {
+        try {
+          const blastResult = await bridge.computeBlastRadius(changedFilesRaw);
+          if (blastResult?.ratio !== undefined) blastRadius = blastResult.ratio;
+        } catch { /* non-critical */ }
+      }
+
       const triggerResult = bridge.evaluateTrigger({
         changedFiles: changedFileCount || 1,
         securitySensitive: /auth|token|secret|crypt/i.test(changedFileSection),
@@ -455,10 +482,15 @@ async function main() {
         crossLayerChange: changedFileSection.includes("src/") && changedFileSection.includes("tests/"),
         isRevert: /revert|rollback/i.test(freshContent),
         domains: detectionResult?.domains,
+        hasPlanDoc,
+        blastRadius,
       });
 
       if (triggerResult) {
         log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
+        if (triggerResult.requiresPlan) {
+          log("PLAN-FIRST: T3 change without plan document — consider adding docs/plan/ before audit");
+        }
         bridge.emitEvent("audit.submit", "claude-code", {
           file: watchPath,
           tier: triggerResult.tier,
@@ -505,6 +537,17 @@ async function main() {
               bridge.emitEvent("specialist.tool", "claude-code", {
                 tool: tr.tool, domain: tr.domain, status: tr.status, duration: tr.duration,
               }, { sessionId });
+            }
+
+            // Submit tool findings to MessageBus for granular tracking
+            const mb = bridge.getMessageBus();
+            if (mb) {
+              for (const tr of specialistResult.toolResults) {
+                const findings = bridge.parseToolFindings(tr);
+                if (findings.length > 0) {
+                  mb.submitFindings(findings, "claude-code", `specialist-${tr.tool}`, tr.domain);
+                }
+              }
             }
 
             // If tools have findings, log them (non-blocking — auditor sees enriched evidence)

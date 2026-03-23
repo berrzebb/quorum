@@ -43,7 +43,7 @@ export function checkScope(evidencePath, repoRoot, baseBranch) {
 /**
  * Format scope check result for display.
  */
-export function formatScopeResult(result) {
+function formatScopeResult(result) {
   const lines = [];
 
   if (result.match) {

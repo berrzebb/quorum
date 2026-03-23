@@ -11,6 +11,7 @@
  */
 
 import type { Auditor, AuditRequest, AuditResult } from "./provider.js";
+import { extractJson } from "./auditors/parse.js";
 
 // ── Role definitions ──────────────────────────
 
@@ -138,34 +139,6 @@ Respond with JSON:
 
 // ── JSON extraction ──────────────────────────
 
-/**
- * Extract the first complete JSON object from LLM output.
- * Strategy: try ```json code block first, then balanced-bracket extraction.
- */
-function extractJson(raw: string): string | null {
-  // 1. Try fenced code block (```json ... ```)
-  const codeBlock = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-  if (codeBlock) return codeBlock[1]!;
-
-  // 2. Balanced bracket extraction — find first complete { ... }
-  const start = raw.indexOf("{");
-  if (start === -1) return null;
-
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < raw.length; i++) {
-    const ch = raw[i];
-    if (escape) { escape = false; continue; }
-    if (ch === "\\") { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{") depth++;
-    else if (ch === "}") { depth--; if (depth === 0) return raw.slice(start, i + 1); }
-  }
-  return null;
-}
-
 // ── Parsers ───────────────────────────────────
 
 function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
@@ -256,10 +229,29 @@ export class DeliberativeConsensus {
       : infraFailureOpinion("devil", devilSettled.reason);
     const opinions = [advocateOpinion, devilOpinion];
 
-    // Round 2: judge
+    // Round 2: judge — wrapped in try/catch so a judge failure doesn't crash the entire consensus
     const judgeRequest = buildJudgePrompt(request, advocateOpinion, devilOpinion);
-    const judgeResult = await this.config.judge.audit(judgeRequest);
-    const judgeVerdict = parseJudgeVerdict(judgeResult.raw);
+    let judgeVerdict: { verdict: "approved" | "changes_requested" | "infra_failure"; summary: string; codes: string[] };
+    try {
+      const judgeResult = await this.config.judge.audit(judgeRequest);
+      judgeVerdict = parseJudgeVerdict(judgeResult.raw);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (process.env.QUORUM_DEBUG) {
+        console.error(`[consensus] Judge failed: ${msg}`);
+      }
+      // Fallback: majority vote from advocate + devil
+      const advocateApproved = advocateOpinion.verdict === "approved";
+      const devilApproved = devilOpinion.verdict === "approved";
+      const bothInfra = advocateOpinion.verdict === "infra_failure" && devilOpinion.verdict === "infra_failure";
+      judgeVerdict = {
+        verdict: bothInfra ? "infra_failure"
+          : (advocateApproved && devilApproved) ? "approved"
+          : "changes_requested",
+        summary: `Judge unavailable (${msg}). Verdict derived from advocate + devil majority.`,
+        codes: [...new Set([...advocateOpinion.codes, ...devilOpinion.codes])],
+      };
+    }
 
     return {
       mode: "deliberative",

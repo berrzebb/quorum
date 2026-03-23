@@ -57,7 +57,27 @@ export type EventType =
   // Merge
   | "merge.start"
   | "merge.complete"
-  | "merge.conflict";
+  | "merge.conflict"
+  // Finding lifecycle
+  | "finding.detect"
+  | "finding.ack"
+  | "finding.resolve"
+  | "finding.claim"
+  // Evidence + review
+  | "evidence.submit"
+  | "review.progress"
+  // Agent communication
+  | "agent.query"
+  | "agent.response"
+  // Context lifecycle
+  | "context.save"
+  | "context.restore"
+  // Dynamic specialist
+  | "specialist.spawn"
+  // Fitness
+  | "fitness.compute"
+  | "fitness.gate"
+  | "fitness.trend";
 
 // ── Typed payloads ────────────────────────────────────
 
@@ -115,6 +135,154 @@ export interface SpecialistReviewPayload {
   verdict: "approved" | "changes_requested";
   codes: string[];
   confidence: number;
+}
+
+// ── Finding types ─────────────────────────────────────
+
+export type FindingSeverity = "critical" | "major" | "minor" | "style";
+export type FindingStatus = "open" | "confirmed" | "dismissed" | "fixed";
+
+/** Canonical severity ordering. Higher = more severe. */
+export const SEVERITY_RANK: Record<FindingSeverity, number> = {
+  critical: 4, major: 3, minor: 2, style: 1,
+};
+
+export interface Finding {
+  id: string;
+  reviewerId: string;
+  provider: string;
+  severity: FindingSeverity;
+  category: string;
+  description: string;
+  file?: string;
+  line?: number;
+  suggestion?: string;
+  status: FindingStatus;
+  /** Reviewers who independently detected the same issue (read-time dedup). */
+  detectedBy?: string[];
+  /** Agreement ratio: detectedBy.length / totalProviders (0.0–1.0). */
+  consensusScore?: number;
+  /** Parent finding ID for threaded replies (e.g. Reviewer-B responds to Reviewer-A). */
+  replyTo?: string;
+}
+
+export interface FindingDetectPayload {
+  findings: Finding[];
+  reviewerId: string;
+  provider: string;
+}
+
+export interface FindingAckPayload {
+  findingId: string;
+  action: "fix" | "dismiss";
+  reason?: string;
+}
+
+export interface FindingResolvePayload {
+  findingId: string;
+  resolution: "fixed" | "dismissed" | "superseded";
+}
+
+export interface FindingClaimPayload {
+  reviewerId: string;
+  domain: string;
+  provider: string;
+}
+
+export interface EvidenceSubmitPayload {
+  findingCount: number;
+  verdict: string;
+  codes: string[];
+  scope?: string;
+}
+
+export interface ReviewProgressPayload {
+  reviewerId: string;
+  provider: string;
+  progress: number;
+  phase: "analyzing" | "reviewing" | "summarizing" | "complete";
+  estimatedMs?: number;
+}
+
+export interface AgentQueryPayload {
+  queryId: string;
+  fromAgent: string;
+  toAgent?: string;  // null = broadcast
+  question: string;
+  context?: Record<string, unknown>;
+}
+
+export interface AgentResponsePayload {
+  queryId: string;
+  fromAgent: string;
+  answer: string;
+  confidence?: number;
+}
+
+export interface ContextSavePayload {
+  sessionId: string;
+  agentId: string;
+  summary: string;
+  findingCount: number;
+  pendingItems: string[];
+  round: number;
+}
+
+export interface SpecialistSpawnPayload {
+  domain: string;
+  trigger: "finding" | "detection" | "manual";
+  reason: string;
+  parentReviewerId?: string;
+}
+
+// ── Fitness types ────────────────────────────────────
+
+export interface FitnessComponent {
+  value: number;       // 0.0-1.0 normalized
+  raw: number;         // raw metric value
+  weight: number;      // contribution weight
+  label: string;
+}
+
+export interface FitnessScore {
+  total: number;       // 0.0-1.0 weighted sum
+  components: {
+    typeSafety: FitnessComponent;    // weight 0.25 — as any count, type errors
+    testCoverage: FitnessComponent;  // weight 0.25 — line/branch coverage
+    patternScan: FitnessComponent;   // weight 0.20 — HIGH findings count
+    buildHealth: FitnessComponent;   // weight 0.15 — tsc + eslint pass rate
+    complexity: FitnessComponent;    // weight 0.15 — avg cyclomatic complexity
+  };
+  timestamp: number;
+  snapshotId: string;
+}
+
+export interface FitnessDelta {
+  before: number;
+  after: number;
+  delta: number;       // after - before
+  improved: boolean;
+  components: Record<string, { before: number; after: number; delta: number }>;
+}
+
+export interface FitnessComputePayload {
+  score: FitnessScore;
+  fileCount: number;
+}
+
+export interface FitnessGatePayload {
+  decision: "proceed" | "self-correct" | "auto-reject";
+  current: number;     // current total score
+  baseline: number;    // baseline total score
+  delta: number;
+  reason: string;
+}
+
+export interface FitnessTrendPayload {
+  movingAverage: number;
+  slope: number;       // positive = improving
+  windowSize: number;
+  dataPoints: number;
 }
 
 // ── Factory ───────────────────────────────────────────

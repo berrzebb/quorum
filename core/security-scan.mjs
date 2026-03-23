@@ -11,8 +11,9 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve, extname, relative } from "node:path";
+import { walkDir } from "./tools/tool-core.mjs";
 
 // ── OWASP patterns (built-in fallback) ────────────────
 
@@ -21,7 +22,7 @@ const PATTERNS = [
     id: "SEC-01",
     name: "SSRF",
     severity: "critical",
-    pattern: /fetch\s*\(\s*[^"'`]|http\.request\s*\(\s*[^"'`]|axios\s*\(\s*\{[^}]*url\s*:\s*[^"'`]/g,
+    pattern: /fetch\s*\(\s*[^"'`]|http\.request\s*\(\s*[^"'`]|axios\s*\(\s*\{[^}]*url\s*:\s*[^"'`]/,
     description: "Dynamic URL in fetch/http/axios — potential SSRF",
     extensions: [".ts", ".js", ".mjs", ".tsx", ".jsx"],
   },
@@ -29,7 +30,7 @@ const PATTERNS = [
     id: "SEC-02",
     name: "SQL Injection",
     severity: "critical",
-    pattern: /\$\{.*\}.*(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b|`[^`]*(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)[^`]*\$\{/gi,
+    pattern: /\$\{.*\}.*(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)\b|`[^`]*(?:SELECT|INSERT|UPDATE|DELETE|WHERE|FROM)[^`]*\$\{/i,
     description: "String interpolation in SQL query — use parameterized queries",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -37,7 +38,7 @@ const PATTERNS = [
     id: "SEC-03",
     name: "XSS",
     severity: "high",
-    pattern: /innerHTML\s*=|dangerouslySetInnerHTML|document\.write\s*\(/g,
+    pattern: /innerHTML\s*=|dangerouslySetInnerHTML|document\.write\s*\(/,
     description: "Direct HTML injection — potential XSS",
     extensions: [".ts", ".js", ".tsx", ".jsx"],
   },
@@ -45,9 +46,9 @@ const PATTERNS = [
     id: "SEC-04",
     name: "Path Traversal",
     severity: "critical",
-    pattern: /\.\.\//g,
+    pattern: /\.\.\//,
     // Only flag when used in file operations
-    contextPattern: /readFile|writeFile|createReadStream|resolve\s*\(.*\.\.\//g,
+    contextPattern: /readFile|writeFile|createReadStream|resolve\s*\(.*\.\.\//,
     description: "Path traversal in file operation",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -55,7 +56,7 @@ const PATTERNS = [
     id: "SEC-05",
     name: "Hardcoded Secret",
     severity: "high",
-    pattern: /(?:password|secret|api_key|apikey|token|auth)\s*[:=]\s*["'][^"']{8,}["']/gi,
+    pattern: /(?:password|secret|api_key|apikey|token|auth)\s*[:=]\s*["'][^"']{8,}["']/i,
     description: "Hardcoded credential or secret",
     extensions: [".ts", ".js", ".mjs", ".json", ".env"],
   },
@@ -63,7 +64,7 @@ const PATTERNS = [
     id: "SEC-06",
     name: "Insecure Deserialization",
     severity: "high",
-    pattern: /JSON\.parse\s*\(\s*(?:req\.|request\.|body|params|query)/g,
+    pattern: /JSON\.parse\s*\(\s*(?:req\.|request\.|body|params|query)/,
     description: "Parsing untrusted input without validation",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -71,7 +72,7 @@ const PATTERNS = [
     id: "SEC-07",
     name: "Command Injection",
     severity: "critical",
-    pattern: /exec\s*\(\s*[`"'].*\$\{|exec\s*\(\s*(?!["'`])|child_process.*exec\s*\(\s*[^"'`\[]/g,
+    pattern: /exec\s*\(\s*[`"'].*\$\{|exec\s*\(\s*(?!["'`])|child_process.*exec\s*\(\s*[^"'`\[]/,
     description: "Dynamic command execution — potential injection",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -79,7 +80,7 @@ const PATTERNS = [
     id: "SEC-08",
     name: "Missing Auth Check",
     severity: "medium",
-    pattern: /app\.(get|post|put|patch|delete)\s*\(\s*["'][^"']*["']\s*,\s*(?:async\s*)?\(/g,
+    pattern: /app\.(get|post|put|patch|delete)\s*\(\s*["'][^"']*["']\s*,\s*(?:async\s*)?\(/,
     description: "Route handler without middleware — verify auth is applied",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -87,7 +88,7 @@ const PATTERNS = [
     id: "SEC-09",
     name: "Eval Usage",
     severity: "critical",
-    pattern: /\beval\s*\(|new\s+Function\s*\(/g,
+    pattern: /\beval\s*\(|new\s+Function\s*\(/,
     description: "eval() or new Function() — code injection risk",
     extensions: [".ts", ".js", ".mjs", ".tsx", ".jsx"],
   },
@@ -95,7 +96,7 @@ const PATTERNS = [
     id: "SEC-10",
     name: "Sensitive Data Exposure",
     severity: "medium",
-    pattern: /console\.(log|info|debug|warn)\s*\(.*(?:password|token|secret|key|credential)/gi,
+    pattern: /console\.(log|info|debug|warn)\s*\(.*(?:password|token|secret|key|credential)/i,
     description: "Logging sensitive data",
     extensions: [".ts", ".js", ".mjs"],
   },
@@ -110,7 +111,7 @@ const PATTERNS = [
  * @returns {{ findings: Finding[], engine: string, summary: object }}
  */
 export function securityScan(targetPath, options = {}) {
-  const useSemgrep = options.useSemgrep !== false && isSemgrepAvailable();
+  const useSemgrep = options.useSemgrep !== false && isToolAvailable("semgrep");
 
   if (useSemgrep) {
     return runSemgrep(targetPath);
@@ -122,7 +123,7 @@ export function securityScan(targetPath, options = {}) {
 /**
  * Format scan results for display.
  */
-export function formatFindings(result) {
+function formatFindings(result) {
   const lines = [];
   lines.push(`Security Scan (${result.engine})`);
   lines.push("─".repeat(50));
@@ -151,20 +152,6 @@ export function formatFindings(result) {
 }
 
 // ── semgrep engine ────────────────────────────
-
-function isSemgrepAvailable() {
-  try {
-    const result = spawnSync("semgrep", ["--version"], {
-      encoding: "utf8",
-      timeout: 5000,
-      shell: process.platform === "win32",
-      windowsHide: true,
-    });
-    return result.status === 0;
-  } catch {
-    return false;
-  }
-}
 
 function runSemgrep(targetPath) {
   try {
@@ -205,7 +192,10 @@ function runSemgrep(targetPath) {
 
 function runBuiltinScan(targetPath) {
   const findings = [];
-  const files = collectFiles(targetPath);
+  const exts = new Set([".ts", ".js", ".mjs", ".tsx", ".jsx", ".json"]);
+  const files = existsSync(targetPath) && statSync(targetPath).isDirectory()
+    ? walkDir(targetPath, exts, 10)
+    : existsSync(targetPath) ? [targetPath] : [];
 
   for (const file of files) {
     const ext = extname(file);
@@ -222,12 +212,9 @@ function runBuiltinScan(targetPath) {
         if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
         if (file.includes("/test") || file.includes(".test.") || file.includes(".spec.")) continue;
 
-        // Reset regex
-        pattern.pattern.lastIndex = 0;
         if (pattern.pattern.test(line)) {
           // For path traversal, check context
           if (pattern.contextPattern) {
-            pattern.contextPattern.lastIndex = 0;
             if (!pattern.contextPattern.test(line)) continue;
           }
 
@@ -255,35 +242,6 @@ function runBuiltinScan(targetPath) {
   };
 }
 
-function collectFiles(targetPath, maxDepth = 10) {
-  const files = [];
-  const exts = new Set([".ts", ".js", ".mjs", ".tsx", ".jsx", ".json"]);
-
-  function scan(dir, depth) {
-    if (depth > maxDepth) return;
-    try {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
-        const full = resolve(dir, entry.name);
-        if (entry.isDirectory()) {
-          scan(full, depth + 1);
-        } else if (exts.has(extname(entry.name))) {
-          files.push(full);
-        }
-      }
-    } catch { /* skip */ }
-  }
-
-  if (existsSync(targetPath)) {
-    if (statSync(targetPath).isDirectory()) {
-      scan(targetPath, 0);
-    } else {
-      files.push(targetPath);
-    }
-  }
-
-  return files;
-}
 
 // ── gitleaks — git history secret detection (language-agnostic) ──
 
@@ -351,7 +309,7 @@ export function gitleaksScan(repoRoot) {
 
 // ── jscpd — duplicate code detection (150+ languages) ──
 
-export function duplicateScan(targetPath) {
+function duplicateScan(targetPath) {
   if (!isToolAvailable("jscpd")) {
     return { findings: [], engine: "jscpd (not installed)", available: false };
   }
@@ -411,7 +369,7 @@ export function depAuditScan(repoRoot) {
 
 // ── Import cycle detection (from dependency_graph) ──
 
-export function cycleScan(targetPath) {
+function cycleScan(targetPath) {
   try {
     const result = spawnSync(process.execPath, [
       resolve(targetPath, "core", "tools", "tool-runner.mjs"), "dependency_graph", "--path", targetPath, "--json",

@@ -32,12 +32,11 @@ export interface LoaderConfig {
 
 export class AgentLoader {
   private cache = new Map<string, AgentPersona>();
-  private cacheOrder: string[] = [];
-  private cacheSize: number;
+  private maxCacheSize: number;
   private searchPaths: string[];
 
   constructor(config: LoaderConfig = {}) {
-    this.cacheSize = config.cacheSize ?? 20;
+    this.maxCacheSize = config.cacheSize ?? 20;
     this.searchPaths = buildSearchPaths(config);
   }
 
@@ -45,7 +44,11 @@ export class AgentLoader {
   load(name: string): AgentPersona | null {
     // Cache hit
     if (this.cache.has(name)) {
-      return this.cache.get(name)!;
+      const persona = this.cache.get(name)!;
+      // Promote to MRU: delete + re-insert
+      this.cache.delete(name);
+      this.cache.set(name, persona);
+      return persona;
     }
 
     // Search through tiers
@@ -105,24 +108,17 @@ export class AgentLoader {
   /** Clear the cache. */
   clearCache(): void {
     this.cache.clear();
-    this.cacheOrder = [];
   }
 
   // ── LRU cache management ──────────────────
 
   private addToCache(name: string, persona: AgentPersona): void {
-    if (this.cache.has(name)) {
-      // Move to end (most recent)
-      const idx = this.cacheOrder.indexOf(name);
-      if (idx !== -1) this.cacheOrder.splice(idx, 1);
-    } else if (this.cacheOrder.length >= this.cacheSize) {
-      // Evict least recently used
-      const evict = this.cacheOrder.shift()!;
-      this.cache.delete(evict);
+    // Evict oldest (first entry in Map) if at capacity
+    if (this.cache.size >= this.maxCacheSize) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest) this.cache.delete(oldest);
     }
-
     this.cache.set(name, persona);
-    this.cacheOrder.push(name);
   }
 }
 

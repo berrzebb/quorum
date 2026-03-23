@@ -6,7 +6,7 @@
  */
 import { readFileSync, existsSync, rmSync, cpSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
 
@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function resolveRepoRoot() {
   try {
-    return execSync("git rev-parse --show-toplevel", { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
   } catch { /* git unavailable */ }
   const legacy = resolve(__dirname, "..", "..", "..");
   if (existsSync(resolve(legacy, ".git"))) return legacy;
@@ -118,7 +118,7 @@ if (existsSync(handoff)) {
 
 // ── 2. Recent git commits ───────────────────────────────────
 try {
-  const commits = execSync("git log --oneline -10", { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
+  const commits = execFileSync("git", ["log", "--oneline", "-10"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
 } catch { /* git unavailable */ }
 
@@ -226,19 +226,6 @@ if (existsSync(retroMarker)) {
 
 // 3d. Orchestrator track detection from handoff
 if (handoffContent) {
-  const inProgressTracks = [];
-  const blockedTracks = [];
-  for (const line of handoffContent.split(/\r?\n/)) {
-    // "- **상태**: 진행 중" 또는 "**status**: in_progress" 패턴
-    if (/진행\s*중|in.?progress/i.test(line)) {
-      // 이전 줄에서 작업 제목 추출 시도
-      inProgressTracks.push(line.trim());
-    }
-    if (/blocked/i.test(line)) {
-      blockedTracks.push(line.trim());
-    }
-  }
-
   // ### [task-id] 형식의 작업 항목에서 "진행 중" 상태인 것 추출
   const taskBlocks = handoffContent.split(/(?=^### \[)/m);
   const activeTasks = [];

@@ -43,7 +43,7 @@
       "changed_files":       "Changed Files"
     },
     "doc_patterns": {
-      "empty_markers":        "해당 없음|없음|none|n\\/a",
+      "empty_markers":        "",
       "completion_suffix":    ":\\s*(완료|done)\\s*\\/?",
       "design_prefix":        "설계|Design",
       "pending_focus_fallback": "current pending items",

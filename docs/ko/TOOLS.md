@@ -181,6 +181,162 @@ quorum tool fvm_validate \
 
 ---
 
+## perf_scan
+
+성능 안티패턴 탐지 — O(n²) 루프, 동기 I/O, 무한 루프, 무제한 쿼리.
+
+```bash
+quorum tool perf_scan src/
+quorum tool perf_scan core/tools/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 스캔할 디렉토리 또는 파일 |
+
+> 줄에 `// scan-ignore` 주석을 추가하면 해당 줄의 탐지를 억제한다. 패턴 정의 파일의 자기참조 false positive 방지에 사용.
+
+---
+
+## a11y_scan
+
+JSX/TSX 접근성 안티패턴 — `<img>` alt 누락, 키보드 미지원 onClick, aria 속성 오류.
+
+```bash
+quorum tool a11y_scan src/components/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | JSX/TSX 파일 또는 디렉토리 |
+
+---
+
+## compat_check
+
+호환성 검사 — @deprecated, @breaking, CommonJS/ESM 혼용, 와일드카드 의존성.
+
+```bash
+quorum tool compat_check src/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 스캔할 디렉토리 또는 파일 |
+
+---
+
+## license_scan
+
+라이선스 위험 + PII 패턴 — copyleft 의존성, 하드코딩 시크릿, SSN/이메일 패턴.
+
+```bash
+quorum tool license_scan .
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 프로젝트 루트 |
+
+---
+
+## infra_scan
+
+인프라 설정 보안 — Dockerfile, CI/CD, docker-compose, nginx 설정.
+
+```bash
+quorum tool infra_scan .
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 프로젝트 루트 |
+
+---
+
+## observability_check
+
+관측성 검사 — 빈 catch 블록, console.log, 구조화 로깅 누락.
+
+```bash
+quorum tool observability_check src/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 스캔할 디렉토리 또는 파일 |
+
+---
+
+## i18n_validate
+
+i18n 키 검증 — 로케일 파일 간 키 동기화, 누락/초과 키 감지.
+
+```bash
+quorum tool i18n_validate locales/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 로케일 디렉토리 |
+
+---
+
+## doc_coverage
+
+문서-코드 정합성 — export된 함수 중 JSDoc 누락, 파일별 문서화율.
+
+```bash
+quorum tool doc_coverage src/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--path` | 스캔할 디렉토리 |
+
+---
+
+## ai_guide
+
+AI 에이전트용 가이드 쿼리 — 역할, 프로토콜, 문서 형식 안내.
+
+```bash
+quorum tool ai_guide --topic evidence
+quorum tool ai_guide --topic roles
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--topic` | 질문 주제 (roles, evidence, tools, planner 등) |
+
+---
+
+## act_analyze
+
+PDCA Act 분석 — 감사 이력 + FVM 결과에서 개선 항목 도출.
+
+```bash
+quorum tool act_analyze
+quorum tool act_analyze --history .claude/audit-history.jsonl
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--history` | 감사 이력 JSONL 파일 |
+| `--fvm_results_path` | FVM 검증 결과 파일 |
+
+---
+
+## scan-ignore 프라그마
+
+`runPatternScan` 기반 도구(perf_scan, a11y_scan, compat_check, infra_scan, observability_check)는 줄 단위 `// scan-ignore` 주석을 인식한다. 해당 주석이 있는 줄은 패턴 매칭에서 제외된다.
+
+```javascript
+{ re: /while\s*\(\s*true\s*\)/m, ... }, // scan-ignore: msg 자기참조 방지
+```
+
+---
+
 ## 검증 파이프라인 (quorum verify)
 
 모든 검사를 순차 실행. 각 검사는 결정론적.

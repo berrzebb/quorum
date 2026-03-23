@@ -94,7 +94,7 @@ export function buildCodexArgs(args, resumeTarget, cwd) {
 export function streamCodexOutput(child, rawJson) {
   return new Promise((resolvePromise, reject) => {
     let threadId = null;
-    const stdoutChunks = [];
+    let stdoutForLog = "";
     const stderrChunks = [];
     let buffer = "";
 
@@ -116,8 +116,9 @@ export function streamCodexOutput(child, rawJson) {
     }
 
     child.stdout.on("data", (chunk) => {
-      stdoutChunks.push(chunk);
-      buffer += chunk.toString("utf8");
+      const str = chunk.toString("utf8");
+      if (stdoutForLog.length < 5000) stdoutForLog += str;
+      buffer += str;
       let idx;
       while ((idx = buffer.indexOf("\n")) !== -1) {
         processLine(buffer.slice(0, idx).trim());
@@ -134,7 +135,7 @@ export function streamCodexOutput(child, rawJson) {
     child.on("close", (code) => {
       if (buffer.trim()) processLine(buffer.trim());
 
-      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+      const stdout = stdoutForLog;
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
 
       // codex-session.log에 디버깅용 기록

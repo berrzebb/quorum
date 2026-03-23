@@ -8,7 +8,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it, before, after } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const {
@@ -20,6 +20,7 @@ const {
   toolInfraScan,
   toolObservabilityCheck,
   toolDocCoverage,
+  toolAiGuide,
   TOOL_NAMES,
 } = await import("../core/tools/tool-core.mjs");
 
@@ -356,5 +357,63 @@ describe("JSON output (--json via tool-runner)", () => {
 
     const obsResult = toolObservabilityCheck({ path: dir });
     assert.ok(obsResult.json, "observability_check should have json");
+  });
+});
+
+// ═══ 10. ai_guide ═══════════════════════════════════════════════════════
+
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const __test_dirname = dirname(fileURLToPath(import.meta.url));
+
+describe("ai_guide", () => {
+  it("generates guide for a directory", () => {
+    const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
+    assert.ok(result.text.includes("# AI-GUIDE"));
+    assert.ok(result.text.includes("## Architecture Overview"));
+    assert.ok(result.text.includes("## Key Modules"));
+    assert.ok(result.summary);
+  });
+
+  it("includes entry points", () => {
+    const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
+    assert.ok(result.text.includes("## Entry Points"));
+  });
+
+  it("handles non-existent directory gracefully", () => {
+    const result = toolAiGuide({ target: "/nonexistent/path" });
+    assert.ok(result.text.includes("AI-GUIDE"));
+    assert.ok(result.summary);
+  });
+
+  it("includes documentation gaps section", () => {
+    const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
+    assert.ok(result.text.includes("## Documentation Gaps"));
+  });
+
+  it("includes quick commands section", () => {
+    const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
+    assert.ok(result.text.includes("## Quick Commands"));
+  });
+
+  it("returns json with projectName", () => {
+    const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
+    assert.ok(result.json);
+    assert.ok(result.json.projectName);
+  });
+
+  it("TOOL_NAMES includes ai_guide", () => {
+    assert.ok(TOOL_NAMES.includes("ai_guide"), "Missing tool: ai_guide");
+  });
+
+  it("works on a minimal temp directory", () => {
+    const dir = join(tmpDir, "ai-guide-minimal");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "index.ts"), "export function main() {}\n");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "test-proj", scripts: { build: "tsc" } }));
+    const result = toolAiGuide({ target: dir });
+    assert.ok(result.text.includes("# AI-GUIDE: test-proj"));
+    assert.ok(result.text.includes("npm run"));
+    assert.ok(!result.error);
   });
 });

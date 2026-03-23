@@ -25,6 +25,12 @@ export interface TriggerContext {
   isRevert: boolean;
   /** Detected specialist domains (optional — enhances tier routing). */
   domains?: DetectedDomains;
+  /** Whether a plan document exists for this change scope. */
+  hasPlanDoc?: boolean;
+  /** Current fitness score (0.0-1.0). Low fitness → higher tier. */
+  fitnessScore?: number;
+  /** Blast radius ratio (0.0-1.0). High ratio → higher tier. */
+  blastRadius?: number;
 }
 
 export interface TriggerResult {
@@ -34,6 +40,8 @@ export interface TriggerResult {
   score: number;
   /** Domains that were detected (empty if not provided). */
   activeDomains: (keyof DetectedDomains)[];
+  /** True when T3 audit has no plan doc — enforcement may block. */
+  requiresPlan: boolean;
 }
 
 /**
@@ -122,6 +130,26 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     }
   }
 
+  // 8. Plan coverage — large changes without plan docs push toward T3
+  if (ctx.changedFiles > 5 && ctx.hasPlanDoc === false) {
+    score += 0.1;
+    reasons.push("large change without plan documentation");
+  }
+
+  // 9. Fitness score — low fitness pushes toward stricter audit (0-0.15)
+  if (ctx.fitnessScore !== undefined && ctx.fitnessScore < 0.5) {
+    const fitnessContribution = 0.15 * (1 - ctx.fitnessScore / 0.5);
+    score += fitnessContribution;
+    reasons.push(`low fitness score (${ctx.fitnessScore.toFixed(2)}) — stricter audit`);
+  }
+
+  // 10. Blast radius — wide impact pushes toward stricter audit (0-0.15)
+  if (ctx.blastRadius !== undefined && ctx.blastRadius > 0.1) {
+    const blastContribution = Math.min(0.15, ctx.blastRadius * 0.3);
+    score += blastContribution;
+    reasons.push(`blast radius ${(ctx.blastRadius * 100).toFixed(0)}% — wide impact`);
+  }
+
   // Clamp
   score = Math.min(1, Math.max(0, score));
 
@@ -140,5 +168,7 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     tier = "T3";
   }
 
-  return { mode, tier, reasons, score, activeDomains };
+  const requiresPlan = tier === "T3" && ctx.hasPlanDoc === false;
+
+  return { mode, tier, reasons, score, activeDomains, requiresPlan };
 }

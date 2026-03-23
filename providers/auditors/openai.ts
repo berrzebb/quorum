@@ -6,6 +6,7 @@
  */
 
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
+import { parseAuditResponse } from "./parse.js";
 
 export interface OpenAIAuditorConfig {
   apiKey?: string;
@@ -79,7 +80,7 @@ export class OpenAIAuditor implements Auditor {
 
       const data = await response.json() as { choices: { message: { content: string } }[] };
       const raw = data.choices?.[0]?.message?.content ?? "";
-      return parseResponse(raw, Date.now() - start);
+      return parseAuditResponse(raw, Date.now() - start, true);
     } catch (err) {
       return {
         verdict: "infra_failure",
@@ -100,23 +101,3 @@ function formatPrompt(request: AuditRequest): string {
   return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
 }
 
-function parseResponse(raw: string, duration: number): AuditResult {
-  try {
-    const parsed = JSON.parse(raw);
-    return {
-      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
-      codes: Array.isArray(parsed.codes) ? parsed.codes : [],
-      summary: parsed.summary ?? "",
-      raw,
-      duration,
-    };
-  } catch {
-    return {
-      verdict: "changes_requested",
-      codes: ["parse-error"],
-      summary: raw.slice(0, 200),
-      raw,
-      duration,
-    };
-  }
-}

@@ -76,6 +76,8 @@ export interface AuditorConfig {
   endpoint?: string;
   /** Timeout in ms. */
   timeout?: number;
+  /** Per-role provider:model mapping for deliberative consensus. */
+  roles?: Record<string, string>;
 }
 
 export interface AuditRequest {

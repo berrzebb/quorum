@@ -8,25 +8,13 @@
 import { strict as assert } from "node:assert";
 import { describe, it, beforeEach } from "node:test";
 import { resolve } from "node:path";
-import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+
+import { createTempStore, cleanup } from "./helpers.mjs";
 
 const { EventStore, TransactionalUnitOfWork } = await import("../dist/bus/store.js");
 const { LockService } = await import("../dist/bus/lock.js");
 const { createEvent } = await import("../dist/bus/events.js");
-
-function createTempStore() {
-  const dir = resolve(tmpdir(), `quorum-test-${randomUUID()}`);
-  mkdirSync(dir, { recursive: true });
-  const dbPath = resolve(dir, "test.db");
-  const store = new EventStore({ dbPath });
-  return { store, dir, dbPath };
-}
-
-function cleanup(dir) {
-  try { rmSync(dir, { recursive: true, force: true }); } catch {}
-}
 
 // ═══ 1. LockService ═══════════════════════════════════════════════════
 

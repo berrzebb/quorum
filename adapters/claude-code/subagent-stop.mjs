@@ -71,7 +71,7 @@ if (lines.length > 0) {
   process.stdout.write(lines.join("\n"));
 }
 
-// ── Emit agent.complete event to EventStore for daemon visibility ──
+// ── Emit agent.complete event + release file claims ──
 try {
   const bridge = await import("../../core/bridge.mjs");
   const { REPO_ROOT } = await import("../../core/context.mjs");
@@ -80,6 +80,11 @@ try {
     name: agentName,
     retroDeferred,
   });
+  // Release all file claims held by this agent
+  const released = bridge.releaseFiles(agentName);
+  if (released > 0) {
+    process.stderr.write(`[quorum] Released ${released} file claim(s) for ${agentName}\n`);
+  }
   bridge.close();
 } catch { /* bridge non-critical */ }
 

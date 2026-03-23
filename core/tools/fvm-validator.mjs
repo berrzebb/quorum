@@ -165,7 +165,7 @@ export async function executeRow(row, baseUrl, authTokens, timeoutMs) {
   return { ...row, actual_status, pass, note, verdict, error };
 }
 
-export function formatResults(results, baseUrl) {
+function formatResults(results, baseUrl) {
   const total = results.length;
   const passed = results.filter((r) => r.pass).length;
   const failed = total - passed;

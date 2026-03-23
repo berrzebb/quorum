@@ -29,7 +29,7 @@ export async function run(args: string[]): Promise<void> {
       await assignTrack(repoRoot, args[1], args.slice(2));
       break;
     case "progress":
-      showProgress(repoRoot);
+      await showProgress(repoRoot);
       break;
     default:
       showHelp();
@@ -88,28 +88,78 @@ async function orchestrateTrack(
 ): Promise<void> {
   console.log(`\n  \x1b[1mOrchestrating: ${track.name}\x1b[0m (${track.items} items)\n`);
 
-  // Emit orchestration event
+  const toURL = (p: string) => pathToFileURL(p).href;
+  let bridge: Record<string, Function> | null = null;
+
   try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    const bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge.init(repoRoot);
-    bridge.emitEvent("track.create", "claude-code", {
-      trackId: track.name,
-      total: track.items,
-      completed: 0,
-      pending: track.items,
-      blocked: 0,
-    });
-    bridge.close();
+    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    await bridge!.init(repoRoot);
   } catch { /* bridge non-critical */ }
 
-  console.log("  Steps:");
-  console.log("    1. \x1b[32m✓\x1b[0m Track selected");
-  console.log("    2. Run scout for RTM:  quorum agent spawn scout claude -p \"scout ${track.name}\"");
-  console.log("    3. Assign to agent:    quorum orchestrate assign ${track.name} <agent-name>");
-  console.log("    4. Monitor progress:   quorum orchestrate progress");
-  console.log("    5. After approval:     quorum retro");
-  console.log("    6. Merge:              quorum merge\n");
+  // 1. Parse work breakdown → WorkItem[]
+  const workItems = parseWorkBreakdown(track.path);
+
+  // 2. Select execution mode
+  if (bridge?.selectExecutionMode && workItems.length > 0) {
+    const selection = bridge.selectExecutionMode(workItems);
+    if (selection) {
+      console.log(`  \x1b[1mExecution mode:\x1b[0m ${selection.mode}`);
+      console.log(`  \x1b[1mMax concurrency:\x1b[0m ${selection.maxConcurrency}`);
+      if (selection.reasons.length > 0) {
+        console.log(`  \x1b[1mReasons:\x1b[0m ${selection.reasons.join("; ")}`);
+      }
+
+      // Show execution groups
+      if (selection.plan.groups.length > 0) {
+        console.log(`\n  \x1b[1mExecution groups\x1b[0m (${selection.plan.depth} sequential steps):\n`);
+        for (const group of selection.plan.groups) {
+          const ids = group.items.map((i: { id: string }) => i.id).join(", ");
+          console.log(`    Step ${group.order + 1}: [${ids}]  (${group.items.length} parallel)`);
+        }
+      }
+
+      if (selection.plan.unschedulable.length > 0) {
+        console.log(`\n  \x1b[33m⚠ Unschedulable:\x1b[0m ${selection.plan.unschedulable.join(", ")} (circular deps)`);
+      }
+
+      // Check existing claims
+      if (bridge.validatePlanClaims && selection.plan) {
+        const conflicts = bridge.validatePlanClaims(selection.plan, `orch-${track.name}`);
+        if (conflicts.size > 0) {
+          console.log(`\n  \x1b[31m✗ Claim conflicts:\x1b[0m`);
+          for (const [itemId, itemConflicts] of conflicts) {
+            const files = itemConflicts.map((c: { filePath: string; heldBy: string }) => `${c.filePath} (${c.heldBy})`).join(", ");
+            console.log(`    ${itemId}: ${files}`);
+          }
+        }
+      }
+    }
+  } else if (workItems.length === 0) {
+    console.log("  \x1b[33mNo parseable work items found in breakdown.\x1b[0m");
+  }
+
+  // 3. Emit orchestration event
+  if (bridge?.emitEvent) {
+    try {
+      bridge.emitEvent("track.create", "claude-code", {
+        trackId: track.name,
+        total: track.items,
+        completed: 0,
+        pending: track.items,
+        blocked: 0,
+      });
+    } catch { /* non-critical */ }
+  }
+
+  console.log("\n  \x1b[1mNext steps:\x1b[0m");
+  console.log(`    1. \x1b[32m✓\x1b[0m Track selected`);
+  console.log(`    2. Run scout for RTM:  quorum agent spawn scout claude -p "scout ${track.name}"`);
+  console.log(`    3. Assign to agent:    quorum orchestrate assign ${track.name} <agent-name>`);
+  console.log(`    4. Monitor progress:   quorum orchestrate progress`);
+  console.log(`    5. After approval:     quorum retro`);
+  console.log(`    6. Merge:              quorum merge\n`);
+
+  if (bridge?.close) bridge.close();
 }
 
 async function assignTrack(repoRoot: string, trackName: string | undefined, args: string[]): Promise<void> {
@@ -120,30 +170,102 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
 
   const agentName = args.includes("--agent") ? args[args.indexOf("--agent") + 1] : `impl-${trackName}`;
 
+  // Find track's work breakdown
+  const tracks = findTracks(repoRoot);
+  const track = tracks.find((t) => t.name === trackName);
+
+  let bridge: Record<string, Function> | null = null;
+  try {
+    const toURL = (p: string) => pathToFileURL(p).href;
+    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    await bridge!.init(repoRoot);
+  } catch { /* non-critical */ }
+
+  // Claim target files for this agent
+  if (bridge?.claimFiles && track) {
+    const workItems = parseWorkBreakdown(track.path);
+    const allFiles = workItems.flatMap((i) => i.targetFiles);
+
+    if (allFiles.length > 0) {
+      const conflicts = bridge.claimFiles(agentName, allFiles, undefined, 600_000);
+      if (conflicts.length > 0) {
+        console.log(`\n  \x1b[31m✗ Cannot assign — file conflicts:\x1b[0m`);
+        for (const c of conflicts) {
+          console.log(`    ${c.filePath} → held by ${c.heldBy}`);
+        }
+        if (bridge?.close) bridge.close();
+        return;
+      }
+      console.log(`  \x1b[32m✓\x1b[0m Claimed ${allFiles.length} file(s) for ${agentName}`);
+    }
+  }
+
+  // Emit assignment event
+  if (bridge?.emitEvent) {
+    bridge.emitEvent("agent.spawn", "claude-code", {
+      agentId: agentName,
+      role: "implementer",
+      trackId: trackName,
+    });
+  }
+
   console.log(`\n  \x1b[36mAssigning ${trackName} → ${agentName}\x1b[0m\n`);
   console.log("  To spawn the agent:");
   console.log(`    quorum agent spawn ${agentName} claude -p "implement track ${trackName}"`);
   console.log(`    quorum agent spawn ${agentName} codex exec "implement track ${trackName}"\n`);
+
+  if (bridge?.close) bridge.close();
 }
 
-function showProgress(repoRoot: string): void {
+async function showProgress(repoRoot: string): Promise<void> {
   console.log("\n\x1b[36mquorum orchestrate progress\x1b[0m\n");
 
-  // Read from EventStore if available
+  let bridge: Record<string, Function> | null = null;
   try {
-    const dbPath = resolve(repoRoot, ".claude", "quorum-events.db");
-    if (!existsSync(dbPath)) {
-      console.log("  No event data. Run 'quorum daemon' to start collecting.\n");
-      return;
-    }
-
     const toURL = (p: string) => pathToFileURL(p).href;
-    // Synchronous import doesn't work here, but we can read the bridge
-    console.log("  Run 'quorum daemon' for real-time progress view.");
-    console.log("  Or:  quorum status\n");
-  } catch {
-    console.log("  Run 'quorum status' for current state.\n");
+    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    await bridge!.init(repoRoot);
+  } catch { /* non-critical */ }
+
+  // Show active claims
+  if (bridge?.getClaims) {
+    const claims = bridge.getClaims();
+    if (claims.length > 0) {
+      console.log("  \x1b[1mActive file claims:\x1b[0m\n");
+      const byAgent = new Map<string, string[]>();
+      for (const c of claims) {
+        const list = byAgent.get(c.agentId) ?? [];
+        list.push(c.filePath);
+        byAgent.set(c.agentId, list);
+      }
+      for (const [agent, files] of byAgent) {
+        console.log(`    ${agent}: ${files.length} file(s)`);
+        for (const f of files.slice(0, 5)) console.log(`      - ${f}`);
+        if (files.length > 5) console.log(`      ... +${files.length - 5} more`);
+      }
+      console.log();
+    }
   }
+
+  // Show audit learnings
+  if (bridge?.analyzeAuditLearnings) {
+    const learnings = bridge.analyzeAuditLearnings();
+    if (learnings?.patterns.length > 0) {
+      console.log("  \x1b[1mRepeat patterns detected:\x1b[0m\n");
+      for (const p of learnings.patterns.slice(0, 5)) {
+        console.log(`    ${p.key} (${p.type}): ${p.count}× — severity: ${p.severity}`);
+      }
+      if (learnings.suggestions.length > 0) {
+        console.log(`\n  \x1b[33m${learnings.suggestions.length} rule suggestion(s) for CLAUDE.md\x1b[0m`);
+      }
+      console.log();
+    }
+  }
+
+  console.log("  Run 'quorum daemon' for real-time TUI dashboard.");
+  console.log("  Or:  quorum status\n");
+
+  if (bridge?.close) bridge.close();
 }
 
 function findTracks(repoRoot: string): { name: string; path: string; items: number }[] {
@@ -183,6 +305,81 @@ function scanDir(dir: string, tracks: { name: string; path: string; items: numbe
       }
     }
   } catch { /* skip */ }
+}
+
+// ── Work Breakdown Parser ──
+
+interface WorkItem {
+  id: string;
+  targetFiles: string[];
+  dependsOn?: string[];
+}
+
+/**
+ * Parse a work-breakdown.md into WorkItem[] suitable for planParallel/selectMode.
+ *
+ * Expected format:
+ *   ## TRACK-1 Title
+ *   - Prerequisite: TRACK-0
+ *   - First touch files:
+ *     - `src/foo.ts` — description
+ */
+function parseWorkBreakdown(wbPath: string): WorkItem[] {
+  let content: string;
+  try {
+    content = readFileSync(wbPath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const items: WorkItem[] = [];
+  // Match section headers: ## XX-1 or ### [XX-1]
+  const sectionRegex = /^#{2,3}\s+(?:\[)?([A-Z][A-Z0-9]*-\d+)\]?\s+/gm;
+  const sections: { id: string; start: number }[] = [];
+
+  let match: RegExpExecArray | null;
+  while ((match = sectionRegex.exec(content)) !== null) {
+    sections.push({ id: match[1]!, start: match.index });
+  }
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i]!;
+    const end = i + 1 < sections.length ? sections[i + 1]!.start : content.length;
+    const body = content.slice(section.start, end);
+
+    // Extract prerequisite/depends_on
+    const depsMatch = body.match(/(?:Prerequisite|depends_on)[:\s]+(.+)/i);
+    const dependsOn: string[] = [];
+    if (depsMatch) {
+      const depStr = depsMatch[1]!;
+      const depIds = depStr.match(/[A-Z][A-Z0-9]*-\d+/g);
+      if (depIds) dependsOn.push(...depIds);
+    }
+
+    // Extract first touch files (backtick-quoted paths)
+    const targetFiles: string[] = [];
+    const fileRegex = /`([^`]+\.[a-z]{1,5})`/g;
+    const firstTouchStart = body.indexOf("First touch files");
+    if (firstTouchStart !== -1) {
+      // Only scan the First touch files section
+      const nextSection = body.indexOf("\n- **", firstTouchStart + 1);
+      const fileBlock = nextSection !== -1
+        ? body.slice(firstTouchStart, nextSection)
+        : body.slice(firstTouchStart, Math.min(firstTouchStart + 500, body.length));
+      let fileMatch: RegExpExecArray | null;
+      while ((fileMatch = fileRegex.exec(fileBlock)) !== null) {
+        targetFiles.push(fileMatch[1]!);
+      }
+    }
+
+    items.push({
+      id: section.id,
+      targetFiles,
+      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+    });
+  }
+
+  return items;
 }
 
 function showHelp(): void {

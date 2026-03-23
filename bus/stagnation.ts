@@ -12,8 +12,9 @@
 
 import { createHash } from "node:crypto";
 import type { QuorumEvent } from "./events.js";
+import { computeTrend } from "./fitness.js";
 
-export type StagnationPattern = "spinning" | "oscillation" | "no-drift" | "diminishing-returns";
+export type StagnationPattern = "spinning" | "oscillation" | "no-drift" | "diminishing-returns" | "fitness-plateau";
 
 export interface StagnationResult {
   detected: boolean;
@@ -36,6 +37,10 @@ export interface StagnationConfig {
   driftEpsilon?: number;
   /** Min consecutive declining improvements (default: 3). */
   diminishingWindow?: number;
+  /** Max slope magnitude to consider fitness plateau (default: 0.005). */
+  plateauEpsilon?: number;
+  /** Min data points before plateau detection (default: 5). */
+  plateauMinPoints?: number;
 }
 
 const DEFAULTS: Required<StagnationConfig> = {
@@ -43,6 +48,8 @@ const DEFAULTS: Required<StagnationConfig> = {
   oscillationCycles: 2,
   driftEpsilon: 0.01,
   diminishingWindow: 3,
+  plateauEpsilon: 0.005,
+  plateauMinPoints: 5,
 };
 
 /**
@@ -52,6 +59,7 @@ const DEFAULTS: Required<StagnationConfig> = {
 export function detectStagnation(
   verdictEvents: QuorumEvent[],
   config: StagnationConfig = {},
+  fitnessHistory?: number[],
 ): StagnationResult {
   const cfg = { ...DEFAULTS, ...config };
   const patterns: DetectedPattern[] = [];
@@ -82,6 +90,12 @@ export function detectStagnation(
   // 4. Diminishing returns
   const diminishing = detectDiminishingReturns(verdictEvents, cfg.diminishingWindow);
   if (diminishing) patterns.push(diminishing);
+
+  // 5. Fitness plateau (requires fitnessHistory from FitnessLoop)
+  if (fitnessHistory && fitnessHistory.length >= cfg.plateauMinPoints) {
+    const plateau = detectFitnessPlateau(fitnessHistory, cfg.plateauEpsilon, cfg.plateauMinPoints);
+    if (plateau) patterns.push(plateau);
+  }
 
   const detected = patterns.length > 0;
   const recommendation = deriveRecommendation(patterns);
@@ -201,13 +215,36 @@ function detectDiminishingReturns(
   return null;
 }
 
+function detectFitnessPlateau(
+  history: number[],
+  epsilon: number,
+  minPoints: number,
+): DetectedPattern | null {
+  if (history.length < minPoints) return null;
+
+  const { slope, movingAverage } = computeTrend(history, minPoints);
+
+  if (Math.abs(slope) <= epsilon) {
+    return {
+      type: "fitness-plateau",
+      confidence: Math.min(1, 1 - Math.abs(slope) / epsilon),
+      detail: `Fitness score plateaued at ${movingAverage.toFixed(3)} (slope: ${slope.toFixed(4)}) over ${minPoints} evaluations`,
+    };
+  }
+  return null;
+}
+
 // ── Recommendation logic ──────────────────────
 
 function deriveRecommendation(patterns: DetectedPattern[]): StagnationResult["recommendation"] {
   if (patterns.length === 0) return "continue";
 
-  const types = new Set(patterns.map((p) => p.type));
-  const maxConfidence = patterns.length > 0 ? Math.max(...patterns.map((p) => p.confidence)) : 0;
+  let maxConfidence = 0;
+  const types = new Set<string>();
+  for (const p of patterns) {
+    types.add(p.type);
+    if (p.confidence > maxConfidence) maxConfidence = p.confidence;
+  }
 
   // Spinning + oscillation = likely stuck → halt
   if (types.has("spinning") && types.has("oscillation")) return "halt";
@@ -220,6 +257,9 @@ function deriveRecommendation(patterns: DetectedPattern[]): StagnationResult["re
 
   // Diminishing returns → escalate
   if (types.has("diminishing-returns")) return "escalate";
+
+  // Fitness plateau → escalate (scores not improving despite changes)
+  if (types.has("fitness-plateau")) return "escalate";
 
   return "escalate";
 }

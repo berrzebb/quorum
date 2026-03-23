@@ -22,18 +22,48 @@ export interface LockInfo {
 export class LockService {
   private db: Database.Database;
 
+  // ── Cached prepared statements ──
+  private stmtDeleteExpired: Database.Statement;
+  private stmtUpsert: Database.Statement;
+  private stmtVerifyOwner: Database.Statement;
+  private stmtRelease: Database.Statement;
+  private stmtCleanAll: Database.Statement;
+  private stmtIsHeld: Database.Statement;
+  private stmtListActive: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
+
+    this.stmtDeleteExpired = db.prepare(
+      `DELETE FROM locks WHERE lock_name = ? AND acquired_at + ttl_ms < ?`
+    );
+    this.stmtUpsert = db.prepare(`
+      INSERT INTO locks (lock_name, owner_pid, owner_session, acquired_at, ttl_ms)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(lock_name) DO UPDATE SET
+        owner_pid = excluded.owner_pid,
+        owner_session = excluded.owner_session,
+        acquired_at = excluded.acquired_at,
+        ttl_ms = excluded.ttl_ms
+      WHERE locks.owner_pid = ? OR locks.acquired_at + locks.ttl_ms < ?
+    `);
+    this.stmtVerifyOwner = db.prepare(
+      `SELECT owner_pid FROM locks WHERE lock_name = ?`
+    );
+    this.stmtRelease = db.prepare(
+      `DELETE FROM locks WHERE lock_name = ? AND owner_pid = ?`
+    );
+    this.stmtCleanAll = db.prepare(
+      `DELETE FROM locks WHERE acquired_at + ttl_ms < ?`
+    );
+    this.stmtIsHeld = db.prepare(
+      `SELECT * FROM locks WHERE lock_name = ? AND acquired_at + ttl_ms > ?`
+    );
+    this.stmtListActive = db.prepare(
+      `SELECT * FROM locks WHERE acquired_at + ttl_ms > ?`
+    );
   }
 
-  /**
-   * Acquire a named lock atomically.
-   *
-   * Uses a single INSERT that checks for unexpired locks held by a different PID.
-   * Returns true if the lock was acquired, false if held by another process.
-   *
-   * If the same PID re-acquires, the lock is refreshed (idempotent).
-   */
   acquire(
     lockName: string,
     pid: number,
@@ -41,66 +71,30 @@ export class LockService {
     ttlMs = 1_800_000,
   ): boolean {
     const now = Date.now();
+    this.stmtDeleteExpired.run(lockName, now);
 
-    // First, try to delete any expired lock for this name
-    this.db.prepare(
-      `DELETE FROM locks WHERE lock_name = ? AND acquired_at + ttl_ms < ?`
-    ).run(lockName, now);
-
-    // Attempt insert; if lock exists for different PID, this fails gracefully
     try {
-      this.db.prepare(`
-        INSERT INTO locks (lock_name, owner_pid, owner_session, acquired_at, ttl_ms)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(lock_name) DO UPDATE SET
-          owner_pid = excluded.owner_pid,
-          owner_session = excluded.owner_session,
-          acquired_at = excluded.acquired_at,
-          ttl_ms = excluded.ttl_ms
-        WHERE locks.owner_pid = ? OR locks.acquired_at + locks.ttl_ms < ?
-      `).run(lockName, pid, sessionId ?? null, now, ttlMs, pid, now);
-
-      // Verify we actually own the lock
-      const row = this.db.prepare(
-        `SELECT owner_pid FROM locks WHERE lock_name = ?`
-      ).get(lockName) as { owner_pid: number } | undefined;
-
+      this.stmtUpsert.run(lockName, pid, sessionId ?? null, now, ttlMs, pid, now);
+      const row = this.stmtVerifyOwner.get(lockName) as { owner_pid: number } | undefined;
       return row?.owner_pid === pid;
     } catch {
       return false;
     }
   }
 
-  /**
-   * Release a named lock. Only the owner (matching PID) can release.
-   */
   release(lockName: string, pid: number): boolean {
-    const result = this.db.prepare(
-      `DELETE FROM locks WHERE lock_name = ? AND owner_pid = ?`
-    ).run(lockName, pid);
+    const result = this.stmtRelease.run(lockName, pid);
     return result.changes > 0;
   }
 
-  /**
-   * Force-release expired locks. Called periodically by daemon.
-   * Returns the number of locks cleaned up.
-   */
   cleanExpired(): number {
-    const now = Date.now();
-    const result = this.db.prepare(
-      `DELETE FROM locks WHERE acquired_at + ttl_ms < ?`
-    ).run(now);
+    const result = this.stmtCleanAll.run(Date.now());
     return result.changes;
   }
 
-  /**
-   * Check if a lock is currently held (not expired).
-   */
   isHeld(lockName: string): LockInfo {
     const now = Date.now();
-    const row = this.db.prepare(
-      `SELECT * FROM locks WHERE lock_name = ? AND acquired_at + ttl_ms > ?`
-    ).get(lockName, now) as {
+    const row = this.stmtIsHeld.get(lockName, now) as {
       lock_name: string;
       owner_pid: number;
       owner_session: string | null;
@@ -120,14 +114,9 @@ export class LockService {
     };
   }
 
-  /**
-   * List all active (non-expired) locks.
-   */
   listActive(): LockInfo[] {
     const now = Date.now();
-    const rows = this.db.prepare(
-      `SELECT * FROM locks WHERE acquired_at + ttl_ms > ?`
-    ).all(now) as Array<{
+    const rows = this.stmtListActive.all(now) as Array<{
       lock_name: string;
       owner_pid: number;
       owner_session: string | null;

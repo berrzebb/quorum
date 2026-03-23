@@ -19,17 +19,27 @@ import { ClaudeCodeProvider } from "../providers/claude-code/adapter.js";
 import { registerProvider, listProviders } from "../providers/provider.js";
 import type { ProviderConfig } from "../providers/provider.js";
 import { ProcessMux, ensureMuxBackend } from "../bus/mux.js";
+import { MarkdownProjector } from "../bus/projector.js";
+import { MessageBus } from "../bus/message-bus.js";
 import { StateReader } from "./state-reader.js";
 import { App } from "./app.js";
 
 const DASHBOARD_SESSION = "quorum-dashboard";
 
-function loadConfig(repoRoot: string): ProviderConfig {
+interface DaemonConfig extends ProviderConfig {
+  agreeTag: string;
+  pendingTag: string;
+}
+
+function loadConfig(repoRoot: string): DaemonConfig {
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
   let watchFile = "docs/feedback/claude.md";
   let respondFile = "docs/feedback/gpt.md";
   let auditorModel = "codex";
   let triggerTag = "[REVIEW_NEEDED]";
+  let agreeTag = "[APPROVED]";
+  let pendingTag = "[CHANGES_REQUESTED]";
+  let roles: Record<string, string> | undefined;
 
   if (existsSync(configPath)) {
     try {
@@ -40,6 +50,11 @@ function loadConfig(repoRoot: string): ProviderConfig {
         : respondFile;
       auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
       triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
+      agreeTag = cfg.consensus?.agree_tag ?? agreeTag;
+      pendingTag = cfg.consensus?.pending_tag ?? pendingTag;
+      if (cfg.consensus?.roles && typeof cfg.consensus.roles === "object") {
+        roles = cfg.consensus.roles;
+      }
     } catch { /* use defaults */ }
   }
 
@@ -48,7 +63,9 @@ function loadConfig(repoRoot: string): ProviderConfig {
     watchFile,
     respondFile,
     triggerTag,
-    auditor: { model: auditorModel, timeout: 120_000 },
+    agreeTag,
+    pendingTag,
+    auditor: { model: auditorModel, timeout: 120_000, roles },
   };
 }
 
@@ -102,8 +119,36 @@ export default async function startDaemon(): Promise<void> {
   registerProvider(claude);
   await claude.start(bus, config);
 
-  // StateReader for SQLite-only state queries (new panels)
-  const stateReader = new StateReader(store);
+  // MessageBus + StateReader for finding-level queries
+  const messageBus = new MessageBus(store);
+  const stateReader = new StateReader(store, messageBus);
+
+  // Projector for self-healing markdown ↔ SQLite drift
+  const projector = new MarkdownProjector(store.getDb(), {
+    triggerTag: config.triggerTag ?? "[REVIEW_NEEDED]",
+    agreeTag: config.agreeTag,
+    pendingTag: config.pendingTag,
+  });
+  const watchPath = resolve(repoRoot, config.watchFile);
+  const respondPath = resolve(repoRoot, config.respondFile);
+  // selfHeal runs only when new events exist since last check (avoids no-op cycles)
+  let lastSelfHealTimestamp = 0;
+  const selfHealInterval = setInterval(() => {
+    try {
+      const latest = store.recent(1);
+      const latestTs = latest[0]?.timestamp ?? 0;
+      if (latestTs === lastSelfHealTimestamp) return;
+      lastSelfHealTimestamp = latestTs;
+
+      const diffs = projector.selfHeal(watchPath, respondPath);
+      if (diffs.length > 0) {
+        bus.emit(createEvent("evidence.sync", "claude-code", {
+          staleDiffs: diffs.length,
+          selfHeal: true,
+        }));
+      }
+    } catch { /* non-critical */ }
+  }, 30_000);
 
   // Bootstrap: only scan files if SQLite has no prior events.
   // When SQLite has data (normal operation), StateReader handles everything.
@@ -119,11 +164,13 @@ export default async function startDaemon(): Promise<void> {
   }, 10_000);
 
   // Config refresh (lazy import to avoid circular deps with MJS module)
-  setInterval(async () => {
-    try {
-      const { refreshConfigIfChanged } = await import("../core/context.mjs" as any);
-      refreshConfigIfChanged();
-    } catch { /* non-critical */ }
+  let _refreshConfig: (() => void) | null = null;
+  try {
+    const mod = await import("../core/context.mjs" as any);
+    _refreshConfig = mod.refreshConfigIfChanged;
+  } catch { /* non-critical */ }
+  const configInterval = setInterval(() => {
+    try { _refreshConfig?.(); } catch { /* non-critical */ }
   }, 10_000);
 
   // Render TUI with stateReader
@@ -134,6 +181,8 @@ export default async function startDaemon(): Promise<void> {
   // Graceful shutdown
   await waitUntilExit();
   clearInterval(maintenanceInterval);
+  clearInterval(configInterval);
+  clearInterval(selfHealInterval);
   for (const provider of listProviders()) {
     await provider.stop();
   }
