@@ -127,9 +127,9 @@ quorum migrate --dry-run  # 미리보기
 quorum/
 ├── cli/          ← 통합 진입점 (플러그인 없이 동작)
 ├── daemon/       ← Ink TUI 대시보드 (독립 동작)
-├── bus/          ← EventStore (SQLite) + pub/sub + 정체 감지 + ProcessMux
-├── providers/    ← 합의 프로토콜 + 트리거 + 라우터 + 에이전트 로더
-├── core/         ← 감사 프로토콜, 템플릿, MCP 도구
+├── bus/          ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + ProcessMux
+├── providers/    ← 합의 프로토콜 + 트리거 + 라우터 + 도메인 전문의원 + 에이전트 로더
+├── core/         ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 17개
 └── adapters/     ← 선택적 IDE 통합 (Claude Code 훅, Codex 감시자)
 ```
 
@@ -155,9 +155,27 @@ quorum/
 2. **악마의 변호인**: 가정에 도전, 근본 원인 vs 증상 치료 검증
 3. **판사**: 양측 의견을 검토하고 최종 판결
 
+### 도메인 전문의원 (v0.3.0)
+
+변경이 특정 도메인에 해당하면, 전문 리뷰어가 조건부로 활성화됩니다:
+
+| 도메인 | 도구 | 에이전트 | 최소 티어 |
+|--------|------|----------|----------|
+| 성능 | `perf_scan` | perf-analyst | T2 |
+| 마이그레이션 | `compat_check` | compat-reviewer | T2 |
+| 접근성 | `a11y_scan` | a11y-auditor | T2 |
+| 컴플라이언스 | `license_scan` | compliance-officer | T2 |
+| i18n | `i18n_validate` | — | T2 |
+| 인프라 | `infra_scan` | — | T2 |
+| 관측성 | `observability_check` | — | T3 |
+| 문서화 | `doc_coverage` | — | T3 |
+| 동시성 | — | concurrency-verifier | T3 |
+
+도구는 결정론적 (비용 0, 항상 실행). 에이전트는 LLM 기반 (충분한 티어에서만 활성화).
+
 ### 조건부 트리거
 
-모든 변경에 전체 합의가 필요하지는 않음. 6팩터 점수 시스템:
+모든 변경에 전체 합의가 필요하지는 않음. 12팩터 점수 시스템 (6 기본 + 도메인 신호):
 
 | 티어 | 점수 | 모드 |
 |------|------|------|
@@ -215,14 +233,30 @@ quorum/
 
 LLM 판단을 결정론적 사실로 대체하는 도구. 할루시네이션 불가.
 
-**분석 도구** (9개):
+**분석 도구** (17개):
 ```bash
+# 핵심 분석
 quorum tool code_map src/              # 심볼 인덱스
 quorum tool dependency_graph .          # import DAG, 순환 감지
 quorum tool audit_scan src/             # 타입 안전성, 하드코딩 패턴
 quorum tool coverage_map                # 파일별 테스트 커버리지
-quorum tool rtm_parse docs/rtm.md      # RTM 파싱
 quorum tool audit_history --summary     # 감사 판정 패턴
+
+# RTM & 검증
+quorum tool rtm_parse docs/rtm.md      # RTM 파싱
+quorum tool rtm_merge --base a --updates '["b"]'  # 워크트리 RTM 병합
+quorum tool fvm_generate /project       # FE×API×BE 접근 매트릭스
+quorum tool fvm_validate --fvm_path x --base_url http://localhost:3000 --credentials '{}'
+
+# 도메인 전문의원 (v0.3.0)
+quorum tool perf_scan src/             # 성능 안티패턴
+quorum tool compat_check src/          # API 호환성 깨짐
+quorum tool a11y_scan src/             # 접근성 (JSX/TSX)
+quorum tool license_scan .             # 라이선스 + PII
+quorum tool i18n_validate .            # 로케일 키 동등성
+quorum tool infra_scan .               # Dockerfile/CI 보안
+quorum tool observability_check src/   # 빈 catch, 로깅 갭
+quorum tool doc_coverage src/          # JSDoc 커버리지 %
 ```
 
 **검증 파이프라인** (`quorum verify`):
@@ -240,7 +274,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 387 tests
+npm test                # 533 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```

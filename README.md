@@ -131,9 +131,9 @@ Both paths use the same core engine: `bus/` + `providers/` + `core/`.
 quorum/
 ├── cli/          ← unified entry point (works without any plugin)
 ├── daemon/       ← Ink TUI dashboard (works standalone)
-├── bus/          ← EventStore (SQLite) + pub/sub + stagnation detection + process mux
-├── providers/    ← consensus protocol + trigger + router + agent loader
-├── core/         ← audit protocol, templates, MCP tools
+├── bus/          ← EventStore (SQLite) + pub/sub + stagnation + LockService + ProcessMux
+├── providers/    ← consensus protocol + trigger + router + domain specialists + agent loader
+├── core/         ← audit protocol (7 modules), templates, 17 MCP tools
 └── adapters/     ← optional IDE integrations (Claude Code hooks, Codex watcher)
 ```
 
@@ -159,9 +159,27 @@ For complex changes (T3), a 3-role protocol runs:
 2. **Devil's Advocate**: challenges assumptions, checks root cause vs symptom
 3. **Judge**: weighs both opinions, delivers final verdict
 
+### Domain Specialists (v0.3.0)
+
+When changes touch specialized domains, quorum conditionally activates expert reviewers:
+
+| Domain | Tool | Agent | Min Tier |
+|--------|------|-------|----------|
+| Performance | `perf_scan` | perf-analyst | T2 |
+| Migration | `compat_check` | compat-reviewer | T2 |
+| Accessibility | `a11y_scan` | a11y-auditor | T2 |
+| Compliance | `license_scan` | compliance-officer | T2 |
+| i18n | `i18n_validate` | — | T2 |
+| Infrastructure | `infra_scan` | — | T2 |
+| Observability | `observability_check` | — | T3 |
+| Documentation | `doc_coverage` | — | T3 |
+| Concurrency | — | concurrency-verifier | T3 |
+
+Tools are deterministic (zero cost, always run). Agents are LLM-powered (only at sufficient tier).
+
 ### Conditional Trigger
 
-Not every change needs full consensus. A 6-factor scoring system determines the audit level:
+Not every change needs full consensus. A 12-factor scoring system (6 base + domain signals) determines the audit level:
 
 | Tier | Score | Mode |
 |------|-------|------|
@@ -219,17 +237,30 @@ quorum is provider-agnostic. Bring your own auditor.
 
 Deterministic tools that replace LLM judgment with facts. No hallucination possible.
 
-**Analysis tools** (9):
+**Analysis tools** (17):
 ```bash
+# Core analysis
 quorum tool code_map src/              # symbol index
 quorum tool dependency_graph .          # import DAG, cycles
 quorum tool audit_scan src/             # type-safety, hardcoded patterns
 quorum tool coverage_map                # per-file test coverage
+quorum tool audit_history --summary     # verdict patterns
+
+# RTM & verification
 quorum tool rtm_parse docs/rtm.md      # parse RTM → structured rows
 quorum tool rtm_merge --base a --updates '["b"]'  # merge worktree RTMs
-quorum tool audit_history --summary     # verdict patterns
 quorum tool fvm_generate /project       # FE×API×BE access matrix
 quorum tool fvm_validate --fvm_path x --base_url http://localhost:3000 --credentials '{}'
+
+# Domain specialists (v0.3.0)
+quorum tool perf_scan src/             # performance anti-patterns
+quorum tool compat_check src/          # API breaking changes
+quorum tool a11y_scan src/             # accessibility (JSX/TSX)
+quorum tool license_scan .             # license compliance + PII
+quorum tool i18n_validate .            # locale key parity
+quorum tool infra_scan .               # Dockerfile/CI security
+quorum tool observability_check src/   # empty catch, logging gaps
+quorum tool doc_coverage src/          # JSDoc coverage %
 ```
 
 **Verification pipeline** (`quorum verify`):
@@ -247,7 +278,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 387 tests
+npm test                # 533 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```
