@@ -70,7 +70,7 @@ quorum tool blast_radius --changed_files '["src/api.ts","src/db.ts"]' --max_dept
 | `--path` | Repository root (default: cwd) |
 | `--max_depth` | BFS depth limit (default: 10) |
 
-Output: affected file count, total file count, ratio, depth-sorted impact list with propagation path (`via` column). Used as the 10th trigger factor — ratio > 10% pushes toward T3.
+Output: affected file count, total file count, ratio, depth-sorted impact list with propagation path (`via` column). Used as a trigger factor — ratio > 10% pushes toward T3.
 
 ---
 

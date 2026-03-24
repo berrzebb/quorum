@@ -30,14 +30,14 @@ code edit → PostToolUse hook
     │       ※ runs only when candidates exist
     │
     ├─ [3] Fitness score computation (fitness.ts)
-    │       → 5 components → single 0.0-1.0 score
+    │       → 7 components → single 0.0-1.0 score
     │
     ├─ [4] Fitness gate (fitness-loop.ts)
     │       ├─ auto-reject: score drop → skip LLM audit
     │       ├─ self-correct: mild drop → warn and continue
     │       └─ proceed: stable/improved → continue
     │
-    ├─ [5] Trigger evaluation (10-factor scoring, incl. fitness + blast radius)
+    ├─ [5] Trigger evaluation (12-factor scoring, incl. fitness + blast radius + velocity + stagnation)
     │       ├─ T1 skip (micro change, no audit)
     │       ├─ T2 simple (single auditor)
     │       └─ T3 deliberative (Advocate + Devil's Advocate → Judge)

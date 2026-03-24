@@ -144,9 +144,9 @@ you write code
 you write code
     → PostToolUse hook fires    # automatic
     → regex scan + AST refine   # hybrid: false positive removal
-    → fitness score computed    # 5-component quality metric
+    → fitness score computed    # 7-component quality metric
     → fitness gate              # auto-reject / self-correct / proceed
-    → trigger eval (10 factors)# skip, simple, or deliberative
+    → trigger eval (12 factors)# skip, simple, or deliberative
     → auditor runs              # background, debounced
     → verdict syncs             # tag promotion/demotion
     → session-gate              # blocks until retro complete
@@ -162,7 +162,7 @@ quorum/
 ├── cli/              ← unified entry point (works without any plugin)
 ├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
 ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
-├── providers/        ← consensus protocol + trigger (10-factor) + router + domain specialists + AST analyzer
+├── providers/        ← consensus protocol + trigger (12-factor) + router + domain specialists + AST analyzer
 ├── core/             ← audit protocol (7 modules), templates, 19 MCP tools
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
@@ -264,7 +264,7 @@ The **FitnessLoop** gates LLM audit with 3 decisions:
 
 ### Conditional Trigger
 
-Not every change needs full consensus. A 10-factor scoring system (6 base + domain + plan + fitness + blast radius) determines the audit level:
+Not every change needs full consensus. A 12-factor scoring system (6 base + domain + plan + fitness + blast radius + velocity + stagnation) determines the audit level:
 
 | Tier | Score | Mode |
 |------|-------|------|

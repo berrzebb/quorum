@@ -35,7 +35,7 @@ Merge → squash → single commit → next track
 
 ## Trigger Evaluation
 
-Before each audit, a 10-factor score determines the consensus mode:
+Before each audit, a 12-factor score determines the consensus mode:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
