@@ -11,7 +11,7 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
@@ -25,7 +25,7 @@ function saveAgentState(repoRoot: string, id: string, data: Record<string, unkno
 
 function removeAgentState(repoRoot: string, id: string): void {
   const path = resolve(repoRoot, ".claude", "agents", `${id}.json`);
-  try { if (existsSync(path)) require("node:fs").rmSync(path); } catch { /* ignore */ }
+  try { if (existsSync(path)) rmSync(path); } catch { /* ignore */ }
 }
 
 /** Emit agent event to EventStore via bridge. */

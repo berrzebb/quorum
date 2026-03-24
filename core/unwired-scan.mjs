@@ -22,9 +22,16 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
  * @returns {{ findings: UWFinding[], summary: { definite: number, suspected: number } }}
  */
 export function unwiredScan(targetPath, options = {}) {
-  const exports = collectExports(targetPath);
-  const imports = collectImports(targetPath);
-  const dynamicPatterns = collectDynamicPatterns(targetPath);
+  // Read all source files once, share content across all collectors
+  const sourceFiles = collectSourceFiles(targetPath);
+  const contentMap = new Map();
+  for (const file of sourceFiles) {
+    try { contentMap.set(file, readFileSync(file, "utf8")); } catch { /* skip */ }
+  }
+
+  const exports = collectExports(targetPath, contentMap);
+  const imports = collectImports(targetPath, contentMap);
+  const dynamicPatterns = collectDynamicPatterns(targetPath, contentMap);
   const changedFiles = new Set((options.changedFiles ?? []).map(f => resolve(targetPath, f)));
 
   const findings = [];
@@ -85,7 +92,7 @@ export function unwiredScan(targetPath, options = {}) {
 /**
  * Format UW results for display.
  */
-export function formatUwResults(result) {
+function formatUwResults(result) {
   const lines = [];
 
   if (result.findings.length === 0) {
@@ -118,12 +125,10 @@ export function formatUwResults(result) {
 
 // ── Export collector ──────────────────────────
 
-function collectExports(targetPath) {
+function collectExports(targetPath, contentMap) {
   const exports = new Map(); // symbol → { file, line }
-  const files = collectSourceFiles(targetPath);
 
-  for (const file of files) {
-    const content = readFileSync(file, "utf8");
+  for (const [file, content] of contentMap) {
     const relPath = relative(targetPath, file);
     const ext = extname(file);
 
@@ -166,12 +171,10 @@ function collectExports(targetPath) {
 
 // ── Import collector ─────────────────────────
 
-function collectImports(targetPath) {
+function collectImports(targetPath, contentMap) {
   const imports = new Map(); // symbol → [consumer files]
-  const files = collectSourceFiles(targetPath);
 
-  for (const file of files) {
-    const content = readFileSync(file, "utf8");
+  for (const [file, content] of contentMap) {
     const relPath = relative(targetPath, file);
     const ext = extname(file);
 
@@ -215,12 +218,10 @@ function collectImports(targetPath) {
 
 // ── Dynamic pattern collector ────────────────
 
-function collectDynamicPatterns(targetPath) {
+function collectDynamicPatterns(targetPath, contentMap) {
   const patterns = [];
-  const files = collectSourceFiles(targetPath);
 
-  for (const file of files) {
-    const content = readFileSync(file, "utf8");
+  for (const [file, content] of contentMap) {
     const relPath = relative(targetPath, file);
 
     // Look for dynamic references: reflection, getattr, registry patterns

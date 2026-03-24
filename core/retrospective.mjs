@@ -42,7 +42,7 @@ function extractAgreedContext(claudeMd, agreedAnchor) {
   return section.length > 0 ? section.join("\n") : t("retro.no_agreed_items");
 }
 
-function main() {
+async function main() {
   if (!existsSync(claudePath)) {
     console.log(t("retro.no_claude_md"));
     return;
@@ -62,7 +62,7 @@ function main() {
   // Structural enforcement: auto-detect if audit quality has degraded.
   let policyReview = null;
   try {
-    const { checkFalsePositiveRate } = await import("./scripts/enforcement.mjs");
+    const { checkFalsePositiveRate } = await import("./enforcement.mjs");
     const { REPO_ROOT } = await import("./context.mjs");
     const historyPath = resolve(REPO_ROOT, ".claude", "audit-history.jsonl");
     // Extract track from agreed items (best effort)
@@ -92,10 +92,8 @@ function main() {
   console.log(t("retro.marker_set", { rx_id: rxId }));
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`retrospective marker failed: ${message}`);
   process.exit(1);
-}
+});

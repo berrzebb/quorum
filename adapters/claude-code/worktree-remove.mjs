@@ -13,7 +13,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, basename, dirname } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { gitSync } from "../../core/cli-runner.mjs";
 
 // ── Read stdin ───────────────────────────────────────────────
@@ -92,10 +92,11 @@ try {
 try {
   if (meta?.branch) {
     // Check if branch has any commits beyond the parent
-    const log = execSync(`git log --oneline "main..${meta.branch}" 2>/dev/null`, {
+    const log = execFileSync("git", ["log", "--oneline", `main..${meta.branch}`], {
       cwd: REPO_ROOT,
       encoding: "utf8",
-      shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
     }).trim();
 
     if (!log) {

@@ -8,7 +8,7 @@
     "session_file": "session.id",
     "debug_log": "debug.log",
     "fix_prompt": "templates/fix-prompt.md",
-    "respond_file": "gpt.md",
+    "respond_file": "verdict.md",
     "retro_script": "retrospective.mjs",
     "retro_prompt": "templates/retro-prompt.md",
     "handoff_file": ".claude/session-handoff.md",
@@ -43,7 +43,7 @@
       "changed_files":       "Changed Files"
     },
     "doc_patterns": {
-      "empty_markers":        "해당 없음|없음|none|n\\/a",
+      "empty_markers":        "",
       "completion_suffix":    ":\\s*(완료|done)\\s*\\/?",
       "design_prefix":        "설계|Design",
       "pending_focus_fallback": "current pending items",

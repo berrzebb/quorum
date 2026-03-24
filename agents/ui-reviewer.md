@@ -3,6 +3,12 @@ name: ui-reviewer
 description: Find UI issues that code-level analysis (scout, code_map, dependency_graph) cannot detect. Launches a real browser to check rendering, visual states, interactions, a11y, and runtime errors. Use after FE implementation to catch issues invisible to static analysis.
 model: claude-sonnet-4-6
 allowed-tools: Read, Glob, Grep, Bash, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__get_page_text, mcp__claude-in-chrome__find, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__javascript_tool, mcp__claude-in-chrome__read_console_messages, mcp__claude-in-chrome__form_input, mcp__claude-in-chrome__gif_creator, mcp__claude-in-chrome__shortcuts_execute, mcp__claude-in-chrome__resize_window
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 ---
 
 # UI Reviewer Protocol

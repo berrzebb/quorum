@@ -6,7 +6,7 @@
  */
 import { readFileSync, existsSync, rmSync, cpSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
 
@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function resolveRepoRoot() {
   try {
-    return execSync("git rev-parse --show-toplevel", { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
   } catch { /* git unavailable */ }
   const legacy = resolve(__dirname, "..", "..", "..");
   if (existsSync(resolve(legacy, ".git"))) return legacy;
@@ -94,7 +94,6 @@ if (!configPath) {
 
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
-const respondFile = cfg.plugin?.respond_file ?? "gpt.md";
 const triggerTag = cfg.consensus?.trigger_tag ?? "[GPT미검증]";
 const agreeTag = cfg.consensus?.agree_tag ?? "[합의완료]";
 const pendingTag = cfg.consensus?.pending_tag ?? "[계류]";
@@ -118,7 +117,7 @@ if (existsSync(handoff)) {
 
 // ── 2. Recent git commits ───────────────────────────────────
 try {
-  const commits = execSync("git log --oneline -10", { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
+  const commits = execFileSync("git", ["log", "--oneline", "-10"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
 } catch { /* git unavailable */ }
 
@@ -156,46 +155,43 @@ if (existsSync(auditLock)) {
   }
 }
 
-// 3b. Watch file + GPT response → 감사 사이클 상태 판단
+// 3b. Audit status (from audit-status.json marker — no verdict file needed)
+const auditStatusPath = resolve(REPO_ROOT, ".claude", "audit-status.json");
 const watchPath = resolve(REPO_ROOT, watchFile);
-const watchDir = resolve(REPO_ROOT, watchFile, "..");
-const gptMd = resolve(watchDir, respondFile);
 let watchContent = "";
-let gptContent = "";
 
 if (existsSync(watchPath)) {
   watchContent = readFileSync(watchPath, "utf8");
 }
-if (existsSync(gptMd)) {
-  gptContent = readFileSync(gptMd, "utf8");
-}
 
 if (watchContent) {
   const hasTrigger = watchContent.includes(triggerTag);
-  const hasPending = gptContent.includes(pendingTag);
-  const hasAgreed = gptContent.includes(agreeTag);
 
-  if (hasPending && hasTrigger) {
-    // pending_tag 보정이 필요한 상태 — 가장 일반적인 resume 케이스
-    // gpt.md에서 반려 코드 추출
-    const rejectionCodes = [];
-    for (const line of gptContent.split(/\r?\n/)) {
-      const codeMatch = line.match(/`([\w-]+)\s*\[(major|minor|critical)\]`/);
-      if (codeMatch) rejectionCodes.push(`${codeMatch[1]} [${codeMatch[2]}]`);
-    }
+  // Read audit status from marker file (written by audit process)
+  let auditStatus = null;
+  if (existsSync(auditStatusPath)) {
+    try { auditStatus = JSON.parse(readFileSync(auditStatusPath, "utf8")); } catch { /* parse error */ }
+  }
+
+  const isPending = auditStatus?.status === "changes_requested";
+  const isApproved = auditStatus?.status === "approved";
+
+  if (isPending && hasTrigger) {
+    // pending 보정이 필요한 상태 — 가장 일반적인 resume 케이스
+    const rejectionCodes = auditStatus.rejectionCodes ?? [];
     resumeActions.push(
       `${pendingTag} 보정이 필요합니다.`
       + (rejectionCodes.length > 0 ? `\n  반려 코드: ${rejectionCodes.join(", ")}` : "")
-      + `\n  → gpt.md의 보정 항목을 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
+      + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
       + `\n  → 파일: ${watchFile} (${triggerTag} 유지)`
     );
-  } else if (hasTrigger && !hasPending && !hasAgreed && !existsSync(auditLock)) {
+  } else if (hasTrigger && !isPending && !isApproved && !existsSync(auditLock)) {
     // trigger_tag 있지만 감사 결과 없음 — 감사가 실행되지 않았거나 실패
     resumeActions.push(
       `${triggerTag} 증거가 제출되었으나 감사 결과가 없습니다.`
       + `\n  → 감사가 실행되지 않았거나 실패했을 수 있습니다. 증거를 재제출하세요.`
     );
-  } else if (hasAgreed && !hasTrigger) {
+  } else if (isApproved && !hasTrigger) {
     context += `Current audit status: ${agreeTag} — 합의 완료 상태\n`;
   }
 }
@@ -226,19 +222,6 @@ if (existsSync(retroMarker)) {
 
 // 3d. Orchestrator track detection from handoff
 if (handoffContent) {
-  const inProgressTracks = [];
-  const blockedTracks = [];
-  for (const line of handoffContent.split(/\r?\n/)) {
-    // "- **상태**: 진행 중" 또는 "**status**: in_progress" 패턴
-    if (/진행\s*중|in.?progress/i.test(line)) {
-      // 이전 줄에서 작업 제목 추출 시도
-      inProgressTracks.push(line.trim());
-    }
-    if (/blocked/i.test(line)) {
-      blockedTracks.push(line.trim());
-    }
-  }
-
   // ### [task-id] 형식의 작업 항목에서 "진행 중" 상태인 것 추출
   const taskBlocks = handoffContent.split(/(?=^### \[)/m);
   const activeTasks = [];

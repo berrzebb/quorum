@@ -97,19 +97,15 @@ export function parseResidualRisk(evidenceContent) {
  */
 export function appendTechDebt(catalogPath, debts, track) {
   let content = existsSync(catalogPath) ? readFileSync(catalogPath, "utf8") : "";
-  let appended = 0;
 
-  for (const debt of debts) {
-    if (content.includes(debt)) continue;
-    const entry = `| TD-auto | ${debt} | tech-debt | — | low | ${track} |`;
-    content = content.trimEnd() + "\n" + entry + "\n";
-    appended++;
-  }
-
-  if (appended > 0) {
+  const newEntries = debts
+    .filter(debt => !content.includes(debt))
+    .map(debt => `| TD-auto | ${debt} | tech-debt | — | low | ${track} |`);
+  if (newEntries.length > 0) {
+    content = content.trimEnd() + "\n" + newEntries.join("\n") + "\n";
     writeFileSync(catalogPath, content, "utf8");
   }
-  return appended;
+  return newEntries.length;
 }
 
 /**
@@ -144,4 +140,38 @@ export function checkFalsePositiveRate(historyPath, track, minRounds = 5) {
   }
 
   return { needsReview: flagged.length > 0, codes: flagged };
+}
+
+/**
+ * Check if evidence contains an Explanation section with meaningful content.
+ * Used by the Explain-or-Block gate: approved items must be explained before retro.
+ *
+ * @param {string} evidenceContent - Full evidence markdown
+ * @returns {{ hasExplanation: boolean, summary: string }}
+ */
+export function checkExplanation(evidenceContent) {
+  const lines = evidenceContent.split(/\r?\n/);
+  let inExplanation = false;
+  const explanationLines = [];
+
+  for (const line of lines) {
+    if (/^###?\s+Explanation/i.test(line.trim())) {
+      inExplanation = true;
+      continue;
+    }
+    if (inExplanation && /^###?\s+/.test(line.trim())) break;
+    if (inExplanation && line.trim()) {
+      explanationLines.push(line.trim());
+    }
+  }
+
+  // Reject empty or placeholder explanations
+  const joined = explanationLines.join(" ");
+  const isEmpty = explanationLines.length === 0
+    || /^(none|없음|n\/a|tbd|todo)$/i.test(joined.trim());
+
+  return {
+    hasExplanation: !isEmpty,
+    summary: isEmpty ? "" : joined.slice(0, 200),
+  };
 }

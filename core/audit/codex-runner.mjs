@@ -4,7 +4,6 @@ import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveBinary, spawnResolvedAsync } from "../cli-runner.mjs";
 import { HOOKS_DIR, REPO_ROOT, cfg, t } from "../context.mjs";
-import { hasPendingItems } from "./scope.mjs";
 import { readSavedSession, deleteSavedSessionId } from "./session.mjs";
 
 const codexLogPath = resolve(HOOKS_DIR, "codex-session.log");
@@ -13,7 +12,7 @@ export function resolveCodexBin() {
   return resolveBinary("codex", "CODEX_BIN");
 }
 
-export function determineResumeTarget(args, gptPath) {
+export function determineResumeTarget(args, auditStatusPath) {
   if (args.resume === false) {
     return null;
   }
@@ -24,16 +23,16 @@ export function determineResumeTarget(args, gptPath) {
 
   const saved = readSavedSession();
   if (saved) {
-    // gpt.md에 [계류] 항목이 있으면 세션 리셋 — 재개 시 orphan call 누적 방지
-    if (existsSync(gptPath)) {
+    // audit-status.json에 pending 상태면 세션 리셋 — 재개 시 orphan call 누적 방지
+    if (existsSync(auditStatusPath)) {
       try {
-        const gptMd = readFileSync(gptPath, "utf8");
-        if (hasPendingItems(gptMd)) {
+        const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
+        if (status.pendingCount > 0) {
           deleteSavedSessionId();
           console.log(t("audit.session.reset_pending"));
           return null;
         }
-      } catch { /* 파일 읽기 실패 시 기존 세션 유지 */ }
+      } catch { /* 마커 파일 읽기 실패 시 기존 세션 유지 */ }
     }
     return { type: "session", value: saved };
   }
@@ -90,13 +89,14 @@ export function buildCodexArgs(args, resumeTarget, cwd) {
   return base;
 }
 
-/** 라인 단위 실시간 스트리밍 — agent_message를 즉시 출력하고 threadId를 추적. */
+/** 라인 단위 실시간 스트리밍 — agent_message를 즉시 출력하고 threadId + verdictText를 추적. */
 export function streamCodexOutput(child, rawJson) {
   return new Promise((resolvePromise, reject) => {
     let threadId = null;
-    const stdoutChunks = [];
+    let stdoutForLog = "";
     const stderrChunks = [];
     let buffer = "";
+    const verdictParts = [];
 
     function processLine(line) {
       if (!line) return;
@@ -108,6 +108,7 @@ export function streamCodexOutput(child, rawJson) {
         if (rawJson) {
           console.log(line);
         } else if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") {
+          verdictParts.push(event.item.text);
           console.log(event.item.text);
         }
       } catch {
@@ -116,8 +117,9 @@ export function streamCodexOutput(child, rawJson) {
     }
 
     child.stdout.on("data", (chunk) => {
-      stdoutChunks.push(chunk);
-      buffer += chunk.toString("utf8");
+      const str = chunk.toString("utf8");
+      if (stdoutForLog.length < 5000) stdoutForLog += str;
+      buffer += str;
       let idx;
       while ((idx = buffer.indexOf("\n")) !== -1) {
         processLine(buffer.slice(0, idx).trim());
@@ -134,7 +136,7 @@ export function streamCodexOutput(child, rawJson) {
     child.on("close", (code) => {
       if (buffer.trim()) processLine(buffer.trim());
 
-      const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+      const stdout = stdoutForLog;
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
 
       // codex-session.log에 디버깅용 기록
@@ -145,7 +147,7 @@ export function streamCodexOutput(child, rawJson) {
         if (stderr) appendFileSync(codexLogPath, `[stderr]\n${stderr.slice(0, 2000)}\n`);
       } catch { /* ignore logging failures */ }
 
-      resolvePromise({ stdout, stderr, threadId, exitCode: code });
+      resolvePromise({ stdout, stderr, threadId, exitCode: code, verdictText: verdictParts.join("\n") });
     });
   });
 }

@@ -25,6 +25,7 @@ import {
   toolAuditScan,
   toolCoverageMap,
   toolDependencyGraph,
+  toolBlastRadius,
   toolRtmParse,
   toolRtmMerge,
   toolAuditHistory,
@@ -38,6 +39,7 @@ import {
   toolInfraScan,
   toolObservabilityCheck,
   toolDocCoverage,
+  toolAiGuide,
   TOOL_NAMES,
 } from "./tool-core.mjs";
 
@@ -80,6 +82,7 @@ const DISPATCH = {
   audit_scan:          (p) => toolAuditScan(p),
   coverage_map:        (p) => toolCoverageMap(p),
   dependency_graph:    (p) => toolDependencyGraph(p),
+  blast_radius:        (p) => toolBlastRadius(p),
   rtm_parse:           (p) => toolRtmParse(p),
   rtm_merge:           (p) => toolRtmMerge(p),
   audit_history:       (p) => toolAuditHistory(p),
@@ -94,6 +97,7 @@ const DISPATCH = {
   infra_scan:          (p) => toolInfraScan(p),
   observability_check: (p) => toolObservabilityCheck(p),
   doc_coverage:        (p) => toolDocCoverage(p),
+  ai_guide:            (p) => toolAiGuide(p),
 };
 
 // ═══ Help text ══════════════════════════════════════════════════════════
@@ -109,6 +113,9 @@ Tools:
 
   dependency_graph  Import/export DAG, components, topological sort, cycles
                     --path <dir|file> [--depth N] [--extensions .ts,.mjs]
+
+  blast_radius      Transitive impact of changed files via reverse import BFS
+                    --changed_files '["src/foo.ts","src/bar.ts"]' [--path <root>] [--max_depth 10]
 
   audit_scan        Pattern scanner (type-safety, hardcoded, console, etc.)
                     [--pattern all|type-safety|hardcoded|console] [--path <dir>]
@@ -155,6 +162,9 @@ Tools:
 
   doc_coverage      Documentation coverage for exported symbols
                     [--path <dir|file>]
+
+  ai_guide          Project onboarding guide (synthesizes code_map + dependency_graph + doc_coverage)
+                    --target <dir>
 
 Options:
   --help            Show this help message

@@ -23,6 +23,7 @@ import {
   parseResidualRisk,
   appendTechDebt,
   checkFalsePositiveRate,
+  checkExplanation,
 } from "../core/enforcement.mjs";
 
 let tmpDir;
@@ -253,5 +254,50 @@ describe("smoke: enforcement module import", () => {
     assert.ok(typeof mod.parseResidualRisk === "function");
     assert.ok(typeof mod.appendTechDebt === "function");
     assert.ok(typeof mod.checkFalsePositiveRate === "function");
+    assert.ok(typeof mod.checkExplanation === "function");
+  });
+});
+
+// ═══ Smoke 5: Explain-or-Block gate ═════════════════════════════════════
+
+describe("smoke: explain gate — checkExplanation", () => {
+  it("detects valid explanation section", () => {
+    const evidence = `## [APPROVED] feature-x
+
+### Explanation
+Added a new caching layer to reduce database queries by 60%.
+The cache uses LRU eviction with a 5-minute TTL.
+
+### Residual Risk
+- None
+`;
+    const result = checkExplanation(evidence);
+    assert.ok(result.hasExplanation);
+    assert.ok(result.summary.includes("caching layer"));
+  });
+
+  it("rejects missing explanation section", () => {
+    const evidence = `## [APPROVED] feature-x
+
+### Residual Risk
+- None
+`;
+    const result = checkExplanation(evidence);
+    assert.equal(result.hasExplanation, false);
+    assert.equal(result.summary, "");
+  });
+
+  it("rejects empty or placeholder explanations", () => {
+    assert.equal(checkExplanation("### Explanation\nNone").hasExplanation, false);
+    assert.equal(checkExplanation("### Explanation\n없음").hasExplanation, false);
+    assert.equal(checkExplanation("### Explanation\nTBD").hasExplanation, false);
+    assert.equal(checkExplanation("### Explanation\nn/a").hasExplanation, false);
+  });
+
+  it("accepts explanation at any heading level", () => {
+    const h2 = `## Explanation\nThis change refactors the auth module.`;
+    const h3 = `### Explanation\nThis change refactors the auth module.`;
+    assert.ok(checkExplanation(h2).hasExplanation);
+    assert.ok(checkExplanation(h3).hasExplanation);
   });
 });

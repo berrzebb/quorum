@@ -14,7 +14,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { runQualityChecks } from "./run-quality-checks.mjs";
 
 // ── Read stdin ───────────────────────────────────────────────
 let input;
@@ -38,7 +39,7 @@ if (!teammateName.includes("implementer")) {
 // ── Resolve repo root ────────────────────────────────────────
 let REPO_ROOT;
 try {
-  REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
+  REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true }).trim();
 } catch {
   REPO_ROOT = process.cwd();
 }
@@ -46,13 +47,11 @@ try {
 // ── Check for uncommitted or staged changes ──────────────────
 let changedFiles = [];
 try {
-  const diff = execSync("git diff --name-only && git diff --cached --name-only", {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
-  }).trim();
-  if (diff) {
-    changedFiles = [...new Set(diff.split(/\r?\n/).filter(Boolean))];
+  const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
+  const staged = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
+  const combined = `${unstaged}\n${staged}`.trim();
+  if (combined) {
+    changedFiles = [...new Set(combined.split(/\r?\n/).filter(Boolean))];
   }
 } catch { /* no changes — pass */ }
 
@@ -62,62 +61,15 @@ if (changedFiles.length === 0) {
 }
 
 // ── Run quality checks (language-aware) ──────────────────────
-const failures = [];
-
-// Load quality_rules presets from config
-let presets = [];
+let quorumConfig = null;
 try {
   const configPath = resolve(REPO_ROOT, ".claude", "quorum", "config.json");
   if (existsSync(configPath)) {
-    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    presets = cfg.quality_rules?.presets ?? [];
+    quorumConfig = JSON.parse(readFileSync(configPath, "utf8"));
   }
 } catch { /* config read error */ }
 
-const activePresets = presets
-  .filter(p => existsSync(resolve(REPO_ROOT, p.detect)))
-  .sort((a, b) => (a.precedence ?? 50) - (b.precedence ?? 50));
-
-if (activePresets.length > 0) {
-  for (const preset of activePresets) {
-    for (const check of preset.checks ?? []) {
-      if (check.per_file) {
-        for (const file of changedFiles) {
-          const fullPath = resolve(REPO_ROOT, file);
-          if (!existsSync(fullPath)) continue;
-          const cmd = check.command.replace("{file}", file);
-          try {
-            spawnSync(cmd, {
-              cwd: REPO_ROOT,
-              encoding: "utf8",
-              stdio: ["pipe", "pipe", "pipe"],
-              timeout: 30000,
-              shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
-            });
-          } catch (e) {
-            if (check.optional) continue;
-            const output = e.stdout?.toString() || e.stderr?.toString() || "";
-            failures.push(`[${check.id}] ${check.label}: ${file}\n${output.slice(0, 200)}`);
-          }
-        }
-      } else {
-        try {
-          spawnSync(check.command, {
-            cwd: REPO_ROOT,
-            encoding: "utf8",
-            stdio: ["pipe", "pipe", "pipe"],
-            timeout: 60000,
-            shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
-          });
-        } catch (e) {
-          if (check.optional) continue;
-          const output = e.stdout?.toString() || e.stderr?.toString() || "";
-          failures.push(`[${check.id}] ${check.label}\n${output.slice(-300)}`);
-        }
-      }
-    }
-  }
-}
+const failures = runQualityChecks({ config: quorumConfig, repoRoot: REPO_ROOT, changedFiles });
 
 // ── Verdict ──────────────────────────────────────────────────
 if (failures.length > 0) {

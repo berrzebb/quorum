@@ -2,6 +2,12 @@
 name: observability-inspector
 description: Observability Inspector — checks logging coverage, structured log format, error context, metric instrumentation, and trace propagation. Activated at T3 when observability domain is detected.
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

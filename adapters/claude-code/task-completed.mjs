@@ -14,7 +14,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
+import { runQualityChecks } from "./run-quality-checks.mjs";
 
 // ── Read stdin ───────────────────────────────────────────────
 let input;
@@ -52,8 +53,8 @@ try {
   // Recent commits (last 5) — covers worktree commit workflow
   let committed = "";
   try {
-    committed = execSync("git diff --name-only HEAD~5..HEAD 2>/dev/null", {
-      cwd: REPO_ROOT, encoding: "utf8", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    committed = execSync("git diff --name-only HEAD~5..HEAD", {
+      cwd: REPO_ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     }).trim();
   } catch { /* shallow repo or <5 commits — skip */ }
 
@@ -71,76 +72,32 @@ if (changedFiles.length === 0) {
 // ── Run done-criteria checks (language-aware) ────────────────
 const failures = [];
 
-// Load quality_rules presets from config
+// Load config once (reused by quality checks + no-abandon gate)
+let quorumConfig = null;
 let presets = [];
 try {
   const configPath = resolve(REPO_ROOT, ".claude", "quorum", "config.json");
   if (existsSync(configPath)) {
-    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    presets = cfg.quality_rules?.presets ?? [];
+    quorumConfig = JSON.parse(readFileSync(configPath, "utf8"));
+    presets = quorumConfig.quality_rules?.presets ?? [];
   }
 } catch { /* config read error — fall through to empty presets */ }
 
-// Find matching presets by detect file presence, sorted by precedence
-const activePresets = presets
-  .filter(p => existsSync(resolve(REPO_ROOT, p.detect)))
-  .sort((a, b) => (a.precedence ?? 50) - (b.precedence ?? 50));
-
-if (activePresets.length > 0) {
-  for (const preset of activePresets) {
-    for (const check of preset.checks ?? []) {
-      if (check.per_file) {
-        // Per-file checks: run for each changed file
-        for (const file of changedFiles) {
-          const fullPath = resolve(REPO_ROOT, file);
-          if (!existsSync(fullPath)) continue;
-          const cmd = check.command.replace("{file}", file);
-          try {
-            spawnSync(cmd, {
-              cwd: REPO_ROOT,
-              encoding: "utf8",
-              stdio: ["pipe", "pipe", "pipe"],
-              timeout: 30000,
-              shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
-            });
-          } catch (e) {
-            if (check.optional) continue;
-            const output = e.stdout?.toString() || e.stderr?.toString() || "";
-            failures.push(`[${check.id}] ${check.label}: ${file}\n${output.slice(0, 200)}`);
-          }
-        }
-      } else {
-        // Whole-project checks
-        try {
-          spawnSync(check.command, {
-            cwd: REPO_ROOT,
-            encoding: "utf8",
-            stdio: ["pipe", "pipe", "pipe"],
-            timeout: 60000,
-            shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
-          });
-        } catch (e) {
-          if (check.optional) continue;
-          const output = e.stdout?.toString() || e.stderr?.toString() || "";
-          failures.push(`[${check.id}] ${check.label}\n${output.slice(-300)}`);
-        }
-      }
-    }
-  }
-} else {
+// Run quality checks via shared helper
+const qcFailures = runQualityChecks({ config: quorumConfig, repoRoot: REPO_ROOT, changedFiles });
+failures.push(...qcFailures);
+if (qcFailures.length === 0 && presets.length === 0) {
   console.error("[task-completed] No quality_rules presets matched — skipping CQ checks");
 }
 
 // ── No-abandon gate: evidence must exist before task completion ──
 try {
-  const configPath = resolve(REPO_ROOT, ".claude", "quorum", "config.json");
-  if (existsSync(configPath)) {
-    const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
+  if (quorumConfig) {
+    const watchFile = quorumConfig.consensus?.watch_file ?? "docs/feedback/claude.md";
     const evidencePath = resolve(REPO_ROOT, watchFile);
     if (existsSync(evidencePath)) {
       const evidence = readFileSync(evidencePath, "utf8");
-      const triggerTag = cfg.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
+      const triggerTag = quorumConfig.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
       if (!evidence.includes(triggerTag) && !evidence.includes("[APPROVED]") && !evidence.includes("[INFRA_FAILURE]")) {
         failures.push("[NO-ABANDON] Evidence file exists but contains no submission tag. Submit evidence before completing task.");
       }
@@ -167,7 +124,6 @@ if (failures.length > 0) {
 // ── Emit task completion to EventStore ──
 try {
   const bridge = await import("../../core/bridge.mjs");
-  const REPO_ROOT = process.cwd();
   await bridge.init(REPO_ROOT);
   bridge.emitEvent("agent.complete", "claude-code", {
     name: teammateName || taskSubject,

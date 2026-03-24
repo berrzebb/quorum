@@ -4,7 +4,7 @@
     "audit_script": "audit.mjs",
     "audit_prompt": "templates/audit-prompt.md",
     "respond_script": "respond.mjs",
-    "respond_file": "gpt.md",
+    "respond_file": "verdict.md",
     "ack_file": "ack.timestamp",
     "session_file": "session.id",
     "debug_log": "debug.log",

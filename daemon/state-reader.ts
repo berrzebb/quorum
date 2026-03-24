@@ -12,9 +12,18 @@
  * - events table (recent events, specialist reviews, track progress)
  */
 
+import type Database from "better-sqlite3";
 import type { EventStore } from "../bus/store.js";
 import type { LockInfo } from "../bus/lock.js";
-import type { QuorumEvent } from "../bus/events.js";
+import type { Finding } from "../bus/events.js";
+import type {
+  QuorumEvent,
+  FindingDetectPayload,
+  FindingAckPayload,
+  FindingResolvePayload,
+  ReviewProgressPayload,
+} from "../bus/events.js";
+import type { MessageBus } from "../bus/message-bus.js";
 
 // ── Types ────────────────────────────────────
 
@@ -51,22 +60,127 @@ export interface TrackInfo {
   lastUpdate: number;
 }
 
+export interface FindingInfo {
+  id: string;
+  severity: string;
+  file?: string;
+  line?: number;
+  description: string;
+  category: string;
+  reviewerId: string;
+  provider: string;
+  timestamp: number;
+}
+
+export interface FindingStats {
+  total: number;
+  open: number;
+  confirmed: number;
+  dismissed: number;
+  fixed: number;
+}
+
+export interface ReviewProgressInfo {
+  reviewerId: string;
+  provider: string;
+  progress: number;
+  phase: string;
+  timestamp: number;
+}
+
+/** A single message in a review thread (finding, reply, or action). */
+export interface ThreadMessage {
+  type: "finding" | "reply" | "ack" | "resolve";
+  id?: string;
+  reviewerId: string;
+  provider: string;
+  severity?: string;
+  description: string;
+  timestamp: number;
+}
+
+/** A review thread grouped by file. */
+export interface FileThread {
+  file: string;
+  threads: Array<{
+    rootId: string;
+    category: string;
+    messages: ThreadMessage[];
+    open: boolean;
+  }>;
+}
+
+export interface FitnessInfo {
+  /** Current baseline score (null if not yet established). */
+  baseline: number | null;
+  /** Latest computed score (null if no fitness events yet). */
+  current: number | null;
+  /** Latest gate decision. */
+  gate: {
+    decision: "proceed" | "self-correct" | "auto-reject";
+    delta: number;
+    reason: string;
+  } | null;
+  /** Score history (newest last, up to 50 entries). */
+  history: number[];
+  /** Trend: moving average and slope. */
+  trend: {
+    movingAverage: number;
+    slope: number;
+  } | null;
+  /** Component breakdown of the latest score. */
+  components: Record<string, { value: number; weight: number; label: string }> | null;
+}
+
 export interface FullState {
   gates: GateInfo[];
   items: ItemStateInfo[];
   locks: LockInfo[];
   specialists: SpecialistInfo[];
   tracks: TrackInfo[];
+  findings: FindingInfo[];
+  findingStats: FindingStats;
+  reviewProgress: ReviewProgressInfo[];
+  fileThreads: FileThread[];
   recentEvents: QuorumEvent[];
+  fitness: FitnessInfo;
 }
 
 // ── StateReader ──────────────────────────────
 
 export class StateReader {
   private store: EventStore;
+  private messageBus: MessageBus | null;
+  private stmtItemStates: Database.Statement;
+  private stmtActiveLocks: Database.Statement;
+  private stmtLatestTransition: Database.Statement;
 
-  constructor(store: EventStore) {
+  constructor(store: EventStore, messageBus?: MessageBus | null) {
     this.store = store;
+    this.messageBus = messageBus ?? null;
+    const db = store.getDb();
+    this.stmtItemStates = db.prepare(`
+      SELECT entity_id, to_state, source, metadata, created_at
+      FROM state_transitions st1
+      WHERE entity_type = 'audit_item'
+        AND rowid = (
+          SELECT rowid FROM state_transitions st2
+          WHERE st2.entity_type = st1.entity_type
+            AND st2.entity_id = st1.entity_id
+          ORDER BY st2.created_at DESC, st2.rowid DESC
+          LIMIT 1
+        )
+      ORDER BY created_at DESC
+    `);
+    this.stmtActiveLocks = db.prepare(
+      `SELECT * FROM locks WHERE acquired_at + ttl_ms > ?`
+    );
+    this.stmtLatestTransition = db.prepare(`
+      SELECT to_state, created_at FROM state_transitions
+      WHERE entity_type = ? AND entity_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1
+    `);
   }
 
   /**
@@ -79,7 +193,12 @@ export class StateReader {
       locks: this.activeLocks(),
       specialists: this.activeSpecialists(),
       tracks: this.trackProgress(),
+      findings: this.openFindings(),
+      findingStats: this.findingStats(),
+      reviewProgress: this.reviewProgress(),
+      fileThreads: this.findingThreads(),
       recentEvents: this.recentEvents(eventLimit),
+      fitness: this.fitnessInfo(),
     };
   }
 
@@ -114,7 +233,7 @@ export class StateReader {
     // Quality gate: recent quality.fail events in last 5 minutes
     const fiveMinAgo = Date.now() - 300_000;
     const qualityFails = this.store.count({
-      eventType: "quality.fail" as any,
+      eventType: "quality.fail",
       since: fiveMinAgo,
     });
     gates.push({
@@ -131,20 +250,7 @@ export class StateReader {
    */
   itemStates(): ItemStateInfo[] {
     try {
-      const db = this.store.getDb();
-      const rows = db.prepare(`
-        SELECT entity_id, to_state, source, metadata, created_at
-        FROM state_transitions st1
-        WHERE entity_type = 'audit_item'
-          AND rowid = (
-            SELECT rowid FROM state_transitions st2
-            WHERE st2.entity_type = st1.entity_type
-              AND st2.entity_id = st1.entity_id
-            ORDER BY st2.created_at DESC, st2.rowid DESC
-            LIMIT 1
-          )
-        ORDER BY created_at DESC
-      `).all() as Array<{
+      const rows = this.stmtItemStates.all() as Array<{
         entity_id: string;
         to_state: string;
         source: string;
@@ -172,11 +278,7 @@ export class StateReader {
    */
   activeLocks(): LockInfo[] {
     try {
-      const db = this.store.getDb();
-      const now = Date.now();
-      const rows = db.prepare(
-        `SELECT * FROM locks WHERE acquired_at + ttl_ms > ?`
-      ).all(now) as Array<{
+      const rows = this.stmtActiveLocks.all(Date.now()) as Array<{
         lock_name: string;
         owner_pid: number;
         owner_session: string | null;
@@ -203,16 +305,12 @@ export class StateReader {
   activeSpecialists(): SpecialistInfo[] {
     try {
       const specialists: SpecialistInfo[] = [];
-      const recentDetect = this.store.query({
-        eventType: "specialist.detect" as any,
-        limit: 5,
-      });
       const recentTool = this.store.query({
-        eventType: "specialist.tool" as any,
+        eventType: "specialist.tool",
         limit: 20,
       });
       const recentReview = this.store.query({
-        eventType: "specialist.review" as any,
+        eventType: "specialist.review",
         limit: 20,
       });
 
@@ -260,7 +358,7 @@ export class StateReader {
   trackProgress(): TrackInfo[] {
     try {
       const trackEvents = this.store.query({
-        eventType: "track.progress" as any,
+        eventType: "track.progress",
         limit: 100,
       });
 
@@ -286,10 +384,337 @@ export class StateReader {
   }
 
   /**
+   * Open findings — detected but not yet dismissed or resolved.
+   * Delegates to MessageBus when available (uses its cache + dedup logic).
+   */
+  openFindings(): FindingInfo[] {
+    try {
+      if (this.messageBus) {
+        const open = this.messageBus.getOpenFindings();
+        return open.map(f => ({
+          id: f.id,
+          severity: f.severity,
+          file: f.file,
+          line: f.line,
+          description: f.description,
+          category: f.category,
+          reviewerId: f.reviewerId,
+          provider: f.provider,
+          timestamp: 0,
+        }));
+      }
+      return this._openFindingsFallback();
+    } catch {
+      return [];
+    }
+  }
+
+  /** Fallback when MessageBus is not injected. */
+  private _openFindingsFallback(): FindingInfo[] {
+    const detectEvents = this.store.query({ eventType: "finding.detect" });
+    const ackEvents = this.store.query({ eventType: "finding.ack" });
+    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+
+    const closedIds = new Set<string>();
+    for (const e of ackEvents) {
+      const p = e.payload as unknown as FindingAckPayload;
+      if (p.action === "dismiss") closedIds.add(p.findingId);
+    }
+    for (const e of resolveEvents) {
+      const p = e.payload as unknown as FindingResolvePayload;
+      closedIds.add(p.findingId);
+    }
+
+    const findings: FindingInfo[] = [];
+    for (const evt of detectEvents) {
+      const p = evt.payload as unknown as FindingDetectPayload;
+      if (!p.findings) continue;
+      for (const f of p.findings) {
+        if (!closedIds.has(f.id)) {
+          findings.push({
+            id: f.id, severity: f.severity, file: f.file, line: f.line,
+            description: f.description, category: f.category,
+            reviewerId: p.reviewerId ?? f.reviewerId,
+            provider: p.provider ?? f.provider,
+            timestamp: evt.timestamp,
+          });
+        }
+      }
+    }
+    return findings.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /**
+   * Finding statistics — counts by status across all findings.
+   * Delegates to MessageBus when available (single source of truth).
+   */
+  findingStats(): FindingStats {
+    try {
+      if (this.messageBus) {
+        return this.messageBus.getStats();
+      }
+      return this._findingStatsFallback();
+    } catch {
+      return { total: 0, open: 0, confirmed: 0, dismissed: 0, fixed: 0 };
+    }
+  }
+
+  private _findingStatsFallback(): FindingStats {
+    const detectEvents = this.store.query({ eventType: "finding.detect" });
+    const ackEvents = this.store.query({ eventType: "finding.ack" });
+    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+
+    const findingState = new Map<string, string>();
+    let total = 0;
+    for (const e of detectEvents) {
+      const p = e.payload as unknown as FindingDetectPayload;
+      if (!p.findings) continue;
+      for (const f of p.findings) { findingState.set(f.id, "open"); total++; }
+    }
+    for (const e of ackEvents) {
+      const p = e.payload as unknown as FindingAckPayload;
+      findingState.set(p.findingId, p.action === "dismiss" ? "dismissed" : "confirmed");
+    }
+    for (const e of resolveEvents) {
+      const p = e.payload as unknown as FindingResolvePayload;
+      findingState.set(p.findingId, p.resolution === "fixed" ? "fixed" : "dismissed");
+    }
+
+    let open = 0, confirmed = 0, dismissed = 0, fixed = 0;
+    for (const state of findingState.values()) {
+      if (state === "open") open++;
+      else if (state === "confirmed") confirmed++;
+      else if (state === "dismissed") dismissed++;
+      else if (state === "fixed") fixed++;
+    }
+    return { total, open, confirmed, dismissed, fixed };
+  }
+
+  /**
+   * Review progress — latest progress per reviewer.
+   */
+  reviewProgress(): ReviewProgressInfo[] {
+    try {
+      const progressEvents = this.store.query({
+        eventType: "review.progress",
+        limit: 100,
+      });
+
+      // Latest per reviewer
+      const reviewerMap = new Map<string, ReviewProgressInfo>();
+      for (const evt of progressEvents) {
+        const p = evt.payload as unknown as ReviewProgressPayload;
+        const reviewerId = p.reviewerId ?? "unknown";
+        reviewerMap.set(reviewerId, {
+          reviewerId,
+          provider: p.provider ?? "unknown",
+          progress: p.progress ?? 0,
+          phase: p.phase ?? "unknown",
+          timestamp: evt.timestamp,
+        });
+      }
+
+      return [...reviewerMap.values()].sort((a, b) => b.timestamp - a.timestamp);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Review threads grouped by file — for chat view.
+   * Delegates to MessageBus.getThreadsByFile() when available.
+   */
+  findingThreads(): FileThread[] {
+    try {
+      if (this.messageBus) {
+        return this._threadsFromMessageBus();
+      }
+      return this._findingThreadsFallback();
+    } catch {
+      return [];
+    }
+  }
+
+  /** Convert MessageBus.getThreadsByFile() → FileThread[] */
+  private _threadsFromMessageBus(): FileThread[] {
+    const mb = this.messageBus!;
+    const byFile = mb.getThreadsByFile();
+
+    const result: FileThread[] = [];
+    for (const [file, threads] of byFile) {
+      // getThreadsByFile() already filters out fully-closed threads, so open is always true
+      const fileThreads: FileThread["threads"] = threads.map(t => {
+        const messages: ThreadMessage[] = [];
+        messages.push({
+          type: "finding", id: t.root.id,
+          reviewerId: t.root.reviewerId, provider: t.root.provider,
+          severity: t.root.severity, description: t.root.description,
+          timestamp: t.timeline.find(e => e.action === "detect")?.timestamp ?? 0,
+        });
+        for (const r of t.replies) {
+          messages.push({
+            type: "reply", id: r.id,
+            reviewerId: r.reviewerId, provider: r.provider,
+            severity: r.severity, description: r.description,
+            timestamp: t.timeline.find(e => e.action === "reply" && e.reviewerId === r.reviewerId)?.timestamp ?? 0,
+          });
+        }
+        for (const tl of t.timeline) {
+          if (tl.action.startsWith("ack:") || tl.action.startsWith("resolve:")) {
+            messages.push({
+              type: tl.action.startsWith("ack:") ? "ack" : "resolve",
+              reviewerId: tl.source, provider: tl.source,
+              description: tl.action.split(":")[1] ?? "",
+              timestamp: tl.timestamp,
+            });
+          }
+        }
+        messages.sort((a, b) => a.timestamp - b.timestamp);
+
+        return { rootId: t.root.id, category: t.root.category, messages, open: true };
+      });
+      result.push({ file, threads: fileThreads });
+    }
+    return result.sort((a, b) => a.file.localeCompare(b.file));
+  }
+
+  /** Fallback when MessageBus is not injected. */
+  private _findingThreadsFallback(): FileThread[] {
+    const detectEvents = this.store.query({ eventType: "finding.detect" });
+    const ackEvents = this.store.query({ eventType: "finding.ack" });
+    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+
+    const allFindings: Array<Finding & { timestamp: number }> = [];
+    for (const evt of detectEvents) {
+      const p = evt.payload as unknown as FindingDetectPayload;
+      if (!p.findings) continue;
+      for (const f of p.findings) allFindings.push({ ...f, timestamp: evt.timestamp });
+    }
+
+    const closedIds = new Set<string>();
+    for (const e of ackEvents) {
+      const p = e.payload as unknown as FindingAckPayload;
+      if (p.action === "dismiss") closedIds.add(p.findingId);
+    }
+    for (const e of resolveEvents) {
+      const p = e.payload as unknown as FindingResolvePayload;
+      closedIds.add(p.findingId);
+    }
+
+    const actionMessages: ThreadMessage[] = [];
+    for (const e of ackEvents) {
+      const p = e.payload as unknown as FindingAckPayload;
+      actionMessages.push({
+        type: "ack", id: p.findingId, reviewerId: "author", provider: e.source,
+        description: `${p.action}${p.reason ? `: ${p.reason}` : ""}`, timestamp: e.timestamp,
+      });
+    }
+    for (const e of resolveEvents) {
+      const p = e.payload as unknown as FindingResolvePayload;
+      actionMessages.push({
+        type: "resolve", id: p.findingId, reviewerId: "system", provider: e.source,
+        description: p.resolution, timestamp: e.timestamp,
+      });
+    }
+
+    const roots = allFindings.filter(f => !f.replyTo);
+    const fileMap = new Map<string, FileThread["threads"]>();
+
+    for (const root of roots) {
+      const file = root.file ?? "(no file)";
+      const replies = allFindings.filter(f => f.replyTo === root.id);
+      const messages: ThreadMessage[] = [{
+        type: "finding", id: root.id, reviewerId: root.reviewerId, provider: root.provider,
+        severity: root.severity, description: root.description, timestamp: root.timestamp,
+      }];
+      for (const r of replies) {
+        messages.push({
+          type: "reply", id: r.id, reviewerId: r.reviewerId, provider: r.provider,
+          severity: r.severity, description: r.description, timestamp: r.timestamp,
+        });
+      }
+      const threadIds = new Set([root.id, ...replies.map(r => r.id)]);
+      for (const am of actionMessages) {
+        if (am.id && threadIds.has(am.id)) messages.push(am);
+      }
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+      const threads = fileMap.get(file) ?? [];
+      threads.push({ rootId: root.id, category: root.category, messages, open: ![...threadIds].every(id => closedIds.has(id)) });
+      fileMap.set(file, threads);
+    }
+
+    return [...fileMap.entries()]
+      .map(([file, threads]) => ({ file, threads }))
+      .sort((a, b) => a.file.localeCompare(b.file));
+  }
+
+  /**
    * Recent events for the audit stream.
    */
   recentEvents(limit = 20): QuorumEvent[] {
     return this.store.recent(limit);
+  }
+
+  /**
+   * Fitness score data from EventStore KV + recent events.
+   */
+  fitnessInfo(): FitnessInfo {
+    try {
+      // Baseline and history from kv_state
+      const baseline = this.store.getKV("fitness.baseline") as { total?: number; components?: Record<string, { value: number; weight: number; label: string }> } | null;
+      const history = (this.store.getKV("fitness.history") as number[]) ?? [];
+
+      // Latest gate decision from events
+      const gateEvents = this.store.query({ eventType: "fitness.gate", limit: 1 });
+      let gate: FitnessInfo["gate"] = null;
+      if (gateEvents.length > 0) {
+        const p = gateEvents[0].payload;
+        gate = {
+          decision: p.decision as "proceed" | "self-correct" | "auto-reject",
+          delta: (p.delta as number) ?? 0,
+          reason: (p.reason as string) ?? "",
+        };
+      }
+
+      // Latest trend from events
+      const trendEvents = this.store.query({ eventType: "fitness.trend", limit: 1 });
+      let trend: FitnessInfo["trend"] = null;
+      if (trendEvents.length > 0) {
+        const p = trendEvents[0].payload;
+        trend = {
+          movingAverage: (p.movingAverage as number) ?? 0,
+          slope: (p.slope as number) ?? 0,
+        };
+      }
+
+      // Latest computed score from events
+      const computeEvents = this.store.query({ eventType: "fitness.compute", limit: 1 });
+      let current: number | null = null;
+      let components: FitnessInfo["components"] = null;
+      if (computeEvents.length > 0) {
+        const score = computeEvents[0].payload.score as { total?: number; components?: Record<string, { value: number; weight: number; label: string }> } | undefined;
+        if (score) {
+          current = score.total ?? null;
+          components = score.components ?? null;
+        }
+      }
+
+      // If no compute events, use baseline for components
+      if (!components && baseline?.components) {
+        components = baseline.components;
+      }
+
+      return {
+        baseline: baseline?.total ?? null,
+        current: current ?? (history.length > 0 ? history[history.length - 1] : null),
+        gate,
+        history,
+        trend,
+        components,
+      };
+    } catch {
+      return { baseline: null, current: null, gate: null, history: [], trend: null, components: null };
+    }
   }
 
   /**
@@ -304,7 +729,9 @@ export class StateReader {
       e.type.startsWith("audit.") ||
       e.type.startsWith("retro.") ||
       e.type.startsWith("specialist.") ||
-      e.type.startsWith("track."),
+      e.type.startsWith("track.") ||
+      e.type.startsWith("finding.") ||
+      e.type === "review.progress",
     );
     return { events, hasStateChanges };
   }
@@ -316,13 +743,7 @@ export class StateReader {
     created_at: number;
   } | null {
     try {
-      const db = this.store.getDb();
-      return db.prepare(`
-        SELECT to_state, created_at FROM state_transitions
-        WHERE entity_type = ? AND entity_id = ?
-        ORDER BY created_at DESC, rowid DESC
-        LIMIT 1
-      `).get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
+      return this.stmtLatestTransition.get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
     } catch {
       return null;
     }

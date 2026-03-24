@@ -6,7 +6,7 @@
  * public surface.  When executed directly (`node core/audit.mjs`), the
  * side-effect `main()` inside index.mjs runs as before.
  */
-export { stampAuditCompleted, initPaths, runRespond, deriveAuditCwd } from "./audit/index.mjs";
+export { initPaths, runRespond, deriveAuditCwd } from "./audit/index.mjs";
 export { parseArgs, usage } from "./audit/args.mjs";
 export { readSavedSession, writeSavedSession, deleteSavedSessionId, getSessionPath, sessionKVKey, initSessionDir } from "./audit/session.mjs";
 export { hasPendingItems, detectScope, readSectionLines, loadPromotionHint, buildPromotionSection, checkEslintCoverage, extractChangedFilesFromEvidence, extractTestCommands } from "./audit/scope.mjs";

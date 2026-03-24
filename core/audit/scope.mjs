@@ -10,14 +10,10 @@ export function hasPendingItems(markdown) {
 }
 
 export function detectScope(markdown) {
-  const lines = markdown.split(/\r?\n/);
-  const start = lines.findIndex((line) => new RegExp(`^##\\s+${escapeRe(SEC.auditScope)}\\s*$`).test(line.trim()));
-  const end = start >= 0
-    ? lines.findIndex((line, idx) => idx > start && /^##\s+/.test(line.trim()))
-    : -1;
-  const section = start >= 0
-    ? lines.slice(start + 1, end >= 0 ? end : lines.length)
-    : lines;
+  const result = readSection(markdown, SEC.auditScope);
+  const section = result
+    ? result.lines.slice(1) // skip the heading line itself
+    : markdown.split(/\r?\n/);
 
   const normalized = section
     .map((line) => line.trim())
@@ -116,8 +112,7 @@ export function checkEslintCoverage(markdown) {
 export function extractChangedFilesFromEvidence(markdown) {
   const section = readSection(markdown, "Changed Files");
   if (!section) return [];
-  return section
-    .split("\n")
+  return section.lines
     .map(line => line.match(/`([^`]+\.[a-zA-Z]+)`/))
     .filter(Boolean)
     .map(m => m[1]);
@@ -127,9 +122,7 @@ export function extractChangedFilesFromEvidence(markdown) {
 export function extractTestCommands(markdown) {
   const section = readSection(markdown, "Test Command");
   if (!section) return [];
-  // Extract lines inside code blocks or plain command lines
-  return section
-    .split("\n")
+  return section.lines
     .map(l => l.trim())
     .filter(l => l && !l.startsWith("```") && !l.startsWith("#") && !l.startsWith("//"))
     .filter(l => l.match(/^(npx|npm|node|vitest|jest|cargo|python|python3|py|ruff|go |make|pytest)/));

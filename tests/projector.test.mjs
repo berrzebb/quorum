@@ -8,24 +8,11 @@
 import { strict as assert } from "node:assert";
 import { describe, it, beforeEach } from "node:test";
 import { resolve } from "node:path";
-import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { writeFileSync, readFileSync } from "node:fs";
 
-const { EventStore } = await import("../dist/bus/store.js");
+import { createTempStore, cleanup } from "./helpers.mjs";
+
 const { MarkdownProjector } = await import("../dist/bus/projector.js");
-
-function createTempStore() {
-  const dir = resolve(tmpdir(), `quorum-proj-${randomUUID()}`);
-  mkdirSync(dir, { recursive: true });
-  const dbPath = resolve(dir, "test.db");
-  const store = new EventStore({ dbPath });
-  return { store, dir, dbPath };
-}
-
-function cleanup(dir) {
-  try { rmSync(dir, { recursive: true, force: true }); } catch {}
-}
 
 const TEST_CONFIG = {
   triggerTag: "[REVIEW_NEEDED]",

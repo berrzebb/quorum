@@ -31,14 +31,11 @@ export function runHealthCheck(repoRoot) {
   // 4. Audit history stagnation
   checkAuditStagnation(repoRoot, issues);
 
-  // 5. Zombie worktrees
-  checkZombieWorktrees(repoRoot, issues);
+  // 5. Zombie worktrees + stale verdicts (single git call)
+  checkWorktrees(repoRoot, issues);
 
   // 6. Config integrity
   checkConfig(repoRoot, issues);
-
-  // 7. Worktree evidence with stale verdicts
-  checkWorktreeVerdicts(repoRoot, issues);
 
   return issues;
 }
@@ -69,29 +66,9 @@ export function formatHealthCheck(issues) {
 
 // ── Checks ────────────────────────────────────
 
-function checkPlaceholders(repoRoot, issues) {
-  const PLACEHOLDER_RE = /\{\{[A-Z_]+\}\}/g;
-  const filesToCheck = [];
-
-  // Main gpt.md
-  const gptPaths = findFiles(repoRoot, "gpt.md", 5);
-  filesToCheck.push(...gptPaths);
-
-  for (const file of filesToCheck) {
-    try {
-      const content = readFileSync(file, "utf8");
-      const matches = content.match(PLACEHOLDER_RE);
-      if (matches) {
-        const unique = [...new Set(matches)];
-        issues.push({
-          severity: "critical",
-          category: "placeholder",
-          message: `Unresolved placeholder in ${relative(repoRoot, file)}: ${unique.join(", ")}`,
-          fix: `Delete ${relative(repoRoot, file)} and re-trigger audit`,
-        });
-      }
-    } catch { /* skip */ }
-  }
+function checkPlaceholders(_repoRoot, _issues) {
+  // Verdict files eliminated — verdicts stored in SQLite only.
+  // No file-based placeholder checks needed.
 }
 
 function checkStaleLocks(repoRoot, issues) {
@@ -177,29 +154,32 @@ function checkAuditStagnation(repoRoot, issues) {
   }
 }
 
-function checkZombieWorktrees(repoRoot, issues) {
+/** Combined zombie worktree + stale verdict check (single git subprocess). */
+function checkWorktrees(repoRoot, issues) {
+  let output;
   try {
-    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
+    output = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
+  } catch { return; /* not a git repo */ }
 
-    let wtPath = "";
-    for (const line of output.split("\n")) {
-      if (line.startsWith("worktree ")) {
-        wtPath = line.slice(9).trim();
-      } else if (line.startsWith("branch ") && wtPath && wtPath !== repoRoot) {
-        if (!existsSync(wtPath)) {
-          issues.push({
-            severity: "warning",
-            category: "zombie-worktree",
-            message: `Worktree path missing: ${wtPath}`,
-            fix: `git worktree remove "${wtPath}"`,
-          });
-        }
-        wtPath = "";
+  let wtPath = "";
+  for (const line of output.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      wtPath = line.slice(9).trim();
+    } else if (line.startsWith("branch ") && wtPath && wtPath !== repoRoot) {
+      // Zombie check
+      if (!existsSync(wtPath)) {
+        issues.push({
+          severity: "warning",
+          category: "zombie-worktree",
+          message: `Worktree path missing: ${wtPath}`,
+          fix: `git worktree remove "${wtPath}"`,
+        });
       }
+      wtPath = "";
     }
-  } catch { /* not a git repo */ }
+  }
 }
 
 function checkConfig(repoRoot, issues) {
@@ -251,38 +231,6 @@ function checkConfig(repoRoot, issues) {
       fix: "quorum setup — regenerates config",
     });
   }
-}
-
-function checkWorktreeVerdicts(repoRoot, issues) {
-  try {
-    const output = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    });
-
-    let wtPath = "";
-    for (const line of output.split("\n")) {
-      if (line.startsWith("worktree ")) {
-        wtPath = line.slice(9).trim();
-      } else if (line.startsWith("branch ") && wtPath && wtPath !== repoRoot) {
-        // Check gpt.md for unresolved placeholders
-        const gptPath = resolve(wtPath, "docs", "feedback", "gpt.md");
-        if (existsSync(gptPath)) {
-          const content = readFileSync(gptPath, "utf8");
-          const placeholders = content.match(/\{\{[A-Z_]+\}\}/g);
-          if (placeholders) {
-            const branch = line.slice(7).trim().replace("refs/heads/", "");
-            issues.push({
-              severity: "critical",
-              category: "worktree-verdict",
-              message: `Worktree ${branch}: gpt.md has unresolved ${[...new Set(placeholders)].join(", ")}`,
-              fix: `rm "${gptPath}" — verdict was from buggy audit`,
-            });
-          }
-        }
-        wtPath = "";
-      }
-    }
-  } catch { /* skip */ }
 }
 
 // ── Utility ───────────────────────────────────

@@ -2,6 +2,12 @@
 name: a11y-auditor
 description: Accessibility Auditor — performs static code analysis for WCAG 2.1 AA compliance, aria attributes, semantic HTML, and keyboard support. Activated when accessibility domain is detected. NOTE — this is STATIC analysis only; runtime browser testing is handled by ui-reviewer.
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

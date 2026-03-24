@@ -31,6 +31,7 @@ import {
   toolAuditScan,
   toolCoverageMap,
   toolDependencyGraph,
+  toolBlastRadius,
   toolRtmParse,
   toolRtmMerge,
   toolAuditHistory,
@@ -45,6 +46,7 @@ import {
   toolInfraScan,
   toolObservabilityCheck,
   toolDocCoverage,
+  toolAiGuide,
 } from "./tool-core.mjs";
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
@@ -89,6 +91,19 @@ const TOOLS = [
         extensions: { type: "string", description: "File extensions (default: .ts,.tsx,.js,.jsx,.mjs,.mts)" },
       },
       required: ["path"],
+    },
+  },
+  {
+    name: "blast_radius",
+    description: "Compute transitive impact of changed files via reverse import graph (BFS on inEdges). Returns affected file count, ratio, and per-file depth/via chain. Use before audit to assess change scope, or during planning to estimate risk.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        changed_files: { type: "array", items: { type: "string" }, description: "Files that changed (relative paths)" },
+        path:          { type: "string", description: "Repository root (default: cwd)" },
+        max_depth:     { type: "number", description: "BFS depth limit (default: 10)" },
+      },
+      required: ["changed_files"],
     },
   },
   {
@@ -277,6 +292,18 @@ const TOOLS = [
       },
     },
   },
+  // ── Synthesis tools ──────────────────
+  {
+    name: "ai_guide",
+    description: "Generate project onboarding guide by synthesizing code_map + dependency_graph + doc_coverage",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", description: "Directory to analyze" },
+      },
+      required: ["target"],
+    },
+  },
 ];
 
 // ═══ Request handler ════════════════════════════════════════════════════
@@ -315,6 +342,15 @@ async function handleRequest(req) {
 
       if (name === "dependency_graph") {
         const result = toolDependencyGraph(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        const tag = result.cached ? " [cached]" : "";
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary}${tag})` }] };
+      }
+
+      if (name === "blast_radius") {
+        const result = toolBlastRadius(args || {});
         if (result.error) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }
@@ -372,6 +408,14 @@ async function handleRequest(req) {
 
       if (name === "act_analyze") {
         const result = toolActAnalyze(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
+      }
+
+      if (name === "ai_guide") {
+        const result = toolAiGuide(args || {});
         if (result.error) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }

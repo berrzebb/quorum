@@ -1,11 +1,11 @@
 # Audit Response Format
 
-> Write `{{GPT_MD_PATH}}` following this format. Adjust sections to fit your project.
+> Output the verdict following this format as your response text. Adjust sections to fit your project.
 
 ## Timestamp
 
 - Audit completion timestamp is **added automatically by the system** — do not write it manually.
-- Format: `> Audit completed: YYYY-MM-DD HH:MM` (auto-appended to bottom of gpt.md)
+- Format: `> Audit completed: YYYY-MM-DD HH:MM` (auto-appended to bottom of verdict.md)
 
 ## Required Sections (keep only these)
 

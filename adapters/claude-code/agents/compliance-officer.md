@@ -2,6 +2,12 @@
 name: compliance-officer
 description: Compliance Officer — checks license compatibility, PII handling, data retention, and regulatory patterns. Activated when compliance domain is detected (license files, personal data handling, GDPR/CCPA patterns).
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

@@ -165,7 +165,11 @@ export class ProcessMux extends EventEmitter {
 
   /** Get active session count. */
   active(): number {
-    return [...this.sessions.values()].filter((s) => s.status === "running").length;
+    let count = 0;
+    for (const s of this.sessions.values()) {
+      if (s.status === "running") count++;
+    }
+    return count;
   }
 
   /** Clean up all sessions. */

@@ -2,7 +2,7 @@
 
 Copy this file to `templates/references/en/output-format.md` and adapt it to your project.
 
-This defines the format the auditor (GPT/Codex) uses when writing to `{{GPT_MD_PATH}}`.
+This defines the format the auditor uses when outputting the verdict as response text.
 - Section headings must match `config.json`'s `consensus.sections`
 - Adjust example tags (`[pending]`, `[agreed]`) to match your project's tags
 
@@ -10,12 +10,12 @@ This defines the format the auditor (GPT/Codex) uses when writing to `{{GPT_MD_P
 
 # Audit Response Format
 
-> Write `{{GPT_MD_PATH}}` following this format. Adjust sections to fit your project.
+> Output the verdict following this format as your response text. Adjust sections to fit your project.
 
 ## Timestamp
 
 - Audit completion timestamp is **added automatically by the system** — do not write it manually.
-- Format: `> Audit completed: YYYY-MM-DD HH:MM` (auto-appended to bottom of gpt.md)
+- Format: `> Audit completed: YYYY-MM-DD HH:MM` (auto-appended to bottom of verdict.md)
 
 ## Required Sections (keep only these)
 

@@ -2,6 +2,12 @@
 name: scout
 description: Read-only RTM generator — reads all track work-breakdowns, verifies each requirement against the actual codebase using deterministic tools, and produces 3 Requirements Traceability Matrices (Forward, Backward, Bidirectional). Use when the orchestrator needs to establish or update the RTM before distributing work.
 tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-opus-4-6
 skills:
   - quorum:tools

@@ -196,6 +196,7 @@ export function detectDomains(
   };
 
   const reasons = new Map<keyof DetectedDomains, string[]>();
+  let activeCount = 0;
 
   for (const domain of Object.keys(domains) as (keyof DetectedDomains)[]) {
     const domainReasons: string[] = [];
@@ -240,6 +241,7 @@ export function detectDomains(
 
     if (domainReasons.length > 0) {
       domains[domain] = true;
+      activeCount++;
       reasons.set(domain, domainReasons);
     }
   }
@@ -247,9 +249,15 @@ export function detectDomains(
   return {
     domains,
     reasons,
-    activeCount: Object.values(domains).filter(Boolean).length,
+    activeCount,
   };
 }
+
+/**
+ * Canonical list of all known domain names.
+ * Used by specialist.ts (DOMAIN_KEYWORDS) to stay in sync.
+ */
+export const DOMAIN_NAMES = Object.keys(PATH_PATTERNS) as (keyof DetectedDomains)[];
 
 /**
  * Get a human-readable summary of detected domains.

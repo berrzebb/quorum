@@ -19,8 +19,9 @@
  *   src/agent/index.ts:L12 class AgentRunner
  *   src/agent/index.ts:L5 import { Router } from "express"
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { resolve, relative, extname } from "node:path";
+import { statSync } from "node:fs";
+import { resolve, relative } from "node:path";
+import { parseFile as _parseFile, findEndLine, walkDir } from "./tool-core.mjs";
 
 const DEFAULTS = {
   extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]),
@@ -29,109 +30,16 @@ const DEFAULTS = {
   showRanges: false,
 };
 
-// ── Symbol patterns ─────────────────────────────────────────
-const PATTERNS = [
-  // Functions
-  { type: "fn", re: /^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/m },
-  { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)\s*(?:=>|:\s*\w)/m },
-  { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/m },
-  // Methods (class/object)
-  { type: "method", re: /^\s+(?:async\s+)?(\w+)\s*\(([^)]*)\)\s*[:{]/m },
-  { type: "method", re: /^\s+(?:get|set)\s+(\w+)\s*\(/m },
-  // Classes
-  { type: "class", re: /^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/m },
-  // Interfaces / Types
-  { type: "iface", re: /^(?:export\s+)?interface\s+(\w+)/m },
-  { type: "type", re: /^(?:export\s+)?type\s+(\w+)\s*[=<]/m },
-  // Enums
-  { type: "enum", re: /^(?:export\s+)?enum\s+(\w+)/m },
-  // Exports
-  { type: "export", re: /^export\s+(?:default\s+)?(class|function|const|let|var)\s+(\w+)/m },
-  // Imports (compact)
-  { type: "import", re: /^import\s+(?:type\s+)?(?:\{([^}]+)\}|(\w+))\s+from\s+["']([^"']+)["']/m },
-];
-
-// ── Scope tracking for --ranges ─────────────────────────────
-function findEndLine(lines, startIdx) {
-  let depth = 0;
-  let started = false;
-  for (let i = startIdx; i < lines.length; i++) {
-    const line = lines[i];
-    for (const ch of line) {
-      if (ch === "{") { depth++; started = true; }
-      if (ch === "}") { depth--; }
+// Wrap parseFile to add --ranges support (loc field) on top of tool-core's base output
+function parseFileWithRanges(filePath, filters, showRanges) {
+  const symbols = _parseFile(filePath, filters);
+  return symbols.map(s => {
+    let loc = `L${s.line}`;
+    if (showRanges && ["fn", "method", "class", "iface", "enum"].includes(s.type)) {
+      if (s.endLine > s.line) loc = `L${s.line}-L${s.endLine}`;
     }
-    if (started && depth <= 0) return i + 1; // 1-indexed
-  }
-  return startIdx + 1;
-}
-
-// ── Parse a single file ─────────────────────────────────────
-function parseFile(filePath, filters, showRanges) {
-  let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
-
-  const lines = content.split(/\r?\n/);
-  const symbols = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim() || line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
-
-    for (const { type, re } of PATTERNS) {
-      if (filters && !filters.has(type)) continue;
-      const m = line.match(re);
-      if (!m) continue;
-
-      let name, detail = "";
-      if (type === "import") {
-        const imported = (m[1] || m[2] || "").trim();
-        const from = m[3];
-        name = imported.length > 40 ? imported.slice(0, 37) + "..." : imported;
-        detail = ` from "${from}"`;
-      } else if (type === "export" && m[2]) {
-        name = m[2];
-        // Skip if already captured as fn/class
-        continue;
-      } else {
-        name = m[1] || "";
-        const params = m[2];
-        if (params !== undefined) {
-          detail = `(${params.length > 50 ? params.slice(0, 47) + "..." : params})`;
-        }
-      }
-
-      const lineNum = i + 1;
-      let loc = `L${lineNum}`;
-      if (showRanges && ["fn", "method", "class", "iface", "enum"].includes(type)) {
-        const endLine = findEndLine(lines, i);
-        if (endLine > lineNum) loc = `L${lineNum}-L${endLine}`;
-      }
-
-      symbols.push({ line: lineNum, loc, type, name, detail });
-      break; // one match per line
-    }
-  }
-  return symbols;
-}
-
-// ── Walk directory ──────────────────────────────────────────
-function walkDir(dir, extensions, maxDepth, depth = 0) {
-  if (depth > maxDepth) return [];
-  const files = [];
-  let entries;
-  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
-
-  for (const entry of entries) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "dist") continue;
-    const full = resolve(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...walkDir(full, extensions, maxDepth, depth + 1));
-    } else if (extensions.has(extname(entry.name))) {
-      files.push(full);
-    }
-  }
-  return files;
+    return { ...s, loc };
+  });
 }
 
 // ── Main ────────────────────────────────────────────────────
@@ -169,7 +77,7 @@ function main() {
   let totalSymbols = 0;
 
   for (const file of files.sort()) {
-    const symbols = parseFile(file, opts.filters, opts.showRanges);
+    const symbols = parseFileWithRanges(file, opts.filters, opts.showRanges);
     if (symbols.length === 0) continue;
 
     const rel = relative(cwd, file);

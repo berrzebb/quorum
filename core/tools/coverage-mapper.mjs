@@ -114,7 +114,7 @@ function processRtm(rtmContent, coverageMap, cwd) {
   return output.join("\n");
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes("--help")) {

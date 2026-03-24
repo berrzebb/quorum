@@ -3,6 +3,12 @@ name: implementer
 description: Headless worker for quorum — receives task + context, implements code, runs tests, submits evidence to watch file, handles audit corrections. Use when the orchestrator needs to delegate a coding task to a worker agent.
 model: claude-sonnet-4-6
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
+disallowedTools:
+  - "Bash(rm -rf*)"
+  - "Bash(git push*)"
+  - "Bash(git reset --hard*)"
+  - "Bash(git checkout -- .)"
+  - "Bash(git clean -f*)"
 skills:
   - quorum:verify
   - quorum:guide
@@ -27,7 +33,7 @@ If running in a worktree (`git rev-parse --git-dir` contains `/worktrees/`):
 Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
 - `consensus.watch_file` → evidence submission path
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` → status tags
-- `plugin.respond_file` → auditor verdict file (relative to watch_file dir)
+- `plugin.respond_file` → auditor verdict file (default: verdict.md, relative to watch_file dir)
 - `plugin.locale` → locale for i18n
 
 ### 2. Read References
@@ -147,7 +153,7 @@ After submitting evidence, wait for the auditor verdict using a **two-phase time
 | 2 | CQ passed | project-appropriate linter/type check exit code 0 |
 | 3 | Tests passed | test runner exit code 0 |
 | 4 | Evidence submitted | watch_file contains `[trigger_tag]` or auditor already responded |
-| 5 | Audit approved | respond_file contains `[agree_tag]` |
+| 5 | Audit approved | verdict file contains `[agree_tag]` |
 | 6 | WIP committed | `git log -1 --oneline` shows WIP commit after `[agree_tag]` |
 
 Before exiting, run this self-check and output the checklist with ✅/❌ status for each row.

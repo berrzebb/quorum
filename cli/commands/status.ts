@@ -46,11 +46,29 @@ export async function run(args: string[]): Promise<void> {
   const configDir = resolve(repoRoot, ".claude", "quorum");
   let watchFile = "docs/feedback/claude.md";
   const configPath = resolve(configDir, "config.json");
+  let roles: Record<string, string> | undefined;
+  let auditorModel = "codex";
   if (existsSync(configPath)) {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
       watchFile = cfg.consensus?.watch_file ?? watchFile;
+      auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
+      if (cfg.consensus?.roles && typeof cfg.consensus.roles === "object") {
+        roles = cfg.consensus.roles;
+      }
     } catch { /* default */ }
+  }
+
+  // ── Auditor config ────────────────────────
+  if (roles && Object.keys(roles).length > 0) {
+    console.log(`  Auditor:     \x1b[36mper-role\x1b[0m`);
+    for (const [role, spec] of Object.entries(roles)) {
+      if (role === "default") continue;
+      console.log(`    ${role}: \x1b[33m${spec}\x1b[0m`);
+    }
+    if (roles.default) console.log(`    default: \x1b[2m${roles.default}\x1b[0m`);
+  } else {
+    console.log(`  Auditor:     ${auditorModel}`);
   }
 
   // Check main repo + all worktrees for evidence
@@ -231,13 +249,15 @@ const DASHBOARD_SESSION = "quorum-dashboard";
 function detectMuxBackend(): "tmux" | "psmux" | null {
   if (process.platform === "win32") {
     try {
-      spawnSync("psmux", ["--version"], { stdio: "ignore", timeout: 3000, windowsHide: true });
-      return "psmux";
+      const r = spawnSync("psmux", ["--version"], { stdio: "ignore", timeout: 3000, windowsHide: true });
+      if (r.status === 0) return "psmux";
+      return null;
     } catch { return null; }
   }
   try {
-    spawnSync("tmux", ["-V"], { stdio: "ignore", timeout: 3000 });
-    return "tmux";
+    const r = spawnSync("tmux", ["-V"], { stdio: "ignore", timeout: 3000 });
+    if (r.status === 0) return "tmux";
+    return null;
   } catch { return null; }
 }
 

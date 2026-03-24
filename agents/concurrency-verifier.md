@@ -2,6 +2,12 @@
 name: concurrency-verifier
 description: Concurrency Verifier — analyzes async coordination, shared state access, race conditions, and deadlock potential. Activated when concurrency domain is detected (Promise.all, Workers, shared state, locks).
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

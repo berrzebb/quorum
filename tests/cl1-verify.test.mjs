@@ -49,7 +49,7 @@ test("F2 collected among mixed line", () => {
 // ─── 2. find_respond_file fallback ──────────────────────────────────────────
 // Mirrors the find_respond_file() function in index.mjs (L45-L56).
 
-function find_respond_file({ respond_file = "gpt.md", watch_file, plugin_dir, repo_root }) {
+function find_respond_file({ respond_file = "verdict.md", watch_file, plugin_dir, repo_root }) {
   const subPath = watch_file.split("/").slice(0, -1).join("/");
   const dirs = [
     join(plugin_dir, subPath),
@@ -81,21 +81,21 @@ try {
   });
 
   test("resolves from plugin_dir first", () => {
-    writeFileSync(join(pluginDir, "feedback", "gpt.md"), "");
-    writeFileSync(join(repoRoot,  "feedback", "gpt.md"), "");
+    writeFileSync(join(pluginDir, "feedback", "verdict.md"), "");
+    writeFileSync(join(repoRoot,  "feedback", "verdict.md"), "");
     const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
     assert.ok(result?.startsWith(pluginDir), `expected plugin_dir prefix, got: ${result}`);
   });
 
   test("falls back to repo_root when absent in plugin_dir", () => {
-    rmSync(join(pluginDir, "feedback", "gpt.md"));
+    rmSync(join(pluginDir, "feedback", "verdict.md"));
     const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
     assert.ok(result?.startsWith(repoRoot), `expected repo_root prefix, got: ${result}`);
   });
 
-  test("uses default respond_file='gpt.md' when not specified", () => {
+  test("uses default respond_file='verdict.md' when not specified", () => {
     const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.endsWith("gpt.md"), `expected gpt.md suffix, got: ${result}`);
+    assert.ok(result?.endsWith("verdict.md"), `expected verdict.md suffix, got: ${result}`);
   });
 
   test("respects custom respond_file name", () => {
@@ -105,10 +105,10 @@ try {
   });
 
   test("case-insensitive match (uppercase variant)", () => {
-    rmSync(join(repoRoot, "feedback", "gpt.md"));
-    writeFileSync(join(repoRoot, "feedback", "GPT.MD"), "");
+    rmSync(join(repoRoot, "feedback", "verdict.md"));
+    writeFileSync(join(repoRoot, "feedback", "VERDICT.MD"), "");
     const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.toUpperCase().endsWith("GPT.MD"), `expected GPT.MD match, got: ${result}`);
+    assert.ok(result?.toUpperCase().endsWith("VERDICT.MD"), `expected VERDICT.MD match, got: ${result}`);
   });
 
 } finally {

@@ -62,6 +62,20 @@ export interface QueryFilter {
 export class EventStore {
   private db: Database.Database;
 
+  // ── Cached prepared statements (compiled once, reused on every call) ──
+  private stmtAppend!: Database.Statement;
+  private stmtCurrentState!: Database.Statement;
+  private stmtGetKV!: Database.Statement;
+  private stmtSetKV!: Database.Statement;
+  private stmtReplay!: Database.Statement;
+  private stmtEventsAfter!: Database.Statement;
+  private stmtRecent!: Database.Statement;
+  private stmtInsertTransition!: Database.Statement;
+
+  /** Cache for dynamically-built query/count prepared statements (keyed by filter shape). */
+  private queryCache = new Map<string, Database.Statement>();
+  private countCache = new Map<string, Database.Statement>();
+
   constructor(opts: StoreOptions) {
     this.db = new Database(opts.dbPath);
 
@@ -72,6 +86,45 @@ export class EventStore {
     this.db.pragma("synchronous = NORMAL");
 
     this.createSchema();
+    this.prepareStatements();
+  }
+
+  private prepareStatements(): void {
+    this.stmtAppend = this.db.prepare(`
+      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.stmtCurrentState = this.db.prepare(`
+      SELECT to_state FROM state_transitions
+      WHERE entity_type = ? AND entity_id = ?
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    this.stmtGetKV = this.db.prepare(
+      `SELECT value FROM kv_state WHERE key = ?`
+    );
+    this.stmtSetKV = this.db.prepare(
+      `INSERT OR REPLACE INTO kv_state (key, value, updated_at) VALUES (?, ?, ?)`
+    );
+    this.stmtReplay = this.db.prepare(`
+      SELECT * FROM events
+      WHERE aggregate_type = ? AND aggregate_id = ?
+      ORDER BY timestamp ASC, id ASC
+    `);
+    this.stmtEventsAfter = this.db.prepare(`
+      SELECT * FROM events
+      WHERE timestamp > ?
+      ORDER BY timestamp ASC, id ASC
+      LIMIT ?
+    `);
+    this.stmtRecent = this.db.prepare(`
+      SELECT * FROM events
+      ORDER BY timestamp DESC, id DESC
+      LIMIT ?
+    `);
+    this.stmtInsertTransition = this.db.prepare(`
+      INSERT INTO state_transitions (id, entity_type, entity_id, from_state, to_state, source, session_id, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
   }
 
   /** Expose the raw database handle (for LockService, StateReader). */
@@ -137,6 +190,17 @@ export class EventStore {
         value         TEXT NOT NULL,
         updated_at    INTEGER NOT NULL
       );
+
+      -- File claims: per-file ownership for worktree conflict prevention
+      CREATE TABLE IF NOT EXISTS file_claims (
+        file_path     TEXT PRIMARY KEY,
+        agent_id      TEXT NOT NULL,
+        session_id    TEXT,
+        claimed_at    INTEGER NOT NULL,
+        ttl_ms        INTEGER NOT NULL DEFAULT 600000
+      );
+      CREATE INDEX IF NOT EXISTS idx_fc_agent
+        ON file_claims (agent_id);
     `);
 
     // Views — use separate exec() calls since CREATE VIEW IF NOT EXISTS
@@ -164,13 +228,9 @@ export class EventStore {
     } catch { /* view already exists */ }
   }
 
-  /** Append a single event. */
-  append(event: QuorumEvent): string {
-    const id = randomUUID();
-    this.db.prepare(`
-      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+  /** Build the parameter tuple for stmtAppend. */
+  private _eventParams(id: string, event: QuorumEvent): unknown[] {
+    return [
       id,
       (event.payload.aggregateType ?? null) as string | null,
       (event.payload.aggregateId ?? null) as string | null,
@@ -181,33 +241,24 @@ export class EventStore {
       event.agentId ?? null,
       JSON.stringify(event.payload),
       event.timestamp,
-    );
+    ];
+  }
+
+  /** Append a single event. */
+  append(event: QuorumEvent): string {
+    const id = randomUUID();
+    this.stmtAppend.run(...this._eventParams(id, event));
     return id;
   }
 
   /** Append multiple events atomically. */
   appendBatch(events: QuorumEvent[]): string[] {
     const ids: string[] = [];
-    const insert = this.db.prepare(`
-      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
 
     const tx = this.db.transaction(() => {
       for (const event of events) {
         const id = randomUUID();
-        insert.run(
-          id,
-          (event.payload.aggregateType ?? null) as string | null,
-          (event.payload.aggregateId ?? null) as string | null,
-          event.type,
-          event.source,
-          event.sessionId ?? null,
-          event.trackId ?? null,
-          event.agentId ?? null,
-          JSON.stringify(event.payload),
-          event.timestamp,
-        );
+        this.stmtAppend.run(...this._eventParams(id, event));
         ids.push(id);
       }
     });
@@ -217,102 +268,77 @@ export class EventStore {
 
   /** Replay all events for an aggregate, ordered by timestamp + id. */
   replay(aggregateType: string, aggregateId: string): QuorumEvent[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM events
-      WHERE aggregate_type = ? AND aggregate_id = ?
-      ORDER BY timestamp ASC, id ASC
-    `).all(aggregateType, aggregateId) as EventRow[];
-
+    const rows = this.stmtReplay.all(aggregateType, aggregateId) as EventRow[];
     return rows.map(rowToEvent);
   }
 
   /** Get events after a cursor (timestamp), for incremental polling. */
   getEventsAfter(sinceTimestamp: number, limit = 100): QuorumEvent[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM events
-      WHERE timestamp > ?
-      ORDER BY timestamp ASC, id ASC
-      LIMIT ?
-    `).all(sinceTimestamp, limit) as EventRow[];
-
+    const rows = this.stmtEventsAfter.all(sinceTimestamp, limit) as EventRow[];
     return rows.map(rowToEvent);
   }
 
-  /** Flexible query with filters. */
+  /** Flexible query with filters. Uses cached prepared statements. */
   query(filter: QueryFilter = {}): QuorumEvent[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (filter.eventType) {
-      conditions.push("event_type = ?");
-      params.push(filter.eventType);
-    }
-    if (filter.source) {
-      conditions.push("source = ?");
-      params.push(filter.source);
-    }
-    if (filter.aggregateType) {
-      conditions.push("aggregate_type = ?");
-      params.push(filter.aggregateType);
-    }
-    if (filter.aggregateId) {
-      conditions.push("aggregate_id = ?");
-      params.push(filter.aggregateId);
-    }
-    if (filter.since) {
-      conditions.push("timestamp >= ?");
-      params.push(filter.since);
-    }
-    if (filter.until) {
-      conditions.push("timestamp <= ?");
-      params.push(filter.until);
-    }
-
+    const { cacheKey, conditions, params } = this._buildFilterSQL(filter);
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limit = filter.limit ? `LIMIT ${filter.limit}` : "";
-    const offset = filter.offset ? `OFFSET ${filter.offset}` : "";
+    const hasLimit = filter.limit != null;
+    const hasOffset = hasLimit && filter.offset != null;
+    const suffix = hasLimit ? ` LIMIT ?${hasOffset ? " OFFSET ?" : ""}` : "";
 
-    const rows = this.db.prepare(`
-      SELECT * FROM events ${where}
-      ORDER BY timestamp ASC, id ASC
-      ${limit} ${offset}
-    `).all(...params) as EventRow[];
+    const stmtKey = `q:${cacheKey}:${hasLimit}:${hasOffset}`;
+    let stmt = this.queryCache.get(stmtKey);
+    if (!stmt) {
+      stmt = this.db.prepare(`
+        SELECT * FROM events ${where}
+        ORDER BY timestamp ASC, id ASC${suffix}
+      `);
+      this.queryCache.set(stmtKey, stmt);
+    }
 
+    if (hasLimit) params.push(filter.limit!);
+    if (hasOffset) params.push(filter.offset!);
+    const rows = stmt.all(...params) as EventRow[];
     return rows.map(rowToEvent);
   }
 
   /** Get most recent N events. */
   recent(count = 50): QuorumEvent[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM events
-      ORDER BY timestamp DESC, id DESC
-      LIMIT ?
-    `).all(count) as EventRow[];
-
+    const rows = this.stmtRecent.all(count) as EventRow[];
     return rows.reverse().map(rowToEvent);
   }
 
-  /** Count events matching a filter. */
+  /** Count events matching a filter. Uses cached prepared statements. */
   count(filter: QueryFilter = {}): number {
+    const { cacheKey, conditions, params } = this._buildFilterSQL(filter);
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    let stmt = this.countCache.get(cacheKey);
+    if (!stmt) {
+      stmt = this.db.prepare(`SELECT COUNT(*) as cnt FROM events ${where}`);
+      this.countCache.set(cacheKey, stmt);
+    }
+
+    const row = stmt.get(...params) as { cnt: number };
+    return row.cnt;
+  }
+
+  /** Build SQL conditions and a cache key from a filter. Shared by query() and count(). */
+  private _buildFilterSQL(filter: QueryFilter): {
+    cacheKey: string; conditions: string[]; params: unknown[];
+  } {
     const conditions: string[] = [];
     const params: unknown[] = [];
+    const keyParts: string[] = [];
 
-    if (filter.eventType) {
-      conditions.push("event_type = ?");
-      params.push(filter.eventType);
-    }
-    if (filter.source) {
-      conditions.push("source = ?");
-      params.push(filter.source);
-    }
-    if (filter.since) {
-      conditions.push("timestamp >= ?");
-      params.push(filter.since);
-    }
+    if (filter.eventType) { conditions.push("event_type = ?"); params.push(filter.eventType); keyParts.push("t"); }
+    if (filter.source) { conditions.push("source = ?"); params.push(filter.source); keyParts.push("s"); }
+    if (filter.aggregateType) { conditions.push("aggregate_type = ?"); params.push(filter.aggregateType); keyParts.push("at"); }
+    if (filter.aggregateId) { conditions.push("aggregate_id = ?"); params.push(filter.aggregateId); keyParts.push("ai"); }
+    if (filter.since) { conditions.push("timestamp >= ?"); params.push(filter.since); keyParts.push("si"); }
+    if (filter.until) { conditions.push("timestamp <= ?"); params.push(filter.until); keyParts.push("un"); }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const row = this.db.prepare(`SELECT COUNT(*) as cnt FROM events ${where}`).get(...params) as { cnt: number };
-    return row.cnt;
+    return { cacheKey: keyParts.join("+") || "_", conditions, params };
   }
 
   /**
@@ -327,38 +353,15 @@ export class EventStore {
     const ids: string[] = [];
     const now = Date.now();
 
-    const insertEvent = this.db.prepare(`
-      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertTransition = this.db.prepare(`
-      INSERT INTO state_transitions (id, entity_type, entity_id, from_state, to_state, source, session_id, metadata, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const upsertKV = this.db.prepare(`
-      INSERT OR REPLACE INTO kv_state (key, value, updated_at) VALUES (?, ?, ?)
-    `);
-
     const tx = this.db.transaction(() => {
       for (const event of events) {
         const id = randomUUID();
-        insertEvent.run(
-          id,
-          (event.payload.aggregateType ?? null) as string | null,
-          (event.payload.aggregateId ?? null) as string | null,
-          event.type,
-          event.source,
-          event.sessionId ?? null,
-          event.trackId ?? null,
-          event.agentId ?? null,
-          JSON.stringify(event.payload),
-          event.timestamp,
-        );
+        this.stmtAppend.run(...this._eventParams(id, event));
         ids.push(id);
       }
 
       for (const st of transitions) {
-        insertTransition.run(
+        this.stmtInsertTransition.run(
           randomUUID(),
           st.entityType,
           st.entityId,
@@ -372,7 +375,7 @@ export class EventStore {
       }
 
       for (const kv of kvUpdates) {
-        upsertKV.run(kv.key, JSON.stringify(kv.value), now);
+        this.stmtSetKV.run(kv.key, JSON.stringify(kv.value), now);
       }
     });
 
@@ -382,28 +385,20 @@ export class EventStore {
 
   /** Query current state for an entity (latest transition). */
   currentState(entityType: string, entityId: string): string | null {
-    const row = this.db.prepare(`
-      SELECT to_state FROM state_transitions
-      WHERE entity_type = ? AND entity_id = ?
-      ORDER BY created_at DESC LIMIT 1
-    `).get(entityType, entityId) as { to_state: string } | undefined;
+    const row = this.stmtCurrentState.get(entityType, entityId) as { to_state: string } | undefined;
     return row?.to_state ?? null;
   }
 
   /** Read a KV entry. */
   getKV(key: string): unknown | null {
-    const row = this.db.prepare(
-      `SELECT value FROM kv_state WHERE key = ?`
-    ).get(key) as { value: string } | undefined;
+    const row = this.stmtGetKV.get(key) as { value: string } | undefined;
     if (!row) return null;
     try { return JSON.parse(row.value); } catch { return null; }
   }
 
   /** Write a KV entry. */
   setKV(key: string, value: unknown): void {
-    this.db.prepare(
-      `INSERT OR REPLACE INTO kv_state (key, value, updated_at) VALUES (?, ?, ?)`
-    ).run(key, JSON.stringify(value), Date.now());
+    this.stmtSetKV.run(key, JSON.stringify(value), Date.now());
   }
 
   /** Close the database connection. */

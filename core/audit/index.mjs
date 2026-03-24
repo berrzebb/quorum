@@ -22,28 +22,49 @@ const promptTemplatePath = resolvePluginPath(plugin.audit_prompt);
 
 // Lazy-initialized in main() — avoid dirname(null) crash at module load time.
 let claudePath = null;
-let gptPath    = null;
 
 const planningDirs = (consensus.planning_dirs ?? []).map((d) => resolve(REPO_ROOT, d));
 const promotionDocPaths = planningDirs.map((d) => resolve(d, "feedback-promotion.md"));
 
-/** Append audit-completed timestamp to gpt.md (idempotent). */
-export function stampAuditCompleted(path) {
-  if (!existsSync(path)) return;
-  let content = readFileSync(path, "utf8");
-  const ts = new Date().toISOString().replace("T", " ").slice(0, 16);
-  const tsLabel = t("index.timestamp.label");
-  const tsLine = `\n---\n> ${tsLabel}: ${ts}\n`;
-  if (content.includes(`${tsLabel}: ${ts}`)) return;
-  // Remove any previous timestamp line, then append new one
-  content = content.replace(/\n---\n> [^:]+: \d{4}-\d{2}-\d{2} \d{2}:\d{2}\n/g, "");
-  content = content.trimEnd() + tsLine;
-  writeFileSync(path, content, "utf8");
-}
-
 export function initPaths(overrideWatchFile) {
   claudePath = overrideWatchFile && existsSync(overrideWatchFile) ? overrideWatchFile : findWatchFile();
-  gptPath = claudePath ? resolve(dirname(claudePath), plugin.respond_file ?? "gpt.md") : null;
+}
+
+/** Write audit-status.json marker for fast-path hook detection (no bridge needed). */
+function writeAuditStatus(statusDir, status, pendingCount, rejectionCodes, track) {
+  const statusPath = resolve(statusDir, "audit-status.json");
+  const marker = {
+    status,
+    pendingCount: pendingCount ?? 0,
+    rejectionCodes: rejectionCodes ?? [],
+    track: track ?? "",
+    timestamp: Date.now(),
+  };
+  try { writeFileSync(statusPath, JSON.stringify(marker, null, 2), "utf8"); } catch { /* non-critical */ }
+}
+
+/** Parse verdict text for status and rejection codes. */
+function parseVerdictText(text) {
+  if (!text) return { status: "unknown", pendingCount: 0, rejectionCodes: [] };
+
+  const hasPending = /\[pending\]|\[계류\]|\[PENDING\]|\[CHANGES_REQUESTED\]/i.test(text);
+  const hasApproved = /\[approved\]|\[합의완료\]|\[APPROVED\]/i.test(text);
+  const hasInfraFailure = /\[INFRA_FAILURE\]/i.test(text);
+
+  const codes = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/`([\w-]+)\s*\[(major|minor|critical)\]`/);
+    if (m) codes.push(`${m[1]} [${m[2]}]`);
+  }
+
+  // Count pending items
+  const pendingMatches = text.match(/\[pending\]|\[계류\]/gi);
+  const pendingCount = pendingMatches ? pendingMatches.length : 0;
+
+  if (hasInfraFailure) return { status: "infra_failure", pendingCount: 0, rejectionCodes: codes };
+  if (hasPending) return { status: "changes_requested", pendingCount: Math.max(1, pendingCount), rejectionCodes: codes };
+  if (hasApproved) return { status: "approved", pendingCount: 0, rejectionCodes: codes };
+  return { status: "unknown", pendingCount: 0, rejectionCodes: codes };
 }
 
 export function runRespond(args) {
@@ -98,7 +119,6 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
     .split("{{DIFF_CMD}}").join(diffScope ?? "")
     .split("{{PROMOTION_SECTION}}").join(promotionSection)
     .split("{{CLAUDE_MD_PATH}}").join(claudePath)
-    .split("{{GPT_MD_PATH}}").join(gptPath)
     .split("{{TRIGGER_TAG}}").join(cfg.consensus.trigger_tag)
     .split("{{AGREE_TAG}}").join(cfg.consensus.agree_tag)
     .split("{{PENDING_TAG}}").join(cfg.consensus.pending_tag)
@@ -116,6 +136,8 @@ async function main() {
 
   // Resolve audit CWD: if watch_file is in a worktree, Codex must run there
   const auditCwd = deriveAuditCwd(args.watchFile);
+  const statusDir = resolve(auditCwd, ".claude");
+  const auditStatusPath = resolve(statusDir, "audit-status.json");
   // Session files go to the worktree too (prevents cross-worktree state corruption)
   if (auditCwd !== REPO_ROOT) initSessionDir(resolve(auditCwd, ".claude"));
 
@@ -156,20 +178,20 @@ async function main() {
   const auditMode = cfg.consensus?.audit_mode || "external";
   if (auditMode === "solo") {
     console.log("[audit] Solo mode \u2014 generating verdict from pre-verification only");
-    const verdict = generateSoloVerdict(preVerified);
-    writeFileSync(gptPath, verdict, "utf8");
-    // Dual-write: record verdict transition to SQLite
+    const verdictText = generateSoloVerdict(preVerified);
+    const isApproved = verdictText.includes("[APPROVED]");
+    const parsed = parseVerdictText(verdictText);
+    // Record verdict to SQLite (single source of truth)
     try {
-      const isApproved = verdict.includes("[APPROVED]");
       bridge.recordTransition(
         "gate", "audit",
         "pending", isApproved ? "approved" : "changes_requested",
         "system",
-        { mode: "solo", preVerified: true },
+        { mode: "solo", preVerified: true, verdictText },
       );
     } catch { /* bridge non-critical */ }
+    writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
     runRespond(args);
-    stampAuditCompleted(gptPath);
     return;
   }
 
@@ -195,7 +217,7 @@ async function main() {
     return;
   }
 
-  const resumeTarget = determineResumeTarget(args, gptPath);
+  const resumeTarget = determineResumeTarget(args, auditStatusPath);
   if (resumeTarget?.type === "session") {
     console.log(t("audit.session.resuming", { id: resumeTarget.value }));
   } else if (resumeTarget?.type === "last") {
@@ -218,55 +240,29 @@ async function main() {
   child.stdin.write(prompt);
   child.stdin.end();
 
-  const { threadId, exitCode } = await streamCodexOutput(child, args.json);
+  const { threadId, exitCode, verdictText } = await streamCodexOutput(child, args.json);
 
   if (exitCode !== 0) {
     // Auto mode: fall back to solo verdict instead of infra_failure
     if (auditMode === "auto") {
       console.error("[audit] External auditor failed (exit " + exitCode + ") \u2014 falling back to solo mode");
-      const verdict = generateSoloVerdict(preVerified);
-      writeFileSync(gptPath, verdict, "utf8");
-      // Dual-write: record fallback verdict to SQLite
+      const fallbackText = generateSoloVerdict(preVerified);
+      const isApproved = fallbackText.includes("[APPROVED]");
+      const parsed = parseVerdictText(fallbackText);
       try {
-        const isApproved = verdict.includes("[APPROVED]");
         bridge.recordTransition(
           "gate", "audit",
           "pending", isApproved ? "approved" : "changes_requested",
           "system",
-          { mode: "auto-fallback-solo", exitCode },
+          { mode: "auto-fallback-solo", exitCode, verdictText: fallbackText },
         );
       } catch { /* bridge non-critical */ }
+      writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
       runRespond(args);
-      stampAuditCompleted(gptPath);
       return;
     }
 
-    // Do NOT call process.exit() here — it skips .finally() lock cleanup.
-    // Instead, write an infra_failure verdict so the worker can proceed.
-    const failureVerdict = [
-      `## [INFRA_FAILURE]`,
-      ``,
-      `### Audit Scope`,
-      ``,
-      `infra_failure: auditor exited with code ${exitCode}. No external review performed.`,
-      ``,
-      `### Final Verdict`,
-      ``,
-      `- Status: infra_failure (auditor unreachable)`,
-      `- Action: worker unblocked \u2014 NOT approved. Requires manual review or retry.`,
-      ``,
-      `### Execution Metadata`,
-      ``,
-      `| Field | Value |`,
-      `|-------|-------|`,
-      `| execution_mode | degraded_infra_failure |`,
-      `| audit_status | unreachable |`,
-      `| merge_status | provisional |`,
-      `| baseline_eligible | false |`,
-      ``,
-    ].join("\n");
-    writeFileSync(gptPath, failureVerdict, "utf8");
-    // Dual-write: record infra failure to SQLite
+    // Record infra_failure to SQLite — worker unblocked but NOT approved
     try {
       bridge.recordTransition(
         "gate", "audit",
@@ -275,26 +271,34 @@ async function main() {
         { exitCode, mode: "infra_failure" },
       );
     } catch { /* bridge non-critical */ }
-    console.error(`[audit] Codex exited with code ${exitCode} \u2014 wrote infra_failure verdict to ${gptPath}`);
+    writeAuditStatus(statusDir, "infra_failure", 0, []);
+    console.error(`[audit] Codex exited with code ${exitCode} \u2014 recorded infra_failure to SQLite`);
+  } else {
+    // Parse verdict from captured response text
+    const parsed = parseVerdictText(verdictText);
+    try {
+      bridge.recordTransition(
+        "gate", "audit",
+        "pending", parsed.status === "approved" ? "approved" : "changes_requested",
+        "system",
+        { mode: "external", verdictText },
+      );
+    } catch { /* bridge non-critical */ }
+    writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
+    console.log(`[audit] Verdict recorded to SQLite: ${parsed.status} (pending: ${parsed.pendingCount})`);
   }
 
-  if (existsSync(gptPath)) {
-    console.log(t("audit.updated", { path: gptPath }));
-    const gptMd = readFileSync(gptPath, "utf8");
-    if (!hasPendingItems(gptMd) && threadId) {
-      deleteSavedSessionId();
-      console.log(t("audit.session.reset", { tag: cfg.consensus.pending_tag }));
-    } else if (threadId) {
-      writeSavedSession(threadId);
-      console.log(t("audit.session.saved", { id: threadId }));
-    }
+  // Session management based on parsed verdict
+  const parsed = parseVerdictText(verdictText);
+  if (parsed.pendingCount === 0 && threadId) {
+    deleteSavedSessionId();
+    console.log(t("audit.session.reset", { tag: cfg.consensus.pending_tag }));
   } else if (threadId) {
     writeSavedSession(threadId);
     console.log(t("audit.session.saved", { id: threadId }));
   }
 
   runRespond(args);
-  stampAuditCompleted(gptPath);
 }
 
 // Lock is per-worktree: if --watch-file is in a worktree, lock goes there too.

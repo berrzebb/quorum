@@ -181,6 +181,8 @@ describe("isEmptyMarker", () => {
   it("detects English empty marker", () => {
     assert.ok(isEmptyMarker("none"));
     assert.ok(isEmptyMarker("None"));
+    assert.ok(isEmptyMarker("n/a"));
+    assert.ok(isEmptyMarker("N/A"));
   });
 
   it("detects backtick-wrapped markers", () => {
@@ -302,7 +304,7 @@ describe("i18n", () => {
     // Use a key that exists in locales/en.json
     const result = t("index.audit.start");
     assert.ok(typeof result === "string");
-    assert.ok(result !== "index.audit.start" || result === "index.audit.start"); // either found or falls back to key
+    assert.ok(result.length > 0, "translator should return non-empty string");
   });
 
   it("returns key for missing message", async () => {

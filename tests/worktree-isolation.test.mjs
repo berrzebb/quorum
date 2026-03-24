@@ -157,9 +157,9 @@ describe("audit.mjs worktree isolation invariants", () => {
     assert.match(fn, /runTestsLocally\(testCmds,\s*root\)/);
   });
 
-  it("infra_failure verdict is written on Codex failure", () => {
-    assert.match(auditSource, /infra_failure.*auditor exited/);
-    assert.match(auditSource, /writeFileSync\(gptPath.*failureVerdict/);
+  it("infra_failure verdict is recorded to SQLite on Codex failure", () => {
+    assert.match(auditSource, /infra_failure.*auditor exited|mode.*infra_failure/);
+    assert.match(auditSource, /bridge\.recordTransition[\s\S]*?infra_failure/);
   });
 });
 

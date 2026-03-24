@@ -15,6 +15,13 @@ import { execFileSync } from "node:child_process";
 import { runFvmValidation } from "./fvm-validator.mjs";
 import { generateFvm } from "./fvm-generator.mjs";
 
+// AST bridge — fail-safe optional import for hybrid scanning
+let _createAstRefine = null;
+try {
+  const astBridge = await import("./ast-bridge.mjs");
+  _createAstRefine = astBridge.createAstRefineCallback;
+} catch { /* AST bridge unavailable — regex-only mode */ }
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ═══ Cache ══════════════════════════════════════════════════════════════
@@ -46,7 +53,7 @@ function getLatestMtime(target) {
 
 const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
 
-const PATTERNS = [
+export const PATTERNS = [
   { type: "fn", re: /^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/m },
   { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)\s*(?:=>|:\s*\w)/m },
   { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/m },
@@ -58,7 +65,7 @@ const PATTERNS = [
   { type: "import", re: /^import\s+(?:type\s+)?(?:\{([^}]+)\}|(\w+))\s+from\s+["']([^"']+)["']/m },
 ];
 
-function findEndLine(lines, startIdx) {
+export function findEndLine(lines, startIdx) {
   let depth = 0, started = false;
   for (let i = startIdx; i < lines.length; i++) {
     for (const ch of lines[i]) {
@@ -70,7 +77,7 @@ function findEndLine(lines, startIdx) {
   return startIdx + 1;
 }
 
-function parseFile(filePath, filters) {
+export function parseFile(filePath, filters) {
   let content;
   try { content = readFileSync(filePath, "utf8"); } catch (err) {
     if (process.env.QUORUM_DEBUG) console.error(`[tool-core] parseFile: cannot read ${filePath}: ${err.message}`);
@@ -110,7 +117,7 @@ function parseFile(filePath, filters) {
   return symbols;
 }
 
-function walkDir(dir, extensions, maxDepth, depth = 0) {
+export function walkDir(dir, extensions, maxDepth, depth = 0) {
   if (depth > maxDepth) return [];
   const files = [];
   let entries;
@@ -125,6 +132,82 @@ function walkDir(dir, extensions, maxDepth, depth = 0) {
     else if (extensions.has(extname(e.name))) files.push(full);
   }
   return files;
+}
+
+// ═══ Pattern scan helper ═══════════════════════════════════════════════
+// Shared by perf_scan, a11y_scan, compat_check, license_scan, i18n_validate,
+// infra_scan, observability_check. Eliminates ~400 lines of boilerplate.
+
+/**
+ * Generic pattern-scan tool runner.
+ * @param {object} opts
+ * @param {string} opts.targetPath - path param from tool input
+ * @param {Set<string>} opts.extensions - file extensions to scan
+ * @param {Array<{re: RegExp, label: string, severity: string, msg: string}>} opts.patterns
+ * @param {string} opts.toolName - e.g. "perf_scan"
+ * @param {string} opts.heading - e.g. "Performance Scan Results"
+ * @param {string} opts.passMsg - e.g. "no performance anti-patterns detected"
+ * @param {string} opts.failNoun - e.g. "high-severity issue(s)"
+ * @param {number} [opts.maxDepth=5]
+ * @param {(findings: any[], files: string[], cwd: string) => void} [opts.postProcess] - optional extra processing
+ */
+export function runPatternScan(opts) {
+  const { targetPath, extensions, patterns, toolName, heading, passMsg, failNoun, maxDepth = 5, postProcess, astRefine } = opts;
+  const cwd = process.cwd();
+  const target = resolve(targetPath || cwd);
+  const stat_ = statSync(target, { throwIfNoEntry: false });
+  if (!stat_) return { error: `Not found: ${target}` };
+
+  const files = stat_.isDirectory() ? walkDir(target, extensions, maxDepth) : [target];
+  const findings = [];
+
+  const SCAN_IGNORE_RE = /\/[/*]\s*scan-ignore\b/;
+
+  for (const file of files) {
+    let content;
+    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    const lines = content.split(/\r?\n/);
+    const relPath = relative(cwd, file).replace(/\\/g, "/");
+
+    for (let i = 0; i < lines.length; i++) {
+      if (SCAN_IGNORE_RE.test(lines[i])) continue;
+      for (const pat of patterns) {
+        if (pat.re.test(lines[i])) {
+          findings.push({
+            file: relPath,
+            line: i + 1,
+            severity: pat.severity,
+            label: pat.label,
+            msg: pat.msg,
+          });
+        }
+      }
+    }
+  }
+
+  if (postProcess) postProcess(findings, files, cwd);
+
+  // AST refinement: remove false positives detected by AST analysis
+  if (astRefine && findings.length > 0) {
+    try { astRefine(findings); } catch { /* fail-open */ }
+  }
+
+  if (findings.length === 0) {
+    return { text: `${toolName}: pass — ${passMsg}.`, summary: `${files.length} files scanned, 0 findings` };
+  }
+
+  const rows = [`## ${heading}\n`, "| File | Line | Severity | Issue |", "|------|------|----------|-------|"];
+  for (const f of findings) rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
+
+  const highCount = findings.filter(f => f.severity === "high").length;
+  const verdict = highCount > 0 ? `fail — ${highCount} ${failNoun}` : `warn — ${findings.length} finding(s)`;
+  rows.push(`\n**Verdict**: ${verdict}`);
+
+  return {
+    text: rows.join("\n"),
+    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
+    json: { total: findings.length, high: highCount, findings },
+  };
 }
 
 // ═══ Matrix formatter ═══════════════════════════════════════════════════
@@ -341,10 +424,21 @@ function resolveImportPath(fromFile, specifier, extensions) {
   return null;
 }
 
-function buildDependencyGraph(targetPath, maxDepth, extensions) {
+/**
+ * Build raw dependency graph: files + forward/reverse edge maps.
+ * Extracted so blast_radius and other analyses can reuse the graph.
+ * L1 mtime cache prevents redundant rebuilds within the same audit cycle.
+ */
+export function buildRawGraph(targetPath, maxDepth = 5, extensions) {
   const target = resolve(targetPath);
   const stat_ = statSync(target, { throwIfNoEntry: false });
   if (!stat_) return { error: `Not found: ${target}` };
+
+  // L1 cache: same path+depth+extensions → return cached graph if recent (<5s)
+  // Uses time-based TTL instead of mtime to avoid recursive stat overhead (~55ms)
+  const rawCacheKey = `rawgraph|${target}|${maxDepth}|${extensions || "default"}`;
+  const cached = CACHE.get(rawCacheKey);
+  if (cached && (Date.now() - cached.time) < 5000) return cached.result;
 
   const extSet = extensions
     ? new Set(extensions.split(","))
@@ -355,7 +449,6 @@ function buildDependencyGraph(targetPath, maxDepth, extensions) {
     ? walkDir(target, extSet, maxDepth)
     : [target];
 
-  const cwd = process.cwd();
   const fileSet = new Set(files.map(f => f.replace(/\\/g, "/")));
 
   const edges = new Map();
@@ -378,6 +471,18 @@ function buildDependencyGraph(targetPath, maxDepth, extensions) {
       inEdges.get(resolvedNorm).add(norm);
     }
   }
+
+  const result = { files, edges, inEdges, fileSet };
+  CACHE.set(rawCacheKey, { time: Date.now(), result });
+  return result;
+}
+
+function buildDependencyGraph(targetPath, maxDepth, extensions) {
+  const raw = buildRawGraph(targetPath, maxDepth, extensions);
+  if (raw.error) return raw;
+  const { files, edges, inEdges } = raw;
+
+  const cwd = process.cwd();
 
   // Topological sort (Kahn's algorithm)
   const inDegree = new Map();
@@ -522,6 +627,125 @@ export function toolDependencyGraph(params) {
 
   CACHE.set(cacheKey, { mtime: latestMtime, result });
   return result;
+}
+
+// ═══ Tool: blast_radius ══════════════════════════════════════════════════
+
+/**
+ * BFS on inEdges from changed files → transitive dependents.
+ * @param {Map<string, Set<string>>} inEdges — reverse import edges
+ * @param {string[]} changedFiles — seed files (absolute, normalized)
+ * @param {number} maxDepth — BFS depth limit
+ * @returns {{ affected: Map<string, {depth: number, via: string|null}>, maxDepthReached: boolean }}
+ */
+export function computeBlastRadiusFromGraph(inEdges, changedFiles, maxDepth = 10) {
+  const affected = new Map();
+  const queue = [];
+  let head = 0; // index-based dequeue: O(1) instead of Array.shift() O(n)
+
+  for (const f of changedFiles) {
+    affected.set(f, { depth: 0, via: null });
+    queue.push([f, 0]);
+  }
+
+  let maxDepthReached = false;
+  while (head < queue.length) {
+    const [file, depth] = queue[head++];
+    if (depth >= maxDepth) { maxDepthReached = true; continue; }
+    for (const importer of (inEdges.get(file) || [])) {
+      if (!affected.has(importer)) {
+        affected.set(importer, { depth: depth + 1, via: file });
+        queue.push([importer, depth + 1]);
+      }
+    }
+  }
+
+  return { affected, maxDepthReached };
+}
+
+/**
+ * Full blast radius: build graph + BFS from changed files.
+ * @param {string} repoRoot — repository root path
+ * @param {string[]} changedFiles — absolute paths of changed files
+ * @param {number} maxDepth — BFS depth limit (default 10)
+ */
+export function computeBlastRadius(repoRoot, changedFiles, maxDepth = 10) {
+  const raw = buildRawGraph(repoRoot, 5, null);
+  if (raw.error) return { error: raw.error };
+
+  const normalized = changedFiles
+    .map(f => resolve(f).replace(/\\/g, "/"))
+    .filter(f => raw.fileSet.has(f));
+
+  if (normalized.length === 0) {
+    return { affected: 0, total: raw.files.length, ratio: 0, maxDepthReached: false, files: [] };
+  }
+
+  const { affected, maxDepthReached } = computeBlastRadiusFromGraph(raw.inEdges, normalized, maxDepth);
+
+  const cwd = process.cwd();
+  const impactedFiles = [...affected.entries()]
+    .filter(([, info]) => info.depth > 0)
+    .sort((a, b) => a[1].depth - b[1].depth);
+
+  return {
+    affected: impactedFiles.length,
+    total: raw.files.length,
+    ratio: raw.files.length > 0 ? impactedFiles.length / raw.files.length : 0,
+    maxDepthReached,
+    files: impactedFiles.map(([file, info]) => ({
+      file: relative(cwd, file).replace(/\\/g, "/"),
+      depth: info.depth,
+      via: info.via ? relative(cwd, info.via).replace(/\\/g, "/") : null,
+    })),
+  };
+}
+
+export function toolBlastRadius(params) {
+  const { changed_files, path: repoPath, max_depth = 10 } = params;
+  if (!changed_files || !Array.isArray(changed_files) || changed_files.length === 0) {
+    return { error: "changed_files (string array) is required" };
+  }
+
+  const cwd = process.cwd();
+  const root = repoPath ? resolve(repoPath) : cwd;
+
+  const cacheKey = `blast|${root}|${changed_files.sort().join(",")}|${max_depth}`;
+  const latestMtime = getLatestMtime(root);
+  const cached = CACHE.get(cacheKey);
+  if (cached && cached.mtime >= latestMtime) {
+    return { ...cached.result, cached: true };
+  }
+
+  const result = computeBlastRadius(root, changed_files.map(f => resolve(cwd, f)), max_depth);
+  if (result.error) return result;
+
+  const rows = ["## Blast Radius Analysis\n"];
+  rows.push(`**Changed**: ${changed_files.length} file(s)`);
+  rows.push(`**Affected**: ${result.affected} / ${result.total} files (${(result.ratio * 100).toFixed(1)}%)`);
+  if (result.maxDepthReached) {
+    rows.push(`**Warning**: max depth (${max_depth}) reached — actual radius may be larger`);
+  }
+
+  if (result.files.length > 0) {
+    rows.push("\n| Affected File | Depth | Via |");
+    rows.push("|---------------|------:|-----|");
+    for (const f of result.files.slice(0, 50)) {
+      rows.push(`| ${f.file} | ${f.depth} | ${f.via || "direct"} |`);
+    }
+    if (result.files.length > 50) {
+      rows.push(`\n_...and ${result.files.length - 50} more files_`);
+    }
+  }
+
+  const output = {
+    text: rows.join("\n"),
+    summary: `${result.affected}/${result.total} files affected (${(result.ratio * 100).toFixed(1)}%)`,
+    json: result,
+  };
+
+  CACHE.set(cacheKey, { mtime: latestMtime, result: output });
+  return output;
 }
 
 // ═══ Tool: rtm_merge ════════════════════════════════════════════════════
@@ -1114,234 +1338,123 @@ export function toolActAnalyze(params) {
 
 // ═══ Tool: perf_scan ════════════════════════════════════════════════════
 
+const PERF_PATTERNS = [
+  { re: /\.forEach\s*\([^)]*=>\s*\{[\s\S]{0,200}\.forEach/m, label: "nested-loop", severity: "high", msg: "Nested .forEach() — potential O(n²)" },
+  { re: /\.filter\([^)]*\)\s*\.map\(/m, label: "chain-inefficiency", severity: "low", msg: "filter().map() — consider single reduce()" },
+  { re: /readFileSync|writeFileSync|execSync/m, label: "sync-io", severity: "medium", msg: "Synchronous I/O — blocks event loop" },
+  { re: /new RegExp\([^)]+\)/m, label: "dynamic-regex", severity: "low", msg: "Dynamic RegExp construction in potential hot path" },
+  { re: /SELECT\s+\*\s+FROM/im, label: "select-star", severity: "medium", msg: "SELECT * — fetch only needed columns" },
+  { re: /(?:import|require)\s*\(\s*["']lodash["']\s*\)/m, label: "heavy-import", severity: "medium", msg: "Full lodash import — use lodash/specific" },
+  { re: /JSON\.parse\(.*readFileSync/m, label: "sync-json", severity: "medium", msg: "Sync file read + JSON.parse — consider async" },
+  { re: /\.findAll\s*\(\s*\)/m, label: "unbounded-query", severity: "high", msg: "Unbounded findAll() — add limit/pagination" },
+  { re: /while\s*\(\s*true\s*\)/m, label: "busy-loop", severity: "high", msg: "while(true) — potential busy loop" }, // scan-ignore: msg contains pattern text, triggers self-referential match
+];
+
 /**
  * Scan for performance anti-patterns: O(n²) loops, sync I/O in hot paths,
  * missing pagination, unbounded queries, large bundle imports.
  */
 export function toolPerfScan(params) {
-  const { path: targetPath } = params;
   const cwd = process.cwd();
-  const target = resolve(targetPath || cwd);
-  const stat_ = statSync(target, { throwIfNoEntry: false });
-  if (!stat_) return { error: `Not found: ${target}` };
-
-  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
-  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
-
-  const findings = [];
-
-  const PERF_PATTERNS = [
-    { re: /\.forEach\s*\([^)]*=>\s*\{[\s\S]{0,200}\.forEach/m, label: "nested-loop", severity: "high", msg: "Nested .forEach() — potential O(n²)" },
-    { re: /\.filter\([^)]*\)\s*\.map\(/m, label: "chain-inefficiency", severity: "low", msg: "filter().map() — consider single reduce()" },
-    { re: /readFileSync|writeFileSync|execSync/m, label: "sync-io", severity: "medium", msg: "Synchronous I/O — blocks event loop" },
-    { re: /new RegExp\([^)]+\)/m, label: "dynamic-regex", severity: "low", msg: "Dynamic RegExp construction in potential hot path" },
-    { re: /SELECT\s+\*\s+FROM/im, label: "select-star", severity: "medium", msg: "SELECT * — fetch only needed columns" },
-    { re: /(?:import|require)\s*\(\s*["']lodash["']\s*\)/m, label: "heavy-import", severity: "medium", msg: "Full lodash import — use lodash/specific" },
-    { re: /JSON\.parse\(.*readFileSync/m, label: "sync-json", severity: "medium", msg: "Sync file read + JSON.parse — consider async" },
-    { re: /\.findAll\s*\(\s*\)/m, label: "unbounded-query", severity: "high", msg: "Unbounded findAll() — add limit/pagination" },
-    { re: /while\s*\(\s*true\s*\)/m, label: "busy-loop", severity: "high", msg: "while(true) — potential busy loop" },
-  ];
-
-  for (const file of files) {
-    let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
-    const lines = content.split(/\r?\n/);
-
-    for (let i = 0; i < lines.length; i++) {
-      for (const pat of PERF_PATTERNS) {
-        if (pat.re.test(lines[i])) {
-          findings.push({
-            file: relative(cwd, file).replace(/\\/g, "/"),
-            line: i + 1,
-            severity: pat.severity,
-            label: pat.label,
-            msg: pat.msg,
-          });
-        }
-      }
-    }
-  }
-
-  if (findings.length === 0) {
-    return { text: "perf_scan: pass — no performance anti-patterns detected.", summary: `${files.length} files scanned, 0 findings` };
-  }
-
-  const rows = ["## Performance Scan Results\n"];
-  rows.push("| File | Line | Severity | Issue |");
-  rows.push("|------|------|----------|-------|");
-  for (const f of findings) {
-    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
-  }
-
-  const highCount = findings.filter(f => f.severity === "high").length;
-  const verdict = highCount > 0 ? `fail — ${highCount} high-severity issue(s)` : `warn — ${findings.length} finding(s)`;
-  rows.push(`\n**Verdict**: ${verdict}`);
-
-  return {
-    text: rows.join("\n"),
-    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
-    json: { total: findings.length, high: highCount, findings },
-  };
+  return runPatternScan({
+    targetPath: params.path,
+    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: PERF_PATTERNS,
+    toolName: "perf_scan",
+    heading: "Performance Scan Results",
+    passMsg: "no performance anti-patterns detected",
+    failNoun: "high-severity issue(s)",
+    astRefine: _createAstRefine ? _createAstRefine(cwd) : null,
+  });
 }
 
 // ═══ Tool: compat_check ═════════════════════════════════════════════════
+
+const COMPAT_PATTERNS = [
+  { re: /@deprecated/m, label: "deprecated-usage", severity: "medium", msg: "Contains @deprecated annotation" },
+  { re: /\/\*\*[\s\S]*?@breaking[\s\S]*?\*\//m, label: "breaking-change", severity: "high", msg: "Marked as @breaking change" },
+  { re: /(?:module\.exports|exports\.)\s*=\s*/m, label: "cjs-export", severity: "low", msg: "CommonJS export in ESM project" },
+  { re: /require\s*\(\s*["'][^"']+["']\s*\)/m, label: "cjs-require", severity: "low", msg: "CommonJS require() in ESM project" },
+  { re: /\/\/\s*TODO.*(?:remove|delete|deprecat)/im, label: "pending-removal", severity: "medium", msg: "Pending removal marked in TODO" },
+];
 
 /**
  * Check for breaking API changes: removed exports, changed function signatures,
  * deprecated usage, version constraint issues.
  */
 export function toolCompatCheck(params) {
-  const { path: targetPath } = params;
-  const cwd = process.cwd();
-  const target = resolve(targetPath || cwd);
-  const stat_ = statSync(target, { throwIfNoEntry: false });
-  if (!stat_) return { error: `Not found: ${target}` };
-
-  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
-  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
-
-  const findings = [];
-
-  const COMPAT_PATTERNS = [
-    { re: /@deprecated/m, label: "deprecated-usage", severity: "medium", msg: "Contains @deprecated annotation" },
-    { re: /\/\*\*[\s\S]*?@breaking[\s\S]*?\*\//m, label: "breaking-change", severity: "high", msg: "Marked as @breaking change" },
-    { re: /(?:module\.exports|exports\.)\s*=\s*/m, label: "cjs-export", severity: "low", msg: "CommonJS export in ESM project" },
-    { re: /require\s*\(\s*["'][^"']+["']\s*\)/m, label: "cjs-require", severity: "low", msg: "CommonJS require() in ESM project" },
-    { re: /\/\/\s*TODO.*(?:remove|delete|deprecat)/im, label: "pending-removal", severity: "medium", msg: "Pending removal marked in TODO" },
-  ];
-
-  for (const file of files) {
-    let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
-    const lines = content.split(/\r?\n/);
-
-    for (let i = 0; i < lines.length; i++) {
-      for (const pat of COMPAT_PATTERNS) {
-        if (pat.re.test(lines[i])) {
-          findings.push({
-            file: relative(cwd, file).replace(/\\/g, "/"),
-            line: i + 1,
-            severity: pat.severity,
-            label: pat.label,
-            msg: pat.msg,
-          });
-        }
+  return runPatternScan({
+    targetPath: params.path,
+    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: COMPAT_PATTERNS,
+    toolName: "compat_check",
+    heading: "Compatibility Check Results",
+    passMsg: "no compatibility issues detected",
+    failNoun: "breaking issue(s)",
+    postProcess: (findings, _files, cwd) => {
+      const pkgPath = resolve(cwd, "package.json");
+      if (existsSync(pkgPath)) {
+        try {
+          const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          for (const [name, ver] of Object.entries(deps)) {
+            if (typeof ver === "string" && ver.startsWith("*")) {
+              findings.push({ file: "package.json", line: 0, severity: "high", label: "wildcard-dep", msg: `Wildcard version for ${name}: ${ver}` });
+            }
+          }
+        } catch { /* skip */ }
       }
-    }
-  }
-
-  // Check package.json for version constraints
-  const pkgPath = resolve(cwd, "package.json");
-  if (existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-      for (const [name, ver] of Object.entries(deps)) {
-        if (typeof ver === "string" && ver.startsWith("*")) {
-          findings.push({ file: "package.json", line: 0, severity: "high", label: "wildcard-dep", msg: `Wildcard version for ${name}: ${ver}` });
-        }
-      }
-    } catch { /* skip */ }
-  }
-
-  if (findings.length === 0) {
-    return { text: "compat_check: pass — no compatibility issues detected.", summary: `${files.length} files scanned, 0 findings` };
-  }
-
-  const rows = ["## Compatibility Check Results\n"];
-  rows.push("| File | Line | Severity | Issue |");
-  rows.push("|------|------|----------|-------|");
-  for (const f of findings) {
-    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
-  }
-
-  const highCount = findings.filter(f => f.severity === "high").length;
-  const verdict = highCount > 0 ? `fail — ${highCount} breaking issue(s)` : `warn — ${findings.length} compatibility note(s)`;
-  rows.push(`\n**Verdict**: ${verdict}`);
-
-  return {
-    text: rows.join("\n"),
-    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
-    json: { total: findings.length, high: highCount, findings },
-  };
+    },
+  });
 }
 
 // ═══ Tool: a11y_scan ════════════════════════════════════════════════════
+
+const A11Y_PATTERNS = [
+  { re: /<img\s+(?![^>]*alt\s*=)/m, label: "img-no-alt", severity: "high", msg: "<img> missing alt attribute" },
+  { re: /<(?!button\b)\w+\s+onClick/m, label: "click-no-keyboard", severity: "medium", msg: "Non-button element with onClick — add keyboard handler or use <button>" },
+  { re: /<div\s+onClick/m, label: "div-click", severity: "medium", msg: "<div> with onClick — use <button> or add role" },
+  { re: /<(?:input|textarea|select)\s+(?![^>]*(?:aria-label|aria-labelledby|id\s*=))/m, label: "form-no-label", severity: "high", msg: "Form element missing label association" },
+  { re: /tabIndex\s*=\s*\{?\s*-1/m, label: "negative-tabindex", severity: "low", msg: "Negative tabIndex removes from tab order" },
+  { re: /aria-hidden\s*=\s*["']true["'][\s\S]{0,50}onClick/m, label: "hidden-interactive", severity: "high", msg: "aria-hidden on interactive element" },
+  { re: /<a\s+(?![^>]*href)/m, label: "anchor-no-href", severity: "medium", msg: "<a> without href — not keyboard accessible" },
+  { re: /style\s*=\s*\{\s*\{[^}]*display\s*:\s*["']?none/m, label: "css-hidden", severity: "low", msg: "CSS display:none — verify not hiding from assistive tech" },
+];
 
 /**
  * Scan JSX/TSX files for accessibility anti-patterns:
  * missing alt, missing aria-label, onClick without keyboard, no role, etc.
  */
 export function toolA11yScan(params) {
-  const { path: targetPath } = params;
+  // Pre-check: skip if no JSX/TSX files exist
   const cwd = process.cwd();
-  const target = resolve(targetPath || cwd);
+  const target = resolve(params.path || cwd);
   const stat_ = statSync(target, { throwIfNoEntry: false });
   if (!stat_) return { error: `Not found: ${target}` };
-
-  const extSet = new Set([".tsx", ".jsx"]);
-  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
-
-  if (files.length === 0) {
+  const jsxExt = new Set([".tsx", ".jsx"]);
+  const jsxFiles = stat_.isDirectory() ? walkDir(target, jsxExt, 5) : [target];
+  if (jsxFiles.length === 0) {
     return { text: "a11y_scan: skip — no JSX/TSX files found.", summary: "0 JSX files" };
   }
 
-  const findings = [];
-
-  const A11Y_PATTERNS = [
-    { re: /<img\s+(?![^>]*alt\s*=)/m, label: "img-no-alt", severity: "high", msg: "<img> missing alt attribute" },
-    { re: /<(?!button\b)\w+\s+onClick/m, label: "click-no-keyboard", severity: "medium", msg: "Non-button element with onClick — add keyboard handler or use <button>" },
-    { re: /<div\s+onClick/m, label: "div-click", severity: "medium", msg: "<div> with onClick — use <button> or add role" },
-    { re: /<(?:input|textarea|select)\s+(?![^>]*(?:aria-label|aria-labelledby|id\s*=))/m, label: "form-no-label", severity: "high", msg: "Form element missing label association" },
-    { re: /tabIndex\s*=\s*\{?\s*-1/m, label: "negative-tabindex", severity: "low", msg: "Negative tabIndex removes from tab order" },
-    { re: /aria-hidden\s*=\s*["']true["'][\s\S]{0,50}onClick/m, label: "hidden-interactive", severity: "high", msg: "aria-hidden on interactive element" },
-    { re: /<a\s+(?![^>]*href)/m, label: "anchor-no-href", severity: "medium", msg: "<a> without href — not keyboard accessible" },
-    { re: /style\s*=\s*\{\s*\{[^}]*display\s*:\s*["']?none/m, label: "css-hidden", severity: "low", msg: "CSS display:none — verify not hiding from assistive tech" },
-  ];
-
-  for (const file of files) {
-    let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
-    const lines = content.split(/\r?\n/);
-
-    for (let i = 0; i < lines.length; i++) {
-      for (const pat of A11Y_PATTERNS) {
-        if (pat.re.test(lines[i])) {
-          findings.push({
-            file: relative(cwd, file).replace(/\\/g, "/"),
-            line: i + 1,
-            severity: pat.severity,
-            label: pat.label,
-            msg: pat.msg,
-          });
-        }
-      }
-    }
-  }
-
-  if (findings.length === 0) {
-    return { text: "a11y_scan: pass — no accessibility issues detected.", summary: `${files.length} JSX files scanned, 0 findings` };
-  }
-
-  const rows = ["## Accessibility Scan Results\n"];
-  rows.push("| File | Line | Severity | Issue |");
-  rows.push("|------|------|----------|-------|");
-  for (const f of findings) {
-    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
-  }
-
-  const highCount = findings.filter(f => f.severity === "high").length;
-  const verdict = highCount > 0 ? `fail — ${highCount} critical a11y violation(s)` : `warn — ${findings.length} a11y issue(s)`;
-  rows.push(`\n**Verdict**: ${verdict}`);
-
-  return {
-    text: rows.join("\n"),
-    summary: `${files.length} JSX files, ${findings.length} findings (${highCount} high)`,
-    json: { total: findings.length, high: highCount, findings },
-  };
+  return runPatternScan({
+    targetPath: params.path,
+    extensions: jsxExt,
+    patterns: A11Y_PATTERNS,
+    toolName: "a11y_scan",
+    heading: "Accessibility Scan Results",
+    passMsg: "no accessibility issues detected",
+    failNoun: "critical a11y violation(s)",
+  });
 }
 
 // ═══ Tool: license_scan ═════════════════════════════════════════════════
+
+const PII_PATTERNS = [
+  { re: /(?:password|passwd|secret|api_?key|token)\s*[:=]\s*["'][^"']{3,}/im, label: "hardcoded-secret", severity: "high", msg: "Potential hardcoded secret" },
+  { re: /\b\d{3}-\d{2}-\d{4}\b/m, label: "ssn-pattern", severity: "high", msg: "SSN-like pattern in source" },
+  { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/im, label: "email-literal", severity: "low", msg: "Hardcoded email address" },
+];
 
 /**
  * Check dependency licenses for copyleft/unknown risks,
@@ -1390,12 +1503,6 @@ export function toolLicenseScan(params) {
   const stat_ = statSync(target, { throwIfNoEntry: false });
   const files = stat_?.isDirectory() ? walkDir(target, extSet, 5) : [];
 
-  const PII_PATTERNS = [
-    { re: /(?:password|passwd|secret|api_?key|token)\s*[:=]\s*["'][^"']{3,}/im, label: "hardcoded-secret", severity: "high", msg: "Potential hardcoded secret" },
-    { re: /\b\d{3}-\d{2}-\d{4}\b/m, label: "ssn-pattern", severity: "high", msg: "SSN-like pattern in source" },
-    { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/im, label: "email-literal", severity: "low", msg: "Hardcoded email address" },
-  ];
-
   for (const file of files) {
     let content;
     try { content = readFileSync(file, "utf8"); } catch { continue; }
@@ -1440,6 +1547,8 @@ export function toolLicenseScan(params) {
 }
 
 // ═══ Tool: i18n_validate ════════════════════════════════════════════════
+
+const HARDCODED_RE = />\s*[A-Z가-힣][A-Za-z가-힣\s]{2,30}\s*</m;
 
 /**
  * Validate i18n locale parity: ensure all keys exist in all locale files,
@@ -1536,8 +1645,6 @@ export function toolI18nValidate(params) {
   const stat_ = statSync(target, { throwIfNoEntry: false });
   const jsxFiles = stat_?.isDirectory() ? walkDir(target, jsxExt, 5) : [];
 
-  const HARDCODED_RE = />\s*[A-Z가-힣][A-Za-z가-힣\s]{2,30}\s*</m;
-
   for (const file of jsxFiles) {
     let content;
     try { content = readFileSync(file, "utf8"); } catch { continue; }
@@ -1582,6 +1689,17 @@ export function toolI18nValidate(params) {
 }
 
 // ═══ Tool: infra_scan ═══════════════════════════════════════════════════
+
+const INFRA_PATTERNS = [
+  { re: /FROM\s+[^:\s]+\s*$/m, label: "no-tag", severity: "high", msg: "Docker FROM without version tag (uses :latest)" },
+  { re: /FROM\s+\S+:latest/m, label: "latest-tag", severity: "high", msg: "Docker FROM uses :latest — pin version" },
+  { re: /RUN\s+.*curl.*\|\s*(?:sh|bash)/m, label: "pipe-install", severity: "high", msg: "curl | sh — unverified remote execution" },
+  { re: /EXPOSE\s+22\b/m, label: "ssh-exposed", severity: "medium", msg: "SSH port exposed in container" },
+  { re: /privileged:\s*true/m, label: "privileged", severity: "high", msg: "Privileged container — security risk" },
+  { re: /password|secret|api_key|token/im, label: "secret-in-config", severity: "high", msg: "Potential secret in config file" },
+  { re: /USER\s+root/m, label: "root-user", severity: "medium", msg: "Container runs as root — use non-root user" },
+  { re: /npm\s+install(?!\s+--production|\s+-P)/m, label: "dev-deps-in-prod", severity: "low", msg: "npm install without --production in Dockerfile" },
+];
 
 /**
  * Scan infrastructure files (Dockerfile, docker-compose, CI configs)
@@ -1634,17 +1752,6 @@ export function toolInfraScan(params) {
     return { text: "infra_scan: skip — no infrastructure files found.", summary: "0 infra files" };
   }
 
-  const INFRA_PATTERNS = [
-    { re: /FROM\s+[^:\s]+\s*$/m, label: "no-tag", severity: "high", msg: "Docker FROM without version tag (uses :latest)" },
-    { re: /FROM\s+\S+:latest/m, label: "latest-tag", severity: "high", msg: "Docker FROM uses :latest — pin version" },
-    { re: /RUN\s+.*curl.*\|\s*(?:sh|bash)/m, label: "pipe-install", severity: "high", msg: "curl | sh — unverified remote execution" },
-    { re: /EXPOSE\s+22\b/m, label: "ssh-exposed", severity: "medium", msg: "SSH port exposed in container" },
-    { re: /privileged:\s*true/m, label: "privileged", severity: "high", msg: "Privileged container — security risk" },
-    { re: /password|secret|api_key|token/im, label: "secret-in-config", severity: "high", msg: "Potential secret in config file" },
-    { re: /USER\s+root/m, label: "root-user", severity: "medium", msg: "Container runs as root — use non-root user" },
-    { re: /npm\s+install(?!\s+--production|\s+-P)/m, label: "dev-deps-in-prod", severity: "low", msg: "npm install without --production in Dockerfile" },
-  ];
-
   for (const file of infraFiles) {
     let content;
     try { content = readFileSync(file, "utf8"); } catch { continue; }
@@ -1690,75 +1797,36 @@ export function toolInfraScan(params) {
 
 // ═══ Tool: observability_check ══════════════════════════════════════════
 
+const OBS_PATTERNS = [
+  { re: /catch\s*\(\s*\w*\s*\)\s*\{\s*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
+  { re: /catch\s*\{[\s\n]*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
+  { re: /catch\s*\(\s*\w+\s*\)\s*\{[\s\n]*\/\//m, label: "comment-only-catch", severity: "medium", msg: "Catch block with only comments — no error handling" },
+  { re: /console\.(log|info|debug)\s*\(/m, label: "console-log", severity: "low", msg: "console.log in source — use structured logger" },
+  { re: /catch\s*\([^)]*\)\s*\{[^}]*console\.error/m, label: "console-error-only", severity: "medium", msg: "catch uses console.error — no structured error reporting" },
+  { re: /process\.exit\s*\(\s*[^0)]/m, label: "hard-exit", severity: "medium", msg: "process.exit with error code — may skip cleanup" },
+  { re: /throw\s+new\s+Error\s*\(\s*\)/m, label: "empty-error", severity: "medium", msg: "throw new Error() with no message" }, // scan-ignore: msg contains pattern text, triggers self-referential match
+];
+
 /**
  * Check for observability gaps: empty catch blocks, missing error logging,
  * console.log in production code, missing metrics/tracing.
  */
 export function toolObservabilityCheck(params) {
-  const { path: targetPath } = params;
-  const cwd = process.cwd();
-  const target = resolve(targetPath || cwd);
-  const stat_ = statSync(target, { throwIfNoEntry: false });
-  if (!stat_) return { error: `Not found: ${target}` };
-
-  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
-  const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
-
-  const findings = [];
-
-  const OBS_PATTERNS = [
-    { re: /catch\s*\(\s*\w*\s*\)\s*\{\s*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
-    { re: /catch\s*\{[\s\n]*\}/m, label: "empty-catch", severity: "high", msg: "Empty catch block — error silently swallowed" },
-    { re: /catch\s*\(\s*\w+\s*\)\s*\{[\s\n]*\/\//m, label: "comment-only-catch", severity: "medium", msg: "Catch block with only comments — no error handling" },
-    { re: /console\.(log|info|debug)\s*\(/m, label: "console-log", severity: "low", msg: "console.log in source — use structured logger" },
-    { re: /catch\s*\([^)]*\)\s*\{[^}]*console\.error/m, label: "console-error-only", severity: "medium", msg: "catch uses console.error — no structured error reporting" },
-    { re: /process\.exit\s*\(\s*[^0)]/m, label: "hard-exit", severity: "medium", msg: "process.exit with error code — may skip cleanup" },
-    { re: /throw\s+new\s+Error\s*\(\s*\)/m, label: "empty-error", severity: "medium", msg: "throw new Error() with no message" },
-  ];
-
-  for (const file of files) {
-    let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
-    const lines = content.split(/\r?\n/);
-
-    for (let i = 0; i < lines.length; i++) {
-      for (const pat of OBS_PATTERNS) {
-        if (pat.re.test(lines[i])) {
-          findings.push({
-            file: relative(cwd, file).replace(/\\/g, "/"),
-            line: i + 1,
-            severity: pat.severity,
-            label: pat.label,
-            msg: pat.msg,
-          });
-        }
-      }
-    }
-  }
-
-  if (findings.length === 0) {
-    return { text: "observability_check: pass — no observability gaps detected.", summary: `${files.length} files scanned, 0 findings` };
-  }
-
-  const rows = ["## Observability Check Results\n"];
-  rows.push("| File | Line | Severity | Issue |");
-  rows.push("|------|------|----------|-------|");
-  for (const f of findings) {
-    rows.push(`| ${f.file} | ${f.line} | ${f.severity} | ${f.msg} |`);
-  }
-
-  const highCount = findings.filter(f => f.severity === "high").length;
-  const verdict = highCount > 0 ? `fail — ${highCount} observability gap(s)` : `warn — ${findings.length} issue(s)`;
-  rows.push(`\n**Verdict**: ${verdict}`);
-
-  return {
-    text: rows.join("\n"),
-    summary: `${files.length} files, ${findings.length} findings (${highCount} high)`,
-    json: { total: findings.length, high: highCount, findings },
-  };
+  return runPatternScan({
+    targetPath: params.path,
+    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: OBS_PATTERNS,
+    toolName: "observability_check",
+    heading: "Observability Check Results",
+    passMsg: "no observability gaps detected",
+    failNoun: "observability gap(s)",
+  });
 }
 
 // ═══ Tool: doc_coverage ═════════════════════════════════════════════════
+
+const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|class|const|let|type|interface|enum)\s+(\w+)/;
+const JSDOC_START = /\/\*\*/;
 
 /**
  * Check documentation coverage: exported symbols without JSDoc,
@@ -1777,9 +1845,6 @@ export function toolDocCoverage(params) {
   const findings = [];
   let totalExports = 0;
   let documentedExports = 0;
-
-  const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|class|const|let|type|interface|enum)\s+(\w+)/;
-  const JSDOC_START = /\/\*\*/;
 
   for (const file of files) {
     let content;
@@ -1843,6 +1908,205 @@ export function toolDocCoverage(params) {
   };
 }
 
+// ═══ Tool: ai_guide ══════════════════════════════════════════════════════
+
+export function toolAiGuide(params) {
+  const { target } = params;
+  if (!target) return { error: "target is required" };
+
+  const targetDir = resolve(target);
+  const stat_ = statSync(targetDir, { throwIfNoEntry: false });
+  if (!stat_ || !stat_.isDirectory()) {
+    // Graceful fallback for non-existent or non-directory paths
+    const name = targetDir.split(/[\\/]/).pop() || "unknown";
+    return {
+      text: `# AI-GUIDE: ${name}\n\n_Target directory not found or not a directory: ${targetDir}_\n`,
+      summary: `ai_guide: target not found — ${targetDir}`,
+    };
+  }
+
+  // ── Resolve project name from package.json ──
+  let projectName = targetDir.split(/[\\/]/).pop() || "project";
+  let scripts = {};
+  try {
+    const pkgPath = resolve(targetDir, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    if (pkg.name) projectName = pkg.name;
+    if (pkg.scripts) scripts = pkg.scripts;
+  } catch { /* no package.json or invalid — skip */ }
+
+  // ── Gather tool outputs ──
+  const codeMapResult = toolCodeMap({ path: target, depth: 3 });
+  const depGraphResult = toolDependencyGraph({ path: target });
+  const docCovResult = toolDocCoverage({ path: target });
+
+  // ── Synthesize: Architecture Overview (from dependency_graph) ──
+  const archLines = [];
+  if (depGraphResult.error) {
+    archLines.push("_Could not build dependency graph._");
+  } else {
+    const dj = depGraphResult.json || {};
+    archLines.push(`- **${dj.files || 0}** source files with **${dj.edges || 0}** import edges`);
+    archLines.push(`- **${dj.components || 0}** connected components (independent module groups)`);
+    if (dj.cycles > 0) {
+      archLines.push(`- **Warning**: ${dj.cycles} files involved in circular dependencies`);
+    } else {
+      archLines.push(`- No circular dependencies detected`);
+    }
+  }
+
+  // ── Shared file list for key modules + entry points (single walkDir call) ──
+  const guideExtSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
+  const guideFiles = codeMapResult.error ? [] : walkDir(targetDir, guideExtSet, 3);
+
+  // ── Synthesize: Key Modules (from code_map — files with most exports) ──
+  const keyModuleLines = [];
+  if (codeMapResult.error) {
+    keyModuleLines.push("_Could not generate code map._");
+  } else {
+    const files = guideFiles;
+    const cwd = process.cwd();
+
+    // Collect per-file export counts
+    const fileCounts = [];
+    for (const file of files) {
+      const symbols = parseFile(file, null);
+      const exportCount = symbols.filter(s => s.type !== "import" && s.type !== "method").length;
+      if (exportCount > 0) {
+        fileCounts.push({
+          rel: relative(cwd, file).replace(/\\/g, "/"),
+          count: exportCount,
+          types: symbols.map(s => s.type),
+        });
+      }
+    }
+
+    // Sort by export count descending, take top 15
+    fileCounts.sort((a, b) => b.count - a.count);
+    const topFiles = fileCounts.slice(0, 15);
+
+    // Group by directory
+    const byDir = new Map();
+    for (const f of topFiles) {
+      const dir = f.rel.includes("/") ? f.rel.slice(0, f.rel.lastIndexOf("/")) : ".";
+      if (!byDir.has(dir)) byDir.set(dir, []);
+      byDir.get(dir).push(f);
+    }
+
+    for (const [dir, items] of byDir) {
+      keyModuleLines.push(`### ${dir}/`);
+      for (const item of items) {
+        const fileName = item.rel.includes("/") ? item.rel.slice(item.rel.lastIndexOf("/") + 1) : item.rel;
+        keyModuleLines.push(`- \`${fileName}\` — ${item.count} symbols`);
+      }
+      keyModuleLines.push("");
+    }
+
+    if (keyModuleLines.length === 0) {
+      keyModuleLines.push("_No exported symbols found._");
+    }
+  }
+
+  // ── Synthesize: Entry Points (index/main/cli/app files) ──
+  const entryLines = [];
+  if (!codeMapResult.error) {
+    const files = guideFiles;
+    const cwd = process.cwd();
+    const entryPattern = /(?:^|[\\/])(?:index|main|cli|app)\.[^.]+$/;
+
+    const entryFiles = files.filter(f => entryPattern.test(f)).sort();
+    for (const file of entryFiles) {
+      const rel = relative(cwd, file).replace(/\\/g, "/");
+      const symbols = parseFile(file, null);
+      const exported = symbols
+        .filter(s => s.type !== "import" && s.type !== "method")
+        .map(s => s.name)
+        .filter(Boolean)
+        .slice(0, 5);
+      if (exported.length > 0) {
+        entryLines.push(`- \`${rel}\` — exports: ${exported.join(", ")}`);
+      } else {
+        entryLines.push(`- \`${rel}\``);
+      }
+    }
+
+    if (entryLines.length === 0) {
+      entryLines.push("_No standard entry points (index/main/cli/app) found._");
+    }
+  } else {
+    entryLines.push("_Could not determine entry points._");
+  }
+
+  // ── Synthesize: Documentation Gaps (from doc_coverage) ──
+  const docGapLines = [];
+  if (docCovResult.error) {
+    docGapLines.push("_Could not compute documentation coverage._");
+  } else {
+    const dj = docCovResult.json || {};
+    docGapLines.push(`- Overall coverage: **${dj.coverage ?? 0}%** (${dj.documentedExports ?? 0}/${dj.totalExports ?? 0} exports documented)`);
+
+    if (dj.findings && dj.findings.length > 0) {
+      // Group by file and show files with most gaps
+      const byFile = new Map();
+      for (const f of dj.findings) {
+        const key = f.file;
+        if (!byFile.has(key)) byFile.set(key, 0);
+        byFile.set(key, byFile.get(key) + 1);
+      }
+      const sorted = [...byFile.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+      docGapLines.push("");
+      docGapLines.push("Files with most undocumented exports:");
+      for (const [file, count] of sorted) {
+        docGapLines.push(`- \`${file}\` — ${count} undocumented`);
+      }
+    }
+  }
+
+  // ── Synthesize: Quick Commands (from package.json scripts) ──
+  const cmdLines = [];
+  const scriptEntries = Object.entries(scripts);
+  if (scriptEntries.length > 0) {
+    cmdLines.push("```bash");
+    for (const [name, cmd] of scriptEntries.slice(0, 15)) {
+      const padded = name.length < 20 ? name.padEnd(20) : name;
+      cmdLines.push(`npm run ${padded} # ${cmd}`);
+    }
+    cmdLines.push("```");
+  } else {
+    cmdLines.push("_No scripts found in package.json._");
+  }
+
+  // ── Assemble final guide ──
+  const sections = [
+    `# AI-GUIDE: ${projectName}`,
+    "",
+    "## Architecture Overview",
+    ...archLines,
+    "",
+    "## Key Modules",
+    ...keyModuleLines,
+    "## Entry Points",
+    ...entryLines,
+    "",
+    "## Documentation Gaps",
+    ...docGapLines,
+    "",
+    "## Quick Commands",
+    ...cmdLines,
+  ];
+
+  const text = sections.join("\n");
+  const json = {
+    projectName,
+    architecture: depGraphResult.json || null,
+    docCoverage: docCovResult.json || null,
+    scriptCount: scriptEntries.length,
+  };
+  const summary = `ai_guide: ${projectName} — ${depGraphResult.json?.files ?? 0} files, ${depGraphResult.json?.components ?? 0} components, ${docCovResult.json?.coverage ?? "?"}% doc coverage`;
+
+  return { text, summary, json };
+}
+
 // ═══ Re-exports ═════════════════════════════════════════════════════════
 
 export { generateFvm, runFvmValidation };
@@ -1851,10 +2115,12 @@ export { generateFvm, runFvmValidation };
 
 export const TOOL_NAMES = [
   "code_map", "audit_scan", "coverage_map",
-  "dependency_graph", "rtm_parse", "rtm_merge",
+  "dependency_graph", "blast_radius", "rtm_parse", "rtm_merge",
   "audit_history", "fvm_generate", "fvm_validate",
   "act_analyze",
   // Specialist domain tools
   "perf_scan", "compat_check", "a11y_scan", "license_scan",
   "i18n_validate", "infra_scan", "observability_check", "doc_coverage",
+  // Synthesis tools
+  "ai_guide",
 ];

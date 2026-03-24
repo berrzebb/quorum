@@ -47,10 +47,11 @@ Works with **any AI coding tool** — Claude Code, Codex, Cursor, Gemini, or man
 For automatic hook integration (event-driven audit on every edit):
 
 ```bash
-claude plugin install quorum
+claude plugin marketplace add berrzebb/claude-plugins
+claude plugin install quorum@quorum
 ```
 
-This registers 12 lifecycle hooks that trigger audits automatically. The CLI still works alongside the plugin.
+This registers 12 lifecycle hooks, 19 MCP tools, and 9 skills automatically. The CLI still works alongside the plugin.
 
 ### From source
 
@@ -71,6 +72,7 @@ quorum <command>
   status         Show audit gate status
   audit          Trigger manual audit
   plan           Work breakdown planning
+  orchestrate    Track orchestration (parallel execution)   # v0.4.0
   ask <provider> Query a provider directly
   tool <name>    Run MCP analysis tool
   migrate        Import consensus-loop data into quorum
@@ -116,7 +118,10 @@ you write code
 ```
 you write code
     → PostToolUse hook fires    # automatic
-    → trigger eval (T1/T2/T3)  # skip, simple, or deliberative
+    → regex scan + AST refine   # hybrid: false positive removal
+    → fitness score computed    # 5-component quality metric
+    → fitness gate              # auto-reject / self-correct / proceed
+    → trigger eval (10 factors)# skip, simple, or deliberative
     → auditor runs              # background, debounced
     → verdict syncs             # tag promotion/demotion
     → session-gate              # blocks until retro complete
@@ -130,10 +135,10 @@ Both paths use the same core engine: `bus/` + `providers/` + `core/`.
 ```
 quorum/
 ├── cli/          ← unified entry point (works without any plugin)
-├── daemon/       ← Ink TUI dashboard (works standalone)
-├── bus/          ← EventStore (SQLite) + pub/sub + stagnation + LockService + ProcessMux
-├── providers/    ← consensus protocol + trigger + router + domain specialists + agent loader
-├── core/         ← audit protocol (7 modules), templates, 17 MCP tools
+├── daemon/       ← Ink TUI dashboard + FitnessPanel (works standalone)
+├── bus/          ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator + ProcessMux
+├── providers/    ← consensus protocol + trigger (10-factor) + router + domain specialists + AST analyzer + agent loader
+├── core/         ← audit protocol (7 modules), templates, 19 MCP tools
 └── adapters/     ← optional IDE integrations (Claude Code hooks, Codex watcher)
 ```
 
@@ -177,9 +182,40 @@ When changes touch specialized domains, quorum conditionally activates expert re
 
 Tools are deterministic (zero cost, always run). Agents are LLM-powered (only at sufficient tier).
 
+### Hybrid Scanning
+
+Pattern scanning uses a 3-layer defense against false positives:
+
+1. **Regex first pass** — fast (<1ms/file), catches candidates
+2. **scan-ignore pragma** — `// scan-ignore` suppresses self-referential matches
+3. **AST second pass** — precise (<50ms/file), removes comment/string matches, analyzes control flow
+
+The `perf_scan` tool uses hybrid scanning: regex detects `while(true)`, AST verifies if `break`/`return` exists.
+
+**Program mode** (`ts.createProgram()`) enables cross-file analysis: unused export detection and import cycle detection via dependency graph DFS.
+
+### Fitness Score Engine
+
+Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LLM.**
+
+Five components combine into a 0.0–1.0 fitness score:
+
+| Component | Weight | Input |
+|-----------|--------|-------|
+| Type Safety | 0.25 | `as any` count per KLOC |
+| Test Coverage | 0.25 | Line + branch coverage |
+| Pattern Scan | 0.20 | HIGH-severity findings |
+| Build Health | 0.15 | tsc + eslint pass rate |
+| Complexity | 0.15 | Avg cyclomatic complexity |
+
+The **FitnessLoop** gates LLM audit with 3 decisions:
+- **auto-reject**: score drop >0.15 or absolute <0.3 → skip LLM audit (cost savings)
+- **self-correct**: mild drop (0.05–0.15) → warn agent, continue
+- **proceed**: stable/improved → update baseline, continue to audit
+
 ### Conditional Trigger
 
-Not every change needs full consensus. A 12-factor scoring system (6 base + domain signals) determines the audit level:
+Not every change needs full consensus. A 10-factor scoring system (6 base + domain + plan + fitness + blast radius) determines the audit level:
 
 | Tier | Score | Mode |
 |------|-------|------|
@@ -189,12 +225,41 @@ Not every change needs full consensus. A 12-factor scoring system (6 base + doma
 
 ### Stagnation Detection
 
-If the audit loop cycles without progress, 4 patterns are detected:
+If the audit loop cycles without progress, 5 patterns are detected:
 
 - **Spinning**: same verdict 3+ times
 - **Oscillation**: approve → reject → approve → reject
 - **No drift**: identical rejection codes repeating
 - **Diminishing returns**: improvement rate declining
+- **Fitness plateau**: fitness score slope ≈ 0 over last N evaluations
+
+### Blast Radius Analysis (v0.4.0)
+
+BFS on the reverse import graph computes transitive dependents of changed files:
+
+```bash
+quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+# → 12/95 files affected (12.6%) — depth-sorted impact list
+```
+
+- **10th trigger factor**: ratio > 10% → score += up to 0.15 (auto-escalation to T3)
+- **Pre-verify evidence**: blast radius section included in auditor evidence
+- Reuses `buildRawGraph()` extracted from `dependency_graph` (TTL-cached)
+
+### Structured Orchestration (v0.4.0)
+
+Multi-agent coordination for parallel worktree execution:
+
+| Component | Purpose |
+|-----------|---------|
+| **ClaimService** | Per-file ownership (`INSERT...ON CONFLICT`), TTL-based expiry |
+| **ParallelPlanner** | Graph coloring for conflict-free execution groups |
+| **OrchestratorMode** | Auto-selects: serial / parallel / fan-out / pipeline / hybrid |
+| **Auto-learning** | Detects repeat rejection patterns (3+), suggests CLAUDE.md rules |
+
+### Event Reactor (v0.4.0)
+
+`respond.mjs` rewritten as a pure event reactor: reads SQLite verdict events → executes side-effects only. No markdown read/write. `-1043/+211 lines` refactoring.
 
 ### Dynamic Escalation
 
@@ -237,14 +302,16 @@ quorum is provider-agnostic. Bring your own auditor.
 
 Deterministic tools that replace LLM judgment with facts. No hallucination possible.
 
-**Analysis tools** (17):
+**Analysis tools** (19):
 ```bash
 # Core analysis
 quorum tool code_map src/              # symbol index
 quorum tool dependency_graph .          # import DAG, cycles
+quorum tool blast_radius --changed_files '["src/api.ts"]'  # transitive impact (v0.4.0)
 quorum tool audit_scan src/             # type-safety, hardcoded patterns
 quorum tool coverage_map                # per-file test coverage
 quorum tool audit_history --summary     # verdict patterns
+quorum tool ai_guide                    # context-aware onboarding (v0.4.0)
 
 # RTM & verification
 quorum tool rtm_parse docs/rtm.md      # parse RTM → structured rows
@@ -253,7 +320,7 @@ quorum tool fvm_generate /project       # FE×API×BE access matrix
 quorum tool fvm_validate --fvm_path x --base_url http://localhost:3000 --credentials '{}'
 
 # Domain specialists (v0.3.0)
-quorum tool perf_scan src/             # performance anti-patterns
+quorum tool perf_scan src/             # performance anti-patterns (hybrid: regex+AST)
 quorum tool compat_check src/          # API breaking changes
 quorum tool a11y_scan src/             # accessibility (JSX/TSX)
 quorum tool license_scan .             # license compliance + PII
@@ -278,7 +345,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 533 tests
+npm test                # 743 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```
@@ -288,8 +355,8 @@ npm run build           # compile
 GitHub Actions builds cross-platform binaries on tag push:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.4.0
+git push origin v0.4.0
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 binaries in Releases
 ```
 

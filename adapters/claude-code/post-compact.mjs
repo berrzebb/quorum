@@ -71,6 +71,12 @@ try {
 
   // Output restoration context to stderr (informational)
   console.error(`[post-compact] Restored state from snapshot (${snapshot.saved_at})`);
+  if (parts.length > 2) { // more than just the wrapper tags
+    console.error(parts.join("\n"));
+  }
+
+  // Clean up snapshot after restoring — it's a one-shot artifact
+  try { unlinkSync(snapshotPath); } catch { /* already removed */ }
 
   // Note: PostCompact cannot inject additionalContext like SessionStart.
   // The restoration is informational — SessionStart handles full context reinject on next session.

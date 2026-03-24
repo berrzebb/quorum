@@ -52,7 +52,7 @@ describe("CodexProvider", () => {
     await provider.start(bus, {
       repoRoot: join(tmpDir, "start-test"),
       watchFile: "docs/feedback/claude.md",
-      respondFile: "docs/feedback/gpt.md",
+      respondFile: "docs/feedback/verdict.md",
       auditor: { model: "codex" },
     });
 
@@ -91,7 +91,7 @@ describe("CodexProvider", () => {
     await provider.start(bus, {
       repoRoot: root,
       watchFile: "docs/feedback/claude.md",
-      respondFile: "docs/feedback/gpt.md",
+      respondFile: "docs/feedback/verdict.md",
       auditor: { model: "codex" },
     });
 

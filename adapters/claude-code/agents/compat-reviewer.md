@@ -2,6 +2,12 @@
 name: compat-reviewer
 description: Compatibility Reviewer — checks backward compatibility, migration safety, breaking API changes, and consumer impact. Activated when migration domain is detected (schema changes, API surface modifications).
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

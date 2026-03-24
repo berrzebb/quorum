@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
  * @param {string} repoRoot - Repository root for resolving file paths
  * @returns {{ updated: number, total: number, changes: string[] }}
  */
-export function updateRtmStatus(rtmPath, repoRoot) {
+function updateRtmStatus(rtmPath, repoRoot) {
   if (!existsSync(rtmPath)) return { updated: 0, total: 0, changes: [] };
 
   const content = readFileSync(rtmPath, "utf8");
@@ -127,7 +127,7 @@ function scanAndUpdate(dir, repoRoot, results) {
  * Build a map of file → last commit info from git log.
  * Used to determine if a file was actually committed (not just created).
  */
-export function getCommitMap(repoRoot, since) {
+function getCommitMap(repoRoot, since) {
   try {
     const args = ["log", "--name-only", "--pretty=format:%H|%aI|%s"];
     if (since) args.push(`--since=${since}`);
@@ -159,7 +159,7 @@ export function getCommitMap(repoRoot, since) {
  * Enhanced RTM update: uses git commit history + file existence.
  * A file counts as "implemented" only if it was actually committed.
  */
-export function updateRtmWithCommitHistory(rtmPath, repoRoot, since) {
+function updateRtmWithCommitHistory(rtmPath, repoRoot, since) {
   if (!existsSync(rtmPath)) return { updated: 0, total: 0, changes: [] };
 
   const commitMap = getCommitMap(repoRoot, since);
@@ -232,7 +232,7 @@ export function updateRtmWithCommitHistory(rtmPath, repoRoot, since) {
  * Get project progress summary from git history + RTM.
  * Usable by daemon and status without modifying RTM files.
  */
-export function getProgressFromGit(repoRoot, rtmPaths) {
+function getProgressFromGit(repoRoot, rtmPaths) {
   const commitMap = getCommitMap(repoRoot);
   const progress = { tracks: [], recentCommits: [], totalFiles: commitMap.size };
 

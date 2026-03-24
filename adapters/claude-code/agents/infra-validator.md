@@ -2,6 +2,12 @@
 name: infra-validator
 description: Infrastructure Validator — checks Dockerfile security, CI/CD config, environment variable handling, and deployment safety. Activated when infrastructure domain is detected.
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

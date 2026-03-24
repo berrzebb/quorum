@@ -2,6 +2,12 @@
 name: perf-analyst
 description: Performance Analyst — reviews changes for performance regressions, bundle size impact, query efficiency, and runtime complexity. Activated when performance domain is detected (DB queries, heavy computation, bundle config changes).
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

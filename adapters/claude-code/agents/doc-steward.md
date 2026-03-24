@@ -2,6 +2,12 @@
 name: doc-steward
 description: Documentation Steward — verifies doc-code consistency, API documentation completeness, and changelog coverage. Activated at T3 when documentation domain is detected.
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

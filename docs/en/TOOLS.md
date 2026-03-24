@@ -191,6 +191,162 @@ quorum tool fvm_validate \
 
 ---
 
+## perf_scan
+
+Performance anti-pattern detection — O(n²) loops, sync I/O, busy loops, unbounded queries.
+
+```bash
+quorum tool perf_scan src/
+quorum tool perf_scan core/tools/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Directory or file to scan |
+
+> Add `// scan-ignore` to any source line to suppress findings on that line. Used for self-referential false positives in pattern definition files.
+
+---
+
+## a11y_scan
+
+JSX/TSX accessibility anti-patterns — missing `<img>` alt, non-keyboard onClick, aria issues.
+
+```bash
+quorum tool a11y_scan src/components/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | JSX/TSX file or directory |
+
+---
+
+## compat_check
+
+Compatibility check — @deprecated, @breaking, CJS/ESM mixing, wildcard dependencies.
+
+```bash
+quorum tool compat_check src/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Directory or file to scan |
+
+---
+
+## license_scan
+
+License risk + PII patterns — copyleft deps, hardcoded secrets, SSN/email patterns.
+
+```bash
+quorum tool license_scan .
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Project root |
+
+---
+
+## infra_scan
+
+Infrastructure security — Dockerfile, CI/CD, docker-compose, nginx config.
+
+```bash
+quorum tool infra_scan .
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Project root |
+
+---
+
+## observability_check
+
+Observability gaps — empty catch blocks, console.log, missing structured logging.
+
+```bash
+quorum tool observability_check src/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Directory or file to scan |
+
+---
+
+## i18n_validate
+
+i18n key validation — cross-locale key sync, missing/extra key detection.
+
+```bash
+quorum tool i18n_validate locales/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Locale directory |
+
+---
+
+## doc_coverage
+
+Documentation-code alignment — undocumented exports, per-file JSDoc coverage.
+
+```bash
+quorum tool doc_coverage src/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--path` | Directory to scan |
+
+---
+
+## ai_guide
+
+AI agent guide queries — roles, protocols, document formats.
+
+```bash
+quorum tool ai_guide --topic evidence
+quorum tool ai_guide --topic roles
+```
+
+| Option | Description |
+|--------|-------------|
+| `--topic` | Query topic (roles, evidence, tools, planner, etc.) |
+
+---
+
+## act_analyze
+
+PDCA Act analysis — derive improvement items from audit history + FVM results.
+
+```bash
+quorum tool act_analyze
+quorum tool act_analyze --history .claude/audit-history.jsonl
+```
+
+| Option | Description |
+|--------|-------------|
+| `--history` | Audit history JSONL file |
+| `--fvm_results_path` | FVM validation results file |
+
+---
+
+## scan-ignore pragma
+
+Tools based on `runPatternScan` (perf_scan, a11y_scan, compat_check, infra_scan, observability_check) recognize inline `// scan-ignore` comments. Lines with this annotation are excluded from pattern matching.
+
+```javascript
+{ re: /while\s*\(\s*true\s*\)/m, ... }, // scan-ignore: prevents self-referential match
+```
+
+---
+
 ## Verification Pipeline
 
 `quorum verify` runs all checks in sequence. Each check is deterministic.

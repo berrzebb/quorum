@@ -206,4 +206,67 @@ describe("evaluateTrigger", () => {
     assert.ok(result.score >= 0.7);
     assert.equal(result.tier, "T3");
   });
+
+  it("plan-first: large change without plan doc increases score", () => {
+    const withPlan = evaluateTrigger({
+      changedFiles: 8,
+      securitySensitive: false,
+      priorRejections: 0,
+      apiSurfaceChanged: false,
+      crossLayerChange: false,
+      isRevert: false,
+      hasPlanDoc: true,
+    });
+    const withoutPlan = evaluateTrigger({
+      changedFiles: 8,
+      securitySensitive: false,
+      priorRejections: 0,
+      apiSurfaceChanged: false,
+      crossLayerChange: false,
+      isRevert: false,
+      hasPlanDoc: false,
+    });
+    assert.ok(withoutPlan.score > withPlan.score);
+    assert.ok(withoutPlan.reasons.some(r => r.includes("plan")));
+  });
+
+  it("plan-first: requiresPlan is true for T3 without plan doc", () => {
+    const result = evaluateTrigger({
+      changedFiles: 10,
+      securitySensitive: true,
+      priorRejections: 2,
+      apiSurfaceChanged: true,
+      crossLayerChange: false,
+      isRevert: false,
+      hasPlanDoc: false,
+    });
+    assert.equal(result.tier, "T3");
+    assert.equal(result.requiresPlan, true);
+  });
+
+  it("plan-first: requiresPlan is false when plan doc exists", () => {
+    const result = evaluateTrigger({
+      changedFiles: 10,
+      securitySensitive: true,
+      priorRejections: 2,
+      apiSurfaceChanged: true,
+      crossLayerChange: false,
+      isRevert: false,
+      hasPlanDoc: true,
+    });
+    assert.equal(result.requiresPlan, false);
+  });
+
+  it("plan-first: small changes do not require plan", () => {
+    const result = evaluateTrigger({
+      changedFiles: 2,
+      securitySensitive: false,
+      priorRejections: 0,
+      apiSurfaceChanged: false,
+      crossLayerChange: false,
+      isRevert: false,
+      hasPlanDoc: false,
+    });
+    assert.equal(result.requiresPlan, false);
+  });
 });

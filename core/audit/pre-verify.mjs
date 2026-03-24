@@ -6,6 +6,13 @@ import { spawnSync } from "node:child_process";
 import { REPO_ROOT } from "../context.mjs";
 import { extractChangedFilesFromEvidence, extractTestCommands } from "./scope.mjs";
 
+// Blast radius — fail-safe top-level import (non-critical)
+let _computeBlastRadius = null;
+try {
+  const tc = await import("../tools/tool-core.mjs");
+  _computeBlastRadius = tc.computeBlastRadius;
+} catch { /* tool-core unavailable — blast radius skipped */ }
+
 /**
  * Run all deterministic verifications LOCALLY before invoking the auditor.
  *
@@ -35,6 +42,11 @@ export function runPreVerification(markdown, cwd) {
   // 4. T: re-run test commands from evidence
   const testCmds = extractTestCommands(markdown);
   sections.push(runTestsLocally(testCmds, root));
+
+  // 5. Blast radius — transitive impact of changed files
+  if (changedFiles.length > 0) {
+    sections.push(computeBlastRadiusSection(changedFiles, root));
+  }
 
   return sections.join("\n\n");
 }
@@ -206,4 +218,40 @@ export function computeChangedFiles(markdown, root) {
     : "(no changed files detected)";
 
   return `**Diff scope** (\`${diffCmd}\`, ${files.length} files):\n${fileList}`;
+}
+
+/** Compute blast radius section for pre-verification evidence. */
+function computeBlastRadiusSection(changedFiles, root) {
+  const lines = ["### Blast Radius (pre-verified locally)"];
+  try {
+    if (!_computeBlastRadius) {
+      lines.push("_blast radius unavailable — skipped_");
+      return lines.join("\n");
+    }
+
+    const absFiles = changedFiles.map(f => resolve(root, f));
+    const result = _computeBlastRadius(root, absFiles);
+
+    if (result.error) {
+      lines.push(`_graph build failed: ${result.error}_`);
+      return lines.join("\n");
+    }
+
+    if (result.affected === 0) {
+      lines.push(`_0/${changedFiles.length} changed files found in dependency graph — skipped_`);
+      return lines.join("\n");
+    }
+
+    lines.push(`**Impact**: ${result.affected} / ${result.total} files affected (${(result.ratio * 100).toFixed(1)}%)`);
+    const display = result.files.slice(0, 20);
+    for (const f of display) {
+      lines.push(`- \`${f.file}\` (depth ${f.depth})`);
+    }
+    if (result.files.length > 20) {
+      lines.push(`- _...and ${result.files.length - 20} more files_`);
+    }
+  } catch {
+    lines.push("_blast radius computation failed — skipped_");
+  }
+  return lines.join("\n");
 }

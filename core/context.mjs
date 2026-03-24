@@ -31,14 +31,19 @@ export const QUORUM_ROOT = resolve(HOOKS_DIR, "..");
  * Falls back to process.cwd() when git is unavailable.
  */
 function resolveRepoRoot() {
+  // 0. Cached via env var — avoids git subprocess on every hook invocation
+  if (process.env.QUORUM_REPO_ROOT) return process.env.QUORUM_REPO_ROOT;
+
   // 1. cwd-based git resolution — worktree-aware (primary)
   try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
     }).trim();
+    process.env.QUORUM_REPO_ROOT = root;
+    return root;
   } catch { /* git not available or not in a repo */ }
 
   // 2. Adapter layout fallback: adapters/claude-code/ installed under .claude/hooks/
@@ -121,10 +126,14 @@ export function refreshConfigIfChanged() {
     if (mtime <= _configMtime) return false;
     _configMtime = mtime;
     const newCfg = JSON.parse(readFileSync(_configPath, "utf8"));
-    // Merge into existing objects so references stay valid
+    // Clear + merge into existing objects so references stay valid and stale keys are removed
+    for (const k of Object.keys(cfg)) delete cfg[k];
     Object.assign(cfg, newCfg);
+    for (const k of Object.keys(plugin)) delete plugin[k];
     Object.assign(plugin, newCfg.plugin ?? DEFAULT_CONFIG.plugin);
+    for (const k of Object.keys(consensus)) delete consensus[k];
     Object.assign(consensus, newCfg.consensus ?? DEFAULT_CONFIG.consensus);
+    _emptyMarkerRe = null; // force recompile on next isEmptyMarker() call
     return true;
   } catch {
     return false;
@@ -192,6 +201,7 @@ export const STATUS_TAG_RE = new RegExp(`\\[(${tagAlts})(?:[^\\]]*?)\\]`);
 export const STATUS_TAG_RE_GLOBAL = new RegExp(
   "`?\\[(" + tagAlts + ")(?:[^\\]]*?)\\]`?", "g",
 );
+const TAG_INNER_RE_G = new RegExp(tagAlts, "g");
 
 // ── Path resolution (memoized) ────────────────────────────
 let _watchPath = undefined;
@@ -218,14 +228,14 @@ export function findWatchFile() {
 
 export function findRespondFile() {
   if (_respondPath !== undefined && _respondPath !== null) return _respondPath;
-  const respondName = plugin.respond_file ?? "gpt.md";
+  const respondName = plugin.respond_file ?? "verdict.md";
   const subPath = consensus.watch_file.split("/").slice(0, -1).join("/");
   _respondPath = probeFile(subPath, respondName);
   return _respondPath;
 }
 
 /** Reset memoization cache — for testing. */
-export function resetPathCache() {
+function resetPathCache() {
   _watchPath = undefined;
   _respondPath = undefined;
 }
@@ -273,17 +283,17 @@ export function extractStatusFromLine(line) {
   const match = line.match(STATUS_TAG_RE);
   if (!match) return null;
 
-  const innerRe = new RegExp(tagAlts, "g");
-  const statuses = [...match[0].matchAll(innerRe)].map((item) => item[0]);
+  TAG_INNER_RE_G.lastIndex = 0;
+  const statuses = [...match[0].matchAll(TAG_INNER_RE_G)].map((item) => item[0]);
   return statuses.at(-1) ?? null;
 }
 
 /** Find a `## heading` section in markdown and return { start, end, lines }. */
 export function readSection(markdown, heading) {
   const lines = typeof markdown === "string" ? markdown.split(/\r?\n/) : markdown;
-  const escaped = escapeRe(heading);
+  const headingRe = new RegExp(`^##\\s+${escapeRe(heading)}\\s*$`);
   const start = lines.findIndex((line) =>
-    new RegExp(`^##\\s+${escaped}\\s*$`).test((typeof line === "string" ? line : "").trim())
+    headingRe.test((typeof line === "string" ? line : "").trim())
   );
   if (start < 0) return null;
   const end = lines.findIndex((line, idx) =>
@@ -384,11 +394,16 @@ export function readBulletSection(markdown, heading) {
     .map((line) => line.replace(/^- /, "").trim());
 }
 
-/** Check for empty markers (해당 없음, 없음, none). */
+/** Check for empty markers (해당 없음, 없음, none, n/a). */
+const BASE_EMPTY_MARKERS = "해당 없음|없음|none|n\\/a";
+let _emptyMarkerRe = null;
 export function isEmptyMarker(line) {
-  return new RegExp(
-    `^\`?(${DOC_PATTERNS.empty_markers ?? "해당 없음|없음|none"})\`?$`, "i"
-  ).test(line.trim());
+  if (!_emptyMarkerRe) {
+    const extra = DOC_PATTERNS.empty_markers;
+    const pattern = extra ? `${BASE_EMPTY_MARKERS}|${extra}` : BASE_EMPTY_MARKERS;
+    _emptyMarkerRe = new RegExp(`^\`?(${pattern})\`?$`, "i");
+  }
+  return _emptyMarkerRe.test(line.trim());
 }
 
 /** Extract approved IDs from markdown. */

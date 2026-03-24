@@ -10,8 +10,14 @@
  * become part of the evidence the judge sees.
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { AuditRequest } from "./provider.js";
+import { DOMAIN_NAMES } from "./domain-detect.js";
 import type { SelectedReviewer, ReviewerSelection } from "./domain-router.js";
+import type { Finding, FindingSeverity } from "../bus/events.js";
+
+const execFileAsync = promisify(execFile);
 
 // ── Types ────────────────────────────────────
 
@@ -65,10 +71,6 @@ export async function runSpecialistTool(
 ): Promise<ToolResult> {
   const start = Date.now();
   try {
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const execFileAsync = promisify(execFile);
-
     const toolRunner = new URL("../../core/tools/tool-runner.mjs", import.meta.url).pathname;
     const { stdout } = await execFileAsync("node", [toolRunner, tool, "--json"], {
       cwd,
@@ -92,6 +94,42 @@ export async function runSpecialistTool(
       output: err instanceof Error ? err.message : String(err),
       duration: Date.now() - start,
     };
+  }
+}
+
+// ── ToolResult → Finding conversion ──────────
+
+const SEVERITY_MAP: Record<string, FindingSeverity> = {
+  critical: "critical", high: "critical",
+  medium: "major", major: "major",
+  low: "minor", minor: "minor",
+  style: "style", info: "style",
+};
+
+/**
+ * Parse a ToolResult's JSON output into structured Finding objects.
+ * Tool JSON shape: { findings: [{ file, line, severity, label, msg }, ...] }
+ */
+export function parseToolFindings(
+  toolResult: ToolResult,
+): Array<Omit<Finding, "id" | "status">> {
+  try {
+    const parsed = JSON.parse(toolResult.output);
+    const rawFindings = parsed?.findings ?? parsed?.json?.findings;
+    if (!Array.isArray(rawFindings)) return [];
+
+    return rawFindings.map((f: Record<string, unknown>) => ({
+      reviewerId: `specialist-${toolResult.tool}`,
+      provider: toolResult.domain,
+      severity: SEVERITY_MAP[String(f.severity ?? "minor").toLowerCase()] ?? "minor",
+      category: String(f.label ?? f.category ?? toolResult.domain),
+      description: String(f.msg ?? f.description ?? f.issue ?? ""),
+      file: f.file ? String(f.file) : undefined,
+      line: typeof f.line === "number" ? f.line : undefined,
+      suggestion: f.suggestion ? String(f.suggestion) : undefined,
+    }));
+  } catch {
+    return [];
   }
 }
 
@@ -161,6 +199,73 @@ export function enrichEvidence(
   }
   const specialistSection = buildSpecialistSection(toolResults, opinions);
   return `${originalEvidence}\n\n${specialistSection}`;
+}
+
+// ── Dynamic Specialist Spawn ─────────────────
+
+export interface SpawnCandidate {
+  domain: string;
+  reason: string;
+  trigger: "finding";
+  parentReviewerId?: string;
+}
+
+/**
+ * Detect domains mentioned in findings that aren't covered by active specialists.
+ * Returns candidates for dynamic specialist spawn mid-review.
+ *
+ * Heuristic: scan finding descriptions + categories for domain keywords,
+ * compare against already-active domains.
+ */
+export function detectMissingSpecialists(
+  findings: Array<{ category: string; description: string; file?: string; reviewerId: string }>,
+  activeDomains: Set<string>,
+): SpawnCandidate[] {
+  const candidates = new Map<string, SpawnCandidate>();
+
+  for (const f of findings) {
+    const text = `${f.category} ${f.description} ${f.file ?? ""}`.toLowerCase();
+    for (const [domain, keywords] of DOMAIN_KEYWORDS) {
+      if (activeDomains.has(domain)) continue;
+      if (candidates.has(domain)) continue;
+      if (keywords.some(kw => text.includes(kw))) {
+        candidates.set(domain, {
+          domain,
+          reason: `finding mentions "${domain}" keywords in "${f.category}"`,
+          trigger: "finding",
+          parentReviewerId: f.reviewerId,
+        });
+      }
+    }
+  }
+
+  return [...candidates.values()];
+}
+
+/**
+ * Keywords for detecting specialist domains from finding text.
+ * Domain names are validated against domain-detect.ts canonical list at import time
+ * to prevent drift when new domains are added.
+ */
+const DOMAIN_KEYWORDS = new Map<string, string[]>([
+  ["performance", ["n+1", "slow query", "latency", "cache miss", "bundle size", "memory leak"]],
+  ["migration", ["breaking change", "schema change", "migration", "backward compat"]],
+  ["accessibility", ["aria", "screen reader", "keyboard nav", "wcag", "focus trap"]],
+  ["compliance", ["pii", "gdpr", "license", "credential", "secret", "token exposure"]],
+  ["observability", ["logging", "no error handling", "unhandled", "silent fail", "no metrics"]],
+  ["concurrency", ["race condition", "deadlock", "shared state", "mutex", "atomic"]],
+  ["i18n", ["hardcoded string", "locale", "translation", "i18n"]],
+  ["infrastructure", ["dockerfile", "env var", "ci/cd", "deploy", "container"]],
+]);
+
+// Drift guard: verify all canonical domains have keyword entries.
+// Logs a warning at startup if domain-detect adds a domain without keywords here.
+for (const domain of DOMAIN_NAMES) {
+  if (!DOMAIN_KEYWORDS.has(domain)) {
+    if (typeof process !== "undefined" && process.env?.QUORUM_DEBUG) {
+      console.warn(`[specialist] Missing DOMAIN_KEYWORDS entry for domain: ${domain}`);
+    }
+  }
 }
 
 // ── Orchestrator ─────────────────────────────

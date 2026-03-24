@@ -30,15 +30,22 @@ async function loadModules() {
   if (_modules) return _modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
       import(toURL(resolve(DIST, "providers", "router.js"))),
       import(toURL(resolve(DIST, "bus", "stagnation.js"))),
       import(toURL(resolve(DIST, "bus", "lock.js"))),
+      import(toURL(resolve(DIST, "bus", "message-bus.js"))),
+      import(toURL(resolve(DIST, "bus", "fitness.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "fitness-loop.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "claim.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "parallel.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod };
+    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod };
     return _modules;
   } catch {
     return null;
@@ -78,6 +85,20 @@ function getLockService() {
     const { LockService } = _modules.lockMod;
     _lockService = new LockService(_store.getDb());
     return _lockService;
+  } catch {
+    return null;
+  }
+}
+
+let _claimService = null;
+
+function getClaimService() {
+  if (_claimService) return _claimService;
+  if (!_modules?.claimMod || !_store) return null;
+  try {
+    const { ClaimService } = _modules.claimMod;
+    _claimService = new ClaimService(_store.getDb());
+    return _claimService;
   } catch {
     return null;
   }
@@ -273,6 +294,153 @@ export function currentState(entityType, entityId) {
   }
 }
 
+/**
+ * Query current states for all audit items.
+ * Returns array of { entityId, currentState, source, metadata, updatedAt } or empty array.
+ */
+let _stmtItemStates = null;
+export function queryItemStates() {
+  if (!_store) return [];
+  try {
+    if (!_stmtItemStates) {
+      _stmtItemStates = _store.getDb().prepare(`
+        SELECT entity_id, to_state, source, metadata, created_at
+        FROM state_transitions st1
+        WHERE entity_type = 'audit_item'
+          AND rowid = (
+            SELECT rowid FROM state_transitions st2
+            WHERE st2.entity_type = st1.entity_type
+              AND st2.entity_id = st1.entity_id
+            ORDER BY st2.created_at DESC, st2.rowid DESC
+            LIMIT 1
+          )
+        ORDER BY created_at DESC
+      `);
+    }
+    const rows = _stmtItemStates.all();
+    return rows.map(r => ({
+      entityId: r.entity_id,
+      currentState: r.to_state,
+      source: r.source,
+      metadata: r.metadata ? JSON.parse(r.metadata) : {},
+      updatedAt: r.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ── File Claims (per-file ownership for parallel agents) ──
+
+/**
+ * Atomically claim files for an agent. Returns conflicts or empty array on success.
+ */
+export function claimFiles(agentId, files, sessionId, ttlMs) {
+  const svc = getClaimService();
+  if (!svc) return [];
+  try {
+    return svc.claimFiles(agentId, files, sessionId, ttlMs);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Release all file claims held by an agent.
+ */
+export function releaseFiles(agentId) {
+  const svc = getClaimService();
+  if (!svc) return 0;
+  try {
+    return svc.releaseFiles(agentId);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Check which files would conflict if an agent claimed them (read-only).
+ */
+export function checkConflicts(agentId, files) {
+  const svc = getClaimService();
+  if (!svc) return [];
+  try {
+    return svc.checkConflicts(agentId, files);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get all active file claims, optionally filtered by agent.
+ */
+export function getClaims(agentId) {
+  const svc = getClaimService();
+  if (!svc) return [];
+  try {
+    return svc.getClaims(agentId);
+  } catch {
+    return [];
+  }
+}
+
+// ── Execution Planning (orchestrator + parallel planner) ──
+
+/**
+ * Plan parallel execution groups from work items.
+ * Returns { groups, depth, maxWidth, unschedulable }.
+ */
+export function planExecution(items) {
+  if (!_modules?.parallelMod) return null;
+  try {
+    return _modules.parallelMod.planParallel(items);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Auto-select orchestration mode for work items.
+ * Returns { mode, plan, reasons, maxConcurrency }.
+ */
+export function selectExecutionMode(items) {
+  if (!_modules?.orchestratorMod) return null;
+  try {
+    return _modules.orchestratorMod.selectMode(items);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate a plan against live file claims.
+ */
+export function validatePlanClaims(plan, agentId) {
+  if (!_modules?.parallelMod) return new Map();
+  const svc = getClaimService();
+  if (!svc) return new Map();
+  try {
+    return _modules.parallelMod.validateAgainstClaims(plan, svc, agentId);
+  } catch {
+    return new Map();
+  }
+}
+
+// ── Auto-Learning (audit pattern detection) ──
+
+/**
+ * Analyze audit history for repeat patterns and generate CLAUDE.md rule suggestions.
+ * Returns { patterns, suggestions, eventsAnalyzed }.
+ */
+export function analyzeAuditLearnings() {
+  if (!_modules?.autoLearnMod || !_store) return null;
+  try {
+    return _modules.autoLearnMod.analyzeAndSuggest(_store);
+  } catch {
+    return null;
+  }
+}
+
 // ── TransactionalUnitOfWork factory ──
 
 /**
@@ -369,6 +537,98 @@ export async function enrichEvidence(evidence, toolResults, opinions) {
   }
 }
 
+// ── MessageBus (finding-level communication) ─
+
+let _messageBus = null;
+
+/**
+ * Get or create a MessageBus instance for finding-level communication.
+ * Returns null if store unavailable.
+ */
+export function getMessageBus() {
+  if (!_store) return null;
+  if (_messageBus) return _messageBus;
+  try {
+    if (_modules?.messageBusMod?.MessageBus) {
+      _messageBus = new _modules.messageBusMod.MessageBus(_store);
+    }
+    return _messageBus;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse specialist ToolResult into Finding objects.
+ * Returns empty array if modules unavailable.
+ */
+export function parseToolFindings(toolResult) {
+  try {
+    const mods = _specialistMod;
+    if (mods?.parseToolFindings) {
+      return mods.parseToolFindings(toolResult);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Fitness ─────────────────────────────────────
+
+let _fitnessLoop = null;
+
+/**
+ * Get or create a FitnessLoop instance. Fail-safe: returns null if modules unavailable.
+ */
+export function getFitnessLoop() {
+  if (_fitnessLoop) return _fitnessLoop;
+  if (!_modules?.fitnessLoopMod) return null;
+  try {
+    const store = getStore();
+    _fitnessLoop = new _modules.fitnessLoopMod.FitnessLoop(store);
+    return _fitnessLoop;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute a fitness score from signals. Fail-safe: returns null.
+ */
+export function computeFitness(signals, config) {
+  if (!_modules?.fitnessMod) return null;
+  try {
+    return _modules.fitnessMod.computeFitness(signals, config);
+  } catch {
+    return null;
+  }
+}
+
+// ── Blast Radius ─────────────────────────────
+
+let _toolCoreMod = null;
+
+/** Lazy-load tool-core.mjs (cached after first call). */
+async function _getToolCore() {
+  if (_toolCoreMod) return _toolCoreMod;
+  const toURL = (p) => pathToFileURL(p).href;
+  _toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "core", "tools", "tool-core.mjs")));
+  return _toolCoreMod;
+}
+
+/**
+ * Compute transitive blast radius for changed files.
+ * @param {string[]} changedFiles - relative or absolute paths
+ * @returns {Promise<{affected: number, total: number, ratio: number, files: any[]}|null>}
+ */
+export async function computeBlastRadius(changedFiles) {
+  try {
+    const tc = await _getToolCore();
+    return tc.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
+  } catch { return null; }
+}
+
 /**
  * Close the store connection. Call at hook exit.
  */
@@ -383,4 +643,9 @@ export function close() {
   _domainMod = null;
   _routerMod2 = null;
   _specialistMod = null;
+  _messageBus = null;
+  _fitnessLoop = null;
+  _claimService = null;
+  _stmtItemStates = null;
+  _toolCoreMod = null;
 }

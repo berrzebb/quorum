@@ -2,6 +2,12 @@
 name: i18n-checker
 description: i18n Checker — verifies locale key parity, detects hardcoded UI strings, and validates translation format consistency. Activated when i18n domain is detected (locale files, translation keys).
 allowed-tools: Read, Grep, Glob, Bash
+disallowedTools:
+  - "Bash(rm*)"
+  - "Bash(git push*)"
+  - "Bash(git reset*)"
+  - "Bash(git checkout*)"
+  - "Bash(git clean*)"
 model: claude-sonnet-4-6
 skills:
   - quorum:tools

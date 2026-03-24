@@ -44,9 +44,42 @@ export class MarkdownProjector {
   private db: Database.Database;
   private config: ProjectorConfig;
 
+  // ── Pre-computed stripped tag values ──
+  private strippedTrigger: string;
+  private strippedAgree: string;
+  private strippedPending: string;
+
+  // ── Cached prepared statements ──
+  private stmtItemStates: Database.Statement;
+  private stmtEntityHistory: Database.Statement;
+
   constructor(db: Database.Database, config: ProjectorConfig) {
     this.db = db;
     this.config = config;
+
+    this.strippedTrigger = config.triggerTag.replace(/^\[|\]$/g, "");
+    this.strippedAgree = config.agreeTag.replace(/^\[|\]$/g, "");
+    this.strippedPending = config.pendingTag.replace(/^\[|\]$/g, "");
+
+    this.stmtItemStates = db.prepare(`
+      SELECT entity_id, to_state AS current_state, source, metadata, created_at
+      FROM state_transitions st1
+      WHERE entity_type = 'audit_item'
+        AND rowid = (
+          SELECT rowid FROM state_transitions st2
+          WHERE st2.entity_type = st1.entity_type
+            AND st2.entity_id = st1.entity_id
+          ORDER BY st2.created_at DESC, st2.rowid DESC
+          LIMIT 1
+        )
+      ORDER BY created_at ASC
+    `);
+    this.stmtEntityHistory = db.prepare(`
+      SELECT from_state, to_state, source, created_at
+      FROM state_transitions
+      WHERE entity_type = 'audit_item' AND entity_id = ?
+      ORDER BY created_at ASC
+    `);
   }
 
   /**
@@ -55,20 +88,7 @@ export class MarkdownProjector {
    */
   queryItemStates(): ItemState[] {
     try {
-      // Use rowid as tiebreaker when created_at matches (same millisecond)
-      const rows = this.db.prepare(`
-        SELECT entity_id, to_state AS current_state, source, metadata, created_at
-        FROM state_transitions st1
-        WHERE entity_type = 'audit_item'
-          AND rowid = (
-            SELECT rowid FROM state_transitions st2
-            WHERE st2.entity_type = st1.entity_type
-              AND st2.entity_id = st1.entity_id
-            ORDER BY st2.created_at DESC, st2.rowid DESC
-            LIMIT 1
-          )
-        ORDER BY created_at ASC
-      `).all() as Array<{
+      const rows = this.stmtItemStates.all() as Array<{
         entity_id: string;
         current_state: string;
         source: string;
@@ -106,9 +126,9 @@ export class MarkdownProjector {
    */
   tagToState(tag: string): string {
     const inner = tag.replace(/^\[|\]$/g, "");
-    if (inner === this.config.triggerTag.replace(/^\[|\]$/g, "")) return "review_needed";
-    if (inner === this.config.agreeTag.replace(/^\[|\]$/g, "")) return "approved";
-    if (inner === this.config.pendingTag.replace(/^\[|\]$/g, "")) return "changes_requested";
+    if (inner === this.strippedTrigger) return "review_needed";
+    if (inner === this.strippedAgree) return "approved";
+    if (inner === this.strippedPending) return "changes_requested";
     if (inner === "INFRA_FAILURE") return "infra_failure";
     return inner.toLowerCase();
   }
@@ -157,18 +177,13 @@ export class MarkdownProjector {
     const current = readFileSync(filePath, "utf8");
 
     // Check if every item's tag in the file matches its SQLite state
+    const lines = current.split(/\r?\n/);
     let stale = false;
     for (const item of items) {
       const expectedTag = this.stateToTag(item.currentState);
-      const entityPattern = new RegExp(
-        item.entityId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      );
 
-      // Find the line containing this entity ID
-      const lines = current.split(/\r?\n/);
       for (const line of lines) {
-        if (entityPattern.test(line)) {
-          // Check if the expected tag is on this line
+        if (line.includes(item.entityId)) {
           if (!line.includes(expectedTag)) {
             stale = true;
             break;
@@ -192,14 +207,17 @@ export class MarkdownProjector {
    * Self-heal: check all tracked markdown files and report staleness.
    * Used by daemon periodic timer.
    */
-  selfHeal(watchFilePath: string, respondFilePath: string): ProjectionDiff[] {
+  selfHeal(watchFilePath: string, respondFilePath?: string): ProjectionDiff[] {
     const diffs: ProjectionDiff[] = [];
 
     const watchDiff = this.checkStaleness(watchFilePath);
     if (watchDiff) diffs.push(watchDiff);
 
-    const respondDiff = this.checkStaleness(respondFilePath);
-    if (respondDiff) diffs.push(respondDiff);
+    // Verdict file is optional — verdicts are stored in SQLite directly
+    if (respondFilePath) {
+      const respondDiff = this.checkStaleness(respondFilePath);
+      if (respondDiff) diffs.push(respondDiff);
+    }
 
     return diffs;
   }
@@ -229,27 +247,28 @@ export class MarkdownProjector {
   }
 
   /**
-   * Project the gpt.md (respond file) from SQLite state.
+   * Project the verdict file from SQLite state.
    * Updates verdict tags in the response file to match SQLite transitions.
    */
-  projectGptMd(existingContent: string): string {
+  projectVerdictFile(existingContent: string): string {
     const items = this.queryItemStates();
     if (items.length === 0) return existingContent;
 
     let content = existingContent;
 
-    // Update tags in "## Agreed" section based on approved items
-    const approvedIds = items
-      .filter(i => i.currentState === "approved")
-      .map(i => i.entityId);
-
-    // Update tags in "## Final Verdict" section based on overall state
-    const hasReviewNeeded = items.some(i => i.currentState === "review_needed");
-    const hasChangesRequested = items.some(i => i.currentState === "changes_requested");
+    // Single-pass state counting
+    let hasReviewNeeded = false;
+    let hasChangesRequested = false;
+    let approvedCount = 0;
+    for (const i of items) {
+      if (i.currentState === "review_needed") hasReviewNeeded = true;
+      else if (i.currentState === "changes_requested") hasChangesRequested = true;
+      else if (i.currentState === "approved") approvedCount++;
+    }
 
     // If all items are approved and content has CHANGES_REQUESTED verdict,
     // update to APPROVED
-    if (!hasReviewNeeded && !hasChangesRequested && approvedIds.length > 0) {
+    if (!hasReviewNeeded && !hasChangesRequested && approvedCount > 0) {
       content = content.replace(
         /## Final Verdict\s*\n+\[CHANGES_REQUESTED\]/,
         `## Final Verdict\n\n[APPROVED]`,
@@ -269,12 +288,7 @@ export class MarkdownProjector {
     createdAt: number;
   }> {
     try {
-      const rows = this.db.prepare(`
-        SELECT from_state, to_state, source, created_at
-        FROM state_transitions
-        WHERE entity_type = 'audit_item' AND entity_id = ?
-        ORDER BY created_at ASC
-      `).all(entityId) as Array<{
+      const rows = this.stmtEntityHistory.all(entityId) as Array<{
         from_state: string | null;
         to_state: string;
         source: string;

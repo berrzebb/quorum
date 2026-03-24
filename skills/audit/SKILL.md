@@ -16,7 +16,7 @@ node ${CLAUDE_PLUGIN_ROOT}/core/audit.mjs {{ arguments }}
 
 ## After Completion
 
-Read the respond file (gpt.md) and summarize:
+Read the verdict file (verdict.md) and summarize:
 - Verdict per item (agree_tag or pending_tag)
 - Rejection codes with reasons
 - Recommended next steps

@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
  *   "/home/user/project"
  *     → "home-user-project"  (leading hyphen stripped)
  */
-export function projectSlug(absPath) {
+function projectSlug(absPath) {
   return absPath.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+|-+$/g, "");
 }
 
@@ -50,7 +50,7 @@ export function projectSlug(absPath) {
  * Find the Claude Code memory directory for a given repo root.
  * Returns the absolute path to the memory/ dir, or null if not found.
  */
-export function findMemoryDir(repoRoot) {
+function findMemoryDir(repoRoot) {
   const claudeProjectsDir = resolve(homedir(), ".claude", "projects");
   if (!existsSync(claudeProjectsDir)) return null;
 

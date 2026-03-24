@@ -10,6 +10,17 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/prompt-submit.mjs",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -18,6 +29,18 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/session-stop.mjs",
             "async": true,
             "timeout": 120
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/stop-failure.mjs",
+            "async": true,
+            "timeout": 10000
           }
         ]
       }
@@ -42,6 +65,18 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/index.mjs",
             "timeout": 30000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/post-tool-failure.mjs",
+            "async": true,
+            "timeout": 5000
           }
         ]
       }
