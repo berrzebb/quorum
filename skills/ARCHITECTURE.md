@@ -3,13 +3,14 @@
 ## Directory Structure
 
 ```
-skills/                          ← Shared skills (source of truth)
-  ├── {skill}/SKILL.md           ← Skill definition
-  └── {skill}/references/        ← Progressive-disclosure references
+skills/                          ← Protocol-neutral canonical definitions (source of truth)
+  ├── {skill}/SKILL.md           ← What the skill does (no adapter-specific content)
+  ├── {skill}/references/        ← Progressive-disclosure references
+  └── ARCHITECTURE.md            ← This file
 
-adapters/claude-code/skills/     ← HARD LINKS to skills/ (same inode)
-adapters/gemini/skills/          ← Adapter-specific copies (Gemini tool names)
-adapters/codex/skills/           ← Adapter-specific copies (Codex tool names)
+adapters/claude-code/skills/     ← Claude Code wrappers (Read/Write/Edit/Bash/Glob/Grep)
+adapters/gemini/skills/          ← Gemini wrappers (read_file/write_file/shell/glob/grep)
+adapters/codex/skills/           ← Codex wrappers (read_file/write_file/apply_diff/shell/find_files/search)
 
 agents/knowledge/                ← Cross-adapter protocols (business logic)
   ├── implementer-protocol.md    ← Execution flow, correction, completion gate
@@ -26,70 +27,62 @@ agents/knowledge/                ← Cross-adapter protocols (business logic)
 ```
 agents/knowledge/ (protocols)     ← Business logic, adapter-independent
         ↓ referenced by
-skills/ (shared skills)           ← Full skill + references (source of truth)
-        ↓ hard-linked to
-adapters/claude-code/skills/      ← Same files, Claude Code tool names
-
-        ↓ adapted as
-adapters/gemini/skills/           ← Gemini tool names + protocol refs
-adapters/codex/skills/            ← Codex tool names + protocol refs
+skills/ (canonical skills)        ← Protocol-neutral definitions + references
+        ↓ adapted by (all 3 adapters are equal peers)
+adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
+adapters/gemini/skills/           ← Gemini tool names + adapter paths
+adapters/codex/skills/            ← Codex tool names + adapter paths
 ```
 
-## shared ↔ claude-code Relationship
+## Protocol Neutrality
 
-`adapters/claude-code/skills/` files are **hard links** to `skills/`. They share the same inode — editing either location modifies both.
+`skills/` contains **protocol-neutral** canonical skill definitions:
+- Define WHAT the skill does (phases, rules, constraints)
+- NO adapter-specific tool names (not `Read`, not `read_file`, not `apply_diff`)
+- NO adapter-specific paths (not `${CLAUDE_PLUGIN_ROOT}`)
+- Use `quorum tool <name>` for generic tool invocation
+- Use `{ADAPTER_ROOT}` as placeholder where adapter path is needed
+- References use local relative paths (`references/xxx.md`)
 
-This means:
-- **Edit `skills/` only** — changes propagate to Claude Code automatically
-- **Never create new files in `adapters/claude-code/skills/`** — create in `skills/` first, then hard-link
-- **References** (`skills/*/references/`) are also hard-linked
-
-To create a hard link for a new skill:
-```bash
-# After creating skills/new-skill/SKILL.md
-mkdir -p adapters/claude-code/skills/new-skill
-ln skills/new-skill/SKILL.md adapters/claude-code/skills/new-skill/SKILL.md
-```
+All three adapters are **equal peers** — each creates its own wrapper with:
+- Adapter-native tool mapping table
+- Adapter-specific invocation paths
+- Protocol references to `agents/knowledge/` and `skills/*/references/`
 
 ## Adapter Skill Template
 
-Gemini and Codex skills follow a standard template — protocol reference + tool binding:
+All adapter skills follow the same pattern — tool mapping + protocol reference:
 
 ```yaml
 ---
-name: quorum-{skill-name}
-description: "{what it does}. {when to use}. Triggers on '{keyword1}', '{keyword2}'."
-model: {gemini-2.5-pro | codex}
+name: quorum:{name}          # CC uses quorum:, Gemini/Codex use quorum-
+description: "..."
+model: {adapter-model}
 allowed-tools: {adapter-native tool names}
 ---
 ```
 
 ```markdown
-# {Skill Title} ({Adapter})
+# {Skill Title} ({Adapter Name})
 
-{One-line purpose statement.}
+{One-line purpose}
 
 ## {Adapter} Tool Mapping
 
 | Operation | Tool |
 |-----------|------|
-| Read file | `read_file` |
-| Write file | `write_file` |
+| Read file | `{native name}` |
+| Write file | `{native name}` |
 | ... | ... |
 
 ## Core Protocol
-
 Read and follow: `agents/knowledge/{protocol}.md`
 
 ## Tool References
-
 For detailed parameters: `skills/consensus-tools/references/`
-
-## {Adapter-specific sections only}
-...
 ```
 
-**Keep adapter skills thin** — business logic belongs in `agents/knowledge/`, tool parameters in `skills/*/references/`. Adapter skills contain only:
+**Keep adapter skills thin** — business logic in `agents/knowledge/`, tool details in `skills/*/references/`. Adapter skills contain only:
 1. Frontmatter (name, description, model, allowed-tools)
 2. Tool Mapping table
 3. Protocol reference pointer
@@ -97,22 +90,23 @@ For detailed parameters: `skills/consensus-tools/references/`
 
 ## Reference Resolution
 
-Shared references live in `skills/{skill-name}/references/`. Adapter skills reference them by path:
+References live in `skills/{skill-name}/references/`. All adapters reference by project-root path:
 
-| Adapter | How to reference |
-|---------|-----------------|
-| Claude Code | `references/xxx.md` (hard-linked, resolves locally) |
-| Gemini | `skills/{skill}/references/xxx.md` (project-root relative) |
-| Codex | `skills/{skill}/references/xxx.md` (project-root relative) |
+```
+skills/{skill}/references/xxx.md
+```
+
+Consistent across all 3 adapters — no special cases.
 
 ## Adding a New Skill
 
-1. Create `skills/{name}/SKILL.md` with full content
+1. Create `skills/{name}/SKILL.md` with protocol-neutral content
 2. Create `skills/{name}/references/` if progressive disclosure needed
-3. Hard-link to Claude Code: `ln skills/{name}/SKILL.md adapters/claude-code/skills/{name}/SKILL.md`
-4. Create Gemini adapter: `adapters/gemini/skills/{name}/SKILL.md` (tool mapping + protocol ref)
-5. Create Codex adapter: `adapters/codex/skills/{name}/SKILL.md` (tool mapping + protocol ref)
-6. Update `CLAUDE.md` skill counts
+3. Create adapter wrappers (all 3):
+   - `adapters/claude-code/skills/{name}/SKILL.md` (Read/Write/Edit/Bash/Glob/Grep)
+   - `adapters/gemini/skills/{name}/SKILL.md` (read_file/write_file/edit_file/shell/glob/grep)
+   - `adapters/codex/skills/{name}/SKILL.md` (read_file/write_file/apply_diff/shell/find_files/search)
+4. Update `CLAUDE.md` skill counts
 
 ## Adding a New Adapter
 

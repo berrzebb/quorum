@@ -109,7 +109,7 @@ adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
-  ├→ skills/            ← 10 skills (hard-linked from skills/; see skills/ARCHITECTURE.md)
+  ├→ skills/            ← 10 skills (adapter wrappers; see skills/ARCHITECTURE.md)
   ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
@@ -156,7 +156,7 @@ adapters/codex/
 - **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.
 - **MuxAdapter**: `mux-adapter.mjs` — bridges ProcessMux (tmux/psmux) sessions with CliAdapter/NdjsonParser. `spawn()` creates a CLI session per model, `send()` writes prompts via mux, `capture()` parses NDJSON output. `spawnConsensus()` + `awaitConsensus()` for 3-model deliberative protocol.
 - **Doc-Sync**: `agents/knowledge/doc-sync-protocol.md` — extracts facts from code (hook counts, tool counts, test counts, versions) and fixes numeric mismatches + section parity gaps in 8 doc files. 3-adapter aware (counts all adapters). Runs automatically in merge-worktree Phase 2.5 before squash commit. `/quorum:doc-sync` for manual invocation.
-- **Skill Architecture**: `skills/ARCHITECTURE.md` — inheritance model: `agents/knowledge/` (protocols) → `skills/` (shared, source of truth) → hard-link to Claude Code → adapter copies for Gemini/Codex. Adapter skills are thin wrappers (tool mapping + protocol ref). References resolve via `skills/*/references/` paths.
+- **Skill Architecture**: `skills/ARCHITECTURE.md` — protocol-neutral inheritance: `agents/knowledge/` (protocols) → `skills/` (shared canonical + references) → 3 equal adapter wrappers (Claude Code / Gemini / Codex). Each adapter skill = tool mapping + protocol ref. References resolve via `skills/*/references/` paths.
 - **Diverge-Converge Consensus**: `consensus.ts` `runDivergeConverge()` — Parliament-style deliberation. Phase A: free divergence (no role constraints, all speak freely). Phase B: Judge converges into 4 MECE registers (statusChanges, decisions, requirementChanges, risks). Phase C: 5-classification analysis (gap/strength/out/buy/build). Implementer testimony via `DivergeConvergeOptions`.
 - **Meeting Log**: `meeting-log.ts` — accumulates N session logs per standing committee → convergence detection (5-classification stability) → CPS generation (Context-Problem-Solution). 6 standing committees: Principles, Definitions, Structure, Architecture, Scope, Research Questions.
 - **Amendment Protocol**: `amendment.ts` — legislative change management. `proposeAmendment()` → `voteOnAmendment()` → `resolveAmendment()`. Majority voting (>50% of eligible). Implementer has testimony but no vote. All amendments stored as parliament.amendment.* events.

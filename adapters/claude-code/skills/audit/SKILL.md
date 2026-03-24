@@ -1,27 +1,34 @@
 ---
 name: quorum:audit
-description: "Run a quorum audit manually — trigger consensus review, re-run failed audits, test audit prompts, or force a specific provider. Use when the hook-based auto-trigger didn't fire, or you want explicit control. Triggers on 'run audit', 'audit again', 'review my code', 'check evidence', '감사 실행'."
+description: "Run a quorum audit manually — trigger consensus review, re-run failed audits, test audit prompts, or force a specific provider. Use when the hook-based auto-trigger didn't fire, or you want explicit control. Triggers on 'run audit', 'audit again', 'review my code', 'check evidence'."
 argument-hint: "[--dry-run | --no-resume | --auto-fix | --model <name>]"
 model: claude-sonnet-4-6
 allowed-tools: Read, Bash(node *), Bash(git *)
 ---
 
-# Manual Audit
+# Manual Audit (Claude Code)
 
-Trigger the consensus audit process manually. The audit evaluates pending evidence items and produces verdicts stored in SQLite.
+Trigger the consensus audit process manually. Evaluates pending evidence items and produces verdicts stored in SQLite.
 
-## Setup
+## Claude Code Tool Mapping
 
-Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
-- `consensus.watch_file` → evidence file path
-- `consensus.trigger_tag` / `agree_tag` / `pending_tag` → tag values
-- `consensus.roles` → provider-per-role mapping (advocate, devil, judge)
+| Operation | Tool |
+|-----------|------|
+| Read file | `Read` |
+| Run command | `Bash` |
 
 ## Execute
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/core/audit.mjs {{ arguments }}
 ```
+
+## Setup
+
+Read config with `Read` at `${CLAUDE_PLUGIN_ROOT}/core/config.json`:
+- `consensus.watch_file` — evidence file path
+- `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
+- `consensus.roles` — provider-per-role mapping (advocate, devil, judge)
 
 ## Options
 
@@ -45,6 +52,8 @@ audit.mjs → provider reviews evidence
   → quorum status shows result
 ```
 
+Do NOT look for verdict.md or gpt.md — these files are eliminated. Use `quorum status` or `audit_history` tool.
+
 ## After Completion
 
 Check the audit result:
@@ -56,16 +65,16 @@ node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary
 Or use `quorum status` to see current gate state.
 
 Interpret the result:
-- **[agree_tag]** → consensus reached, proceed to retrospective → merge
-- **[pending_tag]** → rejection with codes — read rejection reasons, fix issues, re-submit evidence
-- **No verdict** → audit may have failed; check stderr output
+- **[agree_tag]** — consensus reached, proceed to retrospective then merge
+- **[pending_tag]** — rejection with codes; read rejection reasons, fix issues, re-submit evidence
+- **No verdict** — audit may have failed; check stderr output
 
 ## Execution Context
 
 | Context | Behavior |
 |---------|----------|
-| **Interactive** | Run audit → show verdict summary → suggest next steps |
-| **Headless** | Run audit → output verdict → exit (caller reads audit-status.json) |
+| **Interactive** | Run audit, show verdict summary, suggest next steps |
+| **Headless** | Run audit, output verdict, exit (caller reads audit-status.json) |
 
 In headless mode, do NOT ask follow-up questions. Output the result and exit.
 
@@ -77,5 +86,3 @@ In headless mode, do NOT ask follow-up questions. Output the result and exit.
 | `claim-drift` | Evidence claim doesn't match actual diff | Update claim to match git diff |
 | `scope-mismatch` | Changed files not listed in evidence | Update Changed Files section |
 | `quality-violation` | Code quality check failed | Fix lint/type errors |
-
-Full reference: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/rejection-codes.md`
