@@ -82,9 +82,39 @@ Two-phase timeout: soft (2 min, 4 polls × 30s) → hard (3 min, 6 polls × 30s)
 
 **Allowed exits**: ✅ Normal (all met) | 🔴 Infra failure | 🛑 Cancelled
 
+## Correction Round Flow
+
+When audit returns `[pending_tag]`:
+
+1. **Read rejection** — query audit history from SQLite: `quorum tool audit_history --summary --json`. Extract rejection codes and correction instructions.
+2. **Fix each issue** — address every rejection code. Do NOT ignore low-severity findings.
+   - `test-gap` → add tests covering the claimed changes
+   - `claim-drift` → update evidence claim to match actual diff
+   - `scope-mismatch` → update Changed Files section
+   - `quality-violation` → fix lint/type errors
+3. **Re-verify** — run the same checks from Step 3 (Verify) above
+4. **Re-submit evidence** — atomic write to watch_file with `[trigger_tag]`
+5. **Wait for re-audit** — same polling as Step 6
+
+Do NOT spawn a new agent for corrections — the orchestrator sends corrections via message to the existing agent.
+
+## Available Analysis Tools
+
+Pre-submission self-check and general analysis tools:
+
+| Category | Tools |
+|----------|-------|
+| Quality | `audit_scan`, `perf_scan`, `coverage_map` |
+| Impact | `blast_radius`, `dependency_graph` |
+| Structure | `code_map`, `act_analyze` |
+| Domain | `a11y_scan` (FE tasks), `compat_check`, `observability_check` |
+
+Run via: `quorum tool <name> --json`
+
 ## Anti-Patterns
 - Do NOT commit before [agree_tag]
 - Do NOT exit without submitting evidence
 - Do NOT exit with [pending_tag] active without fixing
 - Do NOT exit after [agree_tag] without WIP commit
 - Do NOT use `git add .` — add specific files only
+- Do NOT look for verdict.md or gpt.md — verdicts are in SQLite only

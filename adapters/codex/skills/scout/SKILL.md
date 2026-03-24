@@ -24,58 +24,26 @@ Full 8-phase execution flow, output rules, and anti-patterns: `agents/knowledge/
 | Find files | `find_files` |
 | Search content | `search` |
 
-## Tool Inventory (20 tools, 5 categories)
+## Tool Inventory
 
-All invoked via `shell` — **facts first, inference second**:
-
-### Codebase Analysis
+Full tool catalog: `agents/knowledge/tool-inventory.md` (20 tools, 5 categories). Key tools for scout:
 
 ```bash
-quorum tool code_map --path src/               # symbols, functions, classes with line ranges
-quorum tool dependency_graph --path src/        # import graph + cycle detection
-quorum tool blast_radius --path . --changed "f" # transitive dependents of files
-quorum tool act_analyze --path .                # PDCA metrics + improvement items
+# Codebase structure
+quorum tool code_map --path src/
+quorum tool dependency_graph --path src/
+quorum tool blast_radius --path . --changed "src/changed-file.ts"
+
+# Quality & coverage
+quorum tool audit_scan --pattern all
+quorum tool coverage_map --path src/
+
+# RTM parsing & merging
+quorum tool rtm_parse --path docs/rtm.md
+quorum tool rtm_merge --base b.md --incoming i.md
 ```
 
-### Quality Scans
-
-```bash
-quorum tool audit_scan --pattern all            # type-safety, hardcoded, console.log
-quorum tool coverage_map --path src/            # per-file test coverage percentages
-quorum tool perf_scan --path src/               # performance regressions (hybrid)
-quorum tool observability_check --path src/     # missing logging/metrics/tracing
-```
-
-### Domain Scans
-
-```bash
-quorum tool a11y_scan --path src/               # accessibility (JSX/TSX)
-quorum tool compat_check --path src/            # API compatibility, deprecations
-quorum tool i18n_validate --path src/           # locale keys, hardcoded strings
-quorum tool license_scan --path .               # license compliance
-quorum tool infra_scan --path .                 # infrastructure misconfigs
-quorum tool doc_coverage --path src/            # missing/stale JSDoc, docstrings
-```
-
-### RTM & FVM
-
-```bash
-quorum tool rtm_parse --path docs/rtm.md        # read RTM rows, filter by req_id
-quorum tool rtm_merge --base b.md --incoming i.md # merge worktree RTMs
-quorum tool fvm_generate --path src/             # FE x API x BE x Auth matrix
-quorum tool fvm_validate --url http://localhost  # execute FVM rows against server
-```
-
-### Audit & Guide
-
-```bash
-quorum tool audit_history --summary --json       # verdict history, rejection patterns
-quorum tool ai_guide --path .                    # project onboarding guide
-```
-
-## Language Detection
-
-The tool inventory uses the **language registry** (`languages/{lang}/spec.{domain}.mjs`). Languages are auto-detected from file extensions. Domain scans apply language-specific patterns. Currently supports: TypeScript, Go, Python, Rust, Java.
+All domain scans (`perf_scan`, `a11y_scan`, `compat_check`, `observability_check`, `doc_coverage`, `infra_scan`, `i18n_validate`, `license_scan`) are also available. See the tool inventory for details.
 
 ## Output Files
 

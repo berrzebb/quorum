@@ -53,51 +53,19 @@ quorum tool compat_check --path src/
 
 ## What to Look For
 
-| # | Category | Examples |
-|---|----------|----------|
-| 1 | Query efficiency | N+1 queries, missing indexes, unbounded SELECTs, no LIMIT |
-| 2 | Bundle size | Unnecessary dependencies, tree-shaking failures, dynamic import opportunities |
-| 3 | Algorithmic complexity | O(n^2) loops in hot paths, missing memoization, redundant iterations |
-| 4 | Memory | Event listener leaks, unbounded caches, large object retention |
-| 5 | Network | Waterfall API calls, missing pagination, no request deduplication |
-| 6 | Sync I/O | Blocking reads on main thread, `fs.readFileSync` in request handlers |
+Read `agents/knowledge/domains/perf.md` for focus areas (6) and checklist (PF-1 through PF-6).
 
 ## Language Registry
 
-`perf_scan` uses the **language registry** (`languages/{lang}/spec.perf.mjs`) for language-specific patterns. Currently supports 5 languages: TypeScript, Go, Python, Rust, Java.
-
-For TypeScript, `perf_scan` runs in **hybrid mode**: regex first pass (speed) then AST second pass (precision). AST catches patterns regex misses (e.g., nested awaits in loops, type-narrowing-dependent perf issues).
+`perf_scan` uses the **language registry** (`languages/{lang}/spec.perf.mjs`). Supports 5 languages. TypeScript runs in **hybrid mode** (regex + AST). See `agents/knowledge/domains/perf.md` (section: Language Registry) for details.
 
 ## Anti-Patterns
 
-- Do NOT review outside the performance domain — leave security, a11y, etc. to their specialists
-- Do NOT produce a verdict without running `perf_scan` first
-- Do NOT leave `findings` empty when verdict is `changes_requested`
-- Do NOT flag intentional trade-offs (e.g., readability over micro-optimization) without evidence of measurable impact
+See `agents/knowledge/domains/perf.md` (section: Anti-Patterns).
 
 ## Output Format
 
-Respond with JSON (per `agents/knowledge/specialist-base.md`):
-
-```json
-{
-  "verdict": "approved | changes_requested | infra_failure",
-  "reasoning": "summary of performance analysis",
-  "codes": ["perf-regression", "perf-gap"],
-  "findings": [
-    {
-      "file": "path/to/file.ts",
-      "line": 42,
-      "severity": "high | medium | low",
-      "issue": "O(n^2) nested loop in hot path",
-      "suggestion": "use Map lookup for O(1) access"
-    }
-  ],
-  "confidence": 0.85
-}
-```
-
-**Rejection codes**: `perf-regression` (existing performance degraded), `perf-gap` (clear optimization opportunity missed).
+See `agents/knowledge/specialist-base.md` (section: Output Format) for the JSON schema. Use rejection codes `perf-regression` (existing perf degraded) or `perf-gap` (missed optimization).
 
 ## Tool References
 

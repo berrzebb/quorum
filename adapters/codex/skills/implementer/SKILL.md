@@ -76,25 +76,11 @@ Tag with `[trigger_tag]` from config.
 
 ## Correction Round Flow
 
-When audit returns `[pending_tag]`:
-
-1. **Read rejection** — `shell`: `quorum tool audit_history --summary --json` to get rejection codes and reasons
-2. **Fix** — address each rejection code (e.g., `test-gap` = add tests, `claim-drift` = update evidence)
-3. **Re-verify** — run pre-submission self-check again (all 5 steps)
-4. **Re-submit** — write updated evidence with `[trigger_tag]`
-
-Maximum 3 correction rounds. If still rejected, exit with diagnostic.
+Read the full correction flow in `agents/knowledge/implementer-protocol.md` (section: Correction Round Flow). Maximum 3 correction rounds. If still rejected, exit with diagnostic.
 
 ## Completion Gate
 
-| # | Condition | Verification |
-|---|-----------|-------------|
-| 1 | Code changes exist | `git diff --name-only` |
-| 2 | Type-check passed | linter/type check exit 0 |
-| 3 | Tests passed | test runner exit 0 |
-| 4 | Evidence submitted | watch_file contains `[trigger_tag]` |
-| 5 | Audit approved | `audit_history` shows `[agree_tag]` |
-| 6 | WIP committed | `git log -1 --oneline` shows WIP commit |
+See `agents/knowledge/implementer-protocol.md` (section: Completion Gate) for the 6-condition table.
 
 ## Key Rules
 

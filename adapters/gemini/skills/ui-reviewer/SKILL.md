@@ -44,55 +44,15 @@ If neither Playwright nor Puppeteer is installed, report `infra_failure` — do 
 
 ## Verification Checklist
 
-For **each component** in the UI spec, verify all 8 checks:
-
-| Check | What to Verify |
-|-------|---------------|
-| UI-1 | Renders without errors — check browser console for errors/warnings |
-| UI-2 | 4-state coverage — Loading, Error, Empty, Success all render correctly |
-| UI-3 | Responsive layout — desktop (1280px), tablet (768px), mobile (375px) |
-| UI-4 | Dark mode support — if applicable, toggle and verify contrast/colors |
-| UI-5 | Keyboard navigation — Tab order logical, Enter/Space activate controls |
-| UI-6 | Screen reader labels — aria-label, aria-describedby, alt text present |
-| UI-7 | Interactions work — click handlers, form submit, pagination, modals |
-| UI-8 | Data formats match spec — dates, currency, percentages, number formatting |
+Read `agents/knowledge/ui-review-protocol.md` (section: Verification Checklist) for the full UI-1 through UI-8 table.
 
 ## Verification Report Format
 
-After checking all components, produce this report. **Do NOT exit without it.**
-
-```json
-{
-  "verdict": "approved | changes_requested",
-  "reasoning": "overall assessment of UI implementation quality",
-  "components_checked": ["ComponentA", "ComponentB"],
-  "findings": [
-    {
-      "component": "ComponentName",
-      "check": "UI-3",
-      "state": "loading | error | empty | success",
-      "severity": "high | medium | low",
-      "issue": "Layout breaks at 375px — sidebar overlaps main content",
-      "screenshot": "path/to/screenshot.png",
-      "suggestion": "Add responsive breakpoint for sidebar collapse"
-    }
-  ],
-  "checklist": {
-    "UI-1": "pass | fail | skip (reason)",
-    "UI-2": "pass | fail | skip (reason)",
-    "UI-3": "pass | fail | skip (reason)",
-    "UI-4": "pass | fail | skip (reason)",
-    "UI-5": "pass | fail | skip (reason)",
-    "UI-6": "pass | fail | skip (reason)",
-    "UI-7": "pass | fail | skip (reason)",
-    "UI-8": "pass | fail | skip (reason)"
-  }
-}
-```
+See `agents/knowledge/ui-review-protocol.md` (section: Output Format) for the JSON schema.
 
 ## Completion Gate
 
-**Do NOT exit without producing the verification report above.** Every check must have a pass/fail/skip status. Skipped checks must include a reason.
+See `agents/knowledge/ui-review-protocol.md` (section: Completion Gate).
 
 ## Anti-Patterns
 

@@ -30,46 +30,15 @@ Find UI issues that static analysis cannot catch. Uses browser automation (Playw
 
 ## Verification Checklist
 
-| # | Check | Method |
-|---|-------|--------|
-| UI-1 | Page loads without errors | `shell`: Playwright script — navigate, check `page.title()`, capture console errors |
-| UI-2 | Key DOM elements present | `shell`: Playwright script — `page.locator()` for expected selectors |
-| UI-3 | Interactive states work | `shell`: Playwright script — click, hover, focus — verify state changes |
-| UI-4 | Form inputs validate | `shell`: Playwright script — submit empty/invalid, check error messages |
-| UI-5 | Responsive layout | `shell`: Playwright script — `page.setViewportSize()` at 320px, 768px, 1280px |
-| UI-6 | Accessibility (runtime) | `shell`: `npx playwright test --project=chromium` with `@axe-core/playwright` or `quorum tool a11y_scan --path src/` |
-| UI-7 | No console errors | `shell`: Playwright script — `page.on('console')` listener, filter `error` level |
-| UI-8 | Visual regression | `shell`: Playwright screenshot comparison (if baseline exists) |
+Read `agents/knowledge/ui-review-protocol.md` (section: Verification Checklist) for the full UI-1 through UI-8 table. All browser automation uses `shell` + Playwright scripts.
 
 ## Verification Report
 
-Output as JSON:
-
-```json
-{
-  "verdict": "approved | changes_requested | infra_failure",
-  "checks": [
-    {
-      "id": "UI-1",
-      "name": "Page loads",
-      "status": "pass | fail | skip",
-      "details": "description or error message",
-      "screenshot": "path/to/screenshot.png (if captured)"
-    }
-  ],
-  "console_errors": [],
-  "a11y_violations": [],
-  "reasoning": "summary of UI review",
-  "confidence": 0.85
-}
-```
+See `agents/knowledge/ui-review-protocol.md` (section: Output Format) for the JSON schema.
 
 ## Completion Gate
 
-1. All 8 checks have a status (pass, fail, or skip with reason)
-2. Console errors list is populated (empty array if none)
-3. Verdict reflects the highest-severity failure
-4. Screenshots captured for any failed checks
+See `agents/knowledge/ui-review-protocol.md` (section: Completion Gate).
 
 ## Anti-Patterns
 

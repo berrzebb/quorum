@@ -17,11 +17,11 @@ Read the corresponding reference when entering each phase:
 
 | Phase | Reference | When |
 |-------|-----------|------|
-| **Task complexity tiers** | `references/tiers.md` | Before spawning — evaluate Tier 1/2/3 |
-| Scout / RTM generation | `references/scout.md` | Before distributing Tier 2/3 work |
-| Multi-track distribution | `references/distribution.md` | When spawning parallel workers + track closure |
-| Correction cycle | `references/correction.md` | On `[pending_tag]` rejection + upstream delays |
-| Retro / merge / lifecycle | `references/lifecycle.md` | After `[agree_tag]` + session end audit |
+| **Task complexity tiers** | `skills/orchestrator/references/tiers.md` | Before spawning — evaluate Tier 1/2/3 |
+| Scout / RTM generation | `skills/orchestrator/references/scout.md` | Before distributing Tier 2/3 work |
+| Multi-track distribution | `skills/orchestrator/references/distribution.md` | When spawning parallel workers + track closure |
+| Correction cycle | `skills/orchestrator/references/correction.md` | On `[pending_tag]` rejection + upstream delays |
+| Retro / merge / lifecycle | `skills/orchestrator/references/lifecycle.md` | After `[agree_tag]` + session end audit |
 
 ## Execution Context
 
@@ -117,8 +117,8 @@ Write Handoff -> next task -> loop
 When worker completes:
 1. Read worker's **worktree** watch_file (not main repo)
 2. Query verdict from SQLite: `quorum tool audit_history --summary --json`
-3. `[agree_tag]` -> proceed to Retro & Merge (read `references/lifecycle.md`)
-4. `[pending_tag]` -> Correction Cycle (read `references/correction.md`)
+3. `[agree_tag]` -> proceed to Retro & Merge (read `skills/orchestrator/references/lifecycle.md`)
+4. `[pending_tag]` -> Correction Cycle (read `skills/orchestrator/references/correction.md`)
 
 ## Available Analysis Tools (20)
 
@@ -138,11 +138,11 @@ All tools: `quorum tool <tool_name> --json`
 
 - Do NOT implement code yourself — spawn workers
 - Do NOT spawn new agent for corrections — send message to existing agent
-- Do NOT declare track "done" without pre-close scout (see `references/distribution.md`)
+- Do NOT declare track "done" without pre-close scout (see `skills/orchestrator/references/distribution.md`)
 - Do NOT hold worker context in your window — read from files
 - Do NOT distribute overlapping scopes in parallel
 - Do NOT exceed 3 concurrent agents
 - Do NOT retry same approach 3+ times — escalate to user (interactive) or auto-block (headless)
 - Do NOT skip retrospective
-- Do NOT exit without Session Summary (see `references/lifecycle.md`)
+- Do NOT exit without Session Summary (see `skills/orchestrator/references/lifecycle.md`)
 - **Do NOT ask questions in headless mode** — take safe default action

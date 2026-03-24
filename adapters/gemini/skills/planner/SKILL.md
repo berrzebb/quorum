@@ -8,6 +8,9 @@ allowed-tools: read_file, write_file, shell, glob, grep
 
 # Planner Protocol (Gemini)
 
+## References
+Shared references at `skills/planner/references/`. Read the relevant reference before each phase.
+
 Analyze feature requests, maintain PRDs, define tracks. Do not generate documents immediately — understand, research, confirm scope first.
 
 ## Gemini Tool Mapping
@@ -32,17 +35,17 @@ Config: `.quorum/config.json` — `consensus.planning_dirs`, `plugin.locale`.
 
 | Document | Level | Location | Reference |
 |----------|-------|----------|-----------|
-| PRD | Project | `{planning_dir}/PRD.md` | `references/prd.md` |
-| Execution Order | Project | `{planning_dir}/execution-order.md` | `references/execution-order.md` |
-| Work Catalog | Project | `{planning_dir}/work-catalog.md` | `references/work-catalog.md` |
-| ADR | Project | `{planning_dir}/adr/ADR-{NNN}-{slug}.md` | `references/adr.md` |
-| Track README | Track | `{planning_dir}/{track}/README.md` | `references/track-readme.md` |
-| Work Breakdown | Track | `{planning_dir}/{track}/work-breakdown.md` | `references/work-breakdown.md` |
-| API Contract | Track | `{planning_dir}/{track}/api-contract.md` | `references/api-contract.md` |
-| Test Strategy | Track | `{planning_dir}/{track}/test-strategy.md` | `references/test-strategy.md` |
-| UI Spec | Track | `{planning_dir}/{track}/ui-spec.md` | `references/ui-spec.md` |
-| Data Model | Track | `{planning_dir}/{track}/data-model.md` | `references/data-model.md` |
-| **Design Phase** | Track | `{planning_dir}/{track}/design/` | `references/design-phase.md` |
+| PRD | Project | `{planning_dir}/PRD.md` | `skills/planner/references/prd.md` |
+| Execution Order | Project | `{planning_dir}/execution-order.md` | `skills/planner/references/execution-order.md` |
+| Work Catalog | Project | `{planning_dir}/work-catalog.md` | `skills/planner/references/work-catalog.md` |
+| ADR | Project | `{planning_dir}/adr/ADR-{NNN}-{slug}.md` | `skills/planner/references/adr.md` |
+| Track README | Track | `{planning_dir}/{track}/README.md` | `skills/planner/references/track-readme.md` |
+| Work Breakdown | Track | `{planning_dir}/{track}/work-breakdown.md` | `skills/planner/references/work-breakdown.md` |
+| API Contract | Track | `{planning_dir}/{track}/api-contract.md` | `skills/planner/references/api-contract.md` |
+| Test Strategy | Track | `{planning_dir}/{track}/test-strategy.md` | `skills/planner/references/test-strategy.md` |
+| UI Spec | Track | `{planning_dir}/{track}/ui-spec.md` | `skills/planner/references/ui-spec.md` |
+| Data Model | Track | `{planning_dir}/{track}/data-model.md` | `skills/planner/references/data-model.md` |
+| **Design Phase** | Track | `{planning_dir}/{track}/design/` | `skills/planner/references/design-phase.md` |
 
 Read the reference guide before writing any document. References at: `skills/planner/references/`.
 
@@ -56,7 +59,7 @@ What problem? What does done look like? Who benefits? Scope boundary? Dependenci
 
 ## Phase 1.5: MECE Decomposition
 
-Before writing the PRD, perform structured requirements decomposition. Read `references/mece-decomposition.md` for the full guide.
+Before writing the PRD, perform structured requirements decomposition. Read `skills/planner/references/mece-decomposition.md` for the full guide.
 
 1. **Actor Decomposition** — identify all stakeholders (ME: no role overlap)
 2. **System Decomposition** — derive required systems per actor (ME: clear boundaries)
@@ -95,7 +98,7 @@ Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. Present DRM,
 
 ## Phase 5.5: FDE Failure Checklist
 
-After DRM confirmation, before drafting Work Breakdowns, analyze failure scenarios for P0/P1 FRs. Read `references/fde-checklist.md` for the full guide.
+After DRM confirmation, before drafting Work Breakdowns, analyze failure scenarios for P0/P1 FRs. Read `skills/planner/references/fde-checklist.md` for the full guide.
 
 1. For each P0/P1 FR, build a failure table (scenario, severity, impact, mitigation, new WB?)
 2. HIGH severity failures — mandatory new WB
