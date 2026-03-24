@@ -850,11 +850,10 @@ export function checkDesignGate(planningDir, trackName) {
 export function createConsensusAuditors(roles, cwd) {
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    // Synchronous dynamic import not possible — use cached modules
-    // Factory is a TS module, load from dist/
     const factoryPath = resolve(DIST, "providers", "auditors", "factory.js");
-    // Return a promise-like that the caller can await or use directly
-    return import(toURL(factoryPath)).then(mod => mod.createConsensusAuditors(roles, cwd ?? _store?._dbPath?.replace(/[/\\][^/\\]+$/, "") ?? process.cwd()));
+    return import(toURL(factoryPath)).then(mod =>
+      mod.createConsensusAuditors(roles, cwd ?? process.cwd())
+    );
   } catch { return null; }
 }
 
