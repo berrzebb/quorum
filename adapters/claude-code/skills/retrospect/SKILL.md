@@ -1,7 +1,9 @@
 ---
 name: quorum:retrospect
-description: "Extract learnings from audit history and conversation, manage memories, clean up stale entries. Use after completing a track, during retrospective (③ memory step), at end of session, or anytime the user wants memory maintenance. Triggers on 'what did we learn', 'memory cleanup', 'review learnings', 'retrospective', 'update memories', '회고', '메모리 정리'."
+description: "Extract learnings from audit history and conversation, manage memories, clean up stale entries. Use after completing a track, during retrospective (③ memory step), at end of session, or for memory maintenance. Triggers on 'what did we learn', 'memory cleanup', 'review learnings', 'retrospective', 'update memories', 'session wrap-up', '회고', '메모리 정리', '뭘 배웠지'."
 argument-hint: "[track name or 'all']"
+model: claude-sonnet-4-6
+allowed-tools: Read, Write, Grep, Glob, Bash(node *), Bash(git log*)
 ---
 
 # Retrospect Protocol

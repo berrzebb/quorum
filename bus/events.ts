@@ -77,7 +77,20 @@ export type EventType =
   // Fitness
   | "fitness.compute"
   | "fitness.gate"
-  | "fitness.trend";
+  | "fitness.trend"
+  // Audit lifecycle (escalation)
+  | "audit.escalate"
+  | "audit.downgrade"
+  | "audit.retry"
+  // Finding ownership
+  | "finding.ownership_transferred"
+  // Parliament
+  | "parliament.session.start"
+  | "parliament.debate.round"
+  | "parliament.amendment.propose"
+  | "parliament.amendment.vote"
+  | "parliament.convergence"
+  | "parliament.session.digest";
 
 // ── Typed payloads ────────────────────────────────────
 
@@ -196,6 +209,15 @@ export interface EvidenceSubmitPayload {
   scope?: string;
 }
 
+/** Payload for evidence.write — raw evidence content stored in SQLite as single source of truth. */
+export interface EvidenceContentPayload {
+  watchFile: string;
+  content: string;
+  changedFiles: string[];
+  triggerTag: string;
+  scope?: string;
+}
+
 export interface ReviewProgressPayload {
   reviewerId: string;
   provider: string;
@@ -235,6 +257,89 @@ export interface SpecialistSpawnPayload {
   parentReviewerId?: string;
 }
 
+// ── Audit escalation types ───────────────────────────
+
+export interface AuditEscalatePayload {
+  fromTier: "T1" | "T2" | "T3";
+  toTier: "T1" | "T2" | "T3";
+  reason: string;
+  consecutiveFailures: number;
+}
+
+export interface AuditRetryPayload {
+  round: number;
+  previousVerdict: "approved" | "changes_requested" | "infra_failure";
+  reason: string;
+}
+
+export interface FindingOwnershipTransferredPayload {
+  findingId: string;
+  fromAgent: string;
+  toAgent: string;
+  reason: string;
+}
+
+// ── Parliament types ────────────────────────────────
+
+export type ParliamentRole = "advocate" | "devil" | "judge" | "specialist" | "implementer";
+
+export interface ParliamentSessionStartPayload {
+  participants: Array<{ role: ParliamentRole; agentId: string }>;
+  agenda: string[];
+  votingRule: "majority";
+  sessionType: "morning" | "afternoon";
+}
+
+export interface ParliamentDebateRoundPayload {
+  round: number;
+  speaker: string;
+  role: ParliamentRole;
+  opinion: string;
+  confidence?: number;
+}
+
+export interface ParliamentAmendmentProposePayload {
+  amendmentId: string;
+  target: "prd" | "design" | "wb" | "scope";
+  change: string;
+  sponsor: string;
+  justification: string;
+}
+
+export interface ParliamentAmendmentVotePayload {
+  amendmentId: string;
+  voter: string;
+  position: "for" | "against" | "abstain";
+  confidence: number;
+}
+
+export type MeetingClassification = "gap" | "strength" | "out" | "buy" | "build";
+
+export interface ParliamentConvergencePayload {
+  classifications: Array<{
+    item: string;
+    classification: MeetingClassification;
+    action: string;
+  }>;
+  registers: {
+    statusChanges: string[];
+    decisions: string[];
+    requirementChanges: string[];
+    risks: string[];
+  };
+  convergenceScore: number;
+}
+
+export interface ParliamentSessionDigestPayload {
+  sessionType: "morning" | "afternoon";
+  agendaItems: string[];
+  classifications: Record<MeetingClassification, number>;
+  amendmentsProposed: number;
+  amendmentsApproved: number;
+  convergenceScore: number;
+  summary: string;
+}
+
 // ── Fitness types ────────────────────────────────────
 
 export interface FitnessComponent {
@@ -247,11 +352,13 @@ export interface FitnessComponent {
 export interface FitnessScore {
   total: number;       // 0.0-1.0 weighted sum
   components: {
-    typeSafety: FitnessComponent;    // weight 0.25 — as any count, type errors
-    testCoverage: FitnessComponent;  // weight 0.25 — line/branch coverage
+    typeSafety: FitnessComponent;    // weight 0.20 — as any count, type errors
+    testCoverage: FitnessComponent;  // weight 0.20 — line/branch coverage
     patternScan: FitnessComponent;   // weight 0.20 — HIGH findings count
     buildHealth: FitnessComponent;   // weight 0.15 — tsc + eslint pass rate
-    complexity: FitnessComponent;    // weight 0.15 — avg cyclomatic complexity
+    complexity: FitnessComponent;    // weight 0.10 — avg cyclomatic complexity
+    security: FitnessComponent;      // weight 0.10 — security issues count
+    dependencies: FitnessComponent;  // weight 0.05 — deprecated/vulnerable deps
   };
   timestamp: number;
   snapshotId: string;

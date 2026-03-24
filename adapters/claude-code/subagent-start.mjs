@@ -47,50 +47,17 @@ try {
   }
 } catch { /* marker read error — skip */ }
 
-// 2. Pending audit status (from watch file)
+// 2. Audit status
 try {
-  const { REPO_ROOT, consensus, findWatchFile, findRespondFile, STATUS_TAG_RE } = await import("../../core/context.mjs");
+  const { REPO_ROOT } = await import("../../core/context.mjs");
+  const { readAuditStatus } = await import("../../adapters/shared/audit-state.mjs");
 
-  const watchPath = findWatchFile();
-  if (watchPath && existsSync(watchPath)) {
-    const watchContent = readFileSync(watchPath, "utf8");
-    const lines = watchContent.split(/\r?\n/);
-
-    // Extract diff basis from evidence
-    for (const line of lines) {
-      if (line.includes("git diff") && line.includes("..")) {
-        contextParts.push(`📋 Evidence diff basis: ${line.trim()}`);
-        break;
-      }
-    }
-
-    // Extract current status tag
-    for (const line of lines) {
-      const m = STATUS_TAG_RE.exec(line);
-      if (m) {
-        contextParts.push(`📋 Current audit status: ${line.trim()}`);
-        break;
-      }
-    }
+  const status = readAuditStatus(REPO_ROOT);
+  if (status) {
+    contextParts.push(`📋 Current audit status: ${status.status ?? "unknown"} (pending: ${status.pendingCount ?? 0})`);
   }
 
-  // 3. Latest auditor feedback (rejection codes)
-  const respondPath = findRespondFile();
-  if (respondPath && existsSync(respondPath)) {
-    const respondContent = readFileSync(respondPath, "utf8");
-    // Extract rejection codes from pending items
-    const rejections = [];
-    for (const line of respondContent.split(/\r?\n/)) {
-      if (line.includes(consensus.pending_tag)) {
-        rejections.push(line.trim());
-      }
-    }
-    if (rejections.length > 0) {
-      contextParts.push(`🔴 Pending rejections (${rejections.length}):\n${rejections.slice(0, 5).join("\n")}`);
-    }
-  }
-
-  // 4. Handoff state (active tracks)
+  // 3. Handoff state (active tracks)
   const handoffPath = resolve(REPO_ROOT, ".claude", "session-handoff.md");
   if (existsSync(handoffPath)) {
     const handoff = readFileSync(handoffPath, "utf8");

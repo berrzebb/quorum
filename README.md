@@ -40,7 +40,7 @@ quorum setup                   # creates config + MCP server registration
 quorum daemon                  # TUI dashboard
 ```
 
-Works with **any AI coding tool** — Claude Code, Codex, Cursor, Gemini, or manual use.
+Works with **any AI coding tool** — Claude Code, Codex, Gemini, or manual use.
 
 ### As a Claude Code plugin
 
@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 15 lifecycle hooks, 19 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 19 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -63,7 +63,20 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 gemini extensions link adapters/gemini
 ```
 
-This registers 5 hooks, 8 skills, 4 commands, and 19 MCP tools. Same audit engine as Claude Code.
+### As a Codex CLI hook
+
+For automatic hook integration with OpenAI Codex CLI:
+
+```bash
+# Copy hooks config to project
+cp adapters/codex/hooks/hooks.json .codex/hooks.json
+# Enable hooks feature flag
+codex -c features.codex_hooks=true
+```
+
+This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
+
+This registers 11 hooks, 8 skills, 4 commands, and 19 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -154,9 +167,10 @@ quorum/
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
 └── adapters/
-    ├── shared/       ← adapter-agnostic business logic (8 modules)
-    ├── claude-code/  ← Claude Code hooks (15) + agents (12) + skills (9)
-    └── gemini/       ← Gemini CLI hooks (5) + skills (8) + commands (4)
+    ├── shared/       ← adapter-agnostic business logic (17 modules, incl. HookRunner, NDJSON, MuxAdapter)
+    ├── claude-code/  ← Claude Code hooks (22) + agents (12) + skills (9)
+    ├── gemini/       ← Gemini CLI hooks (11) + skills (8) + commands (4)
+    └── codex/        ← Codex CLI hooks (5)
 ```
 
 The `adapters/` layer is **optional**. Everything above it runs independently. Adding a new adapter requires only I/O wrappers — business logic is in `adapters/shared/`.
@@ -258,6 +272,55 @@ Not every change needs full consensus. A 10-factor scoring system (6 base + doma
 | T2 | 0.3–0.7 | Simple (single auditor) |
 | T3 | > 0.7 | Deliberative (3-role) |
 
+### 3-Layer Adapter Pattern (v0.4.2)
+
+어댑터 간 비즈니스 로직 공유. I/O만 런타임별로 다르다:
+
+```
+I/O (adapters/{adapter}/)
+  Claude Code: hookSpecificOutput, permissionDecision
+  Gemini CLI:  JSON-only stdout, hookSpecificOutput
+  Codex CLI:   .codex/hooks.json, config.toml
+      ↓ readStdinJson() + withBridge() + createHookContext()
+Business Logic (adapters/shared/ — 17 modules)
+  hook-runner, hook-loader, trigger-runner, ndjson-parser,
+  cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
+      ↓ bridge.init() + bridge.checkHookGate()
+Core (core/)
+  audit, tools (19 MCP), EventStore, bus, providers
+```
+
+새 어댑터 추가 시 ~280줄이면 된다 (Codex 어댑터 기준).
+
+### HookRunner Engine (v0.4.2)
+
+사용자 정의 훅. `config.json` 또는 `HOOK.md`에 작성:
+
+```jsonc
+// .claude/quorum/config.json
+{
+  "hooks": {
+    "audit.submit": [
+      { "name": "freeze-guard", "handler": { "type": "command", "command": "node scripts/check-freeze.mjs" } }
+    ]
+  }
+}
+```
+
+command/http 핸들러, 환경변수 보간 (`$VAR`, `${VAR}`), deny-first-break, 비동기 fire-and-forget, regex 매처 필터링.
+
+### Multi-Model NDJSON Protocol (v0.4.2)
+
+3개 CLI 런타임의 출력을 통합 파싱:
+
+| Runtime | Format | Adapter |
+|---------|--------|---------|
+| Claude Code | `stream-json` | `ClaudeCliAdapter` |
+| Codex | `exec --json` | `CodexCliAdapter` |
+| Gemini | `stream-json` | `GeminiCliAdapter` |
+
+모두 `AgentOutputMessage` (assistant_chunk, tool_use, tool_result, complete, error)로 변환된다. `MuxAdapter`가 ProcessMux(tmux/psmux) 세션을 연결해서 실시간 크로스 모델 합의에 쓴다.
+
 ### Stagnation Detection
 
 If the audit loop cycles without progress, 5 patterns are detected:
@@ -325,13 +388,12 @@ The planner skill produces 10 document types for structured project planning:
 
 quorum is provider-agnostic. Bring your own auditor.
 
-| Provider | Mechanism | Plugin needed? |
-|----------|-----------|---------------|
-| Claude Code | 15 native hooks | Optional (auto-triggers) |
-| Gemini CLI | 5 hooks + 8 skills | Optional (`gemini extensions install`) |
-| Codex | File watch + state polling | No |
-| Cursor | — | Planned |
-| Manual | `quorum audit` | No |
+| Provider | Mechanism | Hooks | Plugin needed? |
+|----------|-----------|-------|---------------|
+| Claude Code | 22 native hooks | SessionStart, PreToolUse, PostToolUse, Stop, PermissionRequest, Notification, ... | Optional (auto-triggers) |
+| Gemini CLI | 11 hooks + 8 skills | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, BeforeModel, ... | Optional (`gemini extensions install`) |
+| Codex CLI | 5 hooks | SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse | Optional (`.codex/hooks.json`) |
+| Manual | `quorum audit` | — | No |
 
 ## Tools & Verification
 
@@ -380,7 +442,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 812 tests
+npm test                # 921 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```
@@ -390,8 +452,8 @@ npm run build           # compile
 GitHub Actions builds cross-platform binaries on tag push:
 
 ```bash
-git tag v0.4.1
-git push origin v0.4.1
+git tag v0.4.2
+git push origin v0.4.2
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 binaries in Releases
 ```
 

@@ -1,8 +1,9 @@
 ---
 name: quorum:orchestrator
-description: "Session orchestrator for quorum — reads handoff, picks unblocked tasks, distributes to parallel workers, tracks agent assignments, manages correction cycles via SendMessage. Use when starting a work session with pending tasks, distributing implementation work, or reviewing completed worker output."
+description: "Session orchestrator for quorum — reads handoff, picks unblocked tasks, distributes to parallel workers, tracks agent assignments, manages correction cycles. Use when starting a work session, distributing implementation work, reviewing completed output, or managing multi-agent workflows. Triggers on 'start session', 'distribute tasks', 'what's next', 'assign work', '세션 시작', 'orchestrate'."
 argument-hint: "[optional: task-id to assign]"
 disable-model-invocation: true
+allowed-tools: Read, Grep, Glob, Bash(node *), Bash(git *)
 ---
 
 # Orchestrator Protocol
@@ -35,8 +36,9 @@ Read the corresponding reference when entering each phase:
 Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
 - `consensus.watch_file` → evidence file path
 - `consensus.planning_dirs` → design document directories
-- `plugin.respond_file` → auditor verdict file
 - `plugin.handoff_file` → session handoff path (default: `.claude/session-handoff.md`)
+
+Note: verdicts are in **SQLite** — query via `audit_history` tool or `quorum status`, not from markdown files.
 
 ## Session Start
 
@@ -90,16 +92,38 @@ Write Handoff → next task → loop
 2. Gather context files:
    - Done criteria: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/done-criteria.md`
    - Evidence format: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/evidence-format.md`
-3. Compose worker prompt with task context + scout blueprint (if available)
-4. Spawn implementer: `subagent_type: "quorum:implementer"`, `isolation: "worktree"`, `run_in_background: true`
-5. Record agent info in handoff, update status: `not-started` → `in-progress`
-6. **Continue working** — do not wait
+3. **Pre-spawn analysis** (for Tier 2/3 tasks):
+   ```bash
+   # Blast radius — estimate task impact before spawning
+   node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs blast_radius --path . --changed "<task-files>" --json
+   # Quality baseline — current state for comparison after implementation
+   node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern all --json
+   ```
+4. Compose worker prompt with task context + scout blueprint (if available) + blast radius data
+5. Spawn implementer: `subagent_type: "quorum:implementer"`, `isolation: "worktree"`, `run_in_background: true`
+6. Record agent info in handoff, update status: `not-started` → `in-progress`
+7. **Continue working** — do not wait
+
+## Available Analysis Tools
+
+The orchestrator can use any of the 20 analysis tools for pre-spawn assessment and post-completion verification:
+
+| Category | Tools |
+|----------|-------|
+| Structure | `code_map`, `dependency_graph`, `blast_radius`, `act_analyze` |
+| Quality | `audit_scan`, `coverage_map`, `perf_scan`, `observability_check` |
+| Domain | `a11y_scan`, `compat_check`, `i18n_validate`, `license_scan`, `infra_scan`, `doc_coverage` |
+| RTM | `rtm_parse`, `rtm_merge` |
+| Audit | `audit_history` |
+| Guide | `ai_guide` |
+
+All tools: `node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs <tool_name> --json`
 
 ## Result Verification
 
 When worker completes:
 1. Read worker's **worktree** watch_file (not main repo)
-2. Read verdict file from worker's worktree
+2. Query verdict from SQLite: `node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary --json`
 3. `[agree_tag]` → proceed to Retro & Merge (read `references/lifecycle.md`)
 4. `[pending_tag]` → Correction Cycle (read `references/correction.md`)
 

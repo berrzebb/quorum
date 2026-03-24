@@ -29,6 +29,8 @@ export interface DetectedDomains {
   i18n: boolean;
   /** Dockerfile, CI/CD, K8s manifests, env config. */
   infrastructure: boolean;
+  /** Auth, crypto, secrets, permissions, vulnerability patterns. */
+  security: boolean;
 }
 
 export interface DomainDetectionResult {
@@ -94,6 +96,12 @@ const PATH_PATTERNS: Record<keyof DetectedDomains, RegExp[]> = {
     /terraform|pulumi|cdk/i,
     /nginx|caddy|\.conf$/i,
     /\.env(\.|$)/i,
+  ],
+  security: [
+    /security|crypto|ssl|tls|owasp|cve/i,
+    /auth(ent|oriz)?/i,
+    /secret|key|token|credential/i,
+    /signature|sign|verify/i,
   ],
 };
 
@@ -168,6 +176,13 @@ const CONTENT_PATTERNS: Record<keyof DetectedDomains, RegExp[]> = {
     /resource:|replicas:|containers:/,
     /env:|secret:|configMap:/i,
   ],
+  security: [
+    /bcrypt|argon2|scrypt|pbkdf/i,
+    /JWT|oauth|SAML|openid/i,
+    /encrypt|decrypt|cipher|aes|rsa/i,
+    /permission|privilege|grant|revoke|rbac/i,
+    /sanitiz|escap|injection|xss|csrf/i,
+  ],
 };
 
 // ── Detector ─────────────────────────────────
@@ -193,6 +208,7 @@ export function detectDomains(
     concurrency: false,
     i18n: false,
     infrastructure: false,
+    security: false,
   };
 
   const reasons = new Map<keyof DetectedDomains, string[]>();

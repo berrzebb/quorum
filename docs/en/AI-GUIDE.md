@@ -35,7 +35,7 @@ Merge → squash → single commit → next track
 
 ## Trigger Evaluation
 
-Before each audit, a 6-factor score determines the consensus mode:
+Before each audit, a 10-factor score determines the consensus mode:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
@@ -45,6 +45,10 @@ Before each audit, a 6-factor score determines the consensus mode:
 | API surface | 0–0.15 | Public interface changes |
 | Cross-layer | 0–0.1 | BE + FE changes together |
 | Revert | -0.3 | Rollbacks reduce risk |
+| Domain signals | 0–0.1 | Specialist domain detected |
+| Plan document | 0–0.1 | Structured plan exists |
+| Fitness score | 0–0.1 | Quality metric from FitnessLoop |
+| Blast radius | 0–0.15 | Transitive impact ratio > 10% |
 
 Score → tier: < 0.3 = T1 skip, 0.3–0.7 = T2 simple, > 0.7 = T3 deliberative.
 
@@ -122,6 +126,7 @@ Use deterministic tools before LLM reasoning:
 | `observability_check` | Observability (empty catch, missing logging) |
 | `i18n_validate` | i18n key synchronization |
 | `doc_coverage` | Documentation-code alignment (JSDoc gaps) |
+| `blast_radius` | Transitive impact of changed files (BFS on reverse imports) |
 | `act_analyze` | PDCA Act analysis (improvement items) |
 | `ai_guide` | AI agent guide queries |
 
@@ -133,6 +138,7 @@ If the audit loop cycles without progress, quorum auto-detects:
 - **Oscillation**: A→B→A→B → recommend halt
 - **No drift**: identical codes repeating → recommend escalation
 - **Diminishing returns**: improvement declining → recommend escalation
+- **Fitness plateau**: fitness score slope ≈ 0 over last N evaluations → recommend escalation
 
 ## Session Gate
 

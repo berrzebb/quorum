@@ -137,7 +137,7 @@ This test harness validates the consensus-loop full cycle using a 3-track TypeSc
 ```
 
 ### Expected Output
-- gpt.md contains `[CHANGES_REQUESTED]` for SL-2
+- SQLite verdict contains `[CHANGES_REQUESTED]` for SL-2
 - Rejection code: `test-gap`
 - Completion Criteria Reset: "Create tests/service/validator.test.ts"
 - SL-1, SL-3 may be [APPROVED] if correct
@@ -199,7 +199,7 @@ This test harness validates the consensus-loop full cycle using a 3-track TypeSc
 ```
 
 ### Expected Output
-- gpt.md: [APPROVED] for all SL-* items
+- SQLite verdict: [APPROVED] for all SL-* items
 - claude.md: tags promoted to [APPROVED]
 - retro-marker.json: status `retro_pending`
 - After retro: session-gate unblocked

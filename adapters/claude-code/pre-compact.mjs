@@ -3,13 +3,14 @@
  * PreCompact hook: 컨텍스트 압축 전 감사 상태 스냅샷 저장.
  *
  * 압축 후 SessionStart에서 복원하여 감사 사이클 연속성을 보장한다.
- * 저장 대상: retro-marker, audit.lock 존재 여부, 마지막 감사 상태.
+ * 저장 대상: retro-marker, 마지막 감사 상태 (audit-status.json).
  *
  * Fail-open: 모든 에러는 무시하고 stdin을 그대로 통과시킨다.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
 import { execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,31 +53,17 @@ try {
     try { retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch { /* */ }
   }
 
-  // 2. audit.lock 존재 여부
-  const auditInProgress = existsSync(resolve(claudeDir, "audit.lock"));
-
-  // 3. watch_file에서 마지막 감사 상태 라인 추출
-  const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
-  const watchPath = resolve(REPO_ROOT, watchFile);
-  let lastAuditStatus = null;
-  if (existsSync(watchPath)) {
-    const content = readFileSync(watchPath, "utf8");
-    const tags = [
-      cfg.consensus?.trigger_tag, cfg.consensus?.agree_tag, cfg.consensus?.pending_tag,
-    ].filter(Boolean);
-    for (const line of content.split(/\r?\n/)) {
-      if (line.startsWith("## ") && tags.some((tag) => line.includes(tag))) {
-        lastAuditStatus = line.replace(/^##\s*/, "").trim();
-      }
-    }
-  }
+  // 2. Audit status
+  const status = readAuditStatus(resolve(claudeDir, ".."));
+  const lastAuditStatus = status
+    ? `${status.status ?? "unknown"} (pending: ${status.pendingCount ?? 0})`
+    : null;
 
   // 4. 스냅샷 저장
   if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
   writeFileSync(snapshotPath, JSON.stringify({
     saved_at: new Date().toISOString(),
     retro_marker: retroMarker,
-    audit_in_progress: auditInProgress,
     last_audit_status: lastAuditStatus,
   }, null, 2), "utf8");
 } catch {

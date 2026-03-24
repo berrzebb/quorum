@@ -83,7 +83,6 @@ describe("ClaudeCodeProvider", () => {
     await provider.start(bus, {
       repoRoot: tmpDir,
       watchFile: "docs/feedback/claude.md",
-      respondFile: "docs/feedback/verdict.md",
       auditor: { model: "codex" },
     });
 

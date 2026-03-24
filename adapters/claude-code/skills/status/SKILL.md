@@ -1,38 +1,91 @@
 ---
 name: quorum:status
-description: "Show current quorum status — pending reviews, audit state, retro marker, agent assignments. Use to check what's happening before starting work or after returning from a break."
+description: "Show current quorum gate status — audit verdicts, pending reviews, retro marker, active locks, agent assignments. All state from SQLite. Use to check what's happening before starting work, after a break, or to see audit results. Triggers on 'status', 'what's happening', 'show state', 'check gate', '현재 상태', '상태 확인'. Do NOT use for code verification — use quorum:verify instead."
+allowed-tools: Read, Bash(node *), Bash(git *)
 ---
 
 # Consensus Loop Status
 
-Check the current state of the feedback cycle.
+Check the current state of the quorum feedback cycle. All state lives in **SQLite** — this skill queries it and presents a summary.
 
-## Checks
+## Primary Command
 
-1. **Config**:
 ```bash
-node -e "const c=JSON.parse(require('fs').readFileSync('${CLAUDE_PLUGIN_ROOT}/core/config.json','utf8'));console.log('watch_file:',c.consensus.watch_file);console.log('trigger:',c.consensus.trigger_tag);console.log('agree:',c.consensus.agree_tag);console.log('pending:',c.consensus.pending_tag)"
+node ${CLAUDE_PLUGIN_ROOT}/cli/index.ts status
 ```
 
-2. **Audit lock**:
+This outputs gate state, pending items, recent verdicts, and active locks from SQLite.
+
+## Detailed Checks
+
+If the CLI is unavailable, gather status from individual sources:
+
+### 1. Config
+
 ```bash
-cat "$(git rev-parse --show-toplevel)/.claude/audit.lock" 2>/dev/null || echo "No audit running"
+node -e "const c=JSON.parse(require('fs').readFileSync('${CLAUDE_PLUGIN_ROOT}/core/config.json','utf8'));console.log(JSON.stringify({watch_file:c.consensus.watch_file,trigger:c.consensus.trigger_tag,agree:c.consensus.agree_tag,pending:c.consensus.pending_tag},null,2))"
 ```
 
-3. **Retro marker**:
+### 2. Gate State (SQLite)
+
 ```bash
-cat ${CLAUDE_PLUGIN_ROOT}/.session-state/retro-marker.json 2>/dev/null || echo "No retro pending"
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary --json
 ```
 
-4. **Session handoff** (if exists):
+Shows: last verdict, verdict counts, rejection patterns, timestamps.
+
+### 3. Active Locks
+
 ```bash
-head -30 "$(git rev-parse --show-toplevel)/.claude/session-handoff.md" 2>/dev/null || echo "No handoff"
+node -e "const s=require('${CLAUDE_PLUGIN_ROOT}/dist/bus/store.js');const db=new s.EventStore('.claude/quorum-events.db');console.log(JSON.stringify(db.queryLocks(),null,2))"
 ```
 
-## Output
+### 4. Retro Marker
 
-Summarize:
-- Tag counts (trigger/pending/agree items in watch file)
-- Audit status (running/idle, last timestamp)
-- Retro status (pending/complete)
-- Active agents (from handoff: in-progress tasks with agent_id)
+```bash
+cat "$(git rev-parse --show-toplevel)/.claude/retro-marker.json" 2>/dev/null || echo '{"retro_pending": false}'
+```
+
+### 5. Session Handoff (if exists)
+
+```bash
+head -30 "$(git rev-parse --show-toplevel)/.claude/session-handoff.md" 2>/dev/null || echo "No active handoff"
+```
+
+## Output Format
+
+Present a structured summary:
+
+```markdown
+## Quorum Status
+
+| Item | Value |
+|------|-------|
+| Gate State | approved / pending / idle |
+| Pending Items | N items with [trigger_tag] |
+| Last Verdict | [agree_tag] / [pending_tag] — timestamp |
+| Active Locks | N (list lock holders) |
+| Retro Status | pending / complete |
+| Active Agents | N (from handoff) |
+
+### Recent Verdicts
+| Item | Verdict | Time | Rejection Codes |
+|------|---------|------|----------------|
+| ... | ... | ... | ... |
+```
+
+## Interpretation Guide
+
+| State | Meaning | Next Action |
+|-------|---------|-------------|
+| **idle** | No pending audits, clean state | Start new work |
+| **approved** | All items passed audit | Run retrospective → merge |
+| **pending** | Items awaiting audit or rejected | Fix rejections → re-submit |
+| **locked** | Audit in progress | Wait for completion |
+
+## Execution Context
+
+| Context | Behavior |
+|---------|----------|
+| **Interactive** | Show formatted status → suggest next actions |
+| **Headless** | Output JSON status → exit |

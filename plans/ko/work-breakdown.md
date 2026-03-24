@@ -13,7 +13,7 @@
 1. `CL-1` 핵심 합의 루프 (트리거 → 감사 → 합의)
 2. `CL-2` 미확인 응답 자동 동기화
 3. `CL-3` 품질 규칙 통합 (ESLint, npm audit)
-4. `CL-4` 플래닝 문서 동기화 (gpt-only 정규화 패스)
+4. `CL-4` 플래닝 문서 동기화 (eliminated — gpt-only 패스는 SQLite verdict 전환으로 제거됨)
 5. `CL-5` 설정 추출 + Linux/Windows 호환성
 6. `CL-6` plans/ 문서 구조
 
@@ -51,7 +51,7 @@
 ## CL-4 플래닝 문서 동기화
 
 - 목표:
-  - planning_files 편집 → respond_script --gpt-only로 gpt-only 정규화 패스
+  - planning_files 편집 → (eliminated: --gpt-only 플래그 및 gpt-only 정규화 패스는 SQLite verdict 전환으로 제거됨)
 - 선행 조건:
   - CL-2
 - 주요 파일:

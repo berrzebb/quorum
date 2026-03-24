@@ -1,11 +1,14 @@
 /**
- * Shared audit state reader — reads audit status, retro marker, audit lock.
+ * Shared audit state reader — reads audit status and retro marker.
  *
- * Deduplicates state reading logic from session-start.mjs (L124-262)
- * and prompt-submit.mjs (L52-109). Returns pure data — no stdout writes.
+ * Deduplicates state reading logic from session-start.mjs and prompt-submit.mjs.
+ * Returns pure data — no stdout writes.
+ *
+ * Note: audit.lock file-based locking has been eliminated.
+ * ProcessMux + SQLite LockService now manage agent coordination.
  */
 
-import { readFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
@@ -37,39 +40,6 @@ export function readRetroMarker(adapterDir) {
     return JSON.parse(readFileSync(p, "utf8"));
   } catch {
     return null;
-  }
-}
-
-/**
- * Check audit.lock status — is an audit process currently running?
- *
- * @param {string} repoRoot — absolute path to repo root
- * @returns {{ exists: boolean, alive: boolean, pid?: number, ageMin?: number, cleaned?: boolean }}
- */
-export function checkAuditLock(repoRoot) {
-  const lockPath = resolve(repoRoot, ".claude", "audit.lock");
-  if (!existsSync(lockPath)) return { exists: false, alive: false };
-
-  try {
-    const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-    const ageMin = Math.round((Date.now() - (lock.startedAt ?? 0)) / 60000);
-
-    let alive = false;
-    if (lock.pid) {
-      try { process.kill(lock.pid, 0); alive = true; } catch { /* dead */ }
-    }
-
-    if (!alive) {
-      // Stale lock — clean up
-      rmSync(lockPath, { force: true });
-      return { exists: true, alive: false, pid: lock.pid, ageMin, cleaned: true };
-    }
-
-    return { exists: true, alive: true, pid: lock.pid, ageMin };
-  } catch {
-    // Corrupt lock file — clean up
-    rmSync(lockPath, { force: true });
-    return { exists: true, alive: false, cleaned: true };
   }
 }
 
@@ -110,20 +80,7 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
   const pendingTag = c.pending_tag ?? "[계류]";
   const watchFile = c.watch_file ?? "docs/feedback/claude.md";
 
-  // 1. Audit lock check
-  const lockState = checkAuditLock(repoRoot);
-  if (lockState.exists) {
-    if (lockState.cleaned) {
-      resumeActions.push(
-        `감사 프로세스(PID ${lockState.pid ?? "?"})가 ${lockState.ageMin ?? "?"}분 전 시작 후 종료됨. audit.lock 자동 정리 완료.`
-        + `\n  → watch_file의 ${triggerTag} 상태를 확인하고 필요 시 증거를 재제출하세요.`
-      );
-    } else if (lockState.alive) {
-      contextLines.push(`Background audit in progress (PID ${lockState.pid}, ${lockState.ageMin}min ago)`);
-    }
-  }
-
-  // 2. Audit status from marker
+  // 1. Audit status from marker
   const watchContent = readWatchContent(repoRoot, watchFile);
   const auditStatus = readAuditStatus(repoRoot);
   const hasTrigger = watchContent.includes(triggerTag);
@@ -138,7 +95,7 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
       + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
       + `\n  → 파일: ${watchFile} (${triggerTag} 유지)`
     );
-  } else if (hasTrigger && !isPending && !isApproved && !lockState.alive) {
+  } else if (hasTrigger && !isPending && !isApproved) {
     resumeActions.push(
       `${triggerTag} 증거가 제출되었으나 감사 결과가 없습니다.`
       + `\n  → 감사가 실행되지 않았거나 실패했을 수 있습니다. 증거를 재제출하세요.`
@@ -219,13 +176,7 @@ export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
     signals.push("회고 미완료 — Bash/Agent 차단 중. `echo session-self-improvement-complete` 로 해제");
   }
 
-  // 2. Audit lock
-  const lockState = checkAuditLock(repoRoot);
-  if (lockState.alive) {
-    signals.push(`감사 진행 중 (PID ${lockState.pid}, ${lockState.ageMin}분 경과) — 커밋 대기`);
-  }
-
-  // 3. Audit status
+  // 2. Audit status
   const watchContent = readWatchContent(repoRoot, watchFile);
   const auditStatus = readAuditStatus(repoRoot);
   const hasTrigger = watchContent.includes(triggerTag);
@@ -235,7 +186,7 @@ export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
   if (isPending && hasTrigger) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;
     signals.push(`${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
-  } else if (hasTrigger && !isPending && !isApproved && !lockState.alive) {
+  } else if (hasTrigger && !isPending && !isApproved) {
     signals.push(`${triggerTag} 제출됨 — 감사 대기 중`);
   } else if (isApproved && !hasTrigger) {
     signals.push(`${agreeTag} — 커밋 가능`);

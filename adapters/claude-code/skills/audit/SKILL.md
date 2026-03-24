@@ -1,12 +1,21 @@
 ---
 name: quorum:audit
-description: "Run a quorum audit manually — Codex reviews pending trigger_tag items in the watch file. Use when you want to trigger an audit without editing the watch file, re-run a failed audit, or test the audit prompt."
+description: "Run a quorum audit manually — trigger consensus review, re-run failed audits, test audit prompts, or force a specific provider. Use when the hook-based auto-trigger didn't fire, or you want explicit control. Triggers on 'run audit', 'audit again', 'review my code', 'check evidence', '감사 실행'."
 argument-hint: "[--dry-run | --no-resume | --auto-fix | --model <name>]"
+model: claude-sonnet-4-6
+allowed-tools: Read, Bash(node *), Bash(git *)
 ---
 
 # Manual Audit
 
-Run the audit process manually.
+Trigger the consensus audit process manually. The audit evaluates pending evidence items and produces verdicts stored in SQLite.
+
+## Setup
+
+Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
+- `consensus.watch_file` → evidence file path
+- `consensus.trigger_tag` / `agree_tag` / `pending_tag` → tag values
+- `consensus.roles` → provider-per-role mapping (advocate, devil, judge)
 
 ## Execute
 
@@ -14,20 +23,59 @@ Run the audit process manually.
 node ${CLAUDE_PLUGIN_ROOT}/core/audit.mjs {{ arguments }}
 ```
 
-## After Completion
-
-Read the verdict file (verdict.md) and summarize:
-- Verdict per item (agree_tag or pending_tag)
-- Rejection codes with reasons
-- Recommended next steps
-
 ## Options
 
 | Flag | Effect |
 |------|--------|
-| `--dry-run` | Print audit prompt without executing |
-| `--no-resume` | Fresh session (don't resume previous) |
-| `--auto-fix` | Auto-correct via Claude CLI after audit |
-| `--model <name>` | Model override (default: gpt-5.4) |
-| `--reset-session` | Delete saved session before running |
-| `--watch-file <path>` | Override watch file path (worktree support) |
+| `--dry-run` | Print the audit prompt without executing — use to preview what will be sent |
+| `--no-resume` | Start a fresh session (discard any saved Codex session) |
+| `--auto-fix` | After audit, auto-correct rejected items via Claude CLI |
+| `--model <name>` | Override auditor model (default from config) |
+| `--reset-session` | Delete saved session state before running |
+| `--watch-file <path>` | Override watch file path (useful for worktree audits) |
+
+## Verdict Flow
+
+Verdicts are stored in **SQLite** (not markdown files). The flow:
+
+```
+audit.mjs → provider reviews evidence
+  → verdict stored via bridge.recordTransition()
+  → audit-status.json marker written (fast-path for hooks)
+  → quorum status shows result
+```
+
+## After Completion
+
+Check the audit result:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary
+```
+
+Or use `quorum status` to see current gate state.
+
+Interpret the result:
+- **[agree_tag]** → consensus reached, proceed to retrospective → merge
+- **[pending_tag]** → rejection with codes — read rejection reasons, fix issues, re-submit evidence
+- **No verdict** → audit may have failed; check stderr output
+
+## Execution Context
+
+| Context | Behavior |
+|---------|----------|
+| **Interactive** | Run audit → show verdict summary → suggest next steps |
+| **Headless** | Run audit → output verdict → exit (caller reads audit-status.json) |
+
+In headless mode, do NOT ask follow-up questions. Output the result and exit.
+
+## Common Rejection Codes
+
+| Code | Meaning | Fix |
+|------|---------|-----|
+| `test-gap` | Missing or insufficient tests | Add tests covering the claimed changes |
+| `claim-drift` | Evidence claim doesn't match actual diff | Update claim to match git diff |
+| `scope-mismatch` | Changed files not listed in evidence | Update Changed Files section |
+| `quality-violation` | Code quality check failed | Fix lint/type errors |
+
+Full reference: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/rejection-codes.md`

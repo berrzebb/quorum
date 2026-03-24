@@ -52,7 +52,7 @@ try {
 
   // Restore audit state
   if (snapshot.audit_in_progress) {
-    parts.push("⚠️ Audit was in progress before compaction. Check .claude/audit.lock and audit-bg.log.");
+    parts.push("⚠️ Audit was in progress before compaction. Check audit-status.json and audit-bg.log.");
   }
 
   if (snapshot.last_audit_status) {

@@ -1,11 +1,14 @@
 /**
- * Stagnation Detection — 4 patterns that indicate the audit loop is cycling without progress.
+ * Stagnation Detection — 7 patterns that indicate the audit loop is cycling without progress.
  *
  * Analyzes event history to detect:
  * 1. Spinning: same verdict output 3+ times (SHA-256 hash)
  * 2. Oscillation: A→B→A→B alternation pattern
  * 3. No drift: verdict score unchanged across consecutive audits
  * 4. Diminishing returns: improvement rate monotonically declining
+ * 5. Fitness plateau: fitness score slope near-zero
+ * 6. Expansion: rejection codes increasing (getting worse, not better)
+ * 7. Consensus divergence: opinion confidence declining across rounds
  *
  * Returns detection results with confidence scores and recommended actions.
  */
@@ -14,7 +17,7 @@ import { createHash } from "node:crypto";
 import type { QuorumEvent } from "./events.js";
 import { computeTrend } from "./fitness.js";
 
-export type StagnationPattern = "spinning" | "oscillation" | "no-drift" | "diminishing-returns" | "fitness-plateau";
+export type StagnationPattern = "spinning" | "oscillation" | "no-drift" | "diminishing-returns" | "fitness-plateau" | "expansion" | "consensus-divergence";
 
 export interface StagnationResult {
   detected: boolean;
@@ -41,6 +44,10 @@ export interface StagnationConfig {
   plateauEpsilon?: number;
   /** Min data points before plateau detection (default: 5). */
   plateauMinPoints?: number;
+  /** Min consecutive rounds of increasing codes to detect expansion (default: 3). */
+  expansionWindow?: number;
+  /** Min rounds for consensus divergence detection (default: 3). */
+  divergenceWindow?: number;
 }
 
 const DEFAULTS: Required<StagnationConfig> = {
@@ -50,6 +57,8 @@ const DEFAULTS: Required<StagnationConfig> = {
   diminishingWindow: 3,
   plateauEpsilon: 0.005,
   plateauMinPoints: 5,
+  expansionWindow: 3,
+  divergenceWindow: 3,
 };
 
 /**
@@ -96,6 +105,14 @@ export function detectStagnation(
     const plateau = detectFitnessPlateau(fitnessHistory, cfg.plateauEpsilon, cfg.plateauMinPoints);
     if (plateau) patterns.push(plateau);
   }
+
+  // 6. Expansion: verdict codes increasing (getting worse)
+  const expansion = detectExpansion(verdictEvents, cfg.expansionWindow);
+  if (expansion) patterns.push(expansion);
+
+  // 7. Consensus divergence: opinion agreement declining across rounds
+  const divergence = detectConsensusDivergence(verdictEvents, cfg.divergenceWindow);
+  if (divergence) patterns.push(divergence);
 
   const detected = patterns.length > 0;
   const recommendation = deriveRecommendation(patterns);
@@ -234,6 +251,65 @@ function detectFitnessPlateau(
   return null;
 }
 
+function detectExpansion(
+  events: QuorumEvent[],
+  window: number,
+): DetectedPattern | null {
+  // Count rejection codes per verdict — increasing codes = getting worse
+  const codeCounts = events.map((e) => ((e.payload.codes as string[]) ?? []).length);
+  if (codeCounts.length < window + 1) return null;
+
+  const recent = codeCounts.slice(-window - 1);
+  let expanding = true;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i]! <= recent[i - 1]!) {
+      expanding = false;
+      break;
+    }
+  }
+
+  if (expanding) {
+    const firstCount = recent[0]!;
+    const lastCount = recent[recent.length - 1]!;
+    return {
+      type: "expansion",
+      confidence: Math.min(1, (lastCount - firstCount) / Math.max(firstCount, 1)),
+      detail: `Rejection codes increasing: ${firstCount} → ${lastCount} over ${window} rounds`,
+    };
+  }
+  return null;
+}
+
+function detectConsensusDivergence(
+  events: QuorumEvent[],
+  window: number,
+): DetectedPattern | null {
+  // Check if confidence scores are declining across recent verdicts
+  const confidences = events
+    .map((e) => e.payload.confidence as number | undefined)
+    .filter((c): c is number => c !== undefined);
+
+  if (confidences.length < window) return null;
+
+  const recent = confidences.slice(-window);
+  let declining = true;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i]! >= recent[i - 1]!) {
+      declining = false;
+      break;
+    }
+  }
+
+  if (declining) {
+    return {
+      type: "consensus-divergence",
+      confidence: Math.min(1, (recent[0]! - recent[recent.length - 1]!) / Math.max(recent[0]!, 0.01)),
+      detail: `Consensus confidence declining: ${recent[0]!.toFixed(2)} → ${recent[recent.length - 1]!.toFixed(2)} over ${window} rounds`,
+    };
+  }
+  return null;
+}
+
 // ── Recommendation logic ──────────────────────
 
 function deriveRecommendation(patterns: DetectedPattern[]): StagnationResult["recommendation"] {
@@ -260,6 +336,13 @@ function deriveRecommendation(patterns: DetectedPattern[]): StagnationResult["re
 
   // Fitness plateau → escalate (scores not improving despite changes)
   if (types.has("fitness-plateau")) return "escalate";
+
+  // Expansion (getting worse) → halt immediately
+  if (types.has("expansion") && maxConfidence > 0.6) return "halt";
+  if (types.has("expansion")) return "lateral";
+
+  // Consensus divergence → lateral (try different approach)
+  if (types.has("consensus-divergence")) return "lateral";
 
   return "escalate";
 }

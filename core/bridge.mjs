@@ -259,6 +259,14 @@ export function setState(key, value) {
   }
 }
 
+/**
+ * Get the latest submitted evidence content from KV store.
+ * Returns { content, watchFile, changedFiles, timestamp } or null.
+ */
+export function getLatestEvidence() {
+  return getState("evidence:latest");
+}
+
 // ── State transitions (replaces markdown tag management) ──
 
 /**

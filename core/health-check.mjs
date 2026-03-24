@@ -2,11 +2,11 @@
  * Health Check — diagnose issues that could trap agents.
  *
  * Scans for:
- * 1. Unresolved placeholders in gpt.md / evidence files
- * 2. Stale lock files (audit.lock with dead PID or expired TTL)
+ * 1. Unresolved placeholders in evidence files
+ * 2. (removed — ProcessMux manages agent coordination, locks eliminated)
  * 3. Orphan retro markers (retro-marker without active session)
  * 4. Stagnation in audit history (spinning/oscillation)
- * 5. Zombie worktrees (branch deleted but worktree remains)
+ * 5. Zombie worktrees (branch deleted but directory remains)
  * 6. Config mismatches (planning_dirs pointing to nonexistent dirs)
  * 7. Missing template files referenced in config
  * 8. Broken import paths in hooks
@@ -19,22 +19,10 @@ import { execFileSync } from "node:child_process";
 export function runHealthCheck(repoRoot) {
   const issues = [];
 
-  // 1. Unresolved placeholders
   checkPlaceholders(repoRoot, issues);
-
-  // 2. Stale locks
-  checkStaleLocks(repoRoot, issues);
-
-  // 3. Orphan retro markers
   checkRetroMarkers(repoRoot, issues);
-
-  // 4. Audit history stagnation
   checkAuditStagnation(repoRoot, issues);
-
-  // 5. Zombie worktrees + stale verdicts (single git call)
   checkWorktrees(repoRoot, issues);
-
-  // 6. Config integrity
   checkConfig(repoRoot, issues);
 
   return issues;
@@ -71,39 +59,6 @@ function checkPlaceholders(_repoRoot, _issues) {
   // No file-based placeholder checks needed.
 }
 
-function checkStaleLocks(repoRoot, issues) {
-  const lockPaths = findFiles(repoRoot, "audit.lock", 5);
-  const TTL_MS = 30 * 60 * 1000;
-
-  for (const lockPath of lockPaths) {
-    try {
-      const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-      const age = Date.now() - (lock.startedAt ?? 0);
-
-      // PID check
-      let alive = false;
-      if (lock.pid) {
-        try { process.kill(lock.pid, 0); alive = true; } catch { /* dead */ }
-      }
-
-      if (!alive) {
-        issues.push({
-          severity: "critical",
-          category: "stale-lock",
-          message: `Dead audit.lock: PID ${lock.pid} not running (${relative(repoRoot, lockPath)})`,
-          fix: `rm "${lockPath}"`,
-        });
-      } else if (age > TTL_MS) {
-        issues.push({
-          severity: "warning",
-          category: "stale-lock",
-          message: `Expired audit.lock: ${Math.round(age / 60000)}min old (TTL: 30min)`,
-          fix: `rm "${lockPath}"`,
-        });
-      }
-    } catch { /* skip */ }
-  }
-}
 
 function checkRetroMarkers(repoRoot, issues) {
   const markers = findFiles(repoRoot, "retro-marker.json", 5);

@@ -57,8 +57,6 @@ export interface ProviderConfig {
   repoRoot: string;
   /** Watch file path (relative to repoRoot). */
   watchFile: string;
-  /** Respond file path (relative to repoRoot). */
-  respondFile: string;
   /** Trigger tag to detect evidence submissions (e.g. "[REVIEW_NEEDED]"). */
   triggerTag?: string;
   /** Auditor to use for this provider. */

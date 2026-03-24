@@ -35,7 +35,7 @@ function parseArgs(argv) {
     if (arg === "--auto-fix") args.autoFix = true;
     else if (arg === "--dry-run") args.dryRun = true;
     else if (arg === "--watch-file") args.watchFile = argv[++i] ?? null;
-    else if (arg === "--gpt-only" || arg === "--no-sync-next") { /* compat: ignore legacy flags */ }
+    else if (arg === "--no-sync-next") { /* compat: ignore legacy flag */ }
     else if (arg === "-h" || arg === "--help") {
       console.log("Usage: node respond.mjs [--auto-fix] [--dry-run] [--watch-file <path>]");
       process.exit(0);
@@ -106,7 +106,7 @@ function runAutoFix(codes) {
     .replace(/\{\{REJECT_CODES\}\}/g, codes.join(", "))
     .replace(/\{\{RESET_CRITERIA\}\}/g, codes.join(", "))
     .replace(/\{\{NEXT_TASKS\}\}/g, "")
-    .replace(/\{\{GPT_MD\}\}/g, verdictText)
+    .replace(/\{\{VERDICT_TEXT\}\}/g, verdictText)
     .replace(/\{\{WATCH_FILE\}\}/g, claudePath ?? "")
     .replace(/\{\{CLAUDE_MD_PATH\}\}/g, claudePath ?? "")
     .replace(/\{\{TRIGGER_TAG\}\}/g, consensus.trigger_tag)

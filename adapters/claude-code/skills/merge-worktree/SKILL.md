@@ -1,6 +1,6 @@
 ---
 name: quorum:merge
-description: "Squash-merge a worktree branch into the target branch with a structured commit message. Use after audit consensus and retrospective completion."
+description: "Squash-merge a worktree branch into the target branch with a structured commit message. Use after audit consensus ([agree_tag]) and retrospective completion. Triggers on 'merge worktree', 'squash merge', 'finalize work', 'merge back to main', '워크트리 머지'. Do NOT use for regular git merge — this is specifically for quorum worktree branches."
 argument-hint: "[target-branch]"
 disable-model-invocation: true
 context: fork
@@ -85,6 +85,19 @@ Follow phases in order. Do NOT skip phases.
    - Tests (new or updated)
    - Docs (documentation)
    - Chore (build, CI, tooling)
+
+---
+
+### Phase 2.5: Doc-Sync (Automatic)
+
+Before generating the commit message, run doc-sync to ensure documentation reflects the current code state:
+
+1. **Spawn doc-sync agent** in headless mode — it extracts facts from code and fixes mismatches in all 8 doc files.
+2. **Wait for completion** — the agent outputs a Doc-Sync Report.
+3. **If fixes were made**: stage the changed doc files (`git add README.md README.ko.md docs/`). These become part of the squash commit.
+4. **If no fixes needed**: proceed.
+
+This step is automatic and does not require user confirmation. It prevents the recurring problem of documentation drifting from code across versions.
 
 ---
 

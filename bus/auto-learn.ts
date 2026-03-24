@@ -14,6 +14,7 @@ import type {
   AuditVerdictPayload,
   FindingSeverity,
 } from "./events.js";
+import { detectStagnation, type StagnationPattern } from "./stagnation.js";
 
 // ── Types ────────────────────────────────────
 
@@ -43,9 +44,22 @@ export interface RuleSuggestion {
   confidence: number;
 }
 
+export interface StagnationLearning {
+  /** File patterns associated with stagnation. */
+  filePatterns: string[];
+  /** Which stagnation patterns were detected. */
+  stagnationTypes: StagnationPattern[];
+  /** Boost to add to trigger score for matching files (0.0-0.15). */
+  triggerBoost: number;
+  /** Number of stagnation events in history. */
+  occurrences: number;
+}
+
 export interface LearningSummary {
   patterns: RepeatPattern[];
   suggestions: RuleSuggestion[];
+  /** Stagnation-based trigger adjustments. */
+  stagnationLearnings: StagnationLearning[];
   /** Total events analyzed. */
   eventsAnalyzed: number;
 }
@@ -230,10 +244,91 @@ function generateRuleText(p: RepeatPattern): string {
   return lines.join("\n");
 }
 
+// ── Stagnation Learning ─────────────────────
+
+/**
+ * Learn from stagnation history: which file patterns cause repeated stagnation?
+ * Returns trigger boost values for matching file patterns.
+ */
+export function learnFromStagnation(store: EventStore): StagnationLearning[] {
+  const verdictEvents = store.query({ eventType: "audit.verdict" });
+  if (verdictEvents.length < 3) return [];
+
+  // Group verdicts by trackId to detect per-track stagnation
+  const trackGroups = new Map<string, typeof verdictEvents>();
+  for (const e of verdictEvents) {
+    const track = e.trackId ?? "default";
+    const group = trackGroups.get(track) ?? [];
+    group.push(e);
+    trackGroups.set(track, group);
+  }
+
+  const learnings: StagnationLearning[] = [];
+
+  for (const [_track, events] of trackGroups) {
+    const result = detectStagnation(events);
+    if (!result.detected) continue;
+
+    // Extract file patterns from findings related to this track
+    const filePatterns = extractAffectedFiles(store, events);
+    const stagnationTypes = result.patterns.map(p => p.type);
+    const maxConfidence = Math.max(...result.patterns.map(p => p.confidence));
+
+    // Boost proportional to confidence and pattern severity
+    const triggerBoost = Math.min(0.15, maxConfidence * 0.15);
+
+    learnings.push({
+      filePatterns,
+      stagnationTypes,
+      triggerBoost,
+      occurrences: result.patterns.length,
+    });
+  }
+
+  return learnings;
+}
+
+/**
+ * Get the stagnation-based trigger boost for a set of changed files.
+ * Used by trigger.ts to auto-escalate files with stagnation history.
+ */
+export function getStagnationBoost(
+  learnings: StagnationLearning[],
+  changedFiles: string[],
+): number {
+  let maxBoost = 0;
+  for (const learning of learnings) {
+    for (const changed of changedFiles) {
+      if (learning.filePatterns.some(p => changed.includes(p) || p.includes(changed))) {
+        maxBoost = Math.max(maxBoost, learning.triggerBoost);
+      }
+    }
+  }
+  return maxBoost;
+}
+
+function extractAffectedFiles(store: EventStore, verdictEvents: { trackId?: string }[]): string[] {
+  const trackIds = new Set(verdictEvents.map(e => e.trackId).filter(Boolean));
+  const files = new Set<string>();
+
+  // Gather files from finding.detect events in same tracks
+  const findings = store.query({ eventType: "finding.detect" });
+  for (const e of findings) {
+    if (trackIds.size > 0 && e.trackId && !trackIds.has(e.trackId)) continue;
+    const p = e.payload as unknown as FindingDetectPayload;
+    if (!p.findings) continue;
+    for (const f of p.findings) {
+      if (f.file) files.add(f.file);
+    }
+  }
+
+  return [...files].slice(0, 10); // Cap at 10 patterns
+}
+
 // ── Combined Analysis ────────────────────────
 
 /**
- * Run full learning analysis: detect patterns → generate suggestions.
+ * Run full learning analysis: detect patterns → generate suggestions + stagnation learning.
  */
 export function analyzeAndSuggest(store: EventStore): LearningSummary {
   const detectCount = store.count({ eventType: "finding.detect" });
@@ -241,10 +336,12 @@ export function analyzeAndSuggest(store: EventStore): LearningSummary {
 
   const patterns = detectRepeatPatterns(store);
   const suggestions = suggestRules(patterns);
+  const stagnationLearnings = learnFromStagnation(store);
 
   return {
     patterns,
     suggestions,
+    stagnationLearnings,
     eventsAnalyzed: detectCount + verdictCount,
   };
 }

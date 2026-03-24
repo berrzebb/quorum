@@ -170,31 +170,6 @@ describe("shared/audit-state", () => {
     assert.equal(marker?.rx_id, "test-123");
   });
 
-  it("checks audit lock — no lock", async () => {
-    const { checkAuditLock } = await import("../adapters/shared/audit-state.mjs");
-    const emptyDir = resolve(TEST_DIR, "no-lock");
-    mkdirSync(resolve(emptyDir, ".claude"), { recursive: true });
-    const result = checkAuditLock(emptyDir);
-    assert.equal(result.exists, false);
-    assert.equal(result.alive, false);
-  });
-
-  it("cleans up stale audit lock", async () => {
-    const lockDir = resolve(TEST_DIR, "stale-lock");
-    mkdirSync(resolve(lockDir, ".claude"), { recursive: true });
-    writeFileSync(
-      resolve(lockDir, ".claude", "audit.lock"),
-      JSON.stringify({ pid: 999999, startedAt: Date.now() - 600000 })
-    );
-
-    const { checkAuditLock } = await import("../adapters/shared/audit-state.mjs");
-    const result = checkAuditLock(lockDir);
-    assert.equal(result.exists, true);
-    assert.equal(result.alive, false);
-    assert.equal(result.cleaned, true);
-    assert.ok(!existsSync(resolve(lockDir, ".claude", "audit.lock")));
-  });
-
   it("builds status signals", async () => {
     // Setup: approved audit status
     writeFileSync(

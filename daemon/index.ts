@@ -13,7 +13,6 @@ import React from "react";
 import { render } from "ink";
 import { QuorumBus } from "../bus/bus.js";
 import { EventStore } from "../bus/store.js";
-import { LockService } from "../bus/lock.js";
 import { createEvent } from "../bus/events.js";
 import { ClaudeCodeProvider } from "../providers/claude-code/adapter.js";
 import { registerProvider, listProviders } from "../providers/provider.js";
@@ -34,7 +33,6 @@ interface DaemonConfig extends ProviderConfig {
 function loadConfig(repoRoot: string): DaemonConfig {
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
   let watchFile = "docs/feedback/claude.md";
-  let respondFile = "docs/feedback/verdict.md";
   let auditorModel = "codex";
   let triggerTag = "[REVIEW_NEEDED]";
   let agreeTag = "[APPROVED]";
@@ -45,9 +43,6 @@ function loadConfig(repoRoot: string): DaemonConfig {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
       watchFile = cfg.consensus?.watch_file ?? watchFile;
-      respondFile = cfg.plugin?.respond_file
-        ? watchFile.replace(/[^/]+$/, cfg.plugin.respond_file)
-        : respondFile;
       auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
       triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
       agreeTag = cfg.consensus?.agree_tag ?? agreeTag;
@@ -61,7 +56,6 @@ function loadConfig(repoRoot: string): DaemonConfig {
   return {
     repoRoot,
     watchFile,
-    respondFile,
     triggerTag,
     agreeTag,
     pendingTag,
@@ -130,7 +124,6 @@ export default async function startDaemon(): Promise<void> {
     pendingTag: config.pendingTag,
   });
   const watchPath = resolve(repoRoot, config.watchFile);
-  const respondPath = resolve(repoRoot, config.respondFile);
   // selfHeal runs only when new events exist since last check (avoids no-op cycles)
   let lastSelfHealTimestamp = 0;
   const selfHealInterval = setInterval(() => {
@@ -140,7 +133,7 @@ export default async function startDaemon(): Promise<void> {
       if (latestTs === lastSelfHealTimestamp) return;
       lastSelfHealTimestamp = latestTs;
 
-      const diffs = projector.selfHeal(watchPath, respondPath);
+      const diffs = projector.selfHeal(watchPath);
       if (diffs.length > 0) {
         bus.emit(createEvent("evidence.sync", "claude-code", {
           staleDiffs: diffs.length,
@@ -150,18 +143,12 @@ export default async function startDaemon(): Promise<void> {
     } catch { /* non-critical */ }
   }, 30_000);
 
-  // Bootstrap: only scan files if SQLite has no prior events.
+  // Bootstrap: only scan minimal state if SQLite has no prior events.
   // When SQLite has data (normal operation), StateReader handles everything.
   const hasExistingData = store.query({ limit: 1 }).length > 0;
   if (!hasExistingData) {
-    bootstrapFromFiles(repoRoot, config, bus);
+    bootstrapFromState(repoRoot, config, bus);
   }
-  const lockService = new LockService(store.getDb());
-
-  // Periodic maintenance: clean expired locks
-  const maintenanceInterval = setInterval(() => {
-    try { lockService.cleanExpired(); } catch { /* non-critical */ }
-  }, 10_000);
 
   // Config refresh (lazy import to avoid circular deps with MJS module)
   let _refreshConfig: (() => void) | null = null;
@@ -180,7 +167,6 @@ export default async function startDaemon(): Promise<void> {
 
   // Graceful shutdown
   await waitUntilExit();
-  clearInterval(maintenanceInterval);
   clearInterval(configInterval);
   clearInterval(selfHealInterval);
   for (const provider of listProviders()) {
@@ -190,57 +176,27 @@ export default async function startDaemon(): Promise<void> {
 }
 
 /**
- * Bootstrap: scan existing file state and emit initial events.
- * This populates the TUI with the current state of the project,
- * not just events that happen after daemon starts.
+ * Bootstrap: emit initial events from lightweight state markers.
+ * SQLite is the single source of truth — this only bootstraps from
+ * audit-status.json marker and git metadata. No watch file parsing.
+ * ProcessMux manages agents — no lock files.
  */
-function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: QuorumBus): void {
-  // 1. Evidence file — pending/approved/rejected items
-  const watchPath = resolve(repoRoot, config.watchFile);
-  if (existsSync(watchPath)) {
-    const content = readFileSync(watchPath, "utf8");
-    const pending = (content.match(/\[REVIEW_NEEDED\]/g) ?? []).length;
-    const approved = (content.match(/\[APPROVED\]/g) ?? []).length;
-    const rejected = (content.match(/\[CHANGES_REQUESTED\]/g) ?? []).length;
-
-    if (pending > 0) {
-      bus.emit(createEvent("audit.submit", "claude-code", {
-        file: watchPath,
-        pending,
-        bootstrap: true,
-      }));
-    }
-    if (approved > 0) {
+function bootstrapFromState(repoRoot: string, config: ProviderConfig, bus: QuorumBus): void {
+  // 1. audit-status.json marker — last known verdict state
+  const statusPath = resolve(repoRoot, ".claude", "audit-status.json");
+  if (existsSync(statusPath)) {
+    try {
+      const status = JSON.parse(readFileSync(statusPath, "utf8"));
       bus.emit(createEvent("audit.verdict", "claude-code", {
-        verdict: "approved",
-        count: approved,
+        verdict: status.status ?? "unknown",
+        pendingCount: status.pendingCount ?? 0,
+        codes: status.rejectionCodes ?? [],
         bootstrap: true,
       }));
-    }
-    if (rejected > 0) {
-      bus.emit(createEvent("audit.verdict", "claude-code", {
-        verdict: "changes_requested",
-        count: rejected,
-        bootstrap: true,
-      }));
-    }
-    const infraFailures = (content.match(/\[INFRA_FAILURE\]/g) ?? []).length;
-    if (infraFailures > 0) {
-      bus.emit(createEvent("audit.verdict", "claude-code", {
-        verdict: "infra_failure",
-        count: infraFailures,
-        bootstrap: true,
-      }));
-    }
+    } catch { /* skip */ }
   }
 
-  // 2. Audit lock — active audit
-  const lockPath = resolve(repoRoot, ".claude", "audit.lock");
-  if (existsSync(lockPath)) {
-    bus.emit(createEvent("audit.start", "claude-code", { bootstrap: true }));
-  }
-
-  // 3. Retro marker — gate status
+  // 2. Retro marker — gate status
   const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
   if (existsSync(markerPath)) {
     try {
@@ -252,60 +208,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
     } catch { /* skip */ }
   }
 
-  // 4. Audit history JSONL — import recent verdicts for stagnation detection
-  const historyPath = resolve(repoRoot, ".claude", "audit-history.jsonl");
-  if (existsSync(historyPath)) {
-    const lines = readFileSync(historyPath, "utf8").trim().split("\n").filter(Boolean);
-    const recent = lines.slice(-10); // last 10 for stagnation context
-    for (const line of recent) {
-      try {
-        const entry = JSON.parse(line);
-        bus.emit(createEvent("audit.verdict", "claude-code", {
-          verdict: entry.verdict === "agree" ? "approved" : "changes_requested",
-          codes: entry.rejection_codes ?? [],
-          track: entry.track ?? "",
-          bootstrap: true,
-        }));
-      } catch { /* skip */ }
-    }
-  }
-
-  // 5. Active agents — from .claude/agents/*.json (written by quorum agent spawn)
-  //    Clean up zombie state files (process no longer running)
-  try {
-    const agentsDir = resolve(repoRoot, ".claude", "agents");
-    if (existsSync(agentsDir)) {
-      const { rmSync } = require("node:fs") as typeof import("node:fs");
-      for (const f of readdirSync(agentsDir)) {
-        if (!f.endsWith(".json")) continue;
-        try {
-          const agentPath = resolve(agentsDir, f);
-          const agent = JSON.parse(readFileSync(agentPath, "utf8"));
-
-          // Check if PID is still alive
-          let alive = false;
-          if (agent.pid) {
-            try { process.kill(agent.pid, 0); alive = true; } catch { /* dead */ }
-          }
-
-          if (alive) {
-            bus.emit(createEvent("agent.spawn", "claude-code", {
-              name: agent.name ?? f.replace(".json", ""),
-              role: agent.role ?? "worker",
-              pid: agent.pid,
-              backend: agent.backend,
-              bootstrap: true,
-            }));
-          } else {
-            // Zombie — remove stale state file
-            rmSync(agentPath, { force: true });
-          }
-        } catch { /* skip */ }
-      }
-    }
-  } catch { /* skip */ }
-
-  // 6. Active worktrees — git worktree list + evidence + commit history
+  // 3. Active worktrees — git worktree list + per-worktree audit-status.json
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
@@ -319,23 +222,18 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
       } else if (line.startsWith("branch ") && wtPath && wtPath !== repoRoot) {
         const branch = line.slice(7).trim().replace("refs/heads/", "");
 
-        // Read evidence from this worktree
+        // Read audit-status.json from worktree (no watch file parsing)
         let trackName = branch;
-        let evidenceStatus: "pending" | "approved" | "rejected" | "infra_failure" = "pending";
-        const wtWatchPath = resolve(wtPath, config.watchFile);
-        if (existsSync(wtWatchPath)) {
-          const content = readFileSync(wtWatchPath, "utf8");
-          const heading = content.match(/^##\s+\[([^\]]+)\]\s+(.*)/m);
-          if (heading) {
-            const tag = heading[1]!;
-            trackName = heading[2]!.trim();
-            if (tag === "APPROVED") evidenceStatus = "approved";
-            else if (tag === "CHANGES_REQUESTED") evidenceStatus = "rejected";
-            else if (tag === "INFRA_FAILURE") evidenceStatus = "infra_failure";
-          }
+        let verdictStatus = "pending";
+        const wtStatusPath = resolve(wtPath, ".claude", "audit-status.json");
+        if (existsSync(wtStatusPath)) {
+          try {
+            const ws = JSON.parse(readFileSync(wtStatusPath, "utf8"));
+            verdictStatus = ws.status ?? "pending";
+            if (ws.track) trackName = ws.track;
+          } catch { /* skip */ }
         }
 
-        // Agent event
         bus.emit(createEvent("agent.spawn", "claude-code", {
           name: branch,
           role: "implementer",
@@ -344,10 +242,9 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
           bootstrap: true,
         }));
 
-        // Evidence event for this worktree
-        if (evidenceStatus !== "pending") {
+        if (verdictStatus !== "pending") {
           bus.emit(createEvent("audit.verdict", "claude-code", {
-            verdict: evidenceStatus === "approved" ? "approved" : evidenceStatus === "infra_failure" ? "infra_failure" : "changes_requested",
+            verdict: verdictStatus,
             track: trackName,
             worktree: wtPath,
             bootstrap: true,
@@ -359,21 +256,7 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
     }
   } catch { /* git worktree not available */ }
 
-  // 7. Git commit history → track progress
-  try {
-    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
-    const log = execFileSync("git", ["log", "--oneline", "-10"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    });
-    for (const line of log.trim().split("\n").filter(Boolean)) {
-      bus.emit(createEvent("evidence.sync", "claude-code", {
-        commit: line,
-        bootstrap: true,
-      }));
-    }
-  } catch { /* skip */ }
-
-  // 8. RTM-based track progress
+  // 4. RTM-based track progress
   try {
     const searchDirs = [resolve(repoRoot, "docs"), resolve(repoRoot, "plans")];
     const rtmFiles: string[] = [];
@@ -390,7 +273,6 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
       for (const line of content.split(/\r?\n/)) {
         const trackMatch = line.match(/^##\s+(\w+)\s+Track/i);
         if (trackMatch) {
-          // Emit previous track
           if (currentTrack && total > 0) {
             bus.emit(createEvent("track.progress", "claude-code", {
               trackId: currentTrack,
@@ -413,7 +295,6 @@ function bootstrapFromFiles(repoRoot: string, config: ProviderConfig, bus: Quoru
         else if (status === "wip" || status.startsWith("partial")) wip++;
       }
 
-      // Emit last track
       if (currentTrack && total > 0) {
         bus.emit(createEvent("track.progress", "claude-code", {
           trackId: currentTrack,

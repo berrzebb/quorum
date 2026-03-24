@@ -1,6 +1,6 @@
 ---
 name: quorum:verify
-description: "Run all done-criteria checks (CQ/T/CC/CL/S/I/FV/CV) and produce a pass/fail verification report. Use after implementing code, before submitting evidence to the quorum audit."
+description: "Run all 8 done-criteria checks (CQ/T/CC/CL/S/I/FV/CV) with 20 analysis tools and 5-language registry. Produces a pass/fail verification report. Use after implementing code, before submitting evidence. Triggers on 'verify', 'check my code', 'run done-criteria', 'am I ready to submit', '검증', '구현 확인'. Do NOT use for audit status — use quorum:status instead."
 argument-hint: "[optional: specific category - CQ, T, CC, CL, S, I, FV, CV]"
 model: claude-sonnet-4-6
 allowed-tools: Read, Grep, Glob, Bash(npx *), Bash(node *), Bash(python *), Bash(cargo *), Bash(go *), Bash(ruff *), Bash(git diff *), Bash(git status *), Bash(cat *), Bash(ls *)
@@ -21,16 +21,22 @@ In headless mode, do NOT ask "should I fix this?" — output the report and exit
 
 ## Quick Reference
 
-| # | Category | Key Checks | Tool |
-|---|----------|-----------|------|
-| 1 | Code Quality (CQ) | Per-file + project-wide checks from `quality_rules.presets`, audit-scan type-safety | Bash |
-| 2 | Test (T) | Execute evidence test commands, check direct tests exist | Bash |
-| 3 | Claim-Code (CC) | Diff scope vs Changed Files | Bash, Grep |
-| 4 | Cross-Layer (CL) | BE→FE contracts, consumer existence | Read, Grep |
-| 5 | Security (S) | Input validation, auth guards, audit-scan hardcoded | Grep, Read |
-| 6 | i18n (I) | Locale keys in ALL locale files | Grep |
-| 7 | Frontend (FV) | Page loads, DOM elements, console errors, build | Browser (if FE) |
-| 8 | Coverage (CV) | stmt ≥ 85%, branch ≥ 75% per changed file | tool-runner.mjs |
+| # | Category | Key Checks | Tools |
+|---|----------|-----------|-------|
+| 1 | Code Quality (CQ) | Per-file + project-wide checks, type-safety, pattern violations | `audit_scan`, `perf_scan`, `compat_check`, `observability_check` |
+| 2 | Test (T) | Execute evidence test commands, verify direct tests exist | Bash (test runner) |
+| 3 | Claim-Code (CC) | Diff scope vs Changed Files match | `blast_radius`, git diff |
+| 4 | Cross-Layer (CL) | BE→FE contracts, consumer existence, import cycles | `dependency_graph`, `code_map` |
+| 5 | Security (S) | Input validation, auth guards, hardcoded secrets | `audit_scan --pattern hardcoded`, `license_scan` |
+| 6 | i18n (I) | Locale keys in ALL locale files, no hardcoded strings | `i18n_validate` |
+| 7 | Frontend (FV) | Page loads, DOM elements, console errors, build | `a11y_scan`, Browser (if FE) |
+| 8 | Coverage (CV) | stmt ≥ 85%, branch ≥ 75% per changed file | `coverage_map` |
+
+## Language-Aware Checks
+
+Domain scans are **language-aware** — auto-detect project languages and apply language-specific quality rules from `languages/{lang}/spec.{domain}.mjs` fragments. Supports TypeScript, Go, Python, Rust, Java.
+
+For the full coverage matrix and pattern format, read the language reference: `${CLAUDE_PLUGIN_ROOT}/skills/consensus-tools/references/languages.md`
 
 ## Workflow
 
@@ -40,14 +46,88 @@ In headless mode, do NOT ask "should I fix this?" — output the report and exit
 2. Read watch file → find section with `trigger_tag`
 3. Parse: Claim, Changed Files, Test Command, Test Result, Residual Risk
 4. Extract changed file list
+5. Detect project languages (auto via registry)
 
 No trigger_tag section → "No evidence to verify" → stop.
 
-### Steps 2-8: Run Checks
+### Step 2: Code Quality (CQ)
 
-Read `references/checks.md` for detailed commands and criteria per category.
+```bash
+# Type-safety and pattern scan
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern type-safety --json
 
-### Step 9: Verification Report
+# Performance patterns (hybrid: regex + AST)
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs perf_scan --path <changed-dir> --json
+
+# API compatibility
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs compat_check --path <changed-dir> --json
+
+# Observability (missing logging/metrics)
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs observability_check --path <changed-dir> --json
+```
+
+### Step 3: Test (T)
+
+Execute the test command from the evidence package. Verify actual output matches claimed result.
+
+### Step 4: Claim-Code (CC)
+
+```bash
+# Blast radius of changed files — verify claim scope matches actual impact
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs blast_radius --path . --changed "<changed-files>" --json
+```
+
+Compare `git diff --name-only` against the Changed Files in evidence. Flag any discrepancy.
+
+### Step 5: Cross-Layer (CL)
+
+```bash
+# Dependency graph — check for import cycles, cross-layer dependencies
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs dependency_graph --path <changed-dir> --json
+
+# Symbol map — verify exports consumed by other layers
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs code_map --path <changed-dir> --json
+```
+
+### Step 6: Security (S)
+
+```bash
+# Hardcoded values (secrets, URLs, credentials)
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern hardcoded --json
+
+# License compliance
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs license_scan --path . --json
+```
+
+### Step 7: i18n (I)
+
+```bash
+# Hardcoded strings, missing locale keys
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs i18n_validate --path <changed-dir> --json
+```
+
+### Step 8: Frontend (FV) — if applicable
+
+```bash
+# Accessibility scan (JSX/TSX files)
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs a11y_scan --path <changed-dir> --json
+
+# Doc coverage for component documentation
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs doc_coverage --path <changed-dir> --json
+```
+
+FE detection: check if changed files include `.tsx`, `.jsx`, or if `package.json` has React/Vue/Angular.
+
+### Step 9: Coverage (CV)
+
+```bash
+# Per-file coverage percentages
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs coverage_map --path <changed-dir> --json
+```
+
+Thresholds: stmt ≥ 85%, branch ≥ 75% per changed file.
+
+### Step 10: Verification Report
 
 ```markdown
 ## Verification Report
@@ -64,6 +144,8 @@ Read `references/checks.md` for detailed commands and criteria per category.
 | 8 | Coverage (CV) | PASS / X issues | ... |
 
 **Total: X/8 passed, Y issues found**
+**Languages detected: TypeScript, Go**
+**Domain scans run: perf, compat, observability, a11y**
 ```
 
 If all pass → "Ready for evidence submission."

@@ -27,13 +27,7 @@ export async function run(args: string[]): Promise<void> {
 
   console.log("\n\x1b[36mquorum audit\x1b[0m — manual audit trigger\n");
 
-  // Check lock
-  const lockPath = resolve(repoRoot, ".claude", "audit.lock");
-  if (existsSync(lockPath)) {
-    console.log("  \x1b[33m⚠ Audit already in progress\x1b[0m");
-    console.log("  Run 'quorum status' to check current state\n");
-    return;
-  }
+  // Note: audit.lock eliminated — ProcessMux + SQLite LockService manage agent coordination.
 
   // Check watch file
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");

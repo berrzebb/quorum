@@ -11,7 +11,6 @@
     "session_file": "session.id",
     "debug_log": "debug.log",
     "fix_prompt": "templates/fix-prompt.md",
-    "respond_file": "verdict.md",
     "retro_script": "retrospective.mjs",
     "retro_prompt": "templates/retro-prompt.md",
 
@@ -59,9 +58,6 @@
       "reset_criteria_text":  "The scope must confirm that `{focus}` corrections and related lint/test re-passes are verified before promoting to `{agree_tag}`."
     }
   },
-
-  "_hooks_readme": "User-defined hooks fired at quorum lifecycle events. Also loads from HOOK.md in repo root. command handlers receive JSON on stdin, output JSON on stdout. exit 2 = deny.",
-  "hooks": {},
 
   "quality_rules": [
     {

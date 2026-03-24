@@ -398,14 +398,12 @@ describe("pre-compact snapshot", () => {
     if (snapDir && existsSync(snapDir)) rmSync(snapDir, { recursive: true, force: true });
   });
 
-  function createSnapshot(markerPath, lockPath) {
+  // createSnapshot now only captures retro-marker (audit.lock eliminated — ProcessMux manages coordination)
+  function createSnapshot(markerPath) {
     const snapshot = {};
 
     if (existsSync(markerPath)) {
       try { snapshot.retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch { /* skip */ }
-    }
-    if (existsSync(lockPath)) {
-      try { snapshot.auditLock = JSON.parse(readFileSync(lockPath, "utf8")); } catch { /* skip */ }
     }
     snapshot.timestamp = new Date().toISOString();
     return snapshot;
@@ -415,66 +413,19 @@ describe("pre-compact snapshot", () => {
     const marker = join(snapDir, "retro-marker.json");
     writeFileSync(marker, JSON.stringify({ retro_pending: true, session_id: "s1" }));
 
-    const snapshot = createSnapshot(marker, join(snapDir, "audit.lock"));
+    const snapshot = createSnapshot(marker);
     assert.ok(snapshot.retroMarker);
     assert.equal(snapshot.retroMarker.retro_pending, true);
   });
 
-  it("captures audit.lock in snapshot", () => {
-    const lock = join(snapDir, "audit.lock");
-    writeFileSync(lock, JSON.stringify({ pid: 12345, startedAt: Date.now() }));
-
-    const snapshot = createSnapshot(join(snapDir, "retro-marker.json"), lock);
-    assert.ok(snapshot.auditLock);
-    assert.equal(snapshot.auditLock.pid, 12345);
-  });
-
   it("handles missing files gracefully", () => {
-    const snapshot = createSnapshot(join(snapDir, "missing1.json"), join(snapDir, "missing2.json"));
+    const snapshot = createSnapshot(join(snapDir, "missing1.json"));
     assert.ok(snapshot.timestamp);
     assert.equal(snapshot.retroMarker, undefined);
-    assert.equal(snapshot.auditLock, undefined);
   });
 });
 
-// ═══ 6. audit.lock liveness check ═══════════════════════════════════════
-
-describe("audit.lock liveness", () => {
-  function isLockStale(lockData, ttlMs = 30 * 60 * 1000) {
-    if (!lockData) return true;
-    const { pid, startedAt } = lockData;
-
-    // TTL expired
-    if (Date.now() - startedAt > ttlMs) return true;
-
-    // PID check
-    try {
-      process.kill(pid, 0); // signal 0 = check existence
-      return false; // process alive
-    } catch {
-      return true; // process dead
-    }
-  }
-
-  it("considers missing lock as stale", () => {
-    assert.ok(isLockStale(null));
-  });
-
-  it("considers expired TTL as stale", () => {
-    const lock = { pid: process.pid, startedAt: Date.now() - 31 * 60 * 1000 };
-    assert.ok(isLockStale(lock));
-  });
-
-  it("considers current process as alive", () => {
-    const lock = { pid: process.pid, startedAt: Date.now() };
-    assert.ok(!isLockStale(lock));
-  });
-
-  it("considers dead PID as stale", () => {
-    const lock = { pid: 999999, startedAt: Date.now() };
-    assert.ok(isLockStale(lock));
-  });
-});
+// ═══ 6. (Removed — audit.lock liveness tests eliminated, ProcessMux manages coordination) ═══
 
 // ═══ 7. debounce logic ══════════════════════════════════════════════════
 

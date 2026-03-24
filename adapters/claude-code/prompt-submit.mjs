@@ -10,6 +10,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -64,48 +65,15 @@ if (existsSync(retroMarker)) {
   } catch { /* parse error */ }
 }
 
-// 2. Audit lock active?
-const auditLock = resolve(REPO_ROOT, ".claude", "audit.lock");
-if (existsSync(auditLock)) {
-  try {
-    const lock = JSON.parse(readFileSync(auditLock, "utf8"));
-    const ageMin = Math.round((Date.now() - (lock.startedAt ?? 0)) / 60000);
-    // PID liveness check
-    let alive = false;
-    if (lock.pid) { try { process.kill(lock.pid, 0); alive = true; } catch { /* dead */ } }
-    if (alive) {
-      signals.push(`🔍 감사 진행 중 (PID ${lock.pid}, ${ageMin}분 경과) — 커밋 대기`);
-    }
-  } catch { /* lock parse error */ }
-}
-
-// 3. Audit status (from audit-status.json marker — no verdict file needed)
-const watchPath = resolve(REPO_ROOT, watchFile);
-const auditStatusPath = resolve(REPO_ROOT, ".claude", "audit-status.json");
-
-if (existsSync(watchPath)) {
-  try {
-    const wc = readFileSync(watchPath, "utf8");
-    const hasTrigger = wc.includes(triggerTag);
-
-    // Read audit status from marker file
-    let auditStatus = null;
-    if (existsSync(auditStatusPath)) {
-      try { auditStatus = JSON.parse(readFileSync(auditStatusPath, "utf8")); } catch { /* parse error */ }
-    }
-
-    const isPending = auditStatus?.status === "changes_requested";
-    const isApproved = auditStatus?.status === "approved";
-
-    if (isPending && hasTrigger) {
-      const codeCount = auditStatus.rejectionCodes?.length ?? 0;
-      signals.push(`❌ ${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
-    } else if (hasTrigger && !isPending && !isApproved && !existsSync(auditLock)) {
-      signals.push(`📋 ${triggerTag} 제출됨 — 감사 대기 중`);
-    } else if (isApproved && !hasTrigger) {
-      signals.push(`✅ ${agreeTag} — 커밋 가능`);
-    }
-  } catch { /* watch file read error */ }
+// 2. Audit status
+const auditStatus = readAuditStatus(REPO_ROOT);
+if (auditStatus) {
+  if (auditStatus.status === "changes_requested") {
+    const codeCount = auditStatus.rejectionCodes?.length ?? 0;
+    signals.push(`❌ ${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
+  } else if (auditStatus.status === "approved") {
+    signals.push(`✅ ${agreeTag} — 커밋 가능`);
+  }
 }
 
 // ── No signals → fast exit ───────────────────────────────────

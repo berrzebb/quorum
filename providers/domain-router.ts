@@ -122,6 +122,14 @@ const DOMAIN_REVIEWERS: DomainReviewer[] = [
     agentMinTier: "T2",
     codes: ["infra-unsafe", "infra-config"],
   },
+  {
+    domain: "security",
+    displayName: "Security Reviewer",
+    tool: undefined,
+    agent: "security-reviewer",
+    agentMinTier: "T2",
+    codes: ["security-vulnerability", "secret-exposure", "auth-weakness"],
+  },
 ];
 
 // ── Tier comparison ──────────────────────────

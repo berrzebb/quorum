@@ -10,7 +10,6 @@
     "session_file": "session.id",
     "debug_log": "debug.log",
     "fix_prompt": "fix-prompt.md",
-    "respond_file": "verdict.md",
     "retro_script": "retrospective.mjs",
     "retro_prompt": "templates/retro-prompt.md"
   },

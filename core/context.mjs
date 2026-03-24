@@ -211,7 +211,6 @@ const TAG_INNER_RE_G = new RegExp(tagAlts, "g");
 
 // ── Path resolution (memoized) ────────────────────────────
 let _watchPath = undefined;
-let _respondPath = undefined;
 
 function probeFile(subPath, name) {
   const dirs = [resolve(HOOKS_DIR, subPath), resolve(REPO_ROOT, subPath)];
@@ -232,18 +231,9 @@ export function findWatchFile() {
   return _watchPath;
 }
 
-export function findRespondFile() {
-  if (_respondPath !== undefined && _respondPath !== null) return _respondPath;
-  const respondName = plugin.respond_file ?? "verdict.md";
-  const subPath = consensus.watch_file.split("/").slice(0, -1).join("/");
-  _respondPath = probeFile(subPath, respondName);
-  return _respondPath;
-}
-
 /** Reset memoization cache — for testing. */
 function resetPathCache() {
   _watchPath = undefined;
-  _respondPath = undefined;
 }
 
 // ── i18n (cached) ─────────────────────────────────────────

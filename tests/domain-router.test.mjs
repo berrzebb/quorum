@@ -270,9 +270,9 @@ describe("getActiveRejectionCodes", () => {
 });
 
 describe("listDomainReviewers", () => {
-  it("returns all 9 reviewers", () => {
+  it("returns all 10 reviewers", () => {
     const all = listDomainReviewers();
-    assert.equal(all.length, 9);
+    assert.equal(all.length, 10);
   });
 });
 

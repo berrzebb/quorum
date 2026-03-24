@@ -1,7 +1,7 @@
 {
   "name": "quorum",
   "version": "0.4.2",
-  "description": "Cross-model audit gate — multi-adapter (Claude Code + Gemini CLI), shared agent knowledge, fragment-only language specs, 19 MCP tools, 812 tests.",
+  "description": "Cross-model audit gate — 3-adapter (Claude Code + Gemini CLI + Codex), HookRunner engine, multi-model NDJSON, 19 MCP tools, 921 tests.",
   "author": {
     "name": "berrzebb",
     "url": "https://github.com/berrzebb"

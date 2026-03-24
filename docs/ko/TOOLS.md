@@ -53,6 +53,25 @@ quorum tool dependency_graph src/ --extensions .ts,.mjs
 
 ---
 
+## blast_radius
+
+변경 파일의 전이적 영향 범위를 역방향 import 그래프 BFS로 계산.
+
+```bash
+quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+quorum tool blast_radius --changed_files '["src/api.ts","src/db.ts"]' --max_depth 5
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--changed_files` | 변경된 파일 JSON 배열 (상대 경로) |
+| `--path` | 레포 루트 (기본: cwd) |
+| `--max_depth` | BFS 깊이 제한 (기본: 10) |
+
+출력: 영향받는 파일 수, 전체 파일 수, 비율, 깊이순 영향 목록 (전파 경로 `via` 컬럼 포함). 10번째 트리거 팩터 — 비율 > 10%이면 T3 에스컬레이션.
+
+---
+
 ## audit_scan
 
 패턴 스캐너 — 타입 안전성 문제, 하드코딩 값, console 문 감지.

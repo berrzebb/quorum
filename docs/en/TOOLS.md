@@ -55,6 +55,25 @@ quorum tool dependency_graph src/ --extensions .ts,.mjs --json
 
 ---
 
+## blast_radius
+
+Compute transitive impact of changed files via BFS on the reverse import graph.
+
+```bash
+quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+quorum tool blast_radius --changed_files '["src/api.ts","src/db.ts"]' --max_depth 5
+```
+
+| Option | Description |
+|--------|-------------|
+| `--changed_files` | JSON array of files that changed (relative paths) |
+| `--path` | Repository root (default: cwd) |
+| `--max_depth` | BFS depth limit (default: 10) |
+
+Output: affected file count, total file count, ratio, depth-sorted impact list with propagation path (`via` column). Used as the 10th trigger factor — ratio > 10% pushes toward T3.
+
+---
+
 ## audit_scan
 
 Pattern scanner — detects type-safety issues, hardcoded values, console statements.

@@ -8,7 +8,7 @@ Completion criteria reset:
 Next tasks:
 {{NEXT_TASKS}}
 Auditor feedback:
-{{GPT_MD}}
+{{VERDICT_TEXT}}
 Reference documents (read these for detailed rules):
 - Correction rules (scope, verification, order) → `{{REFERENCES_DIR}}/fix-rules.md`
 - Evidence package format → `{{REFERENCES_DIR}}/evidence-format.md`

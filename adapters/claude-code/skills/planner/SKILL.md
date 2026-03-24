@@ -1,6 +1,6 @@
 ---
 name: quorum:planner
-description: "Design tasks into tracks with work breakdowns and execution order. Also writes and maintains PRDs (Product Requirements Documents) — when a user requests a feature, analyzes it, adds it to the PRD, then decomposes into work breakdowns. Use for new feature planning, PRD writing, architecture changes, multi-track decomposition, requirements analysis, or adjusting existing execution plans. Trigger when user says things like 'add feature X', 'I need Y', 'plan Z', or describes any product requirement."
+description: "Design tasks into tracks with work breakdowns and execution order. Writes and maintains PRDs — analyzes feature requests, decomposes into FRs/NFRs, generates DRM-driven documents. Use for new feature planning, PRD writing, architecture changes, multi-track decomposition, or adjusting existing plans. Triggers on 'add feature X', 'I need Y', 'plan Z', 'write PRD', 'design tasks', '기능 추가', '설계', or any product requirement description."
 argument-hint: "<requirement or feature description>"
 context: fork
 model: claude-opus-4-6
@@ -33,6 +33,7 @@ Each document type has a fixed location. Read the corresponding reference before
 | **Test Strategy** | Track | `{planning_dir}/{track}/test-strategy.md` | `references/test-strategy.md` |
 | **UI Spec** | Track | `{planning_dir}/{track}/ui-spec.md` | `references/ui-spec.md` |
 | **Data Model** | Track | `{planning_dir}/{track}/data-model.md` | `references/data-model.md` |
+| **Design Phase** | Track | `{planning_dir}/{track}/design/` | `references/design-phase.md` |
 
 **Before writing any document**, read its reference guide for structure, principles, and anti-patterns.
 References are at `${CLAUDE_PLUGIN_ROOT}/skills/planner/references/`.
@@ -58,6 +59,18 @@ Start by understanding what the user wants. The conversation may already contain
 6. **What language for documents?** — Ask the user which language to write design documents in (e.g., Korean, English). `plugin.locale` sets the default, but always confirm — the user may want documents in a different language. This determines all PRD, README, WB, and other design document language. Use corresponding example templates from `${CLAUDE_PLUGIN_ROOT}/examples/{locale}/plans/` as reference.
 
 If the user provides a brief description (e.g., "add evaluation pipeline"), don't immediately generate — ask the clarifying questions above.
+
+## Phase 1.5: MECE Decomposition
+
+Before writing the PRD, perform structured requirements decomposition. Read `references/mece-decomposition.md` for the full guide.
+
+1. **Actor Decomposition** — identify all stakeholders (ME: no role overlap)
+2. **System Decomposition** — derive required systems per actor (ME: clear boundaries)
+3. **Domain Coverage** — check cross-cutting concerns (CE: no gaps)
+
+Present the Actor Map + System Map + Domain Checklist to the user. **Wait for confirmation before proceeding to Phase 2.**
+
+In headless mode, extract actors/systems from the prompt context and mark uncertain domains as `[ASSUMPTION]`.
 
 ## Phase 2: PRD (Product Requirements Document)
 
@@ -183,18 +196,42 @@ New feature requests add FRs/NFRs to the Requirements tables, update the Track M
 
 ## Phase 3: Research with Tools
 
-Before writing work breakdowns, gather facts from the codebase using deterministic tools:
+Before writing work breakdowns, gather facts from the codebase using the 20 available analysis tools:
 
+### Structural Analysis
+```bash
+# Symbol index — what exists, function signatures, file sizes
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs code_map --path src/<relevant-dir>/
+
+# Import graph — chains, connected components, cycles
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs dependency_graph --path src/<relevant-dir>/
+
+# Architecture patterns — module boundaries, layering
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs act_analyze --path src/<relevant-dir>/
 ```
-code_map({ path: "src/<relevant-dir>/", format: "matrix" })
-→ Shows what exists, what symbols are defined, file sizes
 
-dependency_graph({ path: "src/<relevant-dir>/" })
-→ Shows import chains, connected components, isolated files
+### Quality Baseline
+```bash
+# Current quality issues — type-safety, hardcoded values
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern all --json
 
-rtm_parse({ path: "<planning_dir>/rtm-<related-track>.md", matrix: "forward" })
-→ Shows current state of related tracks — what's verified, what's open
+# Performance patterns — N+1, O(n²), bundle size (language-aware)
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs perf_scan --path src/<relevant-dir>/
+
+# Test coverage — per-file stmt/branch percentages
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs coverage_map --path src/<relevant-dir>/
+
+# Doc coverage — missing JSDoc/docstrings
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs doc_coverage --path src/<relevant-dir>/
 ```
+
+### Existing Plan State
+```bash
+# RTM status — what's verified, what's open
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs rtm_parse --path <planning_dir>/rtm-<track>.md --matrix forward
+```
+
+Domain scans are **language-aware** — auto-detect project languages and apply quality rules from `languages/{lang}/spec.{domain}.mjs` fragments. See `${CLAUDE_PLUGIN_ROOT}/skills/consensus-tools/references/languages.md` for full details.
 
 Present the results to the user and **wait for confirmation** before proceeding.
 
@@ -202,10 +239,15 @@ Present the results to the user and **wait for confirmation** before proceeding.
 
 For each file the proposed work will modify, run impact analysis **before** generating the work-breakdown:
 
+```bash
+# Blast radius — transitive dependents of target files via reverse import graph BFS
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs blast_radius --path src/ --changed "<target-files>"
+
+# Dependency graph — "Imported By" column shows every consumer
+node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs dependency_graph --path src/<target-dir>/
 ```
-dependency_graph({ path: "src/<target-dir>/" })
-→ "Imported By" column shows every file that depends on targets
-```
+
+If blast radius ratio > 0.1 (>10% of codebase affected), flag as **High** or **Critical** impact.
 
 For each target file, classify the impact:
 
@@ -295,6 +337,19 @@ Update the DRM and inform the user of any newly required documents.
 - **Work Catalog** → `references/work-catalog.md` — add new WB items to index
 
 **Present all drafts to the user for review.** Do not write to files until the user confirms.
+
+## Phase 5.5: FDE Failure Checklist
+
+After DRM confirmation and before drafting Work Breakdowns, analyze failure scenarios for each P0/P1 FR. Read `references/fde-checklist.md` for the full guide.
+
+1. For each P0/P1 FR, build a failure table (scenario, severity, impact, mitigation, new WB?)
+2. HIGH severity failures → mandatory new WB
+3. MEDIUM severity failures → new WB unless explicitly deferred by user
+4. Present failure analysis and derived WBs to user
+
+**Wait for confirmation before proceeding to WB drafting.**
+
+In headless mode, auto-generate failure analysis for external dependencies and data persistence. Note assumptions as `[FDE-ASSUMPTION]`.
 
 ## Phase 6: Review & Iterate
 

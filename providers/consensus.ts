@@ -35,11 +35,35 @@ export interface RoleOpinion {
 }
 
 export interface ConsensusVerdict {
-  mode: "simple" | "deliberative";
+  mode: "simple" | "deliberative" | "diverge-converge";
   finalVerdict: "approved" | "changes_requested" | "infra_failure";
   opinions: RoleOpinion[];
   judgeSummary: string;
   duration: number;
+  /** Parliament session registers (diverge-converge only). */
+  registers?: ConvergenceRegisters;
+  /** 5-classification results (diverge-converge only). */
+  classifications?: ClassificationResult[];
+}
+
+export interface ConvergenceRegisters {
+  statusChanges: string[];
+  decisions: string[];
+  requirementChanges: string[];
+  risks: string[];
+}
+
+export type Classification = "gap" | "strength" | "out" | "buy" | "build";
+
+export interface ClassificationResult {
+  item: string;
+  classification: Classification;
+  action: string;
+}
+
+export interface DivergeConvergeOptions {
+  /** Implementer testimony — context only, no vote. */
+  implementerTestimony?: string;
 }
 
 // ── Prompt builders ───────────────────────────
@@ -135,6 +159,164 @@ Respond with JSON:
   "codes": ["final-rejection-codes-if-any"]
 }`,
   };
+}
+
+// ── Diverge-Converge prompts ─────────────────
+
+function buildDivergePrompt(request: AuditRequest, role: "advocate" | "devil", testimony?: string): AuditRequest {
+  const testimonySection = testimony
+    ? `\n### Implementer Testimony\n${testimony}\n`
+    : "";
+
+  return {
+    ...request,
+    prompt: `${request.prompt}
+${testimonySection}
+## Your Role: ${role.toUpperCase()} (Diverge Phase — Free Speech)
+
+Speak freely. You are NOT limited to your role's traditional focus.
+- If you see risks, say so — even as the advocate.
+- If you see strengths, acknowledge them — even as the devil's advocate.
+- Comment on anything: design, naming, architecture, missing tests, security, performance.
+
+The goal is COMPLETE information, not role-adherence.
+
+Respond with JSON:
+{
+  "verdict": "approved" | "changes_requested" | "infra_failure",
+  "reasoning": "your full analysis — strengths AND weaknesses",
+  "codes": ["any-issue-codes"],
+  "confidence": 0.0-1.0,
+  "items": [
+    { "description": "specific observation", "type": "strength" | "risk" | "gap" | "suggestion" }
+  ]
+}`,
+  };
+}
+
+function buildConvergeJudgePrompt(
+  request: AuditRequest,
+  advocateOpinion: RoleOpinion,
+  devilOpinion: RoleOpinion,
+  advocateItems: DivergenceItem[],
+  devilItems: DivergenceItem[],
+): AuditRequest {
+  const allItems = [...advocateItems.map(i => `[Advocate] ${i.type}: ${i.description}`),
+                    ...devilItems.map(i => `[Devil] ${i.type}: ${i.description}`)].join("\n");
+  return {
+    ...request,
+    prompt: `${request.prompt}
+
+## Your Role: JUDGE (Converge Phase)
+
+Two reviewers have completed their free-form analysis. Your job:
+
+### Phase B: Converge into 4 Registers
+Classify all observations into:
+1. **Status Changes**: What changed since last review?
+2. **Decisions**: What technical decisions were made or need to be made?
+3. **Requirement Changes**: Any scope/requirement additions or removals?
+4. **Risks**: What risks or blockers were identified?
+
+### Phase C: 5-Classification Analysis
+For each substantive observation, classify as:
+- **gap**: Something missing that needs to be built
+- **strength**: Something done well, keep as pattern
+- **out**: Not needed, remove from scope
+- **buy**: Use external solution, don't build
+- **build**: Must be implemented directly
+
+### Reviewer Opinions
+
+**Advocate** (confidence: ${advocateOpinion.confidence}):
+Verdict: ${advocateOpinion.verdict}
+${advocateOpinion.reasoning}
+
+**Devil's Advocate** (confidence: ${devilOpinion.confidence}):
+Verdict: ${devilOpinion.verdict}
+${devilOpinion.reasoning}
+
+### All Observations
+${allItems}
+
+### Respond with JSON:
+{
+  "verdict": "approved" | "changes_requested" | "infra_failure",
+  "summary": "your synthesis",
+  "codes": ["final-codes"],
+  "registers": {
+    "statusChanges": ["..."],
+    "decisions": ["..."],
+    "requirementChanges": ["..."],
+    "risks": ["..."]
+  },
+  "classifications": [
+    { "item": "description", "classification": "gap|strength|out|buy|build", "action": "what to do" }
+  ]
+}`,
+  };
+}
+
+interface DivergenceItem {
+  description: string;
+  type: "strength" | "risk" | "gap" | "suggestion";
+}
+
+function parseDivergeOpinion(raw: string, role: "advocate" | "devil"): { opinion: RoleOpinion; items: DivergenceItem[] } {
+  try {
+    const json = extractJson(raw);
+    if (!json) throw new Error("No JSON found");
+    const parsed = JSON.parse(json);
+    return {
+      opinion: {
+        role,
+        verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+        reasoning: parsed.reasoning ?? "",
+        codes: Array.isArray(parsed.codes) ? parsed.codes : [],
+        confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
+      },
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+    };
+  } catch {
+    return {
+      opinion: { role, verdict: "changes_requested", reasoning: `Failed to parse ${role} diverge response`, codes: ["parse-error"], confidence: 0 },
+      items: [],
+    };
+  }
+}
+
+function parseConvergeVerdict(raw: string): {
+  verdict: "approved" | "changes_requested" | "infra_failure";
+  summary: string;
+  codes: string[];
+  registers: ConvergenceRegisters;
+  classifications: ClassificationResult[];
+} {
+  try {
+    const json = extractJson(raw);
+    if (!json) throw new Error("No JSON found");
+    const parsed = JSON.parse(json);
+    return {
+      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+      summary: parsed.summary ?? "",
+      codes: Array.isArray(parsed.codes) ? parsed.codes : [],
+      registers: {
+        statusChanges: Array.isArray(parsed.registers?.statusChanges) ? parsed.registers.statusChanges : [],
+        decisions: Array.isArray(parsed.registers?.decisions) ? parsed.registers.decisions : [],
+        requirementChanges: Array.isArray(parsed.registers?.requirementChanges) ? parsed.registers.requirementChanges : [],
+        risks: Array.isArray(parsed.registers?.risks) ? parsed.registers.risks : [],
+      },
+      classifications: Array.isArray(parsed.classifications) ? parsed.classifications : [],
+    };
+  } catch {
+    return {
+      verdict: "changes_requested",
+      summary: "Failed to parse converge verdict",
+      codes: ["parse-error"],
+      registers: { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
+      classifications: [],
+    };
+  }
 }
 
 // ── JSON extraction ──────────────────────────
@@ -259,6 +441,65 @@ export class DeliberativeConsensus {
       opinions,
       judgeSummary: judgeVerdict.summary,
       duration: Date.now() - start,
+    };
+  }
+
+  /**
+   * Run the diverge-converge consensus protocol (Parliament model).
+   *
+   * Phase A: Free divergence — all roles speak without role constraints (parallel)
+   * Phase B: Judge converges into 4 MECE registers
+   * Phase C: Judge classifies items into 5 categories (gap/strength/out/buy/build)
+   */
+  async runDivergeConverge(request: AuditRequest, options?: DivergeConvergeOptions): Promise<ConsensusVerdict> {
+    const start = Date.now();
+
+    // Phase A: Diverge — parallel, free speech
+    const [advocateSettled, devilSettled] = await Promise.allSettled([
+      this.config.advocate.audit(buildDivergePrompt(request, "advocate", options?.implementerTestimony)),
+      this.config.devil.audit(buildDivergePrompt(request, "devil", options?.implementerTestimony)),
+    ]);
+
+    const advocateResult = advocateSettled.status === "fulfilled"
+      ? parseDivergeOpinion(advocateSettled.value.raw, "advocate")
+      : { opinion: infraFailureOpinion("advocate", advocateSettled.reason), items: [] as DivergenceItem[] };
+    const devilResult = devilSettled.status === "fulfilled"
+      ? parseDivergeOpinion(devilSettled.value.raw, "devil")
+      : { opinion: infraFailureOpinion("devil", devilSettled.reason), items: [] as DivergenceItem[] };
+
+    const opinions = [advocateResult.opinion, devilResult.opinion];
+
+    // Phase B+C: Converge — Judge synthesizes into registers + classifications
+    const convergeRequest = buildConvergeJudgePrompt(
+      request, advocateResult.opinion, devilResult.opinion,
+      advocateResult.items, devilResult.items,
+    );
+
+    let convergeVerdict: ReturnType<typeof parseConvergeVerdict> extends Promise<infer T> ? T : ReturnType<typeof parseConvergeVerdict>;
+    try {
+      const judgeResult = await this.config.judge.audit(convergeRequest);
+      convergeVerdict = parseConvergeVerdict(judgeResult.raw);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Fallback: majority vote
+      const bothApproved = advocateResult.opinion.verdict === "approved" && devilResult.opinion.verdict === "approved";
+      convergeVerdict = {
+        verdict: bothApproved ? "approved" : "changes_requested",
+        summary: `Judge unavailable (${msg}). Verdict from majority vote.`,
+        codes: [...new Set([...advocateResult.opinion.codes, ...devilResult.opinion.codes])],
+        registers: { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
+        classifications: [],
+      };
+    }
+
+    return {
+      mode: "diverge-converge",
+      finalVerdict: convergeVerdict.verdict,
+      opinions,
+      judgeSummary: convergeVerdict.summary,
+      duration: Date.now() - start,
+      registers: convergeVerdict.registers,
+      classifications: convergeVerdict.classifications,
     };
   }
 

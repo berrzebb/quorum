@@ -4,20 +4,21 @@
  * PostToolUse hook: tag-based consensus loop + code quality auto-checks.
  *
  * (A) consensus.watch_file edited + trigger_tag present → run audit_script → wait for agree_tag
- * (B) On any Edit/Write, if the respond file is newer → auto-sync via respond_script
- * (C) quality_rules — run ESLint/npm audit immediately on matching file edits
+ * (B) quality_rules — run ESLint/npm audit immediately on matching file edits
  *
  * All behavior is controlled by config.json.
+ * Verdicts and evidence are stored in SQLite (single source of truth).
  */
-import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync, openSync, closeSync, rmSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync, openSync, closeSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { execResolved } from "../../core/cli-runner.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus as c,
-  findWatchFile, findRespondFile, t, isHookEnabled, configMissing,
+  findWatchFile, t, isHookEnabled, configMissing,
 } from "../../core/context.mjs";
+import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
 import * as bridge from "../../core/bridge.mjs";
 
 const debugLog = resolve(HOOKS_DIR, plugin.debug_log ?? "debug.log");
@@ -30,8 +31,6 @@ function log(msg) {
 
 // Use memoized path resolvers from context.mjs
 const find_watch_file = findWatchFile;
-/** @deprecated Verdict files eliminated — verdicts stored in SQLite only. Kept for test compat. */
-const find_respond_file = findRespondFile;
 
 /** Pre-computed required section patterns (cached on first call). */
 let _cachedRequired = null;
@@ -151,72 +150,30 @@ function run_script(absPath, args = []) {
   return { status: result.status, stdout: out };
 }
 
-/** (A) Detected trigger_tag → spawn audit_script in background, return immediately. */
+/** (A) Detected trigger_tag → spawn audit_script in background, return immediately.
+ *  ProcessMux handles agent coordination — no lock needed. */
 function run_audit(watchFilePath) {
   if (process.env.FEEDBACK_HOOK_DRY_RUN === "1") {
     process.stdout.write(t("index.dry_run.audit", { script: plugin.audit_script }));
     return;
   }
 
-  // Derive lock identity: worktree-specific if in a worktree
-  let lockRoot = REPO_ROOT;
-  let worktreeId = "main";
+  // Derive worktree root for log path
+  let worktreeRoot = REPO_ROOT;
   if (watchFilePath) {
     const wMatch = watchFilePath.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/([^/]+))\//);
-    if (wMatch) {
-      lockRoot = wMatch[1];
-      worktreeId = wMatch[2];
-    }
-  }
-  const lockName = `audit:${worktreeId}`;
-  const LOCK_TTL_MS = 30 * 60 * 1000;
-
-  // ── Try SQLite lock first (atomic, no TOCTOU) ──
-  const useSqliteLock = bridge.acquireLock(lockName, process.pid, undefined, LOCK_TTL_MS);
-  if (useSqliteLock) {
-    log(`LOCK_ACQUIRED: ${lockName} via SQLite (pid=${process.pid})`);
-  } else {
-    // Check if lock held by another process
-    const lockInfo = bridge.isLockHeld(lockName);
-    if (lockInfo.held) {
-      process.stdout.write(t("index.audit.already_running", { pid: lockInfo.owner }));
-      return;
-    }
-    // ── Fallback: JSON lock file (bridge unavailable) ──
-    log("LOCK_FALLBACK: SQLite lock unavailable, using JSON lock file");
-    const lockPath = resolve(lockRoot, ".claude", "audit.lock");
-    if (existsSync(lockPath)) {
-      try {
-        const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-        const age = Date.now() - (lock.startedAt ?? 0);
-        if (lock.pid && age < LOCK_TTL_MS) {
-          try {
-            process.kill(lock.pid, 0);
-            process.stdout.write(t("index.audit.already_running", { pid: lock.pid }));
-            return;
-          } catch {
-            log("STALE_LOCK: pid " + lock.pid + " no longer running — removing");
-          }
-        } else if (age >= LOCK_TTL_MS) {
-          log("EXPIRED_LOCK: age " + Math.round(age / 60000) + "min — removing");
-        }
-      } catch {
-        log("INVALID_LOCK: removing corrupt audit.lock");
-      }
-      try { rmSync(lockPath, { force: true }); } catch { /* already gone */ }
-    }
+    if (wMatch) worktreeRoot = wMatch[1];
   }
 
   const auditScript = resolve(HOOKS_DIR, plugin.audit_script);
   if (!existsSync(auditScript)) {
     log("SKIP: " + auditScript + " not found");
-    bridge.releaseLock(lockName, process.pid);
     process.stdout.write(t("index.audit.failed"));
     return;
   }
 
   // 백그라운드 프로세스로 감사 실행 — 훅 즉시 반환
-  const logPath = resolve(lockRoot, ".claude", "audit-bg.log");
+  const logPath = resolve(worktreeRoot, ".claude", "audit-bg.log");
   const logFd = openSync(logPath, "w");
 
   let child;
@@ -232,7 +189,6 @@ function run_audit(watchFilePath) {
     });
   } catch (err) {
     closeSync(logFd);
-    bridge.releaseLock(lockName, process.pid);
     log("SPAWN_ERROR: " + (err.message ?? err));
     process.stdout.write(t("index.audit.failed"));
     return;
@@ -241,53 +197,36 @@ function run_audit(watchFilePath) {
   // spawn 에러 핸들링 (ENOENT 등 — 비동기 에러)
   child.on("error", (err) => {
     log("CHILD_ERROR: " + (err.message ?? err));
-    bridge.releaseLock(lockName, process.pid);
-    // Fallback cleanup for JSON lock
-    const lockPath = resolve(lockRoot, ".claude", "audit.lock");
-    try { rmSync(lockPath, { force: true }); } catch { /* ignore */ }
     try { closeSync(logFd); } catch { /* already closed by normal path */ }
   });
 
-  // JSON lock file — still written for backward compatibility (other tools may check it)
-  const lockPath = resolve(lockRoot, ".claude", "audit.lock");
-  writeFileSync(lockPath, JSON.stringify({ pid: child.pid, startedAt: Date.now() }), "utf8");
   child.unref();
   closeSync(logFd);
 
-  log("AUDIT_STARTED: pid=" + child.pid + " lock=" + lockName);
+  log("AUDIT_STARTED: pid=" + child.pid);
   process.stdout.write(t("index.audit.started_async", { tag: c.trigger_tag, pid: child.pid, log: logPath }));
 }
 
-/** (B) If audit-status.json is newer than watch file → auto-sync via respond_script. */
+/** If audit-status.json is newer than last ack → auto-sync via respond_script. */
 function check_pending_response() {
-  const watchPath = find_watch_file();
-  if (!watchPath) return;
-
   const auditStatusPath = resolve(REPO_ROOT, ".claude", "audit-status.json");
-  if (!existsSync(auditStatusPath)) return;
-
   const statusMtime = get_mtime(auditStatusPath);
-  const watchMtime  = get_mtime(watchPath);
-  const lastAck     = read_ack();
+  if (statusMtime === 0) return;
 
-  if (statusMtime > watchMtime && statusMtime > lastAck) {
-    log("NOTIFY: pending response — auto-sync");
-    const result = run_script(resolve(HOOKS_DIR, plugin.respond_script));
-    write_ack(Math.max(statusMtime, get_mtime(auditStatusPath)));
-    if (result?.stdout) process.stdout.write(t("index.sync.output", { out: result.stdout }));
+  const lastAck = read_ack();
+  if (statusMtime <= lastAck) return;
 
-    try {
-      const content_watch = readFileSync(watchPath, "utf8");
-      if (has_agreed(content_watch)) {
-        process.stdout.write(t("index.sync.arrived_agreed", { tag: c.agree_tag }));
-      } else {
-        const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
-        const statusMsg = `status: ${status.status}, pending: ${status.pendingCount}, codes: ${(status.rejectionCodes ?? []).join(", ")}`;
-        process.stdout.write(t("index.sync.arrived_pending", { tag: c.pending_tag, content: statusMsg }));
-      }
-    } catch (err) {
-      log(`WARN: check_pending_response failed: ${err.message}`);
-    }
+  log("NOTIFY: pending response — auto-sync");
+  const result = run_script(resolve(HOOKS_DIR, plugin.respond_script));
+  write_ack(Math.max(statusMtime, get_mtime(auditStatusPath)));
+  if (result?.stdout) process.stdout.write(t("index.sync.output", { out: result.stdout }));
+
+  const status = readAuditStatus(REPO_ROOT);
+  if (status?.status === "approved") {
+    process.stdout.write(t("index.sync.arrived_agreed", { tag: c.agree_tag }));
+  } else if (status) {
+    const statusMsg = `status: ${status.status}, pending: ${status.pendingCount}, codes: ${(status.rejectionCodes ?? []).join(", ")}`;
+    process.stdout.write(t("index.sync.arrived_pending", { tag: c.pending_tag, content: statusMsg }));
   }
 }
 
@@ -341,13 +280,6 @@ function run_quality_checks(filePath) {
       process.stdout.write(t("index.check.error", { label: rule.label, file: filename, output }));
     }
   }
-}
-
-function is_planning_file(normalized) {
-  const files = c.planning_files ?? [];
-  const dirs  = c.planning_dirs  ?? [];
-  return files.some((f) => normalized.endsWith(f.replace(/\\/g, "/")))
-    || dirs.some((d) => normalized.includes(d.replace(/\\/g, "/")));
 }
 
 async function main() {
@@ -466,6 +398,20 @@ async function main() {
       const changedFileCount = (changedFileSection.match(/^- `/gm) ?? []).length;
       const changedFilesRaw = (changedFileSection.match(/^- `([^`]+)`/gm) ?? [])
         .map(m => m.replace(/^- `|`$/g, ""));
+
+      // ── Store evidence in SQLite — single source of truth ──
+      bridge.emitEvent("evidence.write", "claude-code", {
+        watchFile: watchPath,
+        content: freshContent,
+        changedFiles: changedFilesRaw,
+        triggerTag: c.trigger_tag,
+      }, { sessionId });
+      bridge.setState("evidence:latest", {
+        watchFile: watchPath,
+        content: freshContent,
+        changedFiles: changedFilesRaw,
+        timestamp: Date.now(),
+      });
 
       // Run domain detection + blast radius in parallel (independent I/O)
       const [detectionResult, blastResult] = await Promise.all([
@@ -603,20 +549,7 @@ async function main() {
     return;
   }
 
-  // Planning file changed → gpt-only sync
-  if (is_planning_file(normalized)) {
-    log("MATCH: planning doc — gpt-only sync");
-    if (process.env.FEEDBACK_HOOK_DRY_RUN === "1") {
-      process.stdout.write(t("index.dry_run.planning", { script: plugin.respond_script }));
-      return;
-    }
-    const result = run_script(resolve(HOOKS_DIR, plugin.respond_script), ["--gpt-only"]);
-    if (result?.stdout) process.stdout.write(t("index.planning.sync", { out: result.stdout }));
-    write_ack(Date.now());
-    return;
-  }
-
-  // (B) Other file edited → check for pending response
+  // Other file edited → check for pending response
   check_pending_response();
 }
 
@@ -624,4 +557,3 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((err) => log(`FATAL: ${err.message}`));
 }
 
-export { find_respond_file };

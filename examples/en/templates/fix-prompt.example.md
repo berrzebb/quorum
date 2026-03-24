@@ -7,7 +7,7 @@ Template variables injected by `respond.mjs`:
 - `{{REJECT_CODES}}` — rejection codes from the audit (e.g. `needs-evidence [major]`)
 - `{{RESET_CRITERIA}}` — completion criteria from the audit
 - `{{NEXT_TASKS}}` — next task from the audit
-- `{{GPT_MD}}` — full content of auditor response file
+- `{{VERDICT_TEXT}}` — full content of auditor verdict (from SQLite)
 - `{{CLAUDE_MD_PATH}}` — the file being audited (from `consensus.watch_file`)
 - `{{TRIGGER_TAG}}` — the trigger tag (from `consensus.trigger_tag`)
 - `{{DESIGN_DOCS_DIR}}` — glob pattern for design documents (read-only)
@@ -25,7 +25,7 @@ Completion criteria reset:
 Next tasks:
 {{NEXT_TASKS}}
 Auditor feedback:
-{{GPT_MD}}
+{{VERDICT_TEXT}}
 Reference documents (read these for detailed rules):
 - Correction rules (scope, verification, order) → `{{REFERENCES_DIR}}/fix-rules.md`
 - Evidence package format → `{{REFERENCES_DIR}}/evidence-format.md`

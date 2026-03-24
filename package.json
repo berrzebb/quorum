@@ -19,7 +19,8 @@
     "cross-model",
     "ai-agents",
     "claude-code",
-    "codex"
+    "codex",
+    "gemini"
   ],
   "bin": {
     "quorum": "dist/cli/index.js"

@@ -98,7 +98,7 @@ Auto-detects domains from file patterns, conditionally activates domain-specific
 | concurrency | — | concurrency-verifier |
 | documentation | `doc_coverage` | doc-steward |
 
-**18 deterministic tools** — see [TOOLS.md](TOOLS.md) for details.
+**19 deterministic tools** — see [TOOLS.md](TOOLS.md) for details.
 
 ### TUI Dashboard
 
@@ -151,12 +151,55 @@ Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LL
 
 ---
 
+## 3-Layer Adapter Pattern (v0.4.2)
+
+어댑터 간 비즈니스 로직 공유. I/O만 런타임별로 다름:
+
+| Layer | Role | Location |
+|-------|------|----------|
+| **I/O** | stdin/stdout parsing, protocol | `adapters/{adapter}/` |
+| **Business Logic** | trigger, evidence, hooks, NDJSON | `adapters/shared/` (17 modules) |
+| **Core** | audit, 19 MCP tools, EventStore | `core/` |
+
+New adapter = ~280 lines of I/O wrappers (Codex adapter).
+
+### HookRunner Engine
+
+User-defined hooks in `config.json` or `HOOK.md`:
+
+```jsonc
+{
+  "hooks": {
+    "audit.submit": [
+      { "name": "freeze-guard", "handler": { "type": "command", "command": "node scripts/check.mjs" } }
+    ]
+  }
+}
+```
+
+command/http handlers, env interpolation (`$VAR`), deny-first-break, async fire-and-forget, regex matcher.
+
+### Multi-Model NDJSON Protocol
+
+3 CLI runtimes → unified `AgentOutputMessage`:
+
+| Runtime | Format | Adapter |
+|---------|--------|---------|
+| Claude Code | `stream-json` | `ClaudeCliAdapter` |
+| Codex | `exec --json` | `CodexCliAdapter` |
+| Gemini | `stream-json` | `GeminiCliAdapter` |
+
+`MuxAdapter` bridges ProcessMux (tmux/psmux) for cross-model consensus.
+
+---
+
 ## Providers
 
-| Provider | Mechanism | Status |
-|----------|-----------|--------|
-| Claude Code | 12 native hooks | Active |
-| Codex | File watch + state polling | Active |
+| Provider | Mechanism | Hooks | Status |
+|----------|-----------|-------|--------|
+| Claude Code | 22 native hooks | SessionStart, PreToolUse, PostToolUse, Stop, PermissionRequest, Notification, ... | Active |
+| Gemini CLI | 11 native hooks | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, ... | Active |
+| Codex CLI | 5 native hooks | SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse | Active |
 
 ---
 
@@ -171,6 +214,7 @@ Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LL
     "trigger_tag": "[REVIEW_NEEDED]",
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]"
-  }
+  },
+  "hooks": {}
 }
 ```

@@ -43,6 +43,12 @@ export interface FitnessSignals {
   avgComplexity?: number;
   /** Max cyclomatic complexity across functions. */
   maxComplexity?: number;
+  /** Number of security issues (from security domain scan). */
+  securityIssues?: number;
+  /** Number of deprecated or vulnerable dependencies. */
+  deprecatedDeps?: number;
+  /** Total dependency count (for normalization). */
+  totalDeps?: number;
 }
 
 export interface FitnessConfig {
@@ -57,17 +63,23 @@ export interface FitnessConfig {
     maxComplexity?: number;
     /** HIGH findings count above which score = 0 (default: 10). */
     maxHighFindings?: number;
+    /** Security issues above which score = 0 (default: 5). */
+    maxSecurityIssues?: number;
+    /** Deprecated dep ratio above which score = 0 (default: 0.3 = 30%). */
+    maxDeprecatedRatio?: number;
   };
 }
 
 // ── Default weights ──────────────────────────────────
 
 const DEFAULT_WEIGHTS = {
-  typeSafety: 0.25,
-  testCoverage: 0.25,
+  typeSafety: 0.20,
+  testCoverage: 0.20,
   patternScan: 0.20,
   buildHealth: 0.15,
-  complexity: 0.15,
+  complexity: 0.10,
+  security: 0.10,
+  dependencies: 0.05,
 };
 
 const DEFAULT_THRESHOLDS = {
@@ -75,6 +87,8 @@ const DEFAULT_THRESHOLDS = {
   minCoverage: 0,
   maxComplexity: 25,
   maxHighFindings: 10,
+  maxSecurityIssues: 5,
+  maxDeprecatedRatio: 0.3,
 };
 
 // ── Core computation ─────────────────────────────────
@@ -115,12 +129,23 @@ export function computeFitness(
   const avgCC = signals.avgComplexity ?? 0;
   const complexityValue = clamp(1 - avgCC / t.maxComplexity);
 
+  // 6. Security: fewer issues = better
+  const secIssues = signals.securityIssues ?? 0;
+  const securityValue = clamp(1 - secIssues / t.maxSecurityIssues);
+
+  // 7. Dependencies: fewer deprecated/vulnerable = better
+  const totalDeps = Math.max(signals.totalDeps ?? 1, 1);
+  const deprecatedRatio = (signals.deprecatedDeps ?? 0) / totalDeps;
+  const dependenciesValue = clamp(1 - deprecatedRatio / t.maxDeprecatedRatio);
+
   const components: FitnessScore["components"] = {
     typeSafety: { value: typeSafetyValue, raw: assertionsPerKLOC, weight: w.typeSafety, label: "Type Safety" },
     testCoverage: { value: testCoverageValue, raw: (signals.lineCoverage ?? 0), weight: w.testCoverage, label: "Test Coverage" },
     patternScan: { value: patternScanValue, raw: highFindings, weight: w.patternScan, label: "Pattern Scan" },
     buildHealth: { value: buildHealthValue, raw: tscPass + eslintPass, weight: w.buildHealth, label: "Build Health" },
     complexity: { value: complexityValue, raw: avgCC, weight: w.complexity, label: "Complexity" },
+    security: { value: securityValue, raw: secIssues, weight: w.security, label: "Security" },
+    dependencies: { value: dependenciesValue, raw: deprecatedRatio, weight: w.dependencies, label: "Dependencies" },
   };
 
   // Weighted total

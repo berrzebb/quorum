@@ -22,15 +22,22 @@ export async function run(args: string[]): Promise<void> {
   console.log("\n\x1b[36mquorum status\x1b[0m\n");
 
   // ── Gates ───────────────────────────────────
-  const lockPath = resolve(repoRoot, ".claude", "audit.lock");
-  const auditActive = existsSync(lockPath);
-  console.log(`  Audit gate:  ${auditActive ? "\x1b[33m● AUDITING\x1b[0m" : "\x1b[32m● OPEN\x1b[0m"}`);
-  if (auditActive) {
+  // Audit gate: check audit-status.json marker (ProcessMux manages agent coordination)
+  const auditStatusPath = resolve(repoRoot, ".claude", "audit-status.json");
+  let auditGateLabel = "\x1b[32m● OPEN\x1b[0m";
+  if (existsSync(auditStatusPath)) {
     try {
-      const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-      console.log(`               PID: ${lock.pid ?? "?"}, started: ${lock.startedAt ?? "?"}`);
+      const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
+      if (status.status === "changes_requested") {
+        auditGateLabel = "\x1b[33m● PENDING\x1b[0m";
+      } else if (status.status === "approved") {
+        auditGateLabel = "\x1b[32m● APPROVED\x1b[0m";
+      } else if (status.status === "infra_failure") {
+        auditGateLabel = "\x1b[31m● INFRA_FAILURE\x1b[0m";
+      }
     } catch { /* skip */ }
   }
+  console.log(`  Audit gate:  ${auditGateLabel}`);
 
   const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
   const retroPending = existsSync(markerPath);

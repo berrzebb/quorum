@@ -52,7 +52,9 @@ describe("computeFitness components", () => {
       avgComplexity: 30,
       maxComplexity: 50,
     });
-    assert.ok(score.total <= 0.05, `Expected <= 0.05, got ${score.total}`);
+    // security + dependencies have no bad signals → they default to 1.0
+    // With 7 components (weights 0.10 + 0.05 = 0.15), terrible-only-5 gives ~0.15 floor
+    assert.ok(score.total <= 0.20, `Expected <= 0.20, got ${score.total}`);
   });
 
   it("typeSafety: more assertions per KLOC → lower score", () => {
@@ -103,13 +105,15 @@ describe("computeFitness total", () => {
       highFindings: 0,
       avgComplexity: 5,
     });
-    // Manual calculation
+    // Manual calculation (7 components with updated weights)
     const expected =
-      score.components.typeSafety.value * 0.25 +
-      score.components.testCoverage.value * 0.25 +
+      score.components.typeSafety.value * 0.20 +
+      score.components.testCoverage.value * 0.20 +
       score.components.patternScan.value * 0.20 +
       score.components.buildHealth.value * 0.15 +
-      score.components.complexity.value * 0.15;
+      score.components.complexity.value * 0.10 +
+      score.components.security.value * 0.10 +
+      score.components.dependencies.value * 0.05;
     assert.ok(Math.abs(score.total - expected) < 0.01,
       `total ${score.total} should ≈ manual ${expected}`);
   });

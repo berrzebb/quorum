@@ -13,7 +13,7 @@
 1. `CL-1` Core consensus loop (trigger → audit → agree)
 2. `CL-2` Auto-sync on pending response detection
 3. `CL-3` Quality rules integration (ESLint, npm audit)
-4. `CL-4` Planning-doc sync (gpt-only normalize pass)
+4. `CL-4` Planning-doc sync (eliminated — gpt-only pass removed with SQLite verdict migration)
 5. `CL-5` Config extraction + Linux/Windows compatibility
 6. `CL-6` plans/ documentation structure
 
@@ -51,7 +51,7 @@
 ## CL-4 Planning-Doc Sync
 
 - Goal:
-  - edits to planning_files → gpt-only normalize pass via respond_script --gpt-only
+  - edits to planning_files → (eliminated: --gpt-only flag and gpt-only normalize pass removed with SQLite verdict migration)
 - Prerequisite:
   - CL-2
 - First touch files:

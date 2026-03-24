@@ -207,17 +207,11 @@ export class MarkdownProjector {
    * Self-heal: check all tracked markdown files and report staleness.
    * Used by daemon periodic timer.
    */
-  selfHeal(watchFilePath: string, respondFilePath?: string): ProjectionDiff[] {
+  selfHeal(watchFilePath: string): ProjectionDiff[] {
     const diffs: ProjectionDiff[] = [];
 
     const watchDiff = this.checkStaleness(watchFilePath);
     if (watchDiff) diffs.push(watchDiff);
-
-    // Verdict file is optional — verdicts are stored in SQLite directly
-    if (respondFilePath) {
-      const respondDiff = this.checkStaleness(respondFilePath);
-      if (respondDiff) diffs.push(respondDiff);
-    }
 
     return diffs;
   }
@@ -241,38 +235,6 @@ export class MarkdownProjector {
         "g",
       );
       content = content.replace(tagPattern, `${expectedTag} $2`);
-    }
-
-    return content;
-  }
-
-  /**
-   * Project the verdict file from SQLite state.
-   * Updates verdict tags in the response file to match SQLite transitions.
-   */
-  projectVerdictFile(existingContent: string): string {
-    const items = this.queryItemStates();
-    if (items.length === 0) return existingContent;
-
-    let content = existingContent;
-
-    // Single-pass state counting
-    let hasReviewNeeded = false;
-    let hasChangesRequested = false;
-    let approvedCount = 0;
-    for (const i of items) {
-      if (i.currentState === "review_needed") hasReviewNeeded = true;
-      else if (i.currentState === "changes_requested") hasChangesRequested = true;
-      else if (i.currentState === "approved") approvedCount++;
-    }
-
-    // If all items are approved and content has CHANGES_REQUESTED verdict,
-    // update to APPROVED
-    if (!hasReviewNeeded && !hasChangesRequested && approvedCount > 0) {
-      content = content.replace(
-        /## Final Verdict\s*\n+\[CHANGES_REQUESTED\]/,
-        `## Final Verdict\n\n[APPROVED]`,
-      );
     }
 
     return content;

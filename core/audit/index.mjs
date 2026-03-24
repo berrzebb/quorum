@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global process, console */
 
-import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import * as bridge from "../bridge.mjs";
@@ -145,11 +145,21 @@ async function main() {
     deleteSavedSessionId();
   }
 
-  if (!claudePath || !existsSync(claudePath)) {
-    throw new Error(`Missing watch file: ${claudePath ?? consensus.watch_file}`);
-  }
+  // Read evidence from SQLite (single source of truth), fallback to file
+  let claudeMd;
+  try {
+    const evidence = bridge.getLatestEvidence();
+    if (evidence?.content) {
+      claudeMd = evidence.content;
+    }
+  } catch { /* bridge non-critical — fallback to file */ }
 
-  const claudeMd = readFileSync(claudePath, "utf8");
+  if (!claudeMd) {
+    if (!claudePath || !existsSync(claudePath)) {
+      throw new Error(`Missing watch file: ${claudePath ?? consensus.watch_file}`);
+    }
+    claudeMd = readFileSync(claudePath, "utf8");
+  }
 
   // Pre-check: eslint scope consistency before audit
   const eslintWarnings = checkEslintCoverage(claudeMd);
@@ -301,17 +311,9 @@ async function main() {
   runRespond(args);
 }
 
-// Lock is per-worktree: if --watch-file is in a worktree, lock goes there too.
-const watchFileArg = process.argv.find((a, i) => process.argv[i - 1] === "--watch-file");
-const auditLockRoot = watchFileArg ? deriveAuditCwd(watchFileArg) : REPO_ROOT;
-const auditLockPath = resolve(auditLockRoot, ".claude", "audit.lock");
 main()
   .catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`feedback-audit failed: ${message}`);
     process.exitCode = 1;
-  })
-  .finally(() => {
-    // 정상/에러 모두 락 해제 — 다음 감사가 시작될 수 있도록
-    try { rmSync(auditLockPath, { force: true }); } catch { /* ignore */ }
   });

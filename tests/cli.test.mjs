@@ -73,15 +73,15 @@ describe("quorum status", () => {
     }
   });
 
-  it("detects audit lock", () => {
-    const tmp = mkdtempSync(join(tmpdir(), "cli-lock-"));
+  it("shows audit status from audit-status.json", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "cli-status-"));
     const claudeDir = join(tmp, ".claude");
     mkdirSync(claudeDir, { recursive: true });
-    writeFileSync(join(claudeDir, "audit.lock"), JSON.stringify({ pid: 999, startedAt: new Date().toISOString() }));
+    writeFileSync(join(claudeDir, "audit-status.json"), JSON.stringify({ status: "changes_requested", pendingCount: 1 }));
 
     try {
       const result = runCli(["status"], { cwd: tmp });
-      assert.ok(result.stdout.includes("AUDITING"));
+      assert.ok(result.stdout.includes("PENDING"));
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

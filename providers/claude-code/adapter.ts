@@ -44,7 +44,6 @@ export class ClaudeCodeProvider implements QuorumProvider {
     this.config = config;
 
     const watchPath = resolve(config.repoRoot, config.watchFile);
-    const lockPath = resolve(config.repoRoot, ".claude", "audit.lock");
     const inboxPath = resolve(config.repoRoot, ".claude", "quorum-inbox.jsonl");
 
     // Mode 1: Poll hook-generated inbox
@@ -55,8 +54,9 @@ export class ClaudeCodeProvider implements QuorumProvider {
     // Mode 2: Watch evidence file for changes
     this.watchEvidence(watchPath);
 
-    // Monitor audit lock
-    this.watchAuditLock(lockPath);
+    // Note: audit.lock monitoring removed — ProcessMux + SQLite LockService
+    // now manage agent coordination. Audit state is tracked via audit-status.json
+    // and SQLite events.
 
     this.bus.emit(createEvent("session.start", "claude-code", {
       mode: existsSync(inboxPath) ? "hook-forwarding" : "file-watch",
@@ -154,24 +154,6 @@ export class ClaudeCodeProvider implements QuorumProvider {
     });
   }
 
-  private watchAuditLock(lockPath: string): void {
-    let wasLocked = existsSync(lockPath);
-
-    this.intervals.push(setInterval(() => {
-      if (!this.bus) return;
-
-      const isLocked = existsSync(lockPath);
-
-      if (!wasLocked && isLocked) {
-        this.pendingAuditCount++;
-        this.bus.emit(createEvent("audit.start", "claude-code"));
-        this.lastEventTime = Date.now();
-      } else if (wasLocked && !isLocked) {
-        this.pendingAuditCount = Math.max(0, this.pendingAuditCount - 1);
-        this.lastEventTime = Date.now();
-      }
-
-      wasLocked = isLocked;
-    }, 2000));
-  }
+  // watchAuditLock removed — ProcessMux + SQLite LockService manage agent coordination.
+  // Audit events are now emitted via the event bus directly by the audit process.
 }

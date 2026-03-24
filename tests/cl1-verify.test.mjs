@@ -2,15 +2,11 @@
 /**
  * CL-1 direct verification:
  *   1. singleRe  — H1-H6 excluded, H7+ and other single-char IDs collected
- *   2. find_respond_file — plugin-dir first, repo-root fallback, custom name
  *
  * Run: node tests/cl1-verify.test.mjs
  */
 
 import { strict as assert } from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { test, stats } from "./_helpers.mjs";
 
 // ─── 1. singleRe H1-H6 exclusion ────────────────────────────────────────────
@@ -45,75 +41,6 @@ test("F2 collected among mixed line", () => {
   assert.ok(ids.includes("F2"), "F2 missing");
   assert.ok(!ids.includes("H3"), "H3 must be excluded");
 });
-
-// ─── 2. find_respond_file fallback ──────────────────────────────────────────
-// Mirrors the find_respond_file() function in index.mjs (L45-L56).
-
-function find_respond_file({ respond_file = "verdict.md", watch_file, plugin_dir, repo_root }) {
-  const subPath = watch_file.split("/").slice(0, -1).join("/");
-  const dirs = [
-    join(plugin_dir, subPath),
-    join(repo_root,  subPath),
-  ];
-  for (const dir of dirs) {
-    for (const v of [respond_file, respond_file.toUpperCase(), respond_file.toLowerCase()]) {
-      const p = join(dir, v);
-      if (existsSync(p)) return p;
-    }
-  }
-  return null;
-}
-
-console.log("\nfind_respond_file fallback:");
-
-const tmp = mkdtempSync(join(tmpdir(), "cl1-"));
-try {
-  const pluginDir = join(tmp, "plugin");
-  const repoRoot  = join(tmp, "repo");
-  mkdirSync(join(pluginDir, "feedback"), { recursive: true });
-  mkdirSync(join(repoRoot,  "feedback"), { recursive: true });
-
-  test("returns null when file absent in both dirs", () => {
-    assert.strictEqual(
-      find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot }),
-      null,
-    );
-  });
-
-  test("resolves from plugin_dir first", () => {
-    writeFileSync(join(pluginDir, "feedback", "verdict.md"), "");
-    writeFileSync(join(repoRoot,  "feedback", "verdict.md"), "");
-    const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.startsWith(pluginDir), `expected plugin_dir prefix, got: ${result}`);
-  });
-
-  test("falls back to repo_root when absent in plugin_dir", () => {
-    rmSync(join(pluginDir, "feedback", "verdict.md"));
-    const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.startsWith(repoRoot), `expected repo_root prefix, got: ${result}`);
-  });
-
-  test("uses default respond_file='verdict.md' when not specified", () => {
-    const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.endsWith("verdict.md"), `expected verdict.md suffix, got: ${result}`);
-  });
-
-  test("respects custom respond_file name", () => {
-    writeFileSync(join(repoRoot, "feedback", "custom.md"), "");
-    const result = find_respond_file({ respond_file: "custom.md", watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.endsWith("custom.md"), `expected custom.md suffix, got: ${result}`);
-  });
-
-  test("case-insensitive match (uppercase variant)", () => {
-    rmSync(join(repoRoot, "feedback", "verdict.md"));
-    writeFileSync(join(repoRoot, "feedback", "VERDICT.MD"), "");
-    const result = find_respond_file({ watch_file: "feedback/claude.md", plugin_dir: pluginDir, repo_root: repoRoot });
-    assert.ok(result?.toUpperCase().endsWith("VERDICT.MD"), `expected VERDICT.MD match, got: ${result}`);
-  });
-
-} finally {
-  rmSync(tmp, { recursive: true, force: true });
-}
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 console.log(`\n${stats.passed + stats.failed} tests: ${stats.passed} passed, ${stats.failed} failed`);

@@ -80,9 +80,10 @@ agents/knowledge/          ← Cross-adapter shared protocols
   ├→ implementer-protocol.md  ← execution flow, completion gate, anti-patterns
   ├→ scout-protocol.md        ← RTM generation 8-phase, output rules
   ├→ specialist-base.md       ← JSON output format, judgment criteria
+  ├→ doc-sync-protocol.md     ← fact extraction, numeric mismatch detection, section parity
   └→ domains/{perf,a11y,...}.md ← 9 domain knowledge files
 
-adapters/shared/           ← Adapter-agnostic business logic (16 modules)
+adapters/shared/           ← Adapter-agnostic business logic (17 modules)
   ├→ repo-resolver.mjs     ← resolveRepoRoot() (git → env → fallback)
   ├→ config-resolver.mjs   ← findConfigPath(), loadConfig(), extractTags()
   ├→ audit-state.mjs       ← readAuditStatus(), buildResumeState(), buildStatusSignals()
@@ -102,14 +103,14 @@ adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
-  ├→ skills/            ← 9 skills
-  ├→ agents/            ← 12 agents (reference agents/knowledge/ + Claude Code tool bindings)
-  └→ commands/          ← 9 CLI shortcuts
+  ├→ skills/            ← 10 skills (incl. doc-sync)
+  ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
+  └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
 adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
   ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
-  ├→ skills/               ← 8 skills (audit, status, guide, verify + implementer, scout, perf-analyst, ui-reviewer)
+  ├→ skills/               ← 9 skills (audit, status, guide, verify, doc-sync + implementer, scout, perf-analyst, ui-reviewer)
   └→ commands/             ← 4 TOML commands
 
 adapters/codex/
@@ -147,6 +148,7 @@ adapters/codex/
 - **JSON-RPC Client**: `jsonrpc-client.mjs` — stdio JSON-RPC 2.0 client for Codex app-server mode. Bidirectional: client requests + server-initiated requests + notifications. 10MB buffer guard, request timeout, auto-reject on process exit.
 - **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.
 - **MuxAdapter**: `mux-adapter.mjs` — bridges ProcessMux (tmux/psmux) sessions with CliAdapter/NdjsonParser. `spawn()` creates a CLI session per model, `send()` writes prompts via mux, `capture()` parses NDJSON output. `spawnConsensus()` + `awaitConsensus()` for 3-model deliberative protocol.
+- **Doc-Sync**: `agents/knowledge/doc-sync-protocol.md` — extracts facts from code (hook counts, tool counts, test counts, versions) and fixes numeric mismatches + section parity gaps in 8 doc files. Runs automatically in merge-worktree Phase 2.5 before squash commit. `/quorum:doc-sync` for manual invocation.
 
 ## Testing
 

@@ -4,11 +4,12 @@
  * Loads handoff + recent changes + audit state as context for new sessions.
  * Detects interrupted audit cycles and orchestrator tracks → provides resume instructions.
  */
-import { readFileSync, existsSync, rmSync, cpSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
+import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -122,76 +123,17 @@ try {
 } catch { /* git unavailable */ }
 
 // ── 3. Resume detection ─────────────────────────────────────
-// 3a. Audit lock — stale process detection + cleanup
-const auditLock = resolve(REPO_ROOT, ".claude", "audit.lock");
-if (existsSync(auditLock)) {
-  let lockCleanedUp = false;
-  try {
-    const lock = JSON.parse(readFileSync(auditLock, "utf8"));
-    const ageMin = Math.round((Date.now() - (lock.startedAt ?? 0)) / 60000);
-
-    // PID liveness check
-    let pidAlive = false;
-    if (lock.pid) {
-      try { process.kill(lock.pid, 0); pidAlive = true; } catch { /* dead */ }
-    }
-
-    if (!pidAlive) {
-      // 프로세스 사망 — 락 정리 + 재개 안내
-      rmSync(auditLock, { force: true });
-      lockCleanedUp = true;
-      resumeActions.push(
-        `감사 프로세스(PID ${lock.pid ?? "?"})가 ${ageMin}분 전 시작 후 종료됨. audit.lock 자동 정리 완료.`
-        + `\n  → watch_file의 ${triggerTag} 상태를 확인하고 필요 시 증거를 재제출하세요.`
-      );
-    } else {
-      context += `⚠ Background audit in progress (PID ${lock.pid}, ${ageMin}min ago)\n`;
-    }
-  } catch {
-    // 손상된 락 파일 — 정리
-    rmSync(auditLock, { force: true });
-    lockCleanedUp = true;
-    resumeActions.push("손상된 audit.lock 정리됨. 감사 상태를 확인하세요.");
-  }
-}
-
-// 3b. Audit status (from audit-status.json marker — no verdict file needed)
-const auditStatusPath = resolve(REPO_ROOT, ".claude", "audit-status.json");
-const watchPath = resolve(REPO_ROOT, watchFile);
-let watchContent = "";
-
-if (existsSync(watchPath)) {
-  watchContent = readFileSync(watchPath, "utf8");
-}
-
-if (watchContent) {
-  const hasTrigger = watchContent.includes(triggerTag);
-
-  // Read audit status from marker file (written by audit process)
-  let auditStatus = null;
-  if (existsSync(auditStatusPath)) {
-    try { auditStatus = JSON.parse(readFileSync(auditStatusPath, "utf8")); } catch { /* parse error */ }
-  }
-
-  const isPending = auditStatus?.status === "changes_requested";
-  const isApproved = auditStatus?.status === "approved";
-
-  if (isPending && hasTrigger) {
-    // pending 보정이 필요한 상태 — 가장 일반적인 resume 케이스
+// 3a. Audit status
+const auditStatus = readAuditStatus(REPO_ROOT);
+if (auditStatus) {
+  if (auditStatus.status === "changes_requested") {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
     resumeActions.push(
       `${pendingTag} 보정이 필요합니다.`
       + (rejectionCodes.length > 0 ? `\n  반려 코드: ${rejectionCodes.join(", ")}` : "")
       + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
-      + `\n  → 파일: ${watchFile} (${triggerTag} 유지)`
     );
-  } else if (hasTrigger && !isPending && !isApproved && !existsSync(auditLock)) {
-    // trigger_tag 있지만 감사 결과 없음 — 감사가 실행되지 않았거나 실패
-    resumeActions.push(
-      `${triggerTag} 증거가 제출되었으나 감사 결과가 없습니다.`
-      + `\n  → 감사가 실행되지 않았거나 실패했을 수 있습니다. 증거를 재제출하세요.`
-    );
-  } else if (isApproved && !hasTrigger) {
+  } else if (auditStatus.status === "approved") {
     context += `Current audit status: ${agreeTag} — 합의 완료 상태\n`;
   }
 }

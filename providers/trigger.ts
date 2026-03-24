@@ -1,7 +1,7 @@
 /**
  * Consensus Trigger — decides whether to run simple or deliberative audit.
  *
- * Evaluates 6 base conditions + optional domain signals to determine
+ * Evaluates 12 factors (6 base + 4 domain/quality + 2 FDE learning) to determine
  * if full deliberative consensus is needed.
  * Maps to complexity tiers: T1 (skip), T2 (simple), T3 (deliberative).
  */
@@ -31,6 +31,10 @@ export interface TriggerContext {
   fitnessScore?: number;
   /** Blast radius ratio (0.0-1.0). High ratio → higher tier. */
   blastRadius?: number;
+  /** Number of changes to the same files in recent history. Higher = hot spot. */
+  changeVelocity?: number;
+  /** Past stagnation pattern count for similar file patterns. */
+  stagnationHistory?: number;
 }
 
 export interface TriggerResult {
@@ -104,7 +108,7 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
   const activeDomains: (keyof DetectedDomains)[] = [];
   if (ctx.domains) {
     // High-risk domains push toward higher tiers
-    const HIGH_RISK_DOMAINS: (keyof DetectedDomains)[] = ["migration", "compliance", "concurrency"];
+    const HIGH_RISK_DOMAINS: (keyof DetectedDomains)[] = ["migration", "compliance", "concurrency", "security"];
     const MID_RISK_DOMAINS: (keyof DetectedDomains)[] = ["performance", "accessibility", "infrastructure"];
 
     for (const domain of HIGH_RISK_DOMAINS) {
@@ -148,6 +152,20 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     const blastContribution = Math.min(0.15, ctx.blastRadius * 0.3);
     score += blastContribution;
     reasons.push(`blast radius ${(ctx.blastRadius * 100).toFixed(0)}% — wide impact`);
+  }
+
+  // 11. Change velocity — frequently changed files are higher risk (0-0.1)
+  if (ctx.changeVelocity !== undefined && ctx.changeVelocity >= 3) {
+    const velocityContribution = Math.min(0.1, ctx.changeVelocity * 0.02);
+    score += velocityContribution;
+    reasons.push(`change velocity ${ctx.changeVelocity} (hot spot)`);
+  }
+
+  // 12. Stagnation history — past stagnation on similar files → auto-escalate (0-0.15)
+  if (ctx.stagnationHistory !== undefined && ctx.stagnationHistory > 0) {
+    const stagnationContribution = Math.min(0.15, ctx.stagnationHistory * 0.05);
+    score += stagnationContribution;
+    reasons.push(`${ctx.stagnationHistory} past stagnation events on similar files`);
   }
 
   // Clamp

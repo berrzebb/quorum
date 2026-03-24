@@ -167,8 +167,8 @@ describe("audit.mjs worktree isolation invariants", () => {
 describe("index.mjs worktree isolation invariants", () => {
   const indexSource = readFileSync(resolve(ADAPTER_DIR, "index.mjs"), "utf8");
 
-  it("lock path derives from watchFilePath", () => {
-    assert.match(indexSource, /lockRoot/);
+  it("worktree root derives from watchFilePath", () => {
+    assert.match(indexSource, /worktreeRoot/);
     assert.match(indexSource, /wMatch.*\.claude.*worktrees/);
   });
 

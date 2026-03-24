@@ -38,17 +38,43 @@ quorum setup                   # 설정 + MCP 서버 등록
 quorum daemon                  # TUI 대시보드
 ```
 
-**어떤 AI 도구와든** 사용 가능 — Claude Code, Codex, Cursor, Gemini, 또는 수동.
+**어떤 AI 도구와든** 사용 가능 — Claude Code, Codex, Gemini, 또는 수동.
 
 ### Claude Code 플러그인
 
 편집할 때마다 자동으로 감사를 트리거하려면:
 
 ```bash
-claude plugin install quorum
+claude plugin marketplace add berrzebb/quorum
+claude plugin install quorum@berrzebb-plugins
 ```
 
-12개 라이프사이클 훅이 등록됩니다. CLI는 플러그인과 함께 동작합니다.
+22개 라이프사이클 훅, 19개 MCP 도구, 9개 스킬, 12개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
+
+### Gemini CLI 확장
+
+Gemini CLI에서 자동 훅 연동:
+
+```bash
+gemini extensions install https://github.com/berrzebb/quorum.git
+# 또는 개발용:
+gemini extensions link adapters/gemini
+```
+
+11개 훅, 8개 스킬, 4개 명령어, 19개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
+
+### Codex CLI 훅
+
+OpenAI Codex CLI에서 자동 훅 연동:
+
+```bash
+# 프로젝트에 훅 설정 복사
+cp adapters/codex/hooks/hooks.json .codex/hooks.json
+# 훅 기능 플래그 활성화
+codex -c features.codex_hooks=true
+```
+
+5개 훅(SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)이 등록됩니다.
 
 ### 소스에서 빌드
 
@@ -114,7 +140,11 @@ quorum migrate --dry-run  # 미리보기
 ```
 코드 작성
     → PostToolUse 훅 발화       # 자동
-    → 트리거 평가 (T1/T2/T3)   # 스킵, 단일, 숙의
+    → regex 스캔 + AST 정밀화  # 하이브리드: false positive 제거
+    → 피트니스 점수 계산        # 5-컴포넌트 품질 메트릭
+    → 피트니스 게이트           # 자동 거절 / 자가 수정 / 진행
+    → 트리거 평가 (10팩터)     # T1 스킵, T2 단일, T3 숙의
+    → 도메인 감지 + blast radius # 전문가 도구 활성화
     → 감사자 실행               # 백그라운드, 디바운스
     → 판정 동기화               # 태그 승격/강등
     → 세션 게이트               # 회고 완료까지 차단
@@ -125,15 +155,21 @@ quorum migrate --dry-run  # 미리보기
 
 ```
 quorum/
-├── cli/          ← 통합 진입점 (플러그인 없이 동작)
-├── daemon/       ← Ink TUI 대시보드 (독립 동작)
-├── bus/          ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + ProcessMux
-├── providers/    ← 합의 프로토콜 + 트리거 + 라우터 + 도메인 전문의원 + 에이전트 로더
-├── core/         ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 17개
-└── adapters/     ← 선택적 IDE 통합 (Claude Code 훅, Codex 감시자)
+├── cli/              ← 통합 진입점 (플러그인 없이 동작)
+├── daemon/           ← Ink TUI 대시보드 + FitnessPanel (독립 동작)
+├── bus/              ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + Claims + Orchestrator
+├── providers/        ← 합의 프로토콜 + 트리거 (10팩터) + 라우터 + 도메인 전문의원 + AST 분석기
+├── core/             ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 19개
+├── languages/        ← 플러그 가능 언어 스펙 (프래그먼트 기반: spec.mjs + spec.{domain}.mjs)
+├── agents/knowledge/ ← 공유 에이전트 프로토콜 (구현자, 스카우트, 9 도메인)
+└── adapters/
+    ├── shared/       ← 어댑터 공용 비즈니스 로직 (17 모듈: HookRunner, NDJSON, MuxAdapter 등)
+    ├── claude-code/  ← Claude Code 훅 (22) + 에이전트 (12) + 스킬 (9)
+    ├── gemini/       ← Gemini CLI 훅 (11) + 스킬 (8) + 명령어 (4)
+    └── codex/        ← Codex CLI 훅 (5)
 ```
 
-`adapters/` 계층은 **선택 사항**. 그 위의 모든 것은 독립적으로 동작합니다.
+`adapters/` 계층은 **선택 사항**. 그 위의 모든 것은 독립적으로 동작합니다. 새 어댑터 추가 = I/O 래퍼만 작성 (~280줄, Codex가 증명).
 
 ## 핵심 개념
 
@@ -173,9 +209,36 @@ quorum/
 
 도구는 결정론적 (비용 0, 항상 실행). 에이전트는 LLM 기반 (충분한 티어에서만 활성화).
 
+### 하이브리드 스캐닝 (v0.3.0)
+
+패턴 스캐닝의 3층 방어:
+
+1. **Regex 1차 스캔** — 빠름 (<1ms/파일), 후보 탐지
+2. **scan-ignore 프라그마** — `// scan-ignore`로 자기 참조 매칭 억제
+3. **AST 2차 검증** — 정밀 (<50ms/파일), 주석/문자열 내부 매칭 제거, 제어 흐름 분석
+
+**프로그램 모드** (`ts.createProgram()`): 크로스파일 분석 — 미사용 export 탐지, import 순환 감지.
+
+### 피트니스 점수 엔진 (v0.4.0)
+
+Karpathy의 autoresearch에서 영감: **측정 가능한 것은 LLM에게 묻지 않는다.**
+
+| 컴포넌트 | 가중치 | 입력 |
+|---------|--------|------|
+| Type Safety | 0.25 | `as any` 수 / KLOC |
+| Test Coverage | 0.25 | line + branch 커버리지 |
+| Pattern Scan | 0.20 | HIGH findings 수 |
+| Build Health | 0.15 | tsc + eslint 통과율 |
+| Complexity | 0.15 | 평균 순환 복잡도 |
+
+**FitnessLoop** 3단 게이트:
+- **auto-reject**: 점수 급락 >0.15 또는 절대 <0.3 → LLM 감사 생략 (비용 절감)
+- **self-correct**: 소폭 하락 (0.05–0.15) → 에이전트에게 경고
+- **proceed**: 유지/개선 → 베이스라인 갱신, 감사 진행
+
 ### 조건부 트리거
 
-모든 변경에 전체 합의가 필요하지는 않음. 12팩터 점수 시스템 (6 기본 + 도메인 신호):
+모든 변경에 전체 합의가 필요하지는 않음. 10팩터 점수 시스템 (6 기본 + 도메인 + 계획 + 피트니스 + blast radius):
 
 | 티어 | 점수 | 모드 |
 |------|------|------|
@@ -185,12 +248,73 @@ quorum/
 
 ### 정체 감지
 
-감사 루프가 진전 없이 순환하면 4가지 패턴 감지:
+감사 루프가 진전 없이 순환하면 5가지 패턴 감지:
 
 - **Spinning**: 같은 판정 3회 이상 반복
 - **Oscillation**: 승인 → 거절 → 승인 → 거절
 - **No drift**: 동일 거절 코드 반복
 - **Diminishing returns**: 개선률 하락
+- **Fitness plateau**: 피트니스 점수 기울기 ≈ 0 (최근 N회 평가)
+
+### Blast Radius 분석 (v0.4.0)
+
+역방향 import 그래프(inEdges)에서 BFS로 변경 파일의 전이적 의존자를 계산:
+
+```bash
+quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+# → 12/95 files affected (12.6%) — 깊이순 영향 목록
+```
+
+- **10번째 트리거 팩터**: ratio > 10% → 점수 += 최대 0.15 (자동 T3 에스컬레이션)
+- **Pre-verify 증거**: blast radius 섹션이 감사자 증거에 포함
+
+### 3-Layer 어댑터 패턴 (v0.4.2)
+
+어댑터 간 비즈니스 로직 공유. I/O만 다르다:
+
+```
+I/O (adapters/{adapter}/)
+  Claude Code: hookSpecificOutput, permissionDecision
+  Gemini CLI:  JSON-only stdout
+  Codex CLI:   .codex/hooks.json
+      ↓ readStdinJson() + withBridge()
+Business Logic (adapters/shared/ — 17 modules)
+  hook-runner, trigger-runner, ndjson-parser,
+  cli-adapter, mux-adapter, jsonrpc-client, ...
+      ↓ bridge.init() + checkHookGate()
+Core (core/)
+  audit, tools (19 MCP), EventStore, bus
+```
+
+새 어댑터 추가: ~280줄 (Codex 어댑터 기준).
+
+### HookRunner 엔진 (v0.4.2)
+
+사용자 정의 훅. `config.json` 또는 `HOOK.md`에 작성:
+
+```jsonc
+{
+  "hooks": {
+    "audit.submit": [
+      { "name": "freeze-guard", "handler": { "type": "command", "command": "node scripts/check-freeze.mjs" } }
+    ]
+  }
+}
+```
+
+command/http 핸들러, 환경변수 보간 (`$VAR`), deny-first-break, 비동기 fire-and-forget, regex 매처 필터링.
+
+### 멀티 모델 NDJSON 프로토콜 (v0.4.2)
+
+3개 CLI 런타임의 출력을 통합 파싱:
+
+| 런타임 | 포맷 | 어댑터 |
+|--------|------|--------|
+| Claude Code | `stream-json` | `ClaudeCliAdapter` |
+| Codex | `exec --json` | `CodexCliAdapter` |
+| Gemini | `stream-json` | `GeminiCliAdapter` |
+
+모두 `AgentOutputMessage`로 변환. `MuxAdapter`가 ProcessMux(tmux/psmux) 세션을 연결해서 크로스 모델 합의에 쓴다.
 
 ### 동적 에스컬레이션
 
@@ -221,26 +345,27 @@ quorum/
 
 프로바이더 무관. 원하는 감사자를 사용.
 
-| 프로바이더 | 메커니즘 | 플러그인 필요? |
-|-----------|---------|-------------|
-| Claude Code | 12개 네이티브 훅 | 선택 (자동 트리거) |
-| Codex | 파일 감시 + 상태 폴링 | 아니오 |
-| Cursor | — | 예정 |
-| Gemini | — | 예정 |
-| 수동 | `quorum audit` | 아니오 |
+| 프로바이더 | 메커니즘 | 훅 수 | 플러그인 필요? |
+|-----------|---------|-------|-------------|
+| Claude Code | 네이티브 훅 | 22 | 선택 (자동 트리거) |
+| Gemini CLI | 네이티브 훅 | 11 | 선택 (`gemini extensions install`) |
+| Codex CLI | 네이티브 훅 | 5 | 선택 (`.codex/hooks.json`) |
+| 수동 | `quorum audit` | — | 아니오 |
 
 ## 도구
 
 LLM 판단을 결정론적 사실로 대체하는 도구. 할루시네이션 불가.
 
-**분석 도구** (17개):
+**분석 도구** (19개):
 ```bash
 # 핵심 분석
 quorum tool code_map src/              # 심볼 인덱스
 quorum tool dependency_graph .          # import DAG, 순환 감지
+quorum tool blast_radius --changed_files '["core/bridge.mjs"]'  # 전이적 영향 범위
 quorum tool audit_scan src/             # 타입 안전성, 하드코딩 패턴
 quorum tool coverage_map                # 파일별 테스트 커버리지
 quorum tool audit_history --summary     # 감사 판정 패턴
+quorum tool ai_guide                    # 컨텍스트 인식 온보딩
 
 # RTM & 검증
 quorum tool rtm_parse docs/rtm.md      # RTM 파싱
@@ -248,8 +373,8 @@ quorum tool rtm_merge --base a --updates '["b"]'  # 워크트리 RTM 병합
 quorum tool fvm_generate /project       # FE×API×BE 접근 매트릭스
 quorum tool fvm_validate --fvm_path x --base_url http://localhost:3000 --credentials '{}'
 
-# 도메인 전문의원 (v0.3.0)
-quorum tool perf_scan src/             # 성능 안티패턴
+# 도메인 전문의원
+quorum tool perf_scan src/             # 성능 안티패턴 (하이브리드: regex+AST)
 quorum tool compat_check src/          # API 호환성 깨짐
 quorum tool a11y_scan src/             # 접근성 (JSX/TSX)
 quorum tool license_scan .             # 라이선스 + PII
@@ -274,7 +399,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 533 tests
+npm test                # 921 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```
@@ -284,8 +409,8 @@ npm run build           # 컴파일
 태그 푸시 시 GitHub Actions가 크로스 플랫폼 바이너리 빌드:
 
 ```bash
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.4.2
+git push origin v0.4.2
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 바이너리가 Releases에 올라감
 ```
 
