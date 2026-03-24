@@ -94,5 +94,10 @@
   "workflows.retrieval_mode_hybrid": "혼합 검색",
   "tool_call.running": "실행 중",
   "tool_call.success": "완료",
-  "tool_call.error": "오류"
+  "tool_call.error": "오류",
+  "signal.retro_pending": "회고 미완료 — Bash/Agent 차단 중. `echo session-self-improvement-complete` 로 해제",
+  "signal.pending_corrections": "{tag} 보정 필요 (반려 {count}건) — 감사 결과 확인 후 수정 & 재제출",
+  "signal.approved": "{tag} — 커밋 가능",
+  "resume.pending_corrections": "{tag} 보정이 필요합니다.{codes}\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.",
+  "resume.approved_status": "Current audit status: {tag} — 합의 완료 상태"
 }

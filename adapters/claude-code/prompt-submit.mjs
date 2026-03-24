@@ -11,6 +11,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { createT } from "../../core/context.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,8 @@ if (!configPath) process.exit(0);
 let cfg;
 try { cfg = JSON.parse(readFileSync(configPath, "utf8")); } catch { process.exit(0); }
 
+const locale = cfg.plugin?.locale ?? "en";
+const t = createT(locale);
 const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
 const triggerTag = cfg.consensus?.trigger_tag ?? "[GPT미검증]";
 const agreeTag = cfg.consensus?.agree_tag ?? "[합의완료]";
@@ -60,7 +63,7 @@ if (existsSync(retroMarker)) {
     const m = JSON.parse(readFileSync(retroMarker, "utf8"));
     if (m.retro_pending) {
       retroPending = true;
-      signals.push("⏳ 회고 미완료 — Bash/Agent 차단 중. `echo session-self-improvement-complete` 로 해제");
+      signals.push(`⏳ ${t("signal.retro_pending")}`);
     }
   } catch { /* parse error */ }
 }
@@ -70,9 +73,9 @@ const auditStatus = readAuditStatus(REPO_ROOT);
 if (auditStatus) {
   if (auditStatus.status === AUDIT_STATUS.CHANGES_REQUESTED) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;
-    signals.push(`❌ ${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
+    signals.push(`❌ ${t("signal.pending_corrections", { tag: pendingTag, count: codeCount })}`);
   } else if (auditStatus.status === AUDIT_STATUS.APPROVED) {
-    signals.push(`✅ ${agreeTag} — 커밋 가능`);
+    signals.push(`✅ ${t("signal.approved", { tag: agreeTag })}`);
   }
 }
 

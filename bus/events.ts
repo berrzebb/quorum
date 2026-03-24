@@ -120,6 +120,7 @@ export interface AuditVerdictPayload {
   verdict: AuditVerdict;
   codes?: string[];
   summary?: string;
+  mode?: string;
 }
 
 export interface AgentSpawnPayload {
@@ -352,13 +353,14 @@ export interface ParliamentConvergencePayload {
 }
 
 export interface ParliamentSessionDigestPayload {
+  agendaId: string;
   sessionType: "morning" | "afternoon";
-  agendaItems: string[];
-  classifications: Record<MeetingClassification, number>;
-  amendmentsProposed: number;
-  amendmentsApproved: number;
-  convergenceScore: number;
-  summary: string;
+  verdictResult: string;
+  converged: boolean;
+  amendmentsResolved: number;
+  confluencePassed: boolean;
+  errorCount: number;
+  duration: number;
 }
 
 export interface ParliamentCPSPayload {

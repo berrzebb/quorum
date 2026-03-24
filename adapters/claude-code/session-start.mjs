@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
 import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { createT } from "../../core/context.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -94,6 +95,7 @@ if (!configPath) {
 }
 
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+const t = createT(cfg.plugin?.locale ?? "en");
 const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
 const triggerTag = cfg.consensus?.trigger_tag ?? "[GPT미검증]";
 const agreeTag = cfg.consensus?.agree_tag ?? "[합의완료]";
@@ -129,12 +131,13 @@ if (auditStatus) {
   if (auditStatus.status === AUDIT_STATUS.CHANGES_REQUESTED) {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
     resumeActions.push(
-      `${pendingTag} 보정이 필요합니다.`
-      + (rejectionCodes.length > 0 ? `\n  반려 코드: ${rejectionCodes.join(", ")}` : "")
-      + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
+      t("resume.pending_corrections", {
+        tag: pendingTag,
+        codes: rejectionCodes.length > 0 ? `\n  Rejection codes: ${rejectionCodes.join(", ")}` : "",
+      })
     );
   } else if (auditStatus.status === AUDIT_STATUS.APPROVED) {
-    context += `Current audit status: ${agreeTag} — 합의 완료 상태\n`;
+    context += `${t("resume.approved_status", { tag: agreeTag })}\n`;
   }
 }
 

@@ -310,6 +310,7 @@ export async function run(args: string[]): Promise<void> {
         const missing = availability.unavailable.map(u => `${u.role} (${u.provider})`).join(", ");
         console.error(`${C.red}Unavailable auditors: ${missing}${C.reset}`);
         console.error(`${C.dim}Use --force to skip this check${C.reset}`);
+        store.close();
         process.exit(1);
       }
     }
@@ -336,6 +337,7 @@ export async function run(args: string[]): Promise<void> {
         if (!parsed.topic) parsed.topic = checkpoint.topic;
       } else {
         console.error(`${C.red}No checkpoint found for session: ${parsed.resume}${C.reset}`);
+        store.close();
         process.exit(1);
       }
     }

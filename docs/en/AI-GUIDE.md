@@ -130,6 +130,18 @@ Use deterministic tools before LLM reasoning:
 | `act_analyze` | PDCA Act analysis (improvement items) |
 | `ai_guide` | AI agent guide queries |
 
+## Parliament Protocol
+
+When `parliament.enabled` in config or `quorum parliament` CLI is used:
+
+1. **Diverge-Converge**: 3 roles speak freely (no role constraints), Judge converges into 4 MECE registers + 5-classification (gap/strength/out/buy/build)
+2. **Meeting Log**: N sessions accumulate → convergence detected → CPS (Context-Problem-Solution) generated
+3. **Amendments**: gap classifications auto-propose amendments; majority voting with implementer testimony (no vote)
+4. **Enforcement Gates**: 5 gates block work when protocol conditions are violated (amendment/verdict/confluence/design/regression)
+5. **Blueprint Lint**: `quorum tool blueprint_lint` checks naming conventions from Design Phase Blueprint against source code
+
+Use `quorum parliament --history` to review past sessions. Use `--mux` for daemon-observable deliberation.
+
 ## Stagnation Detection
 
 If the audit loop cycles without progress, quorum auto-detects:

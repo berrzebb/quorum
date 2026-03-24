@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * PreCompact hook: 컨텍스트 압축 전 감사 상태 스냅샷 저장.
+ * PreCompact hook: save audit state snapshot before context compaction.
  *
- * 압축 후 SessionStart에서 복원하여 감사 사이클 연속성을 보장한다.
- * 저장 대상: retro-marker, 마지막 감사 상태 (audit-status.json).
+ * Restored at SessionStart after compaction to maintain audit cycle continuity.
+ * Saved state: retro-marker, last audit status (audit-status.json).
  *
- * Fail-open: 모든 에러는 무시하고 stdin을 그대로 통과시킨다.
+ * Fail-open: all errors are ignored and stdin is passed through as-is.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -39,14 +39,14 @@ function loadConfig() {
 try {
   const cfg = loadConfig();
 
-  // Hook toggle — 비활성화 시 스냅샷 생략
+  // Hook toggle — skip snapshot when disabled
   if (cfg.plugin?.hooks_enabled?.pre_compact === false) throw new Error("disabled");
 
   const REPO_ROOT = resolveRepoRoot();
   const claudeDir = resolve(REPO_ROOT, ".claude");
   const snapshotPath = resolve(claudeDir, "compaction-snapshot.json");
 
-  // 1. retro-marker 상태
+  // 1. retro-marker state
   const markerPath = resolve(__dirname, ".session-state", "retro-marker.json");
   let retroMarker = null;
   if (existsSync(markerPath)) {
@@ -59,7 +59,7 @@ try {
     ? `${status.status ?? "unknown"} (pending: ${status.pendingCount ?? 0})`
     : null;
 
-  // 4. 스냅샷 저장
+  // 4. Save snapshot
   if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
   writeFileSync(snapshotPath, JSON.stringify({
     saved_at: new Date().toISOString(),
@@ -67,7 +67,7 @@ try {
     last_audit_status: lastAuditStatus,
   }, null, 2), "utf8");
 } catch {
-  // Fail-open: 에러 시 (toggle disabled 포함) 아무 것도 하지 않음
+  // Fail-open: on error (including toggle disabled) do nothing
 }
 
 // stdin pass-through

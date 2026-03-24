@@ -62,13 +62,41 @@
 ```bash
 quorum setup              # 프로젝트 초기화
 quorum daemon             # TUI 대시보드
-quorum status             # 게이트 상태
+quorum status             # 게이트 상태 (의회 포함)
 quorum audit              # 수동 감사
 quorum plan               # 작업 분해 목록
+quorum parliament "논제"  # 의회 심의
 quorum ask codex "..."    # 프로바이더 직접 쿼리
 quorum tool code_map      # MCP 도구 실행
+quorum tool blueprint_lint # 네이밍 규칙 검증
 quorum migrate            # consensus-loop 데이터 가져오기
 ```
+
+---
+
+## 의회 프로토콜 (Parliament)
+
+입법 메타포를 활용한 구조적 합의: 논제 → 심의 → CPS → 설계 → PRD → WB → 감사.
+
+```bash
+quorum parliament "결제 시스템 설계"               # 기본 심의
+quorum parliament --rounds 3 "인증 설계"          # 다중 라운드 수렴
+quorum parliament --mux "시스템 설계"             # daemon에서 관찰 가능한 세션
+quorum parliament --history                       # 과거 세션 조회
+quorum parliament --resume <id>                   # 심의 재개
+```
+
+### 강제 게이트 (Enforcement Gates)
+
+5개 구조적 게이트가 위반 시 **작업을 차단** (문서화가 아닌 코드 강제):
+
+| 게이트 | 차단 조건 | 우회 |
+|--------|----------|------|
+| Amendment | 미결 개정안 존재 | `--force` |
+| Verdict | 최종 감사 ≠ approved | `--force` |
+| Confluence | 합류 검증 실패 | `--force` |
+| Design | 설계 산출물 미존재 | `--force` |
+| Regression | Normal Form 단계 후퇴 | 경고만 |
 
 ---
 

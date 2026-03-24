@@ -62,12 +62,40 @@ code edit → PostToolUse hook
 ```bash
 quorum setup              # initialize project
 quorum daemon             # TUI dashboard
-quorum status             # gate status
+quorum status             # gate status (incl. parliament)
 quorum audit              # manual trigger
 quorum plan               # list work breakdowns
+quorum parliament "topic" # parliamentary deliberation
 quorum ask codex "..."    # direct provider query
 quorum tool code_map      # run MCP tool
+quorum tool blueprint_lint # naming convention check
 ```
+
+---
+
+## Parliament Protocol
+
+Legislative metaphor for structured consensus: topic → deliberation → CPS → Design → PRD → WB → audit.
+
+```bash
+quorum parliament "payment system design"          # basic
+quorum parliament --rounds 3 "auth design"         # multi-round convergence
+quorum parliament --mux "system design"            # daemon-observable sessions
+quorum parliament --history                       # review past sessions
+quorum parliament --resume <id>                   # continue deliberation
+```
+
+### Enforcement Gates
+
+5 structural gates that **block work** (not just document):
+
+| Gate | Blocks When | Bypass |
+|------|------------|--------|
+| Amendment | Pending amendments unresolved | `--force` |
+| Verdict | Latest audit != approved | `--force` |
+| Confluence | Verification failed | `--force` |
+| Design | Design artifacts missing | `--force` |
+| Regression | Normal-form stage regressed | alert only |
 
 ---
 
@@ -75,10 +103,10 @@ quorum tool code_map      # run MCP tool
 
 | Round | Roles | Purpose |
 |-------|-------|---------|
-| 1 (parallel) | Advocate + Devil's Advocate | Independent analysis |
-| 2 (sequential) | Judge | Final verdict from both opinions |
+| 1 (parallel) | Advocate + Devil's Advocate | Independent analysis (free speech) |
+| 2 (sequential) | Judge | Converge into 4 MECE registers + 5-classification |
 
-Devil's Advocate checks: **root cause vs symptom treatment.**
+Parliament mode adds: meeting log accumulation → convergence detection → CPS generation → auto-amendment proposal.
 
 ---
 
@@ -153,7 +181,7 @@ Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LL
 
 ## 3-Layer Adapter Pattern (v0.4.2)
 
-어댑터 간 비즈니스 로직 공유. I/O만 런타임별로 다름:
+Shared business logic across adapters. Only I/O differs per runtime:
 
 | Layer | Role | Location |
 |-------|------|----------|

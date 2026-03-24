@@ -64,7 +64,7 @@ function validate_evidence_format(content) {
     }
   }
 
-  // ── Test Command glob 금지 ──
+  // ── Test Command: reject glob patterns ──
   if (/### Test Command/.test(triggerSection)) {
     const cmdSection = triggerSection.split(/### Test Command/i)[1]?.split(/### /)[0] || "";
     if (/\*\*?\/|\*\.\w+/.test(cmdSection)) {
@@ -72,7 +72,7 @@ function validate_evidence_format(content) {
     }
   }
 
-  // ── Test Result 비어있는지 ──
+  // ── Test Result: check non-empty ──
   if (/### Test Result/.test(triggerSection)) {
     const resultSection = triggerSection.split(/### Test Result/i)[1]?.split(/### /)[0] || "";
     if (resultSection.trim().length < 10) {
@@ -80,7 +80,7 @@ function validate_evidence_format(content) {
     }
   }
 
-  // ── 간이 감사: Changed Files 실제 존재 확인 ──
+  // ── Quick audit: verify Changed Files exist ──
   if (/### Changed Files/.test(triggerSection)) {
     const filesSection = triggerSection.split(/### Changed Files/i)[1]?.split(/### /)[0] || "";
     const listedFiles = [...filesSection.matchAll(/`([^`]+\.[a-zA-Z]+)`/g)].map((m) => m[1]);
@@ -95,13 +95,13 @@ function validate_evidence_format(content) {
     }
   }
 
-  // ── 간이 감사: git diff와 Changed Files 비교 ──
+  // ── Quick audit: compare git diff vs Changed Files ──
   if (/### Changed Files/.test(triggerSection)) {
     try {
       const diffFiles = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
         .trim().split("\n").filter(Boolean);
       if (diffFiles.length === 0) {
-        // staged 없으면 unstaged 확인
+        // no staged files — check unstaged
         const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true })
           .trim().split("\n").filter(Boolean);
         if (unstaged.length > 0) {
@@ -113,7 +113,7 @@ function validate_evidence_format(content) {
           }
         }
       }
-    } catch { /* git 사용 불가 시 무시 */ }
+    } catch { /* skip if git unavailable */ }
   }
 
   // ── Quick audit: tag conflict (agree + trigger on same line) ──
@@ -173,7 +173,7 @@ function run_audit(watchFilePath) {
     return;
   }
 
-  // 백그라운드 프로세스로 감사 실행 — 훅 즉시 반환
+  // Spawn audit in background — hook returns immediately
   const logPath = resolve(worktreeRoot, ".claude", "audit-bg.log");
   const logFd = openSync(logPath, "w");
 
@@ -195,7 +195,7 @@ function run_audit(watchFilePath) {
     return;
   }
 
-  // spawn 에러 핸들링 (ENOENT 등 — 비동기 에러)
+  // Handle spawn errors (ENOENT etc — async)
   child.on("error", (err) => {
     log("CHILD_ERROR: " + (err.message ?? err));
     try { closeSync(logFd); } catch { /* already closed by normal path */ }
@@ -334,7 +334,7 @@ async function main() {
     const wm = watchPath.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
     if (wm) debounceRoot = wm[1];
 
-    // 디바운스: 연속 Edit 시 마지막 Edit만 감사 트리거 (per-worktree)
+    // Debounce: only trigger audit on last Edit in a sequence (per-worktree)
     const DEBOUNCE_MS = 10_000;
     const debounceDir = resolve(debounceRoot, ".claude");
     if (!existsSync(debounceDir)) { try { mkdirSync(debounceDir, { recursive: true }); } catch { /* race-safe */ } }
@@ -345,7 +345,7 @@ async function main() {
 
     await new Promise((r) => setTimeout(r, DEBOUNCE_MS));
 
-    // 디바운스 확인: 내가 쓴 timestamp가 아직 유효한가?
+    // Debounce check: is my timestamp still current?
     try {
       const current = readFileSync(debouncePath, "utf8").trim();
       if (current !== String(now)) {
@@ -357,11 +357,11 @@ async function main() {
       return;
     }
 
-    // 디바운스 통과 — 마지막 Edit 확인. 최신 content 다시 읽기.
+    // Debounce passed — last Edit confirmed. Re-read latest content.
     const freshContent = readFileSync(watchPath, "utf8");
     if (!has_trigger(freshContent)) { log("EXIT: trigger_tag removed during debounce"); return; }
 
-    // Pre-validate format + 간이 감사 — zero tokens, blocks before Codex invocation
+    // Pre-validate format + quick audit — zero tokens, blocks before Codex invocation
     const { errors: formatErrors, warnings: quickAuditWarnings } = validate_evidence_format(freshContent);
     if (formatErrors.length > 0) {
       const errorList = formatErrors.map((e) => `  • ${e}`).join("\n");
@@ -370,7 +370,7 @@ async function main() {
       return;
     }
 
-    // 간이 감사 결과 출력 (warning은 감사를 차단하지 않음 — 참고용)
+    // Quick audit warnings (non-blocking — informational only)
     if (quickAuditWarnings.length > 0) {
       const warnList = quickAuditWarnings.map((w) => `  ⚠ ${w}`).join("\n");
       process.stdout.write(t("index.quick_audit.header", { count: quickAuditWarnings.length, warnings: warnList }));

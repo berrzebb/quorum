@@ -2006,27 +2006,18 @@ export function toolBlueprintLint(params) {
     : resolve(cwd, "docs", "design");
   const targetPath = params.path ? resolve(params.path) : cwd;
 
-  // Try loading compiled blueprint parser (fail-open)
-  let parseBlueprints;
-  try {
-    const mod = _tryImport("bus", "blueprint-parser.js");
-    if (mod) parseBlueprints = mod.parseBlueprints;
-  } catch { /* fall through */ }
-
-  if (!parseBlueprints) {
-    // Inline minimal parser for fail-open
-    parseBlueprints = (dir) => {
-      const rules = [];
-      try {
-        const files = _walkMarkdown(dir);
-        for (const file of files) {
-          const content = readFileSync(file, "utf8");
-          rules.push(..._extractNamingRulesInline(content, file));
-        }
-      } catch { /* ok */ }
-      return { rules, sources: [] };
-    };
-  }
+  // Inline minimal parser (always used — no compiled parser dependency)
+  const parseBlueprints = (dir) => {
+    const rules = [];
+    try {
+      const files = _walkMarkdown(dir);
+      for (const file of files) {
+        const content = readFileSync(file, "utf8");
+        rules.push(..._extractNamingRulesInline(content, file));
+      }
+    } catch { /* ok */ }
+    return { rules, sources: [] };
+  };
 
   const { rules, sources } = parseBlueprints(designDir);
 
@@ -2123,7 +2114,7 @@ function _genAlts(concept, name) {
     if (pascal !== name) alts.push(pascal);
     const camel = words[0].toLowerCase() + words.slice(1).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join("");
     if (camel !== name) alts.push(camel);
-    for (const suffix of ["List", "Array", "Collection", "Manager", "Service"]) {
+    for (const suffix of ["List", "Array", "Collection", "Manager", "Service", "Set", "Map", "Handler", "Controller"]) {
       const alt = words[0][0].toUpperCase() + words[0].slice(1) + suffix;
       if (alt !== name) alts.push(alt);
     }
@@ -2131,14 +2122,6 @@ function _genAlts(concept, name) {
   return [...new Set(alts)].filter(a => a.length > 2);
 }
 
-function _tryImport(dir, file) {
-  try {
-    const p = resolve(process.cwd(), "dist", dir, file);
-    if (!existsSync(p)) return null;
-    // Dynamic import not available in sync context — return null for now
-    return null;
-  } catch { return null; }
-}
 
 // ═══ Tool: ai_guide ══════════════════════════════════════════════════════
 

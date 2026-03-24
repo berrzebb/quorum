@@ -94,5 +94,10 @@
   "workflows.retrieval_mode_hybrid": "Hybrid",
   "tool_call.running": "running",
   "tool_call.success": "done",
-  "tool_call.error": "error"
+  "tool_call.error": "error",
+  "signal.retro_pending": "Retro incomplete — Bash/Agent blocked. Run `echo session-self-improvement-complete` to unblock.",
+  "signal.pending_corrections": "{tag} corrections needed ({count} rejection codes) — review audit result, fix, and resubmit.",
+  "signal.approved": "{tag} — ready to commit.",
+  "resume.pending_corrections": "{tag} corrections required.{codes}\n  → Review audit result, fix code, and resubmit evidence.",
+  "resume.approved_status": "Current audit status: {tag} — approved"
 }

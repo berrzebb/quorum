@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { ProcessMux, type MuxSession, type MuxBackend } from "../../bus/mux.js";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { extractJson } from "./parse.js";
+import { AUDIT_VERDICT } from "../../bus/events.js";
 
 // ── Types ────────────────────────────────────
 
@@ -179,7 +180,7 @@ function sleep(ms: number): Promise<void> {
 
 function infraFailure(message: string, start: number): AuditResult {
   return {
-    verdict: "infra_failure",
+    verdict: AUDIT_VERDICT.INFRA_FAILURE,
     codes: ["mux-auditor-error"],
     summary: message,
     raw: "",
@@ -207,7 +208,7 @@ function parseAuditOutput(raw: string, duration: number): AuditResult {
     const json = extractJson(raw);
     if (!json) {
       return {
-        verdict: "changes_requested",
+        verdict: AUDIT_VERDICT.CHANGES_REQUESTED,
         codes: ["parse-error"],
         summary: "Could not extract JSON from auditor output",
         raw,
@@ -216,9 +217,9 @@ function parseAuditOutput(raw: string, duration: number): AuditResult {
     }
     const parsed = JSON.parse(json);
     return {
-      verdict: parsed.verdict === "approved" ? "approved"
-        : parsed.verdict === "infra_failure" ? "infra_failure"
-        : "changes_requested",
+      verdict: parsed.verdict === AUDIT_VERDICT.APPROVED ? AUDIT_VERDICT.APPROVED
+        : parsed.verdict === AUDIT_VERDICT.INFRA_FAILURE ? AUDIT_VERDICT.INFRA_FAILURE
+        : AUDIT_VERDICT.CHANGES_REQUESTED,
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       summary: parsed.summary ?? parsed.reasoning ?? "",
       raw,
@@ -226,7 +227,7 @@ function parseAuditOutput(raw: string, duration: number): AuditResult {
     };
   } catch {
     return {
-      verdict: "changes_requested",
+      verdict: AUDIT_VERDICT.CHANGES_REQUESTED,
       codes: ["parse-error"],
       summary: "Failed to parse auditor output",
       raw,

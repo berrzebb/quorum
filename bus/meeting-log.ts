@@ -152,13 +152,14 @@ export function createMeetingLog(
  */
 export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
   const payload: ParliamentSessionDigestPayload = {
+    agendaId: log.agendaId,
     sessionType: log.sessionType,
-    agendaItems: [log.agendaId],
-    classifications: countClassifications(log.classifications),
-    amendmentsProposed: 0,
-    amendmentsApproved: 0,
-    convergenceScore: log.convergenceScore,
-    summary: log.summary,
+    verdictResult: "approved",
+    converged: false,
+    amendmentsResolved: 0,
+    confluencePassed: false,
+    errorCount: 0,
+    duration: 0,
   };
 
   const event = createEvent("parliament.session.digest", "generic", {

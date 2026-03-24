@@ -152,8 +152,7 @@ describe("E2E: Confluence 4-check verification", () => {
     const result = verifyConfluence({
       auditVerdict: "approved",
       integrationTestsPassed: true,
-      cpsGapsResolved: true,
-      amendmentContradictions: [],
+      lawContradictions: [],
     });
 
     assert.equal(result.passed, true);
@@ -166,8 +165,7 @@ describe("E2E: Confluence 4-check verification", () => {
     const result = verifyConfluence({
       auditVerdict: "changes_requested",
       integrationTestsPassed: false,
-      cpsGapsResolved: false,
-      amendmentContradictions: [{ law1: "A", law2: "B", description: "conflict" }],
+      lawContradictions: ["Law A conflicts with Law B"],
     });
 
     assert.equal(result.passed, false);
@@ -302,8 +300,7 @@ describe("E2E: Full integrated pipeline", () => {
     const confluenceResult = verifyConfluence({
       auditVerdict: "approved",
       integrationTestsPassed: true,
-      cpsGapsResolved: true,
-      amendmentContradictions: [],
+      lawContradictions: [],
     });
     assert.equal(confluenceResult.passed, true);
 

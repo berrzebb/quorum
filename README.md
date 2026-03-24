@@ -274,7 +274,7 @@ Not every change needs full consensus. A 12-factor scoring system (6 base + doma
 
 ### 3-Layer Adapter Pattern (v0.4.2)
 
-어댑터 간 비즈니스 로직 공유. I/O만 런타임별로 다르다:
+Shared business logic across adapters. Only I/O differs per runtime:
 
 ```
 I/O (adapters/{adapter}/)
@@ -290,11 +290,11 @@ Core (core/)
   audit, tools (19 MCP), EventStore, bus, providers
 ```
 
-새 어댑터 추가 시 ~280줄이면 된다 (Codex 어댑터 기준).
+Adding a new adapter requires ~280 lines (proven by the Codex adapter).
 
 ### HookRunner Engine (v0.4.2)
 
-사용자 정의 훅. `config.json` 또는 `HOOK.md`에 작성:
+User-defined hooks. Configure in `config.json` or `HOOK.md`:
 
 ```jsonc
 // .claude/quorum/config.json
@@ -307,11 +307,11 @@ Core (core/)
 }
 ```
 
-command/http 핸들러, 환경변수 보간 (`$VAR`, `${VAR}`), deny-first-break, 비동기 fire-and-forget, regex 매처 필터링.
+command/http handlers, env interpolation (`$VAR`, `${VAR}`), deny-first-break, async fire-and-forget, regex matcher filtering.
 
 ### Multi-Model NDJSON Protocol (v0.4.2)
 
-3개 CLI 런타임의 출력을 통합 파싱:
+Unified parsing of 3 CLI runtime outputs:
 
 | Runtime | Format | Adapter |
 |---------|--------|---------|
@@ -319,7 +319,7 @@ command/http 핸들러, 환경변수 보간 (`$VAR`, `${VAR}`), deny-first-break
 | Codex | `exec --json` | `CodexCliAdapter` |
 | Gemini | `stream-json` | `GeminiCliAdapter` |
 
-모두 `AgentOutputMessage` (assistant_chunk, tool_use, tool_result, complete, error)로 변환된다. `MuxAdapter`가 ProcessMux(tmux/psmux) 세션을 연결해서 실시간 크로스 모델 합의에 쓴다.
+All outputs are normalized to `AgentOutputMessage` (assistant_chunk, tool_use, tool_result, complete, error). `MuxAdapter` bridges ProcessMux (tmux/psmux) sessions for real-time cross-model consensus.
 
 ### Stagnation Detection
 
