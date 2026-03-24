@@ -17,6 +17,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
 
+type Bridge = Record<string, Function>;
+
+async function loadBridge(repoRoot: string): Promise<Bridge | null> {
+  try {
+    const url = pathToFileURL(resolve(repoRoot, "core", "bridge.mjs")).href;
+    const bridge: Bridge = await import(url);
+    await bridge.init(repoRoot);
+    return bridge;
+  } catch {
+    return null;
+  }
+}
+
 export async function run(args: string[]): Promise<void> {
   const repoRoot = process.cwd();
   const subcommand = args[0] ?? "start";
@@ -24,6 +37,9 @@ export async function run(args: string[]): Promise<void> {
   switch (subcommand) {
     case "start":
       await startOrchestration(repoRoot, args.slice(1));
+      break;
+    case "plan":
+      await interactivePlanner(repoRoot, args.slice(1));
       break;
     case "run":
       await runImplementationLoop(repoRoot, args.slice(1));
@@ -91,13 +107,7 @@ async function orchestrateTrack(
 ): Promise<void> {
   console.log(`\n  \x1b[1mOrchestrating: ${track.name}\x1b[0m (${track.items} items)\n`);
 
-  const toURL = (p: string) => pathToFileURL(p).href;
-  let bridge: Record<string, Function> | null = null;
-
-  try {
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* bridge non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // 1. Parse work breakdown → WorkItem[]
   const workItems = parseWorkBreakdown(track.path);
@@ -177,12 +187,7 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
   const tracks = findTracks(repoRoot);
   const track = tracks.find((t) => t.name === trackName);
 
-  let bridge: Record<string, Function> | null = null;
-  try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // Claim target files for this agent
   if (bridge?.claimFiles && track) {
@@ -223,12 +228,7 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
 async function showProgress(repoRoot: string): Promise<void> {
   console.log("\n\x1b[36mquorum orchestrate progress\x1b[0m\n");
 
-  let bridge: Record<string, Function> | null = null;
-  try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // Show active claims
   if (bridge?.getClaims) {
@@ -428,12 +428,7 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
   }
 
   // Init bridge
-  const toURL = (p: string) => pathToFileURL(p).href;
-  let bridge: Record<string, Function> | null = null;
-  try {
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // Parliament gates
   if (bridge?.checkParliamentGates) {
@@ -457,6 +452,7 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
   if (groups.length === 0) groups = workItems.map(i => ({ items: [i] }));
 
   // Init ProcessMux
+  const toURL = (p: string) => pathToFileURL(p).href;
   let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux>;
   try {
     const muxMod = await import(toURL(resolve(DIST, "bus", "mux.js")));
@@ -531,9 +527,12 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
 
         if (!done) continue;
 
-        // Check verdict
-        const verdicts = bridge?.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
-        const latest = verdicts.length > 0 ? verdicts[verdicts.length - 1] : null;
+        // Check verdict scoped to this WB item
+        const allVerdicts = bridge?.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
+        const itemVerdicts = allVerdicts.filter(
+          (v: { payload: Record<string, unknown> }) => v.payload.itemId === s.item.id,
+        );
+        const latest = itemVerdicts.length > 0 ? itemVerdicts[itemVerdicts.length - 1] : null;
         const verdict = latest?.payload?.verdict as string | undefined;
 
         if (verdict === "approved") {
@@ -592,7 +591,84 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
   if (bridge?.close) bridge.close();
 }
 
-// ── Auto-generate WBs from CPS ──────────────
+// ── Interactive Planner (replaces interview.ts) ──
+
+async function interactivePlanner(repoRoot: string, args: string[]): Promise<void> {
+  const trackName = args[0];
+  const providerIdx = args.indexOf("--provider");
+  const provider = providerIdx >= 0 ? args[providerIdx + 1] ?? "claude" : "claude";
+
+  if (!trackName) {
+    console.log("  Usage: quorum orchestrate plan <track> [--provider claude|codex|gemini]\n");
+    console.log("  Interactive planner with Socratic questioning. Reads CPS if available.\n");
+    return;
+  }
+
+  console.log(`\n\x1b[36mquorum orchestrate plan\x1b[0m\n`);
+
+  // Load CPS
+  let cpsContent = "";
+  const cpsDir = resolve(repoRoot, ".claude", "parliament");
+  if (existsSync(cpsDir)) {
+    const cpsFiles = readdirSync(cpsDir).filter(f => f.startsWith("cps-") && f.endsWith(".md"));
+    if (cpsFiles.length > 0) {
+      cpsContent = readFileSync(resolve(cpsDir, cpsFiles[cpsFiles.length - 1]!), "utf8");
+      console.log(`  \x1b[32m✓\x1b[0m CPS loaded`);
+    }
+  }
+
+  // Load planner protocol
+  let protocol = "";
+  for (const p of [resolve(repoRoot, "skills", "planner", "SKILL.md")]) {
+    if (existsSync(p)) { protocol = readFileSync(p, "utf8"); break; }
+  }
+
+  const planDir = resolve(repoRoot, "docs", "plan");
+  const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+
+  const cpsSection = cpsContent
+    ? `## Parliament CPS (Phase 0)\n${cpsContent}\nMap: Context→PRD§1, Problem→PRD§2, Solution→PRD§4.`
+    : "## No CPS — Socratic mode. Ask: What problem? Who benefits? Done criteria? Out of scope? Constraints?";
+
+  const systemPrompt = `# Planner: ${trackName}
+Output to: ${planDir}/${trackName}/
+
+${cpsSection}
+
+## Parliament Feedback
+If ambiguity cannot be resolved: tell user to run quorum parliament "<topic>".
+
+## Output
+1. PRD (${planDir}/${trackName}/PRD.md)
+2. Design: Spec, Blueprint (Naming Conventions!), Domain Model, Architecture (${planDir}/${trackName}/design/)
+3. Work Breakdown (${planDir}/${trackName}/work-breakdown.md) — IDs: ${prefix}-1, ${prefix}-2, ...
+
+Rules: Design MANDATORY. Blueprint naming = law. Ask before assuming. User's language.
+
+${protocol}`;
+
+  console.log(`  Track: ${trackName}, Provider: ${provider}, CPS: ${cpsContent ? "yes" : "Socratic"}\n`);
+
+  // Spawn LLM with stdio: "inherit" for direct user interaction
+  const { spawnSync: spawn } = await import("node:child_process");
+  const cliArgs = provider === "claude"
+    ? ["-p", "--append-system-prompt", systemPrompt]
+    : provider === "codex" ? ["exec", "-"] : ["-p"];
+
+  spawn(provider, cliArgs, {
+    cwd: repoRoot, stdio: "inherit",
+    env: { ...process.env },
+    shell: process.platform === "win32",
+  });
+
+  // Check result
+  const wbPath = resolve(planDir, trackName, "work-breakdown.md");
+  if (existsSync(wbPath)) {
+    console.log(`\n  \x1b[32m✓ WBs generated.\x1b[0m Next: quorum orchestrate run ${trackName}\n`);
+  }
+}
+
+// ── Auto-generate WBs from CPS (headless) ───
 
 async function autoGenerateWBs(repoRoot: string, trackName: string, provider: string): Promise<boolean> {
   // Check if CPS exists
@@ -717,10 +793,9 @@ async function autoRetro(repoRoot: string): Promise<void> {
 
   // Emit retro complete event
   try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    const bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    if (bridge?.emitEvent) {
-      bridge.emitEvent("retro.complete", "claude-code", { auto: true, timestamp: Date.now() });
+    const b = await loadBridge(repoRoot);
+    if (b?.emitEvent) {
+      b.emitEvent("retro.complete", "claude-code", { auto: true, timestamp: Date.now() });
     }
   } catch { /* non-critical */ }
 }
@@ -808,14 +883,15 @@ function showHelp(): void {
 \x1b[1mUsage:\x1b[0m quorum orchestrate [subcommand]
 
 \x1b[1mSubcommands:\x1b[0m
-  start [track]              Select and orchestrate a track (interactive)
-  run <track> [--provider]   Execute WBs via agents (full implementation loop)
+  start [track]              Select and orchestrate a track
+  plan <track> [--provider]  Interactive planner (Socratic + CPS)
+  run <track> [--provider]   Execute WBs (full implementation loop)
   assign <track> [--agent]   Assign track to an agent
   progress                   Show orchestration progress
 
 \x1b[1mExamples:\x1b[0m
-  quorum orchestrate                              Interactive track selection
-  quorum orchestrate run my-track --provider claude   Execute all WBs
+  quorum orchestrate plan auth-track               Socratic planning session
+  quorum orchestrate run payment-track --provider claude  Full execution
   quorum orchestrate assign my-track --agent impl-1
   quorum orchestrate progress
 `);
