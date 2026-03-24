@@ -94,5 +94,15 @@
   "workflows.retrieval_mode_hybrid": "혼합 검색",
   "tool_call.running": "실행 중",
   "tool_call.success": "완료",
-  "tool_call.error": "오류"
+  "tool_call.error": "오류",
+  "signal.retro_pending": "회고 미완료 — Bash/Agent 차단 중. `echo session-self-improvement-complete` 로 해제",
+  "signal.pending_corrections": "{tag} 보정 필요 (반려 {count}건) — 감사 결과 확인 후 수정 & 재제출",
+  "signal.approved": "{tag} — 커밋 가능",
+  "resume.pending_corrections": "{tag} 보정이 필요합니다.{codes}\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.\n  → 파일: {file} ({triggerTag} 유지)",
+  "resume.approved_status": "Current audit status: {tag} — 합의 완료 상태",
+  "resume.no_audit_result": "{tag} 증거가 제출되었으나 감사 결과가 없습니다.\n  → 감사가 실행되지 않았거나 실패했을 수 있습니다. 증거를 재제출하세요.",
+  "resume.retro_deferred": "서브에이전트 회고가 orchestrator에 위임됨 ({id}).\n  → 즉시 회고를 시작하세요:\n    1. 잘된 것 / 문제인 것 / 개선할 것\n    2. 사용자와 피드백 교환\n    3. 메모리에 원칙 기록\n    4. echo session-self-improvement-complete",
+  "resume.retro_pending": "회고가 미완료 ({id}). session-gate가 Bash/Agent를 차단합니다.\n  → 즉시 회고를 진행한 뒤 echo session-self-improvement-complete",
+  "resume.active_tasks": "이전 세션에서 {count}개 작업이 진행 중이었습니다:\n{list}\n  → /quorum:orchestrator 로 미완료 트랙을 이어서 진행하세요.",
+  "signal.submitted_waiting": "{tag} 제출됨 — 감사 대기 중"
 }

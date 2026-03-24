@@ -7,7 +7,7 @@
  * 3. Classify items into 5 MECE categories (gap/strength/out/buy/build)
  * 4. Generate CPS (Context-Problem-Solution) from converged logs
  *
- * Each meeting log is stored as a parliament.session.digest event in EventStore.
+ * Each meeting log is stored as a parliament.meeting.log event in EventStore.
  * Convergence is per-agenda (standing committee) — independent tracking.
  */
 
@@ -15,7 +15,6 @@ import { randomUUID } from "node:crypto";
 import type { EventStore } from "./store.js";
 import type {
   MeetingClassification,
-  ParliamentSessionDigestPayload,
   ParliamentConvergencePayload,
 } from "./events.js";
 import { createEvent, type QuorumEvent } from "./events.js";
@@ -91,6 +90,36 @@ export const STANDING_COMMITTEES: Record<StandingCommittee, { name: string; item
   "research-questions": { name: "Research Questions", items: ["Requirements", "Communication Protocol", "Intent Classification", "Agent Cooperation", "State Management", "Workflow Visualization"] },
 };
 
+export const COMMITTEE_IDS = Object.keys(STANDING_COMMITTEES) as StandingCommittee[];
+
+// ── Committee Routing ────────────────────────
+
+const COMMITTEE_PATTERNS: Record<StandingCommittee, RegExp> = {
+  "principles": /\b(boundar|mental.model|hallucin|human.in.the.loop|hitl|audit.trail|principle|i\/o)\b/i,
+  "definitions": /\b(agent.example|agent.call|sub.?agent|context.defin|definition|terminolog)\b/i,
+  "structure": /\b(hierarch|relation|parent.child|composition|inheritance|tree.struct)\b/i,
+  "architecture": /\b(overview|dataflow|data.flow|api.design|protocol|system.diagram|architect)\b/i,
+  "scope": /\b(in.scope|out.scope|exclude|scope.bound|mvp|defer|phase.out)\b/i,
+  "research-questions": /\b(research|communicat|intent.classif|agent.cooperat|state.manage|workflow.visual|open.question)\b/i,
+};
+
+const COMMITTEE_ENTRIES = Object.entries(COMMITTEE_PATTERNS) as Array<[StandingCommittee, RegExp]>;
+
+/**
+ * Route a topic to the appropriate standing committee(s) by keyword matching.
+ * Returns multiple committees if topic spans concerns.
+ */
+export function routeToCommittee(topic: string): StandingCommittee[] {
+  const matches: StandingCommittee[] = [];
+  for (const [committee, pattern] of COMMITTEE_ENTRIES) {
+    if (pattern.test(topic)) {
+      matches.push(committee);
+    }
+  }
+  // Fallback: unmatched topics go to research-questions
+  return matches.length > 0 ? matches : ["research-questions"];
+}
+
 // ── Core Functions ───────────────────────────
 
 const DEFAULT_CONVERGENCE_THRESHOLD = 2;
@@ -118,25 +147,16 @@ export function createMeetingLog(
 }
 
 /**
- * Store a meeting log as a parliament.session.digest event.
+ * Store a meeting log as a parliament.meeting.log event.
  */
 export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
-  const payload: ParliamentSessionDigestPayload = {
-    sessionType: log.sessionType,
-    agendaItems: [log.agendaId],
-    classifications: countClassifications(log.classifications),
-    amendmentsProposed: 0,
-    amendmentsApproved: 0,
-    convergenceScore: log.convergenceScore,
-    summary: log.summary,
-  };
-
-  const event = createEvent("parliament.session.digest", "generic", {
-    ...payload,
+  const event = createEvent("parliament.meeting.log", "generic", {
     meetingLogId: log.id,
+    agendaId: log.agendaId,
+    sessionType: log.sessionType,
     registers: log.registers,
     classificationDetails: log.classifications,
-    agendaId: log.agendaId,
+    convergenceScore: log.convergenceScore,
   });
   store.append(event);
 }
@@ -145,7 +165,7 @@ export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
  * Retrieve meeting logs for a specific agenda from EventStore.
  */
 export function getMeetingLogs(store: EventStore, agendaId?: string): MeetingLog[] {
-  const events = store.query({ eventType: "parliament.session.digest" });
+  const events = store.query({ eventType: "parliament.meeting.log" });
   const logs: MeetingLog[] = [];
 
   for (const e of events) {
@@ -174,9 +194,10 @@ export function checkConvergence(
   store: EventStore,
   agendaId: string,
   config?: MeetingLogConfig,
+  prefetchedLogs?: MeetingLog[],
 ): ConvergenceStatus {
   const threshold = config?.convergenceThreshold ?? DEFAULT_CONVERGENCE_THRESHOLD;
-  const logs = getMeetingLogs(store, agendaId);
+  const logs = prefetchedLogs ?? getMeetingLogs(store, agendaId);
 
   if (logs.length < 2) {
     return { converged: false, stableRounds: 0, threshold, lastDelta: 1 };

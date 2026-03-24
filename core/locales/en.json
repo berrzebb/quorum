@@ -94,5 +94,15 @@
   "workflows.retrieval_mode_hybrid": "Hybrid",
   "tool_call.running": "running",
   "tool_call.success": "done",
-  "tool_call.error": "error"
+  "tool_call.error": "error",
+  "signal.retro_pending": "Retro incomplete — Bash/Agent blocked. Run `echo session-self-improvement-complete` to unblock.",
+  "signal.pending_corrections": "{tag} corrections needed ({count} rejection codes) — review audit result, fix, and resubmit.",
+  "signal.approved": "{tag} — ready to commit.",
+  "resume.pending_corrections": "{tag} corrections required.{codes}\n  → Review audit result, fix code, and resubmit evidence.\n  → File: {file} (keep {triggerTag})",
+  "resume.approved_status": "Current audit status: {tag} — approved",
+  "resume.no_audit_result": "{tag} evidence submitted but no audit result.\n  → Audit may not have run or failed. Resubmit evidence.",
+  "resume.retro_deferred": "Subagent retro delegated to orchestrator ({id}).\n  → Start retro immediately:\n    1. What went well / what went wrong / what to improve\n    2. Exchange feedback with user\n    3. Record principles in memory\n    4. echo session-self-improvement-complete",
+  "resume.retro_pending": "Retro incomplete ({id}). session-gate blocks Bash/Agent.\n  → Complete retro, then echo session-self-improvement-complete",
+  "resume.active_tasks": "{count} task(s) were in progress from previous session:\n{list}\n  → Continue with /quorum:orchestrator",
+  "signal.submitted_waiting": "{tag} submitted — waiting for audit"
 }

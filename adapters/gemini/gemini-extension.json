@@ -1,11 +1,13 @@
 {
   "name": "quorum",
-  "version": "0.4.2",
-  "description": "Cross-model audit gate — 3-adapter, HookRunner engine, multi-model NDJSON, 19 MCP tools, 921 tests.",
+  "version": "0.4.4",
+  "description": "Cross-model audit gate — parliament protocol, 5 enforcement gates, 21 MCP tools, 1018 tests.",
   "mcpServers": {
     "quorum": {
       "command": "node",
-      "args": ["${extensionPath}${/}..${/}..${/}core${/}tools${/}mcp-server.mjs"],
+      "args": [
+        "${extensionPath}${/}..${/}..${/}core${/}tools${/}mcp-server.mjs"
+      ],
       "cwd": "${extensionPath}${/}..${/}.."
     }
   }

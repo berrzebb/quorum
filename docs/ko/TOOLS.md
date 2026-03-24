@@ -68,7 +68,7 @@ quorum tool blast_radius --changed_files '["src/api.ts","src/db.ts"]' --max_dept
 | `--path` | 레포 루트 (기본: cwd) |
 | `--max_depth` | BFS 깊이 제한 (기본: 10) |
 
-출력: 영향받는 파일 수, 전체 파일 수, 비율, 깊이순 영향 목록 (전파 경로 `via` 컬럼 포함). 10번째 트리거 팩터 — 비율 > 10%이면 T3 에스컬레이션.
+출력: 영향받는 파일 수, 전체 파일 수, 비율, 깊이순 영향 목록 (전파 경로 `via` 컬럼 포함). 트리거 팩터 — 비율 > 10%이면 T3 에스컬레이션.
 
 ---
 
@@ -405,3 +405,30 @@ git 스테이징 파일에서 유출된 자격 증명 스캔. **언어 무관**.
 `git diff --name-only`와 증거의 `### Changed Files` 섹션을 비교:
 - diff에 있는데 증거에 없는 파일 (문서화되지 않은 변경)
 - 증거에 있는데 diff에 없는 파일 (주장했지만 변경 안 됨)
+
+---
+
+## blueprint_lint
+
+Blueprint 네이밍 규칙 대비 소스 코드 검증. 설계 디렉토리의 Blueprint 마크다운에서 "Naming Conventions" 테이블을 파싱하고, 위반 패턴을 생성하여 소스 파일을 스캔.
+
+```bash
+quorum tool blueprint_lint
+quorum tool blueprint_lint --design_dir docs/design --path src/
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--design_dir` | Blueprint 마크다운이 있는 설계 디렉토리 (기본: `docs/design`) |
+| `--path` | 스캔할 소스 디렉토리 또는 파일 (기본: cwd) |
+
+### 동작 방식
+
+1. Blueprint 마크다운에서 "Naming Conventions" 테이블 파싱
+2. 각 규정 이름(예: `Restaurants`)에 대해 대안 생성(`RestaurantList`, `restaurantList` 등)
+3. 소스 파일에서 대안 매칭 — 각 매칭이 위반
+4. 규정 이름과 Blueprint 근거를 포함한 위반 보고
+
+### 필요성
+
+Blueprint 네이밍 규칙은 의회 프로토콜에서 **법률**. 강제 없으면 `impl(A) ≠ impl(B)` — 다른 구현자가 같은 개념에 다른 이름을 선택. 린터가 감사 전 이탈을 감지.

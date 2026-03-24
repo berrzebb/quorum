@@ -3,6 +3,7 @@ name: quorum-merge
 description: "Squash-merge a worktree branch into target with structured commit message. Use after audit consensus and retrospective completion. Triggers on 'merge worktree', 'squash merge', 'finalize work'."
 argument-hint: "[target-branch]"
 disable-model-invocation: true
+model: codex
 context: fork
 allowed-tools: read_file, find_files, search, shell
 ---

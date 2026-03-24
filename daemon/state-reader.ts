@@ -13,9 +13,13 @@
  */
 
 import type Database from "better-sqlite3";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import type { EventStore } from "../bus/store.js";
 import type { LockInfo } from "../bus/lock.js";
-import type { Finding } from "../bus/events.js";
+import { COMMITTEE_IDS } from "../bus/meeting-log.js";
+import { getPendingAmendmentCount } from "../bus/amendment.js";
+import type { Finding, EventType } from "../bus/events.js";
 import type {
   QuorumEvent,
   FindingDetectPayload,
@@ -132,6 +136,36 @@ export interface FitnessInfo {
   components: Record<string, { value: number; weight: number; label: string }> | null;
 }
 
+export interface ParliamentCommitteeStatus {
+  committee: string;
+  converged: boolean;
+  stableRounds: number;
+  threshold: number;
+  score: number;
+}
+
+export interface ParliamentLiveSession {
+  id: string;
+  role: string;
+  backend: string;
+  startedAt: number;
+}
+
+export interface ParliamentInfo {
+  /** Per-committee convergence status. */
+  committees: ParliamentCommitteeStatus[];
+  /** Latest session verdict. */
+  lastVerdict: string | null;
+  /** Number of pending (unresolved) amendments. */
+  pendingAmendments: number;
+  /** Normal Form conformance (0-1). */
+  conformance: number | null;
+  /** Total parliament sessions recorded. */
+  sessionCount: number;
+  /** Active mux sessions (from .claude/agents/) */
+  liveSessions: ParliamentLiveSession[];
+}
+
 export interface FullState {
   gates: GateInfo[];
   items: ItemStateInfo[];
@@ -144,6 +178,7 @@ export interface FullState {
   fileThreads: FileThread[];
   recentEvents: QuorumEvent[];
   fitness: FitnessInfo;
+  parliament: ParliamentInfo;
 }
 
 // ── StateReader ──────────────────────────────
@@ -154,6 +189,7 @@ export class StateReader {
   private stmtItemStates: Database.Statement;
   private stmtActiveLocks: Database.Statement;
   private stmtLatestTransition: Database.Statement;
+  private _liveSessionsCache: { ts: number; data: ParliamentLiveSession[] } = { ts: 0, data: [] };
 
   constructor(store: EventStore, messageBus?: MessageBus | null) {
     this.store = store;
@@ -199,6 +235,7 @@ export class StateReader {
       fileThreads: this.findingThreads(),
       recentEvents: this.recentEvents(eventLimit),
       fitness: this.fitnessInfo(),
+      parliament: this.parliamentInfo(),
     };
   }
 
@@ -618,11 +655,19 @@ export class StateReader {
     }
 
     const roots = allFindings.filter(f => !f.replyTo);
+    const replyMap = new Map<string, typeof allFindings>();
+    for (const f of allFindings) {
+      if (f.replyTo) {
+        const arr = replyMap.get(f.replyTo) ?? [];
+        arr.push(f);
+        replyMap.set(f.replyTo, arr);
+      }
+    }
     const fileMap = new Map<string, FileThread["threads"]>();
 
     for (const root of roots) {
       const file = root.file ?? "(no file)";
-      const replies = allFindings.filter(f => f.replyTo === root.id);
+      const replies = replyMap.get(root.id) ?? [];
       const messages: ThreadMessage[] = [{
         type: "finding", id: root.id, reviewerId: root.reviewerId, provider: root.provider,
         severity: root.severity, description: root.description, timestamp: root.timestamp,
@@ -746,6 +791,106 @@ export class StateReader {
       return this.stmtLatestTransition.get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Parliament state: committee convergence, last verdict, pending amendments, conformance.
+   */
+  parliamentInfo(): ParliamentInfo {
+    const defaultCommittee = (c: string) => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 });
+    const empty: ParliamentInfo = {
+      committees: COMMITTEE_IDS.map(defaultCommittee),
+      lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
+      liveSessions: [],
+    };
+
+    try {
+      // Session count + last verdict
+      const sessions = this.store.query({ eventType: "parliament.session.digest" as EventType, limit: 100 });
+      empty.sessionCount = sessions.length;
+
+      if (sessions.length > 0) {
+        const last = sessions[sessions.length - 1]!;
+        empty.lastVerdict = (last.payload.verdictResult as string) ?? null;
+      }
+
+      // Convergence per committee
+      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as EventType, limit: 50 });
+      const latestByCommittee = new Map<string, typeof convergenceEvents[0]>();
+      for (const e of convergenceEvents) {
+        const agenda = (e.payload.agendaId as string) ?? "";
+        latestByCommittee.set(agenda, e);  // ASC order → last write = latest
+      }
+      empty.committees = COMMITTEE_IDS.map(c => {
+        const e = latestByCommittee.get(c);
+        if (!e) return { committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 };
+        return {
+          committee: c,
+          converged: (e.payload.converged as boolean) ?? false,
+          stableRounds: (e.payload.stableRounds as number) ?? 0,
+          threshold: (e.payload.threshold as number) ?? 2,
+          score: (e.payload.convergenceScore as number) ?? 0,
+        };
+      });
+
+      // Pending amendments
+      empty.pendingAmendments = getPendingAmendmentCount(this.store);
+
+      // Conformance — read from normalform events (digest doesn't carry conformance)
+      const nfEvents = this.store.query({ eventType: "parliament.session.normalform" as EventType, limit: 10 });
+      if (nfEvents.length > 0) {
+        const lastNf = nfEvents[nfEvents.length - 1]!;
+        const allConverged = lastNf.payload.allConverged as boolean | undefined;
+        empty.conformance = allConverged === true ? 1.0 : allConverged === false ? 0.0 : null;
+      }
+
+      // Live sessions (cached, 5s TTL — filesystem I/O)
+      empty.liveSessions = this.readLiveParliamentSessions();
+
+      return empty;
+    } catch {
+      return empty;
+    }
+  }
+
+  /**
+   * Read active parliament mux sessions from .claude/agents/ directory.
+   * Cached with 5-second TTL to avoid sync filesystem I/O on every 1s poll.
+   */
+  private readLiveParliamentSessions(): ParliamentLiveSession[] {
+    const now = Date.now();
+    if (now - this._liveSessionsCache.ts < 5000) return this._liveSessionsCache.data;
+
+    try {
+      const agentsDir = resolve(process.cwd(), ".claude", "agents");
+      if (!existsSync(agentsDir)) {
+        this._liveSessionsCache = { ts: now, data: [] };
+        return [];
+      }
+
+      const files = readdirSync(agentsDir).filter(f => f.endsWith(".json"));
+      const sessions: ParliamentLiveSession[] = [];
+
+      for (const f of files) {
+        try {
+          const data = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
+          if (data.type === "parliament" && data.status === "running") {
+            sessions.push({
+              id: data.id,
+              role: data.role ?? "unknown",
+              backend: data.backend ?? "raw",
+              startedAt: data.startedAt ?? 0,
+            });
+          }
+        } catch { /* skip corrupt files */ }
+      }
+
+      this._liveSessionsCache = { ts: now, data: sessions };
+      return sessions;
+    } catch {
+      this._liveSessionsCache = { ts: now, data: [] };
+      return [];
     }
   }
 }

@@ -2,6 +2,7 @@
 name: quorum-orchestrator
 description: "Session orchestrator — reads handoff, picks unblocked tasks, distributes to parallel workers, manages correction cycles. Use when starting a work session or distributing implementation work. Triggers on 'start session', 'distribute tasks', 'what's next'."
 disable-model-invocation: true
+model: codex
 allowed-tools: read_file, shell, find_files, search
 ---
 
@@ -22,14 +23,15 @@ You do NOT implement — you distribute, verify, and decide.
 | Spawn agent | `create_agent` |
 
 ## References
+Shared references at `skills/orchestrator/references/`. Read the relevant reference before each phase.
 
 | Phase | Reference | When |
 |-------|-----------|------|
-| Task tiers | `references/tiers.md` | Before spawning |
-| Scout / RTM | `references/scout.md` | Tier 2/3 distribution |
-| Distribution | `references/distribution.md` | Parallel workers + track closure |
-| Correction | `references/correction.md` | On `[pending_tag]` |
-| Lifecycle | `references/lifecycle.md` | After `[agree_tag]` + session end |
+| Task tiers | `skills/orchestrator/references/tiers.md` | Before spawning |
+| Scout / RTM | `skills/orchestrator/references/scout.md` | Tier 2/3 distribution |
+| Distribution | `skills/orchestrator/references/distribution.md` | Parallel workers + track closure |
+| Correction | `skills/orchestrator/references/correction.md` | On `[pending_tag]` |
+| Lifecycle | `skills/orchestrator/references/lifecycle.md` | After `[agree_tag]` + session end |
 
 ## Execution Context
 

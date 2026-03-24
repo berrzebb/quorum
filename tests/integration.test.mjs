@@ -242,73 +242,13 @@ describe("MarkdownProjector integration", () => {
       },
     ], []);
 
-    const projector = new MarkdownProjector(store.getDb(), {
-      triggerTag: "[REVIEW_NEEDED]",
-      agreeTag: "[APPROVED]",
-      pendingTag: "[CHANGES_REQUESTED]",
-    });
-
-    // Existing content has EV-1 as review_needed
-    const existing = "## Tasks\n\n[REVIEW_NEEDED] EV-1 — implement feature\n";
-    const projected = projector.projectClaudeMd(existing);
-
-    assert.ok(projected.includes("[APPROVED] EV-1"), `Expected [APPROVED] EV-1, got: ${projected}`);
-    assert.ok(!projected.includes("[REVIEW_NEEDED] EV-1"), "Should not contain old tag");
-  });
-
-  it("queryItemStates returns deduplicated results", () => {
-    const projector = new MarkdownProjector(store.getDb(), {
-      triggerTag: "[REVIEW_NEEDED]",
-      agreeTag: "[APPROVED]",
-      pendingTag: "[CHANGES_REQUESTED]",
-    });
+    const projector = new MarkdownProjector(store.getDb(), {});
 
     const items = projector.queryItemStates();
     // Check uniqueness
     const ids = items.map(i => i.entityId);
     const uniqueIds = [...new Set(ids)];
     assert.equal(ids.length, uniqueIds.length, "Should have no duplicate entity IDs");
-  });
-
-  it("stateToTag and tagToState are inverse", () => {
-    const projector = new MarkdownProjector(store.getDb(), {
-      triggerTag: "[REVIEW_NEEDED]",
-      agreeTag: "[APPROVED]",
-      pendingTag: "[CHANGES_REQUESTED]",
-    });
-
-    for (const state of ["review_needed", "approved", "changes_requested", "infra_failure"]) {
-      const tag = projector.stateToTag(state);
-      const back = projector.tagToState(tag);
-      assert.equal(back, state, `Round-trip failed for ${state}: tag=${tag}, back=${back}`);
-    }
-  });
-
-  it("checkStaleness detects mismatched tags", () => {
-    // Add a changes_requested item
-    store.commitTransaction([], [
-      {
-        entityType: "audit_item",
-        entityId: "STALE-1",
-        fromState: "review_needed",
-        toState: "changes_requested",
-        source: "test",
-        metadata: {},
-      },
-    ], []);
-
-    const projector = new MarkdownProjector(store.getDb(), {
-      triggerTag: "[REVIEW_NEEDED]",
-      agreeTag: "[APPROVED]",
-      pendingTag: "[CHANGES_REQUESTED]",
-    });
-
-    const filePath = join(tmpDir, "stale-test.md");
-    writeFileSync(filePath, "## Items\n\n[REVIEW_NEEDED] STALE-1 — some task\n");
-
-    const diff = projector.checkStaleness(filePath);
-    assert.ok(diff, "Should detect staleness");
-    assert.ok(diff.stale);
   });
 });
 

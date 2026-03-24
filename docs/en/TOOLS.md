@@ -70,7 +70,7 @@ quorum tool blast_radius --changed_files '["src/api.ts","src/db.ts"]' --max_dept
 | `--path` | Repository root (default: cwd) |
 | `--max_depth` | BFS depth limit (default: 10) |
 
-Output: affected file count, total file count, ratio, depth-sorted impact list with propagation path (`via` column). Used as the 10th trigger factor — ratio > 10% pushes toward T3.
+Output: affected file count, total file count, ratio, depth-sorted impact list with propagation path (`via` column). Used as a trigger factor — ratio > 10% pushes toward T3.
 
 ---
 
@@ -415,3 +415,30 @@ Runs `npm audit` and reports critical/high vulnerabilities. Warnings don't block
 Compares `git diff --name-only` against the evidence's `### Changed Files` section. Catches:
 - Files in diff but not documented in evidence (undocumented changes)
 - Files in evidence but not in diff (claimed but unchanged)
+
+---
+
+## blueprint_lint
+
+Check source code against Blueprint naming conventions. Parses "Naming Conventions" tables from design/ Blueprint markdown, generates violation patterns, scans source files for non-compliant identifiers.
+
+```bash
+quorum tool blueprint_lint
+quorum tool blueprint_lint --design_dir docs/design --path src/
+```
+
+| Option | Description |
+|--------|-------------|
+| `--design_dir` | Path to design directory with Blueprint markdown (default: `docs/design`) |
+| `--path` | Source directory or file to scan (default: cwd) |
+
+### How It Works
+
+1. Parses Blueprint markdown for "Naming Conventions" tables
+2. For each mandated name (e.g., `Restaurants`), generates common alternatives (`RestaurantList`, `restaurantList`, `restaurant_list`, etc.)
+3. Scans source files for any of these alternatives — each match is a violation
+4. Reports violations with the mandated name and Blueprint rationale
+
+### Why
+
+Blueprint naming conventions are **law** in the parliamentary protocol. Without enforcement, `impl(A) ≠ impl(B)` — different implementers choose different names for the same concept. The linter ensures any deviation is caught before audit.

@@ -17,6 +17,16 @@
 - [ ] PF-5: Memoization used where appropriate
 - [ ] PF-6: No synchronous blocking on main thread
 
+## Language Registry
+
+`perf_scan` uses `qualityRules.perf` from each language's `spec.perf.mjs` fragment. Hybrid scanning (regex + AST) is available for TypeScript. Supports 5 languages: TypeScript, Go, Python, Rust, Java.
+
+## Anti-Patterns
+- Do NOT flag micro-optimizations — focus on measurable impact
+- Do NOT suggest premature optimization for cold paths
+- Do NOT make assumptions about database schema — verify with tools
+- Do NOT review outside the performance domain
+
 ## Rejection Codes
 - **perf-regression**: Existing performance degraded
 - **perf-gap**: Clear optimization opportunity missed
