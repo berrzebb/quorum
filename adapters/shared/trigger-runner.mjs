@@ -13,6 +13,10 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
+/** Cached required-section patterns (stable within session). */
+let _requiredCache = null;
+let _requiredCacheKey = null;
+
 /**
  * Pre-validate evidence package format — regex-based, zero tokens.
  *
@@ -30,14 +34,19 @@ export function validateEvidenceFormat(content, consensus, t = (k) => k) {
   const triggerSection = content.split(/^## /m).find((s) => s.includes(triggerTag));
   if (!triggerSection) return { errors, warnings };
 
-  // Required sections — configurable
+  // Required sections — configurable (cached per config)
   const configSections = consensus.evidence_sections ?? [];
   const defaultSections = ["Claim", "Changed Files", "Test Command", "Test Result", "Residual Risk"];
   const sectionNames = configSections.length > 0 ? configSections : defaultSections;
-  const required = sectionNames.map((label) => ({
-    label,
-    pattern: new RegExp(`### ${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"),
-  }));
+  const cacheKey = sectionNames.join("|");
+  if (!_requiredCache || _requiredCacheKey !== cacheKey) {
+    _requiredCacheKey = cacheKey;
+    _requiredCache = sectionNames.map((label) => ({
+      label,
+      pattern: new RegExp(`### ${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"),
+    }));
+  }
+  const required = _requiredCache;
 
   for (const { label, pattern } of required) {
     if (!pattern.test(triggerSection)) {

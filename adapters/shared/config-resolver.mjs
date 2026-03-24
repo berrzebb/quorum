@@ -93,8 +93,8 @@ export function extractTags(cfg) {
   const c = cfg.consensus ?? {};
   return {
     watchFile: c.watch_file ?? "docs/feedback/claude.md",
-    triggerTag: c.trigger_tag ?? "[GPT미검증]",
-    agreeTag: c.agree_tag ?? "[합의완료]",
-    pendingTag: c.pending_tag ?? "[계류]",
+    triggerTag: c.trigger_tag ?? "[REVIEW_NEEDED]",
+    agreeTag: c.agree_tag ?? "[APPROVED]",
+    pendingTag: c.pending_tag ?? "[CHANGES_REQUESTED]",
   };
 }

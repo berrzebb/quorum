@@ -585,8 +585,8 @@ export function getFitnessLoop() {
   if (_fitnessLoop) return _fitnessLoop;
   if (!_modules?.fitnessLoopMod) return null;
   try {
-    const store = getStore();
-    _fitnessLoop = new _modules.fitnessLoopMod.FitnessLoop(store);
+    if (!_store) return null;
+    _fitnessLoop = new _modules.fitnessLoopMod.FitnessLoop(_store);
     return _fitnessLoop;
   } catch {
     return null;
@@ -632,6 +632,79 @@ export async function computeBlastRadius(changedFiles) {
 /**
  * Close the store connection. Call at hook exit.
  */
+// ── HookRunner integration ────────────────────
+
+let _hookRunner = null;
+
+/**
+ * Initialize the HookRunner from config and/or HOOK.md.
+ * Call after init() — hooks fire at audit lifecycle events.
+ *
+ * @param {string} repoRoot — workspace directory
+ * @param {object} [hooksCfg] — hooks section from config.json (optional)
+ * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
+ */
+export async function initHookRunner(repoRoot, hooksCfg) {
+  if (_hookRunner) return _hookRunner;
+  try {
+    const { HookRunner } = await import("../adapters/shared/hook-runner.mjs");
+    const { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } = await import("../adapters/shared/hook-loader.mjs");
+
+    const fileConfig = loadHooksFromFile(repoRoot, "HOOK.md");
+    const jsonConfig = hooksCfg ? hooksConfigFromJson({ hooks: hooksCfg }) : { hooks: {} };
+    const merged = mergeHooksConfigs(fileConfig, jsonConfig);
+
+    _hookRunner = new HookRunner(repoRoot, merged);
+    return _hookRunner;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the current HookRunner instance (null if not initialized).
+ * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
+ */
+export function getHookRunner() {
+  return _hookRunner;
+}
+
+/**
+ * Fire a quorum lifecycle hook event.
+ * Fail-safe — returns empty array if HookRunner unavailable.
+ *
+ * @param {string} event — hook event name (e.g., "audit.submit", "audit.verdict", "PreToolUse")
+ * @param {object} input — HookInput fields
+ * @returns {Promise<import("../adapters/shared/hook-runner.mjs").HookExecutionResult[]>}
+ */
+export async function fireHook(event, input = {}) {
+  if (!_hookRunner) return [];
+  try {
+    return await _hookRunner.fire(event, { hook_event_name: event, ...input });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check if any hook would deny the given event.
+ * Returns { allowed: true } or { allowed: false, reason }.
+ *
+ * @param {string} event
+ * @param {object} input
+ * @returns {Promise<{ allowed: boolean, reason?: string, additional_context?: string }>}
+ */
+export async function checkHookGate(event, input = {}) {
+  const results = await fireHook(event, input);
+  for (const r of results) {
+    if (r.output.decision === "deny") {
+      return { allowed: false, reason: r.output.reason || `blocked by hook: ${r.hook_name}`, additional_context: r.output.additional_context };
+    }
+  }
+  const contexts = results.filter((r) => r.output.additional_context).map((r) => r.output.additional_context);
+  return { allowed: true, additional_context: contexts.length > 0 ? contexts.join("\n") : undefined };
+}
+
 export function close() {
   if (_store) {
     try { _store.close(); } catch { /* ignore */ }
@@ -648,4 +721,5 @@ export function close() {
   _claimService = null;
   _stmtItemStates = null;
   _toolCoreMod = null;
+  _hookRunner = null;
 }

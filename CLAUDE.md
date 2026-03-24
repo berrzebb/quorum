@@ -82,27 +82,38 @@ agents/knowledge/          ← Cross-adapter shared protocols
   ├→ specialist-base.md       ← JSON output format, judgment criteria
   └→ domains/{perf,a11y,...}.md ← 9 domain knowledge files
 
-adapters/shared/           ← Adapter-agnostic business logic (8 modules)
+adapters/shared/           ← Adapter-agnostic business logic (16 modules)
   ├→ repo-resolver.mjs     ← resolveRepoRoot() (git → env → fallback)
   ├→ config-resolver.mjs   ← findConfigPath(), loadConfig(), extractTags()
   ├→ audit-state.mjs       ← readAuditStatus(), buildResumeState(), buildStatusSignals()
   ├→ trigger-runner.mjs    ← validateEvidenceFormat(), buildTriggerContext()
   ├→ tool-names.mjs        ← TOOL_MAP (claude-code/gemini/codex canonical mapping)
+  ├→ hook-runner.mjs       ← HookRunner engine (command/http, deny-first-break, async fire-and-forget)
+  ├→ hook-loader.mjs       ← HOOK.md YAML parser + JSON config → HooksConfig + merge
+  ├→ hook-bridge.mjs       ← HookRunner → PreToolHook/PostToolHook/AuditGate adapters
+  ├→ ndjson-parser.mjs     ← Stream NDJSON line parser (10MB buffer guard)
+  ├→ cli-adapter.mjs       ← Multi-CLI adapters (Claude/Codex/Gemini NDJSON wire format)
+  ├→ jsonrpc-client.mjs    ← JSON-RPC 2.0 stdio client (Codex app-server mode)
+  ├→ sdk-tool-bridge.mjs   ← JSON Schema → Zod conversion (SDK native tool loops)
+  ├→ mux-adapter.mjs       ← ProcessMux ↔ CliAdapter bridge (spawn/send/capture/awaitConsensus)
   └→ ...                   ← first-run, context-reinforcement, quality-runner
 
 adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
-  ├→ hooks/hooks.json   ← 15 hook registrations (incl. UserPromptSubmit, StopFailure, PostToolUseFailure)
+  ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
   ├→ skills/            ← 9 skills
   ├→ agents/            ← 12 agents (reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 9 CLI shortcuts
 
 adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
-  ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, BeforeAgent, BeforeTool, AfterTool, SessionEnd)
+  ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
   ├→ skills/               ← 8 skills (audit, status, guide, verify + implementer, scout, perf-analyst, ui-reviewer)
   └→ commands/             ← 4 TOML commands
+
+adapters/codex/
+  └→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
 ```
 
 ## Key Patterns
@@ -131,11 +142,16 @@ adapters/gemini/
 - **Fragment-Only Language Specs**: `languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
 - **Adapter Env Fallback**: `core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
 - **Tool Name Mapping**: `adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
+- **HookRunner Engine**: `adapters/shared/hook-runner.mjs` — generic hook execution engine (ported from SoulFlow). command/http handlers, env interpolation, deny-first-break, async fire-and-forget, matcher filtering. `hook-loader.mjs` loads from HOOK.md YAML or JSON config. `hook-bridge.mjs` adapts to PreToolHook/PostToolHook/AuditGate interfaces.
+- **NDJSON Wire Protocol**: `ndjson-parser.mjs` + `cli-adapter.mjs` — stream-based NDJSON parsing for 3 CLI formats (Claude stream-json, Codex exec --json, Gemini stream-json). Unified `AgentOutputMessage` type (assistant_chunk, tool_use, tool_result, complete, error). Factory: `createCliAdapter("claude"|"codex"|"gemini")`.
+- **JSON-RPC Client**: `jsonrpc-client.mjs` — stdio JSON-RPC 2.0 client for Codex app-server mode. Bidirectional: client requests + server-initiated requests + notifications. 10MB buffer guard, request timeout, auto-reject on process exit.
+- **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.
+- **MuxAdapter**: `mux-adapter.mjs` — bridges ProcessMux (tmux/psmux) sessions with CliAdapter/NdjsonParser. `spawn()` creates a CLI session per model, `send()` writes prompts via mux, `capture()` parses NDJSON output. `spawnConsensus()` + `awaitConsensus()` for 3-model deliberative protocol.
 
 ## Testing
 
 ```bash
-npm test                              # all (812 tests)
+npm test                              # all (921 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -153,4 +169,6 @@ node --test tests/blast-radius.test.mjs   # Blast radius (BFS, graph, trigger in
 node --test tests/shared-adapter.test.mjs  # Shared adapter modules (8 modules, 28 tests)
 node --test tests/language-registry.test.mjs # Language registry + fragment loading (38 tests)
 node --test tests/agent-persona.test.mjs   # Agent persona loading + shared knowledge (22 tests)
+node --test tests/hook-runner.test.mjs     # HookRunner engine + loader + bridge (43 tests)
+node --test tests/multi-model-integration.test.mjs # 3-model integration: CLI adapters + NDJSON + hooks + consensus (23 tests)
 ```

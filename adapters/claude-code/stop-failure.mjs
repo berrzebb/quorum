@@ -4,30 +4,21 @@
  * Fires when the session ends abnormally (crash, timeout, etc.).
  * Saves diagnostic state to the event bus for post-mortem analysis.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { REPO_ROOT, cfg, configMissing } from "../../core/context.mjs";
+import { readStdinJson, withBridge } from "../shared/hook-io.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+if (configMissing) process.exit(0);
 
 try {
-  const input = JSON.parse(readFileSync("/dev/stdin", "utf8"));
+  const input = await readStdinJson({ exitOnEmpty: false, fallback: {} });
   const error = input?.error ?? "unknown";
 
-  // Emit event to bus if available
-  const bridgePath = resolve(__dirname, "..", "..", "core", "bridge.mjs");
-  if (existsSync(bridgePath)) {
-    const bridge = await import(bridgePath);
-    if (bridge.emitEvent) {
-      bridge.emitEvent("session.stop_failure", {
-        error,
-        timestamp: new Date().toISOString(),
-        sessionId: input?.session_id,
-      });
-    }
-    // Attempt graceful cleanup
-    if (bridge.close) bridge.close();
-  }
+  await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
+    bridge.emitEvent("session.stop_failure", "claude-code", {
+      error,
+      timestamp: new Date().toISOString(),
+    }, { sessionId: input?.session_id });
+  });
 
   console.error(`[quorum] StopFailure: ${error}`);
 } catch {

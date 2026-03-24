@@ -13,7 +13,7 @@
         "url": "https://github.com/berrzebb/quorum.git",
         "sha": "PLACEHOLDER_SHA"
       },
-      "version": "0.4.1",
+      "version": "0.4.2",
       "category": "development",
       "keywords": ["code-review", "audit", "consensus", "mcp", "ai-agents"],
       "homepage": "https://github.com/berrzebb/quorum"

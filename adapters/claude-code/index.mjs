@@ -447,14 +447,34 @@ async function main() {
     // ── Bridge: evaluate trigger + emit events ──
     const bridgeReady = await bridge.init(REPO_ROOT);
     if (bridgeReady) {
+      // Initialize HookRunner from config + HOOK.md (fail-safe)
+      await bridge.initHookRunner(REPO_ROOT, cfg.hooks);
+
+      // Fire pre-audit hooks — user can deny to block audit (e.g., code freeze)
+      const preAuditGate = await bridge.checkHookGate("audit.submit", {
+        session_id: sessionId, cwd: REPO_ROOT,
+        metadata: { provider: "claude-code", watchFile: watchPath },
+      });
+      if (!preAuditGate.allowed) {
+        log(`HOOK_DENY: audit.submit blocked — ${preAuditGate.reason}`);
+        process.stdout.write(`[quorum] Audit blocked by hook: ${preAuditGate.reason}\n`);
+        bridge.close();
+        return;
+      }
       // Count changed files from evidence
       const changedFileSection = freshContent.match(/### Changed Files[\s\S]*?(?=###|$)/)?.[0] ?? "";
       const changedFileCount = (changedFileSection.match(/^- `/gm) ?? []).length;
       const changedFilesRaw = (changedFileSection.match(/^- `([^`]+)`/gm) ?? [])
         .map(m => m.replace(/^- `|`$/g, ""));
 
-      // Pre-detect domains for trigger context (enriches tier scoring)
-      const detectionResult = await bridge.detectDomains(changedFilesRaw, changedFileSection);
+      // Run domain detection + blast radius in parallel (independent I/O)
+      const [detectionResult, blastResult] = await Promise.all([
+        bridge.detectDomains(changedFilesRaw, changedFileSection),
+        changedFilesRaw.length > 0
+          ? bridge.computeBlastRadius(changedFilesRaw).catch(() => null)
+          : null,
+      ]);
+      const blastRadius = blastResult?.ratio;
 
       // Check prior rejections
       const priorRejections = bridge.queryEvents({ eventType: "audit.verdict" })
@@ -468,15 +488,6 @@ async function main() {
         });
       }
       const hasPlanDoc = _hasPlanDoc;
-
-      // Compute blast radius for changed files
-      let blastRadius;
-      if (changedFilesRaw.length > 0) {
-        try {
-          const blastResult = await bridge.computeBlastRadius(changedFilesRaw);
-          if (blastResult?.ratio !== undefined) blastRadius = blastResult.ratio;
-        } catch { /* non-critical */ }
-      }
 
       const triggerResult = bridge.evaluateTrigger({
         changedFiles: changedFileCount || 1,
@@ -573,6 +584,18 @@ async function main() {
           recommendation: stagnation.recommendation,
         }, { sessionId });
       }
+    }
+
+    // Pre-spawn hook gate (last chance to deny before audit process starts)
+    const spawnGate = await bridge.checkHookGate("audit.spawn", {
+      session_id: sessionId, cwd: REPO_ROOT,
+      metadata: { provider: "claude-code", watchFile: watchPath },
+    });
+    if (!spawnGate.allowed) {
+      log(`HOOK_DENY: audit.spawn blocked — ${spawnGate.reason}`);
+      process.stdout.write(`[quorum] Audit spawn blocked: ${spawnGate.reason}\n`);
+      bridge.close();
+      return;
     }
 
     run_audit(watchPath);

@@ -18,7 +18,7 @@ export const TOOL_MAP = {
     todoWrite: "TodoWrite",
   },
   gemini: {
-    bash: "shell",
+    bash: "run_shell_command",
     read: "read_file",
     write: "write_file",
     edit: "edit_file",

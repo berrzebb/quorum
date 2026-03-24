@@ -1,6 +1,6 @@
 {
   "name": "quorum",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Cross-model audit gate with autonomous quality loop — AST hybrid scanning, fitness gate, blast radius analysis, structured orchestration.",
   "mcpServers": {
     "quorum": {

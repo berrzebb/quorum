@@ -21,4 +21,9 @@ const signals = buildStatusSignals({ repoRoot: REPO_ROOT, adapterDir: ADAPTER_DI
 
 if (signals.length === 0) process.exit(0);
 
-console.log(`[quorum status] ${signals.join(" | ")}`);
+// Gemini protocol: JSON only on stdout
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    additionalContext: `[quorum status] ${signals.join(" | ")}`,
+  },
+}));

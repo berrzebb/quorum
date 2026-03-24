@@ -396,13 +396,13 @@ describe("shared/tool-names", () => {
     assert.equal(getToolName("claude-code", "write"), "Write");
 
     // Gemini
-    assert.equal(getToolName("gemini", "bash"), "shell");
+    assert.equal(getToolName("gemini", "bash"), "run_shell_command");
     assert.equal(getToolName("gemini", "write"), "write_file");
     assert.equal(getToolName("gemini", "edit"), "edit_file");
 
     // Reverse lookup
     assert.equal(getCanonicalName("claude-code", "Write"), "write");
-    assert.equal(getCanonicalName("gemini", "shell"), "bash");
+    assert.equal(getCanonicalName("gemini", "run_shell_command"), "bash");
     assert.equal(getCanonicalName("gemini", "unknown_tool"), null);
 
     // File edit detection

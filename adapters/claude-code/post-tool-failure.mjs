@@ -3,29 +3,28 @@
  * Hook: PostToolUseFailure
  * Fires when a tool call fails. Tracks repeated failures for stagnation detection.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { REPO_ROOT, cfg, configMissing } from "../../core/context.mjs";
+import { readStdinJson, withBridge } from "../shared/hook-io.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+if (configMissing) process.exit(0);
 
 try {
-  const input = JSON.parse(readFileSync("/dev/stdin", "utf8"));
+  const input = await readStdinJson({ exitOnEmpty: false, fallback: {} });
   const toolName = input?.tool_name ?? "unknown";
   const error = input?.error ?? "";
 
-  // Emit event to bus if available
-  const bridgePath = resolve(__dirname, "..", "..", "core", "bridge.mjs");
-  if (existsSync(bridgePath)) {
-    const bridge = await import(bridgePath);
-    if (bridge.emitEvent) {
-      bridge.emitEvent("tool.failure", {
-        tool: toolName,
-        error: typeof error === "string" ? error.slice(0, 500) : String(error).slice(0, 500),
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+  await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
+    bridge.emitEvent("tool.failure", "claude-code", {
+      tool: toolName,
+      error: typeof error === "string" ? error.slice(0, 500) : String(error).slice(0, 500),
+    }, { sessionId: input?.session_id });
+    await bridge.fireHook("tool.failure", {
+      session_id: input?.session_id,
+      cwd: REPO_ROOT,
+      tool_name: toolName,
+      metadata: { error },
+    });
+  });
 } catch {
   // Hook must never block — fail silently
 }

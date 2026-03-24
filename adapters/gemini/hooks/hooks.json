@@ -5,7 +5,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/hooks/scripts/session-start.mjs"
+            "command": "node ${extensionPath}/hooks/scripts/session-start.mjs",
+            "name": "quorum-session-start",
+            "description": "Load audit state + context for new sessions"
           }
         ]
       }
@@ -15,7 +17,57 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/hooks/scripts/before-agent.mjs"
+            "command": "node ${extensionPath}/hooks/scripts/before-agent.mjs",
+            "name": "quorum-before-agent",
+            "description": "Inject audit/retro status signals"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/after-agent.mjs",
+            "name": "quorum-after-agent",
+            "description": "Quality checks + retro detection"
+          }
+        ]
+      }
+    ],
+    "BeforeModel": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/before-model.mjs",
+            "name": "quorum-before-model",
+            "description": "Extension point for request modification"
+          }
+        ]
+      }
+    ],
+    "AfterModel": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/after-model.mjs",
+            "name": "quorum-after-model",
+            "description": "Extension point for response filtering"
+          }
+        ]
+      }
+    ],
+    "BeforeToolSelection": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/before-tool-selection.mjs",
+            "name": "quorum-before-tool-selection",
+            "description": "Extension point for tool filtering"
           }
         ]
       }
@@ -25,7 +77,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/hooks/scripts/before-tool.mjs"
+            "command": "node ${extensionPath}/hooks/scripts/before-tool.mjs",
+            "name": "quorum-before-tool",
+            "description": "Session gate — block tools when retro pending"
           }
         ]
       }
@@ -35,7 +89,34 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/hooks/scripts/after-tool.mjs"
+            "command": "node ${extensionPath}/hooks/scripts/after-tool.mjs",
+            "name": "quorum-after-tool",
+            "timeout": 30000,
+            "description": "Core audit pipeline — evidence validation + trigger eval"
+          }
+        ]
+      }
+    ],
+    "PreCompress": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/pre-compress.mjs",
+            "name": "quorum-pre-compress",
+            "description": "State snapshot before context compression"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${extensionPath}/hooks/scripts/notification.mjs",
+            "name": "quorum-notification",
+            "description": "System notification observer"
           }
         ]
       }
@@ -45,7 +126,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/hooks/scripts/session-end.mjs"
+            "command": "node ${extensionPath}/hooks/scripts/session-end.mjs",
+            "name": "quorum-session-end",
+            "description": "Cleanup — auto-commit artifacts, RTM update"
           }
         ]
       }

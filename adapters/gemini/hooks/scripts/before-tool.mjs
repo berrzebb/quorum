@@ -7,16 +7,17 @@
  *
  * Gemini hooks receive input via stdin (JSON) and output to stdout.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { readRetroMarker } from "../../../shared/audit-state.mjs";
+import { readStdinJson } from "../../../shared/hook-io.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = (await import("node:path")).dirname((await import("node:url")).fileURLToPath(import.meta.url));
 const ADAPTER_DIR = resolve(__dirname, "..");
 const MARKER_DIR = resolve(ADAPTER_DIR, ".session-state");
 const COMPLETION_CMD = "session-self-improvement-complete";
+// Gemini CLI tool names — run_shell_command (not "shell")
 const ALLOWED_TOOLS = ["read_file", "write_file", "edit_file", "glob", "grep", "todo_write"];
 
 // Quick check: retro marker
@@ -25,19 +26,11 @@ if (!marker || !marker.retro_pending) {
   process.exit(0);
 }
 
-// Read stdin
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
-const raw = Buffer.concat(chunks).toString("utf8").trim();
-if (!raw) process.exit(0);
-
-let input;
-try { input = JSON.parse(raw); } catch { process.exit(0); }
-
+const input = await readStdinJson();
 const toolName = input.tool_name || "";
 
 // Completion command → release marker
-if (toolName === "shell") {
+if (toolName === "run_shell_command" || toolName === "shell") {
   const command = (input.tool_input?.command || "").trim();
   if (command === COMPLETION_CMD ||
       command === `echo ${COMPLETION_CMD}` ||
@@ -57,6 +50,7 @@ if (ALLOWED_TOOLS.includes(toolName)) {
   process.exit(0);
 }
 
-// Block other tools
-console.error(`[quorum] 회고 미완료 — ${toolName} 차단됨. echo session-self-improvement-complete 으로 해제`);
+// Block other tools — Gemini protocol: JSON on stdout + exit 2
+const reason = `[quorum] 회고 미완료 — ${toolName} 차단됨. echo session-self-improvement-complete 으로 해제`;
+process.stdout.write(JSON.stringify({ decision: "deny", reason }));
 process.exit(2);

@@ -32,7 +32,10 @@ if (configMissing) {
   const result = firstRunSetup({ adapterRoot, projectConfigDir });
   const msg = buildFirstRunMessage(result, resolve(adapterRoot, "README.md"));
   if (msg) {
-    console.log(msg);
+    process.stdout.write(JSON.stringify({
+      systemMessage: msg,
+      hookSpecificOutput: { additionalContext: msg },
+    }));
     process.exit(0);
   }
 }
@@ -90,7 +93,11 @@ if (reinforcement) {
   context += `\n${reinforcement}\n`;
 }
 
-// ── Output ──────────────────────────────────────────────────
+// ── Output (Gemini hook protocol: JSON only on stdout) ──────
 if (context.trim()) {
-  console.log(context);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      additionalContext: context.trim(),
+    },
+  }));
 }
