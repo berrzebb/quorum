@@ -7,7 +7,7 @@
  * 3. Classify items into 5 MECE categories (gap/strength/out/buy/build)
  * 4. Generate CPS (Context-Problem-Solution) from converged logs
  *
- * Each meeting log is stored as a parliament.session.digest event in EventStore.
+ * Each meeting log is stored as a parliament.meeting.log event in EventStore.
  * Convergence is per-agenda (standing committee) — independent tracking.
  */
 
@@ -15,7 +15,6 @@ import { randomUUID } from "node:crypto";
 import type { EventStore } from "./store.js";
 import type {
   MeetingClassification,
-  ParliamentSessionDigestPayload,
   ParliamentConvergencePayload,
 } from "./events.js";
 import { createEvent, type QuorumEvent } from "./events.js";
@@ -148,26 +147,16 @@ export function createMeetingLog(
 }
 
 /**
- * Store a meeting log as a parliament.session.digest event.
+ * Store a meeting log as a parliament.meeting.log event.
  */
 export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
-  const payload: ParliamentSessionDigestPayload = {
+  const event = createEvent("parliament.meeting.log", "generic", {
+    meetingLogId: log.id,
     agendaId: log.agendaId,
     sessionType: log.sessionType,
-    verdictResult: "approved",
-    converged: false,
-    amendmentsResolved: 0,
-    confluencePassed: false,
-    errorCount: 0,
-    duration: 0,
-  };
-
-  const event = createEvent("parliament.session.digest", "generic", {
-    ...payload,
-    meetingLogId: log.id,
     registers: log.registers,
     classificationDetails: log.classifications,
-    agendaId: log.agendaId,
+    convergenceScore: log.convergenceScore,
   });
   store.append(event);
 }
@@ -176,7 +165,7 @@ export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
  * Retrieve meeting logs for a specific agenda from EventStore.
  */
 export function getMeetingLogs(store: EventStore, agendaId?: string): MeetingLog[] {
-  const events = store.query({ eventType: "parliament.session.digest" });
+  const events = store.query({ eventType: "parliament.meeting.log" });
   const logs: MeetingLog[] = [];
 
   for (const e of events) {

@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { ProcessMux, type MuxSession, type MuxBackend } from "../../bus/mux.js";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { extractJson } from "./parse.js";
+import { parseSpec } from "./factory.js";
 import { AUDIT_VERDICT } from "../../bus/events.js";
 
 // ── Types ────────────────────────────────────
@@ -127,6 +128,7 @@ export class MuxAuditor implements Auditor {
     }
 
     // 4. Poll until completion or timeout
+    // Track completion independently — marker may scroll out of later capture windows
     let raw = "";
     let completed = false;
 
@@ -136,13 +138,13 @@ export class MuxAuditor implements Auditor {
       const capture = mux.capture(session.id, 500);
       if (!capture) continue;
 
-      raw = capture.output;
-
-      // Check for completion signals
-      if (isComplete(raw, provider)) {
+      if (isComplete(capture.output, provider)) {
+        raw = capture.output;
         completed = true;
         break;
       }
+
+      raw = capture.output;
     }
 
     // 5. Cleanup
@@ -249,14 +251,13 @@ export function createMuxConsensusAuditors(
   options?: { pollIntervalMs?: number; timeoutMs?: number; keepSession?: boolean },
 ): { advocate: Auditor; devil: Auditor; judge: Auditor } {
   const makeAuditor = (role: "advocate" | "devil" | "judge"): MuxAuditor => {
-    const spec = roles[role] ?? "claude";
-    const [provider, ...rest] = spec.split(":");
+    const { provider, model } = parseSpec(roles[role] ?? "claude");
     return new MuxAuditor({
-      provider: provider!,
+      provider,
       role,
       cwd,
       mux,
-      model: rest.length > 0 ? rest.join(":") : undefined,
+      model,
       ...options,
     });
   };

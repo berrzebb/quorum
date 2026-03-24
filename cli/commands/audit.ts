@@ -30,10 +30,12 @@ export async function run(args: string[]): Promise<void> {
   // Check watch file
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
   let watchFile = "docs/feedback/claude.md";
+  let triggerTag = "[REVIEW_NEEDED]";
   if (existsSync(configPath)) {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
       watchFile = cfg.consensus?.watch_file ?? watchFile;
+      triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
     } catch { /* use default */ }
   }
 
@@ -45,7 +47,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const content = readFileSync(watchPath, "utf8");
-  if (!content.includes("[REVIEW_NEEDED]")) {
+  if (!content.includes(triggerTag)) {
     console.log("  \x1b[32m✓ No pending items to audit\x1b[0m\n");
     return;
   }

@@ -91,6 +91,7 @@ export type EventType =
   | "parliament.amendment.vote"
   | "parliament.amendment.resolve"
   | "parliament.convergence"
+  | "parliament.meeting.log"
   | "parliament.session.digest"
   | "parliament.session.normalform"
   | "parliament.cps.generated";

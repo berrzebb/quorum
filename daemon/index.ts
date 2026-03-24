@@ -160,9 +160,16 @@ export default async function startDaemon(): Promise<void> {
     try { _refreshConfig?.(); } catch { /* non-critical */ }
   }, 10_000);
 
-  // Render TUI with stateReader
+  // Initialize ProcessMux for agent session management
+  let daemonMux: InstanceType<typeof ProcessMux> | null = null;
+  try {
+    const backend = await ensureMuxBackend();
+    daemonMux = new ProcessMux(backend);
+  } catch { /* non-critical — chat view will be unavailable */ }
+
+  // Render TUI with stateReader + mux
   const { waitUntilExit } = render(
-    React.createElement(App, { bus, stateReader }),
+    React.createElement(App, { bus, stateReader, mux: daemonMux }),
   );
 
   // Graceful shutdown

@@ -129,7 +129,7 @@ export class MarkdownProjector {
         entityId: row.entity_id,
         currentState: row.current_state,
         source: row.source,
-        metadata: JSON.parse(row.metadata),
+        metadata: row.metadata ? JSON.parse(row.metadata) : {},
         createdAt: row.created_at,
       }));
     } catch {

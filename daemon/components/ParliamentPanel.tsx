@@ -11,6 +11,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ParliamentInfo } from "../state-reader.js";
+import { STANDING_COMMITTEES, type StandingCommittee } from "../../bus/meeting-log.js";
 
 interface ParliamentPanelProps {
   parliament: ParliamentInfo;
@@ -107,13 +108,8 @@ function padRight(str: string, len: number): string {
 }
 
 function shortName(committee: string): string {
-  const map: Record<string, string> = {
-    "principles": "Principles",
-    "definitions": "Definitions",
-    "structure": "Structure",
-    "architecture": "Architecture",
-    "scope": "Scope",
-    "research-questions": "Research Q",
-  };
-  return map[committee] ?? committee;
+  const entry = STANDING_COMMITTEES[committee as StandingCommittee];
+  if (!entry) return committee;
+  const name = entry.name;
+  return name.length > 12 ? name.slice(0, 11) + "…" : name;
 }

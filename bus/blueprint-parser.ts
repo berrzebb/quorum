@@ -136,7 +136,10 @@ export function generateAlternatives(concept: string, mandatedName: string): str
     }
   } else {
     // Single word — generate with common suffixes
-    const base = mandatedName.replace(/s$/i, ""); // Remove trailing 's'
+    // Only strip trailing 's' for simple plurals (avoid mangling "process", "address", etc.)
+    const base = mandatedName.length > 4 && /[^s]s$/i.test(mandatedName)
+      ? mandatedName.slice(0, -1)
+      : mandatedName;
     for (const suffix of ["List", "Array", "Collection", "Manager", "Service"]) {
       const alt = base + suffix;
       if (alt !== mandatedName) alts.push(alt);

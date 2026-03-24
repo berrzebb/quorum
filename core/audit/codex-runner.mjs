@@ -23,7 +23,7 @@ export function determineResumeTarget(args, auditStatusPath) {
 
   const saved = readSavedSession();
   if (saved) {
-    // audit-status.json에 pending 상태면 세션 리셋 — 재개 시 orphan call 누적 방지
+    // If audit-status.json shows pending → reset session to prevent orphan call buildup on resume
     if (existsSync(auditStatusPath)) {
       try {
         const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
@@ -32,7 +32,7 @@ export function determineResumeTarget(args, auditStatusPath) {
           console.log(t("audit.session.reset_pending"));
           return null;
         }
-      } catch { /* 마커 파일 읽기 실패 시 기존 세션 유지 */ }
+      } catch { /* marker read failed — keep existing session */ }
     }
     return { type: "session", value: saved };
   }
@@ -89,7 +89,7 @@ export function buildCodexArgs(args, resumeTarget, cwd) {
   return base;
 }
 
-/** 라인 단위 실시간 스트리밍 — agent_message를 즉시 출력하고 threadId + verdictText를 추적. */
+/** Line-by-line real-time streaming — print agent_message immediately, track threadId + verdictText. */
 export function streamCodexOutput(child, rawJson) {
   return new Promise((resolvePromise, reject) => {
     let threadId = null;
@@ -139,7 +139,7 @@ export function streamCodexOutput(child, rawJson) {
       const stdout = stdoutForLog;
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
 
-      // codex-session.log에 디버깅용 기록
+      // Write debug log to codex-session.log
       try {
         const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
         appendFileSync(codexLogPath, `\n=== [${ts}] Codex session output ===\n`);

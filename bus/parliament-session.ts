@@ -228,16 +228,10 @@ export async function runParliamentSession(
   const amendments: AmendmentResolution[] = [];
   try {
     const pending = getAmendments(store).filter(a => a.status === AMENDMENT_STATUS.PROPOSED);
-    const allVotes = store.query({ eventType: "parliament.amendment.vote" });
-    const votesByAmendment = new Map<string, typeof allVotes>();
-    for (const v of allVotes) {
-      const aid = v.payload.amendmentId as string;
-      const arr = votesByAmendment.get(aid) ?? [];
-      arr.push(v);
-      votesByAmendment.set(aid, arr);
-    }
+    const allVoteEvents = store.query({ eventType: "parliament.amendment.vote" });
     for (const a of pending) {
-      const resolution = resolveAmendment(store, a.id, config.eligibleVoters, votesByAmendment.get(a.id) ?? []);
+      const votes = allVoteEvents.filter(e => e.payload.amendmentId === a.id);
+      const resolution = resolveAmendment(store, a.id, config.eligibleVoters, votes);
       amendments.push(resolution);
     }
   } catch (err) {

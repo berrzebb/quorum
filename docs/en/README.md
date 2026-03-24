@@ -60,15 +60,16 @@ code edit → PostToolUse hook
 ## CLI
 
 ```bash
-quorum setup              # initialize project
-quorum daemon             # TUI dashboard
-quorum status             # gate status (incl. parliament)
-quorum audit              # manual trigger
-quorum plan               # list work breakdowns
-quorum parliament "topic" # parliamentary deliberation
-quorum ask codex "..."    # direct provider query
-quorum tool code_map      # run MCP tool
-quorum tool blueprint_lint # naming convention check
+quorum setup                          # initialize project
+quorum daemon                         # TUI dashboard
+quorum status                         # gate status (incl. parliament)
+quorum parliament "topic"             # parliamentary deliberation → CPS
+quorum orchestrate plan <track>       # interactive planner (Socratic + CPS)
+quorum orchestrate run <track>        # full implementation loop (auto)
+quorum plan                           # list work breakdowns
+quorum ask codex "..."                # direct provider query
+quorum tool code_map                  # run MCP tool
+quorum tool blueprint_lint            # naming convention check
 ```
 
 ---
@@ -126,13 +127,15 @@ Auto-detects domains from file patterns, conditionally activates domain-specific
 | concurrency | — | concurrency-verifier |
 | documentation | `doc_coverage` | doc-steward |
 
-**19 deterministic tools** — see [TOOLS.md](TOOLS.md) for details.
+**21 deterministic tools** (incl. `blueprint_lint`) — see [TOOLS.md](TOOLS.md) for details.
 
 ### TUI Dashboard
 
-The daemon TUI (`quorum daemon`) includes:
+The daemon TUI (`quorum daemon`) is a control center, not just a dashboard:
 - **GateStatus**: enforcement gate visualization (Audit/Retro/Quality)
-- **FitnessPanel**: real-time fitness score, sparkline history, component breakdown, gate decision
+- **FitnessPanel**: real-time fitness score (7 components), sparkline history, gate decision
+- **ParliamentPanel**: live deliberation sessions, committee convergence, pending amendments
+- **AgentChatPanel**: multi-pane interactive agent relay (select, pin, type, send)
 - **AgentPanel**: active agent tracking
 - **TrackProgress**: work breakdown status
 - **AuditStream**: live event stream
@@ -166,11 +169,13 @@ Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LL
 
 | Component | Weight | Input |
 |-----------|--------|-------|
-| Type Safety | 0.25 | `as any` count / KLOC |
-| Test Coverage | 0.25 | line + branch coverage |
+| Type Safety | 0.20 | `as any` count / KLOC |
+| Test Coverage | 0.20 | line + branch coverage |
 | Pattern Scan | 0.20 | HIGH findings count |
 | Build Health | 0.15 | tsc + eslint pass rate |
-| Complexity | 0.15 | avg cyclomatic complexity |
+| Complexity | 0.10 | avg cyclomatic complexity |
+| Security | 0.10 | security issue count |
+| Dependencies | 0.05 | deprecated dependency ratio |
 
 **3-tier gate**:
 - **auto-reject**: score drop (delta ≤ -0.15) or absolute < 0.3 → skip LLM audit (cost savings)
@@ -179,15 +184,15 @@ Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LL
 
 ---
 
-## 3-Layer Adapter Pattern (v0.4.2)
+## 3-Layer Adapter Pattern (v0.4.4)
 
 Shared business logic across adapters. Only I/O differs per runtime:
 
 | Layer | Role | Location |
 |-------|------|----------|
 | **I/O** | stdin/stdout parsing, protocol | `adapters/{adapter}/` |
-| **Business Logic** | trigger, evidence, hooks, NDJSON | `adapters/shared/` (17 modules) |
-| **Core** | audit, 19 MCP tools, EventStore | `core/` |
+| **Business Logic** | trigger, evidence, hooks, NDJSON | `adapters/shared/` (17+ modules) |
+| **Core** | audit, 21 MCP tools, EventStore | `core/` |
 
 New adapter = ~280 lines of I/O wrappers (Codex adapter).
 
@@ -243,6 +248,14 @@ command/http handlers, env interpolation (`$VAR`), deny-first-break, async fire-
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]"
   },
-  "hooks": {}
+  "hooks": {},
+  "parliament": {
+    "enabled": true,
+    "convergenceThreshold": 2,
+    "eligibleVoters": 3,
+    "maxRounds": 10,
+    "maxAutoAmendments": 5,
+    "roles": { "advocate": "claude", "devil": "claude", "judge": "claude" }
+  }
 }
 ```

@@ -78,7 +78,8 @@ export async function run(args: string[]): Promise<void> {
   }
 
   // Check main repo + all worktrees for evidence
-  const evidencePaths = findAllEvidence(repoRoot, watchFile);
+  const worktrees = getActiveWorktrees(repoRoot);
+  const evidencePaths = findAllEvidence(repoRoot, watchFile, worktrees);
 
   if (evidencePaths.length > 0) {
     console.log(`  Evidence:`);
@@ -104,7 +105,6 @@ export async function run(args: string[]): Promise<void> {
   }
 
   // ── Active worktrees ────────────────────────
-  const worktrees = getActiveWorktrees(repoRoot);
   if (worktrees.length > 0) {
     console.log(`  Worktrees:   ${worktrees.length} active`);
     for (const wt of worktrees) {
@@ -200,7 +200,7 @@ interface EvidenceItem {
   status: "pending" | "approved" | "rejected" | "infra_failure";
 }
 
-function findAllEvidence(repoRoot: string, watchFile: string): EvidencePath[] {
+function findAllEvidence(repoRoot: string, watchFile: string, worktrees: Worktree[]): EvidencePath[] {
   const results: EvidencePath[] = [];
 
   // Main repo
@@ -210,7 +210,6 @@ function findAllEvidence(repoRoot: string, watchFile: string): EvidencePath[] {
   }
 
   // Worktrees
-  const worktrees = getActiveWorktrees(repoRoot);
   for (const wt of worktrees) {
     const wtPath = resolve(wt.path, watchFile);
     if (existsSync(wtPath)) {

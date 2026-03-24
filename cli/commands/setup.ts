@@ -78,6 +78,23 @@ export async function run(args: string[]): Promise<void> {
   const quorumDir = resolve(repoRoot, ".claude", "quorum");
   const steps: { label: string; ok: boolean }[] = [];
 
+  // Locale selection: --locale <code> or interactive prompt
+  let locale = "en";
+  const localeIdx = args.indexOf("--locale");
+  if (localeIdx >= 0 && args[localeIdx + 1]) {
+    locale = args[localeIdx + 1]!;
+  } else if (!args.includes("--yes") && !args.includes("-y")) {
+    // Interactive: ask user to pick language
+    const { createInterface } = await import("node:readline");
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>(r =>
+      rl.question("  Language / 언어 (en/ko) [en]: ", r),
+    );
+    rl.close();
+    const picked = answer.trim().toLowerCase();
+    if (picked === "ko" || picked === "kr") locale = "ko";
+  }
+
   console.log("\n\x1b[36mquorum setup\x1b[0m — initializing project\n");
 
   // 1. Config directory
@@ -93,7 +110,7 @@ export async function run(args: string[]): Promise<void> {
   if (!existsSync(configPath)) {
     const defaultConfig = {
       plugin: {
-        locale: "en",
+        locale,
         audit_script: "audit.mjs",
         respond_script: "respond.mjs",
         hooks_enabled: {

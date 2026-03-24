@@ -228,7 +228,7 @@ function estimateRawConformance(
 
   const first = verdictEvents[0]!.payload as unknown as AuditVerdictPayload;
   if (first.verdict === AUDIT_VERDICT.APPROVED) return 95;
-  if (first.verdict === "infra_failure") return 50;
+  if (first.verdict === AUDIT_VERDICT.INFRA_FAILURE) return 50;
 
   // changes_requested: estimate from code count
   const codeCount = first.codes?.length ?? 0;

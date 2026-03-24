@@ -6,11 +6,11 @@
  * convergence, generates CPS, and resolves amendments.
  *
  * Usage:
- *   quorum parliament "주문 앱에 결제 기능 추가"
- *   quorum parliament --rounds 3 "마이크로서비스 전환 전략"
- *   quorum parliament --committee architecture "시스템 설계 논의"
- *   quorum parliament --advocate claude --devil openai --judge codex "인증 재설계"
- *   quorum parliament --testimony "기존 DB 제약 있음" "주문 테이블 리팩토링"
+ *   quorum parliament "add payment feature to order app"
+ *   quorum parliament --rounds 3 "microservice migration strategy"
+ *   quorum parliament --committee architecture "system design discussion"
+ *   quorum parliament --advocate claude --devil openai --judge codex "auth redesign"
+ *   quorum parliament --testimony "DB schema constraints" "order table refactoring"
  */
 
 import { resolve } from "node:path";
@@ -99,6 +99,9 @@ export function parseArgs(args: string[]): ParliamentArgs {
 function loadConfig(): Record<string, unknown> {
   const candidates = [
     resolve(process.cwd(), ".claude", "quorum", "config.json"),
+    ...(process.env.QUORUM_ADAPTER_ROOT ? [resolve(process.env.QUORUM_ADAPTER_ROOT, "config.json")] : []),
+    ...(process.env.CLAUDE_PLUGIN_ROOT ? [resolve(process.env.CLAUDE_PLUGIN_ROOT, "config.json")] : []),
+    ...(process.env.GEMINI_EXTENSION_ROOT ? [resolve(process.env.GEMINI_EXTENSION_ROOT, "config.json")] : []),
   ];
   for (const p of candidates) {
     try { return JSON.parse(readFileSync(p, "utf8")); } catch { continue; }
@@ -556,11 +559,11 @@ ${C.bold}Provider specs:${C.reset}
   claude:claude-opus-4-6, openai:gpt-4o   (with model override)
 
 ${C.bold}Examples:${C.reset}
-  quorum parliament "주문 앱에 결제 기능 추가"
-  quorum parliament --rounds 3 "마이크로서비스 전환 전략"
-  quorum parliament -c architecture "시스템 설계 논의"
-  quorum parliament --advocate claude --devil openai --judge codex "인증 재설계"
-  quorum parliament -t "DB 스키마 제약 있음" "주문 테이블 리팩토링"
+  quorum parliament "add payment feature"
+  quorum parliament --rounds 3 "microservice migration"
+  quorum parliament -c architecture "system design review"
+  quorum parliament --advocate claude --devil openai --judge codex "auth redesign"
+  quorum parliament -t "DB schema constraints" "order table refactoring"
 
 ${C.bold}Flow:${C.reset}
   1. Topic auto-routed to standing committee (or --committee override)

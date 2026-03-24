@@ -9,20 +9,12 @@ import { resolve, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
-import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { readAuditStatus, readRetroMarker, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { resolveRepoRoot } from "../../adapters/shared/repo-resolver.mjs";
 import { createT } from "../../core/context.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function resolveRepoRoot() {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
-  } catch { /* git unavailable */ }
-  const legacy = resolve(__dirname, "..", "..", "..");
-  if (existsSync(resolve(legacy, ".git"))) return legacy;
-  return process.cwd();
-}
-const REPO_ROOT = resolveRepoRoot();
+const REPO_ROOT = resolveRepoRoot({ adapterDir: __dirname });
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? __dirname;
 const configPath = (() => {
@@ -35,7 +27,7 @@ const configPath = (() => {
   return existsSync(local) ? local : null;
 })();
 
-// ── config.json 미존재 → project dir에 자동 복사 + 커스터마이즈 안내 ──
+// ── config.json not found → auto-copy to project dir + prompt to customize ──
 if (!configPath) {
   const projectConfigDir = resolve(REPO_ROOT, ".claude", "quorum");
   const exampleConfig = resolve(pluginRoot, "examples", "config.example.json");
@@ -97,9 +89,9 @@ if (!configPath) {
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 const t = createT(cfg.plugin?.locale ?? "en");
 const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
-const triggerTag = cfg.consensus?.trigger_tag ?? "[GPT미검증]";
-const agreeTag = cfg.consensus?.agree_tag ?? "[합의완료]";
-const pendingTag = cfg.consensus?.pending_tag ?? "[계류]";
+const triggerTag = cfg.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
+const agreeTag = cfg.consensus?.agree_tag ?? "[APPROVED]";
+const pendingTag = cfg.consensus?.pending_tag ?? "[CHANGES_REQUESTED]";
 
 let context = "";
 const resumeActions = [];
@@ -142,38 +134,24 @@ if (auditStatus) {
 }
 
 // 3c. Retrospective state
-const retroMarker = resolve(__dirname, ".session-state", "retro-marker.json");
-if (existsSync(retroMarker)) {
-  try {
-    const marker = JSON.parse(readFileSync(retroMarker, "utf8"));
-    if (marker.retro_pending && marker.deferred_to_orchestrator) {
-      resumeActions.push(
-        `서브에이전트 회고가 orchestrator에 위임됨 (${marker.rx_id ?? "unknown"}).`
-        + `\n  → 즉시 회고를 시작하세요:`
-        + `\n    1. 잘된 것 / 문제인 것 / 개선할 것`
-        + `\n    2. 사용자와 피드백 교환`
-        + `\n    3. 메모리에 원칙 기록`
-        + `\n    4. echo session-self-improvement-complete`
-        + (marker.agreed_items ? `\n  합의된 항목:\n${marker.agreed_items}` : "")
-      );
-    } else if (marker.retro_pending) {
-      resumeActions.push(
-        `회고가 미완료 (${marker.rx_id ?? "unknown"}). session-gate가 Bash/Agent를 차단합니다.`
-        + `\n  → 즉시 회고를 진행한 뒤 echo session-self-improvement-complete`
-      );
-    }
-  } catch { /* marker parse error */ }
+const marker = readRetroMarker(__dirname);
+if (marker?.retro_pending && marker.deferred_to_orchestrator) {
+  resumeActions.push(
+    t("resume.retro_deferred", { id: marker.rx_id ?? "unknown" })
+    + (marker.agreed_items ? `\n  Agreed items:\n${marker.agreed_items}` : "")
+  );
+} else if (marker?.retro_pending) {
+  resumeActions.push(t("resume.retro_pending", { id: marker.rx_id ?? "unknown" }));
 }
 
 // 3d. Orchestrator track detection from handoff
 if (handoffContent) {
-  // ### [task-id] 형식의 작업 항목에서 "진행 중" 상태인 것 추출
   const taskBlocks = handoffContent.split(/(?=^### \[)/m);
   const activeTasks = [];
   for (const block of taskBlocks) {
     const titleMatch = block.match(/^### \[([^\]]+)\]\s*(.+)/m);
     if (!titleMatch) continue;
-    const statusMatch = block.match(/\*\*상태\*\*:\s*(.+)/);
+    const statusMatch = block.match(/\*\*(?:상태|status)\*\*:\s*(.+)/i);
     if (!statusMatch) continue;
     const status = statusMatch[1].trim();
     if (/진행\s*중|in.?progress/i.test(status)) {
@@ -182,12 +160,8 @@ if (handoffContent) {
   }
 
   if (activeTasks.length > 0) {
-    const taskList = activeTasks.map((t) => `  - [${t.id}] ${t.title}`).join("\n");
-    resumeActions.push(
-      `이전 세션에서 ${activeTasks.length}개 작업이 진행 중이었습니다:`
-      + `\n${taskList}`
-      + `\n  → /quorum:orchestrator 로 미완료 트랙을 이어서 진행하세요.`
-    );
+    const taskList = activeTasks.map((tk) => `  - [${tk.id}] ${tk.title}`).join("\n");
+    resumeActions.push(t("resume.active_tasks", { count: activeTasks.length, list: taskList }));
   }
 }
 
@@ -197,9 +171,9 @@ if (existsSync(snapshotPath)) {
   try {
     const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8"));
     const parts = [];
-    if (snapshot.audit_in_progress) parts.push("감사 진행 중");
-    if (snapshot.last_audit_status) parts.push(`마지막 항목: ${snapshot.last_audit_status}`);
-    if (snapshot.retro_marker?.retro_pending) parts.push("회고 대기");
+    if (snapshot.audit_in_progress) parts.push("audit in progress");
+    if (snapshot.last_audit_status) parts.push(`last item: ${snapshot.last_audit_status}`);
+    if (snapshot.retro_marker?.retro_pending) parts.push("retro pending");
     if (parts.length > 0) {
       context += `[Pre-compaction state — ${snapshot.saved_at}] ${parts.join(", ")}\n`;
     }

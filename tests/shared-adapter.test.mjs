@@ -200,7 +200,8 @@ describe("shared/audit-state", () => {
     const cfg = { consensus: { watch_file: "docs/feedback/claude.md", trigger_tag: "[GPT미검증]", pending_tag: "[계류]" } };
     const { resumeActions } = buildResumeState({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
     assert.ok(resumeActions.length > 0);
-    assert.ok(resumeActions[0].includes("보정"));
+    // i18n: ko="보정", en="corrections"
+    assert.ok(resumeActions[0].includes("보정") || resumeActions[0].includes("corrections"));
   });
 });
 

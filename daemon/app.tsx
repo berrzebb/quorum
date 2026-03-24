@@ -19,13 +19,15 @@ import { TrackProgress } from "./components/TrackProgress.js";
 import { Header } from "./components/Header.js";
 import { FitnessPanel } from "./components/FitnessPanel.js";
 import { ParliamentPanel } from "./components/ParliamentPanel.js";
+import { AgentChatPanel } from "./components/AgentChatPanel.js";
 
 interface AppProps {
   bus: QuorumBus;
   stateReader?: StateReader;
+  mux?: import("../bus/mux.js").ProcessMux | null;
 }
 
-export function App({ bus, stateReader }: AppProps) {
+export function App({ bus, stateReader, mux }: AppProps) {
   const { exit } = useApp();
   const [events, setEvents] = useState<QuorumEvent[]>(bus.recent(50));
   const [activeView, setActiveView] = useState<"dashboard" | "log" | "chat">("dashboard");
@@ -59,7 +61,7 @@ export function App({ bus, stateReader }: AppProps) {
   const providers = useMemo(() => listProviders().map((p) => ({
     name: p.displayName,
     ...p.status(),
-  })), [events]);
+  })), []);
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -136,9 +138,7 @@ export function App({ bus, stateReader }: AppProps) {
 
           {/* Row 2.5: parliament */}
           {fullState && fullState.parliament.sessionCount > 0 && (
-            <Box gap={2}>
-              <ParliamentPanel parliament={fullState.parliament} />
-            </Box>
+            <ParliamentPanel parliament={fullState.parliament} />
           )}
 
           {/* Row 3: finding stats + open findings + review progress */}
@@ -159,14 +159,18 @@ export function App({ bus, stateReader }: AppProps) {
           </Box>
         </Box>
       ) : activeView === "chat" ? (
-        <ChatPanel fileThreads={fullState?.fileThreads ?? []} />
+        mux ? (
+          <AgentChatPanel mux={mux} liveSessions={fullState?.parliament.liveSessions ?? []} />
+        ) : (
+          <ChatPanel fileThreads={fullState?.fileThreads ?? []} />
+        )
       ) : (
         <AuditStream events={events} fullScreen />
       )}
 
       <Box marginTop={1}>
         <Text dimColor>
-          [1] Dashboard  [2] Full Log  [3] Chat  [q] Quit
+          [1] Dashboard  [2] Full Log  [3] Agent Chat  [q] Quit
         </Text>
       </Box>
     </Box>

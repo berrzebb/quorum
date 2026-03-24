@@ -38,7 +38,7 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
 
   try {
     const sessionResult = await bridge.runParliamentSession(
-      { prompt: content, evidence: watchPath },
+      { prompt: content, evidence: watchPath, files: [] },
       parliamentCfg,
     );
 

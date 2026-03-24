@@ -189,6 +189,7 @@ export class StateReader {
   private stmtItemStates: Database.Statement;
   private stmtActiveLocks: Database.Statement;
   private stmtLatestTransition: Database.Statement;
+  private _liveSessionsCache: { ts: number; data: ParliamentLiveSession[] } = { ts: 0, data: [] };
 
   constructor(store: EventStore, messageBus?: MessageBus | null) {
     this.store = store;
@@ -654,11 +655,19 @@ export class StateReader {
     }
 
     const roots = allFindings.filter(f => !f.replyTo);
+    const replyMap = new Map<string, typeof allFindings>();
+    for (const f of allFindings) {
+      if (f.replyTo) {
+        const arr = replyMap.get(f.replyTo) ?? [];
+        arr.push(f);
+        replyMap.set(f.replyTo, arr);
+      }
+    }
     const fileMap = new Map<string, FileThread["threads"]>();
 
     for (const root of roots) {
       const file = root.file ?? "(no file)";
-      const replies = allFindings.filter(f => f.replyTo === root.id);
+      const replies = replyMap.get(root.id) ?? [];
       const messages: ThreadMessage[] = [{
         type: "finding", id: root.id, reviewerId: root.reviewerId, provider: root.provider,
         severity: root.severity, description: root.description, timestamp: root.timestamp,
@@ -789,10 +798,11 @@ export class StateReader {
    * Parliament state: committee convergence, last verdict, pending amendments, conformance.
    */
   parliamentInfo(): ParliamentInfo {
+    const defaultCommittee = (c: string) => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 });
     const empty: ParliamentInfo = {
-      committees: COMMITTEE_IDS.map(c => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 })),
+      committees: COMMITTEE_IDS.map(defaultCommittee),
       lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
-      liveSessions: this.readLiveParliamentSessions(),
+      liveSessions: [],
     };
 
     try {
@@ -827,12 +837,16 @@ export class StateReader {
       // Pending amendments
       empty.pendingAmendments = getPendingAmendmentCount(this.store);
 
-      // Conformance — reuse already-fetched sessions (last digest's conformance field)
-      if (sessions.length > 0) {
-        const lastSession = sessions[sessions.length - 1]!;
-        const score = lastSession.payload.conformance as number | undefined;
-        empty.conformance = typeof score === "number" ? score : null;
+      // Conformance — read from normalform events (digest doesn't carry conformance)
+      const nfEvents = this.store.query({ eventType: "parliament.session.normalform" as EventType, limit: 10 });
+      if (nfEvents.length > 0) {
+        const lastNf = nfEvents[nfEvents.length - 1]!;
+        const allConverged = lastNf.payload.allConverged as boolean | undefined;
+        empty.conformance = allConverged === true ? 1.0 : allConverged === false ? 0.0 : null;
       }
+
+      // Live sessions (cached, 5s TTL — filesystem I/O)
+      empty.liveSessions = this.readLiveParliamentSessions();
 
       return empty;
     } catch {
@@ -842,11 +856,18 @@ export class StateReader {
 
   /**
    * Read active parliament mux sessions from .claude/agents/ directory.
+   * Cached with 5-second TTL to avoid sync filesystem I/O on every 1s poll.
    */
   private readLiveParliamentSessions(): ParliamentLiveSession[] {
+    const now = Date.now();
+    if (now - this._liveSessionsCache.ts < 5000) return this._liveSessionsCache.data;
+
     try {
       const agentsDir = resolve(process.cwd(), ".claude", "agents");
-      if (!existsSync(agentsDir)) return [];
+      if (!existsSync(agentsDir)) {
+        this._liveSessionsCache = { ts: now, data: [] };
+        return [];
+      }
 
       const files = readdirSync(agentsDir).filter(f => f.endsWith(".json"));
       const sessions: ParliamentLiveSession[] = [];
@@ -865,8 +886,10 @@ export class StateReader {
         } catch { /* skip corrupt files */ }
       }
 
+      this._liveSessionsCache = { ts: now, data: sessions };
       return sessions;
     } catch {
+      this._liveSessionsCache = { ts: now, data: [] };
       return [];
     }
   }

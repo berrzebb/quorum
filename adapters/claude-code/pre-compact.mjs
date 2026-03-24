@@ -10,21 +10,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
-import { execFileSync } from "node:child_process";
+import { readAuditStatus, readRetroMarker } from "../../adapters/shared/audit-state.mjs";
+import { resolveRepoRoot } from "../../adapters/shared/repo-resolver.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function resolveRepoRoot() {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    }).trim();
-  } catch { /* fallback */ }
-  const legacy = resolve(__dirname, "..", "..", "..");
-  if (existsSync(resolve(legacy, ".git"))) return legacy;
-  return process.cwd();
-}
 
 function loadConfig() {
   const pr = process.env.CLAUDE_PLUGIN_ROOT;
@@ -42,16 +31,12 @@ try {
   // Hook toggle — skip snapshot when disabled
   if (cfg.plugin?.hooks_enabled?.pre_compact === false) throw new Error("disabled");
 
-  const REPO_ROOT = resolveRepoRoot();
+  const REPO_ROOT = resolveRepoRoot({ adapterDir: __dirname });
   const claudeDir = resolve(REPO_ROOT, ".claude");
   const snapshotPath = resolve(claudeDir, "compaction-snapshot.json");
 
   // 1. retro-marker state
-  const markerPath = resolve(__dirname, ".session-state", "retro-marker.json");
-  let retroMarker = null;
-  if (existsSync(markerPath)) {
-    try { retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch { /* */ }
-  }
+  const retroMarker = readRetroMarker(__dirname);
 
   // 2. Audit status
   const status = readAuditStatus(resolve(claudeDir, ".."));

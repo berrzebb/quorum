@@ -7,6 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { t } from "../../core/context.mjs";
 
 /** Canonical audit verdict status values. */
 export const AUDIT_STATUS = /** @type {const} */ ({
@@ -73,9 +74,9 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
   const resumeActions = [];
   const contextLines = [];
   const c = cfg.consensus ?? {};
-  const triggerTag = c.trigger_tag ?? "[GPT미검증]";
-  const agreeTag = c.agree_tag ?? "[합의완료]";
-  const pendingTag = c.pending_tag ?? "[계류]";
+  const triggerTag = c.trigger_tag ?? "[REVIEW_NEEDED]";
+  const agreeTag = c.agree_tag ?? "[APPROVED]";
+  const pendingTag = c.pending_tag ?? "[CHANGES_REQUESTED]";
   const watchFile = c.watch_file ?? "docs/feedback/claude.md";
 
   // 1. Audit status from marker
@@ -87,19 +88,12 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
 
   if (isPending && hasTrigger) {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
-    resumeActions.push(
-      `${pendingTag} 보정이 필요합니다.`
-      + (rejectionCodes.length > 0 ? `\n  반려 코드: ${rejectionCodes.join(", ")}` : "")
-      + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
-      + `\n  → 파일: ${watchFile} (${triggerTag} 유지)`
-    );
+    const codes = rejectionCodes.length > 0 ? `\n  Rejection codes: ${rejectionCodes.join(", ")}` : "";
+    resumeActions.push(t("resume.pending_corrections", { tag: pendingTag, codes, file: watchFile, triggerTag }));
   } else if (hasTrigger && !isPending && !isApproved) {
-    resumeActions.push(
-      `${triggerTag} 증거가 제출되었으나 감사 결과가 없습니다.`
-      + `\n  → 감사가 실행되지 않았거나 실패했을 수 있습니다. 증거를 재제출하세요.`
-    );
+    resumeActions.push(t("resume.no_audit_result", { tag: triggerTag }));
   } else if (isApproved && !hasTrigger) {
-    contextLines.push(`Current audit status: ${agreeTag} — 합의 완료 상태`);
+    contextLines.push(t("resume.approved_status", { tag: agreeTag }));
   }
 
   // 3. Retro marker
@@ -107,19 +101,11 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
   if (retroMarker?.retro_pending) {
     if (retroMarker.deferred_to_orchestrator) {
       resumeActions.push(
-        `서브에이전트 회고가 orchestrator에 위임됨 (${retroMarker.rx_id ?? "unknown"}).`
-        + `\n  → 즉시 회고를 시작하세요:`
-        + `\n    1. 잘된 것 / 문제인 것 / 개선할 것`
-        + `\n    2. 사용자와 피드백 교환`
-        + `\n    3. 메모리에 원칙 기록`
-        + `\n    4. echo session-self-improvement-complete`
-        + (retroMarker.agreed_items ? `\n  합의된 항목:\n${retroMarker.agreed_items}` : "")
+        t("resume.retro_deferred", { id: retroMarker.rx_id ?? "unknown" })
+        + (retroMarker.agreed_items ? `\n  Agreed items:\n${retroMarker.agreed_items}` : "")
       );
     } else {
-      resumeActions.push(
-        `회고가 미완료 (${retroMarker.rx_id ?? "unknown"}). session-gate가 Bash/Agent를 차단합니다.`
-        + `\n  → 즉시 회고를 진행한 뒤 echo session-self-improvement-complete`
-      );
+      resumeActions.push(t("resume.retro_pending", { id: retroMarker.rx_id ?? "unknown" }));
     }
   }
 
@@ -130,7 +116,7 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
     for (const block of taskBlocks) {
       const titleMatch = block.match(/^### \[([^\]]+)\]\s*(.+)/m);
       if (!titleMatch) continue;
-      const statusMatch = block.match(/\*\*상태\*\*:\s*(.+)/);
+      const statusMatch = block.match(/\*\*(?:상태|status)\*\*:\s*(.+)/i);
       if (!statusMatch) continue;
       const status = statusMatch[1].trim();
       if (/진행\s*중|in.?progress/i.test(status)) {
@@ -138,12 +124,8 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
       }
     }
     if (activeTasks.length > 0) {
-      const taskList = activeTasks.map((t) => `  - [${t.id}] ${t.title}`).join("\n");
-      resumeActions.push(
-        `이전 세션에서 ${activeTasks.length}개 작업이 진행 중이었습니다:`
-        + `\n${taskList}`
-        + `\n  → /quorum:orchestrator 로 미완료 트랙을 이어서 진행하세요.`
-      );
+      const taskList = activeTasks.map((tk) => `  - [${tk.id}] ${tk.title}`).join("\n");
+      resumeActions.push(t("resume.active_tasks", { count: activeTasks.length, list: taskList }));
     }
   }
 
@@ -163,15 +145,15 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
 export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
   const signals = [];
   const c = cfg.consensus ?? {};
-  const triggerTag = c.trigger_tag ?? "[GPT미검증]";
-  const agreeTag = c.agree_tag ?? "[합의완료]";
-  const pendingTag = c.pending_tag ?? "[계류]";
+  const triggerTag = c.trigger_tag ?? "[REVIEW_NEEDED]";
+  const agreeTag = c.agree_tag ?? "[APPROVED]";
+  const pendingTag = c.pending_tag ?? "[CHANGES_REQUESTED]";
   const watchFile = c.watch_file ?? "docs/feedback/claude.md";
 
   // 1. Retro pending
   const retroMarker = readRetroMarker(adapterDir);
   if (retroMarker?.retro_pending) {
-    signals.push("회고 미완료 — Bash/Agent 차단 중. `echo session-self-improvement-complete` 로 해제");
+    signals.push(t("signal.retro_pending"));
   }
 
   // 2. Audit status
@@ -183,11 +165,11 @@ export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
 
   if (isPending && hasTrigger) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;
-    signals.push(`${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
+    signals.push(t("signal.pending_corrections", { tag: pendingTag, count: codeCount }));
   } else if (hasTrigger && !isPending && !isApproved) {
-    signals.push(`${triggerTag} 제출됨 — 감사 대기 중`);
+    signals.push(t("signal.submitted_waiting", { tag: triggerTag }));
   } else if (isApproved && !hasTrigger) {
-    signals.push(`${agreeTag} — 커밋 가능`);
+    signals.push(t("signal.approved", { tag: agreeTag }));
   }
 
   return signals;

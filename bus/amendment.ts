@@ -246,7 +246,7 @@ export function getPendingAmendmentCount(store: EventStore): number {
   const proposed = store.query({ eventType: "parliament.amendment.propose" });
   const resolved = new Set(
     store.query({ eventType: "parliament.amendment.resolve" })
-      .map(e => (e.payload as unknown as { amendmentId: string }).amendmentId),
+      .map(e => e.payload.amendmentId as string),
   );
-  return proposed.filter(e => !resolved.has((e.payload as unknown as { amendmentId: string }).amendmentId)).length;
+  return proposed.filter(e => !resolved.has(e.payload.amendmentId as string)).length;
 }

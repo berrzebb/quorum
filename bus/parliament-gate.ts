@@ -15,8 +15,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EventStore } from "./store.js";
-import type { EventType } from "./events.js";
 import { AUDIT_VERDICT } from "./events.js";
+import { getPendingAmendmentCount } from "./amendment.js";
 import { STAGE_ORDER, type ConformanceStage } from "./normal-form.js";
 
 // ── Gate result ─────────────────────────────
@@ -35,17 +35,13 @@ export interface GateResult {
  */
 export function checkAmendmentGate(store: EventStore): GateResult {
   try {
-    const proposeEvents = store.query({ eventType: "parliament.amendment.propose" as EventType });
-    const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" as EventType });
-    const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
-    const pending = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string));
+    const pendingCount = getPendingAmendmentCount(store);
 
-    if (pending.length > 0) {
-      const ids = pending.map(e => e.payload.amendmentId as string).join(", ");
+    if (pendingCount > 0) {
       return {
         allowed: false,
-        reason: `${pending.length} pending amendment(s) must be resolved before proceeding: ${ids}`,
-        details: { pendingCount: pending.length, amendmentIds: ids },
+        reason: `${pendingCount} pending amendment(s) must be resolved before proceeding`,
+        details: { pendingCount },
       };
     }
     return { allowed: true };
@@ -61,7 +57,9 @@ export function checkAmendmentGate(store: EventStore): GateResult {
  */
 export function checkVerdictGate(store: EventStore): GateResult {
   try {
-    const verdicts = store.query({ eventType: "audit.verdict" as EventType });
+    const allVerdicts = store.query({ eventType: "audit.verdict" });
+    // Filter out parliament deliberation verdicts — they are topic discussions, not code audits
+    const verdicts = allVerdicts.filter(e => e.payload.mode !== "parliament");
     if (verdicts.length === 0) return { allowed: true }; // No audits yet
 
     const latest = verdicts[verdicts.length - 1]!; // ASC order → last = newest
@@ -87,7 +85,7 @@ export function checkVerdictGate(store: EventStore): GateResult {
  */
 export function checkConfluenceGate(store: EventStore): GateResult {
   try {
-    const sessions = store.query({ eventType: "parliament.session.digest" as EventType, limit: 5 });
+    const sessions = store.query({ eventType: "parliament.session.digest", limit: 5 });
     // Find latest session with confluence result
     for (let i = sessions.length - 1; i >= 0; i--) {
       const p = sessions[i]!.payload;

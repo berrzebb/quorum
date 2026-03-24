@@ -142,6 +142,16 @@ When `parliament.enabled` in config or `quorum parliament` CLI is used:
 
 Use `quorum parliament --history` to review past sessions. Use `--mux` for daemon-observable deliberation.
 
+### Full Pipeline (CLI)
+
+```bash
+quorum parliament "topic" --rounds 3          # deliberate → CPS
+quorum orchestrate plan <track> --provider claude  # interactive planner (Socratic)
+quorum orchestrate run <track> --provider claude   # implement → audit → retro → merge
+```
+
+The planner uses Socratic questioning in the user's language. If ambiguity is unresolvable, it suggests `quorum parliament "sub-topic"` for deliberation.
+
 ## Stagnation Detection
 
 If the audit loop cycles without progress, quorum auto-detects:

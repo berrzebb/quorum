@@ -45,7 +45,6 @@ describe("Amendment Gate", () => {
     const result = checkAmendmentGate(store);
     assert.equal(result.allowed, false);
     assert.ok(result.reason.includes("pending"));
-    assert.ok(result.reason.includes("A-001"));
   });
 
   it("allows when all amendments are resolved", () => {
