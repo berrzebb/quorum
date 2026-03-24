@@ -84,15 +84,15 @@ Registry rules:
 ```
 Session Start
     |
-Evaluate Tier -> read references/tiers.md
+Evaluate Tier -> read skills/orchestrator/references/tiers.md
     |
 +-- Tier 1 (Micro): direct fix -> verify CQ+T -> commit -> next task
 +-- Tier 2 (Standard): scout? -> worktree -> audit cycle -> retro -> merge
 +-- Tier 3 (Complex): mandatory scout -> worktree -> full audit -> post-merge regression -> retro
     |
 Result Verification
-  +-- [agree_tag] -> Retro & Merge -> read references/lifecycle.md
-  +-- [pending_tag] -> Correction -> read references/correction.md -> loop
+  +-- [agree_tag] -> Retro & Merge -> read skills/orchestrator/references/lifecycle.md
+  +-- [pending_tag] -> Correction -> read skills/orchestrator/references/correction.md -> loop
     |
 Write Handoff -> next task -> loop
 ```
