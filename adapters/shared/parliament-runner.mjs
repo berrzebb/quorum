@@ -24,16 +24,24 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
 
   const consensus = cfg.consensus ?? {};
 
-  // Build actual Auditor instances from role strings if needed.
-  // Prefer pre-built auditors (ConsensusConfig with Auditor instances).
-  let consensusConfig = consensus.auditors;
-  if (!consensusConfig && bridge.createConsensusAuditors) {
-    try {
-      const roles = cfg.parliament?.roles ?? consensus.roles ?? {};
-      consensusConfig = await bridge.createConsensusAuditors(roles);
-    } catch { /* fall through to fail-open */ }
+  // Build actual Auditor instances. Strings are NOT valid — must be converted.
+  let consensusConfig = consensus.auditors; // Pre-built Auditor instances
+  if (!consensusConfig || !consensusConfig.advocate?.audit) {
+    // Roles are strings (e.g. "claude") — convert to Auditor instances
+    if (bridge.createConsensusAuditors) {
+      try {
+        const roles = cfg.parliament?.roles ?? consensus.roles ?? {};
+        consensusConfig = await bridge.createConsensusAuditors(roles);
+      } catch (err) {
+        if (log) log(`PARLIAMENT: failed to create auditors: ${err.message}`);
+        return null; // Strict: cannot proceed without real Auditors
+      }
+    }
+    if (!consensusConfig?.advocate?.audit) {
+      if (log) log("PARLIAMENT: no valid auditors — skipping session");
+      return null; // Strict: do not pass strings through to parliament-session
+    }
   }
-  if (!consensusConfig) consensusConfig = consensus.roles ?? {};
 
   const parliamentCfg = {
     agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",

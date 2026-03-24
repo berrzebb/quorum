@@ -16,7 +16,7 @@ import type { ProviderKind, QuorumEvent } from "../bus/events.js";
 // ── Provider interface ────────────────────────────────
 
 export interface QuorumProvider {
-  /** Unique identifier: "claude-code", "codex", "cursor", etc. */
+  /** Unique identifier: "claude-code", "codex", "gemini", etc. */
   readonly kind: ProviderKind;
 
   /** Human-readable name for the TUI. */

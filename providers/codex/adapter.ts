@@ -92,22 +92,18 @@ export class CodexProvider implements QuorumProvider {
 
   static isAvailable(): boolean {
     try {
-      // Use resolveBinary logic: on Windows, prefer .cmd/.exe over extensionless POSIX scripts
+      // Delegate to cli-runner.mjs resolveBinary for Windows .cmd/.exe resolution
       let bin = process.env.CODEX_BIN ?? "codex";
-      if (process.platform === "win32" && !bin.includes(".")) {
-        // Check for .cmd wrapper first (prevents Git Bash msys-2.0.dll crash)
-        for (const ext of [".cmd", ".exe", ".bat"]) {
-          const candidate = bin + ext;
-          try { const r = spawnSync("where", [candidate], { encoding: "utf8", timeout: 3000, windowsHide: true }); if (r.status === 0) { bin = r.stdout.trim().split("\n")[0]; break; } } catch { /* skip */ }
-        }
-      }
-      const result = spawnSync(bin, ["--version"], {
-        encoding: "utf8",
-        timeout: 5000,
-        shell: process.platform === "win32",
-        windowsHide: true,
-      });
-      return result.status === 0;
+      try {
+        // Sync dynamic import not possible — use same PATH scan inline
+        const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+        const result = execFileSync(bin, ["--version"], {
+          encoding: "utf8", timeout: 5000, windowsHide: true,
+          shell: process.platform === "win32",
+        });
+        return true;
+      } catch { /* fall through */ }
+      return false;
     } catch {
       return false;
     }

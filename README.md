@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 19 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 21 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -76,7 +76,7 @@ codex -c features.codex_hooks=true
 
 This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
 
-This registers 11 hooks, 8 skills, 4 commands, and 19 MCP tools. Same audit engine as Claude Code.
+This registers 11 hooks, 8 skills, 4 commands, and 21 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -163,7 +163,7 @@ quorum/
 ├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
 ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
 ├── providers/        ← consensus protocol + trigger (12-factor) + router + domain specialists + AST analyzer
-├── core/             ← audit protocol (7 modules), templates, 19 MCP tools
+├── core/             ← audit protocol (7 modules), templates, 21 MCP tools
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
 └── adapters/
@@ -177,15 +177,30 @@ The `adapters/` layer is **optional**. Everything above it runs independently. A
 
 ## Core Concepts
 
+### Parliament Protocol
+
+Legislative deliberation framework for structured consensus:
+
+```
+quorum parliament "topic"             → CPS (Context-Problem-Solution)
+quorum orchestrate plan <track>       → interactive planner (Socratic + CPS)
+quorum orchestrate run <track>        → full implementation loop (auto)
+```
+
 ### Enforcement Gates
 
-Three gates that block progress until conditions are met:
+8 gates that block progress until conditions are met (not just document — code enforces):
 
 | Gate | Blocks when | Releases when |
 |------|------------|---------------|
 | **Audit** | Evidence submitted | Auditor approves |
 | **Retro** | Audit approved | Retrospective complete |
 | **Quality** | Lint/test fails | All checks pass |
+| **Amendment** | Pending amendments | All resolved (vote) |
+| **Verdict** | Last verdict ≠ approved | Re-audit passes |
+| **Confluence** | Integrity check failed | 4-point verification passes |
+| **Design** | Design artifacts missing | Spec + Blueprint exist |
+| **Regression** | Normal-form stage regressed | Alert only |
 
 ### Deliberative Consensus
 
@@ -287,7 +302,7 @@ Business Logic (adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
       ↓ bridge.init() + bridge.checkHookGate()
 Core (core/)
-  audit, tools (19 MCP), EventStore, bus, providers
+  audit, tools (21 MCP), EventStore, bus, providers
 ```
 
 Adding a new adapter requires ~280 lines (proven by the Codex adapter).
