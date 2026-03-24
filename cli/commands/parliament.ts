@@ -95,12 +95,14 @@ function resolveRoles(
   parsed: ParliamentArgs,
   cfg: Record<string, unknown>,
 ): Record<string, string> {
-  const configRoles = (cfg.consensus as Record<string, unknown>)?.roles as Record<string, string> | undefined;
+  // Priority: CLI flags > parliament.roles > consensus.roles > defaults
+  const parliamentRoles = (cfg.parliament as Record<string, unknown>)?.roles as Record<string, string> | undefined;
+  const consensusRoles = (cfg.consensus as Record<string, unknown>)?.roles as Record<string, string> | undefined;
   const defaults: Record<string, string> = { advocate: "claude", devil: "claude", judge: "claude" };
   return {
-    advocate: parsed.advocate ?? configRoles?.advocate ?? defaults.advocate,
-    devil: parsed.devil ?? configRoles?.devil ?? defaults.devil,
-    judge: parsed.judge ?? configRoles?.judge ?? defaults.judge,
+    advocate: parsed.advocate ?? parliamentRoles?.advocate ?? consensusRoles?.advocate ?? defaults.advocate,
+    devil: parsed.devil ?? parliamentRoles?.devil ?? consensusRoles?.devil ?? defaults.devil,
+    judge: parsed.judge ?? parliamentRoles?.judge ?? consensusRoles?.judge ?? defaults.judge,
   };
 }
 
@@ -258,6 +260,18 @@ export async function run(args: string[]): Promise<void> {
   // Create auditors
   const cwd = process.cwd();
   const auditors = createConsensusAuditors(roles, cwd);
+
+  // Pre-flight: check auditor availability (skip with --force)
+  if (!parsed.force) {
+    const availability = await checkAvailability(auditors);
+    if (!availability.allAvailable) {
+      const missing = availability.unavailable.map(u => `${u.role} (${roles[u.role]})`).join(", ");
+      console.error(`${C.red}Unavailable auditors: ${missing}${C.reset}`);
+      console.error(`${C.dim}Use --force to skip this check${C.reset}`);
+      store.close();
+      process.exit(1);
+    }
+  }
 
   // Build session config
   const sessionType = new Date().getHours() < 12 ? "morning" as const : "afternoon" as const;
