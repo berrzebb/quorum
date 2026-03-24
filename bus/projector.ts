@@ -53,6 +53,11 @@ export class MarkdownProjector {
   private stmtItemStates: Database.Statement;
   private stmtEntityHistory: Database.Statement;
 
+  // ── Parliament prepared statements ──
+  private stmtParliamentSessions: Database.Statement;
+  private stmtParliamentAmendments: Database.Statement;
+  private stmtParliamentConvergence: Database.Statement;
+
   constructor(db: Database.Database, config: ProjectorConfig) {
     this.db = db;
     this.config = config;
@@ -60,6 +65,23 @@ export class MarkdownProjector {
     this.strippedTrigger = config.triggerTag.replace(/^\[|\]$/g, "");
     this.strippedAgree = config.agreeTag.replace(/^\[|\]$/g, "");
     this.strippedPending = config.pendingTag.replace(/^\[|\]$/g, "");
+
+    // Parliament views — read from events table
+    this.stmtParliamentSessions = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.session.digest'
+      ORDER BY timestamp DESC LIMIT 20
+    `);
+    this.stmtParliamentAmendments = db.prepare(`
+      SELECT event_type, payload, timestamp FROM events
+      WHERE event_type LIKE 'parliament.amendment.%'
+      ORDER BY timestamp DESC LIMIT 50
+    `);
+    this.stmtParliamentConvergence = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.convergence'
+      ORDER BY timestamp DESC LIMIT 10
+    `);
 
     this.stmtItemStates = db.prepare(`
       SELECT entity_id, to_state AS current_state, source, metadata, created_at
@@ -264,6 +286,126 @@ export class MarkdownProjector {
       }));
     } catch {
       return [];
+    }
+  }
+
+  // ── Parliament Views ──────────────────────────
+
+  /**
+   * Generate a session digest markdown — recent parliament sessions.
+   */
+  projectSessionDigest(): string {
+    try {
+      const rows = this.stmtParliamentSessions.all() as Array<{ payload: string; timestamp: number }>;
+      if (rows.length === 0) return "No parliament sessions recorded.";
+
+      const lines = [`## Parliament Sessions (recent ${rows.length})\n`];
+      for (const row of rows) {
+        const p = JSON.parse(row.payload);
+        const date = new Date(row.timestamp).toISOString().slice(0, 16).replace("T", " ");
+        const type = p.sessionType ?? "unknown";
+        const agenda = p.agendaItems?.join(", ") ?? p.agendaId ?? "—";
+        const score = typeof p.convergenceScore === "number" ? p.convergenceScore.toFixed(2) : "—";
+        const cls = p.classifications ?? {};
+        const clsSummary = Object.entries(cls).map(([k, v]) => `${k}:${v}`).join(" ");
+        lines.push(`### ${date} (${type})`);
+        lines.push(`- **Agenda**: ${agenda}`);
+        lines.push(`- **Convergence**: ${score}`);
+        if (clsSummary) lines.push(`- **Classifications**: ${clsSummary}`);
+        if (p.summary) lines.push(`- **Summary**: ${p.summary}`);
+        lines.push("");
+      }
+      return lines.join("\n");
+    } catch {
+      return "Parliament session data unavailable.";
+    }
+  }
+
+  /**
+   * Generate an amendment log markdown — proposed/voted/resolved amendments.
+   */
+  projectAmendmentLog(): string {
+    try {
+      const rows = this.stmtParliamentAmendments.all() as Array<{
+        event_type: string; payload: string; timestamp: number;
+      }>;
+      if (rows.length === 0) return "No amendments recorded.";
+
+      // Group by amendmentId
+      const amendments = new Map<string, { events: Array<{ type: string; payload: Record<string, unknown>; timestamp: number }> }>();
+      for (const row of rows) {
+        const p = JSON.parse(row.payload);
+        const id = (p.amendmentId as string) ?? "unknown";
+        if (!amendments.has(id)) amendments.set(id, { events: [] });
+        amendments.get(id)!.events.push({ type: row.event_type, payload: p, timestamp: row.timestamp });
+      }
+
+      const lines = [`## Amendment Log (${amendments.size} amendments)\n`];
+      for (const [id, data] of amendments) {
+        const propose = data.events.find(e => e.type === "parliament.amendment.propose");
+        const votes = data.events.filter(e => e.type === "parliament.amendment.vote");
+        const resolve = data.events.find(e => e.type === "parliament.amendment.resolve");
+
+        const target = (propose?.payload.target as string) ?? "—";
+        const status = (resolve?.payload.resolution as string) ?? "pending";
+        lines.push(`### ${id.slice(0, 8)} — ${status}`);
+        lines.push(`- **Target**: ${target}`);
+        if (propose?.payload.change) lines.push(`- **Change**: ${propose.payload.change}`);
+        lines.push(`- **Votes**: ${votes.length} cast`);
+        for (const v of votes) {
+          lines.push(`  - ${v.payload.voter}: ${v.payload.position} (confidence: ${v.payload.confidence ?? "—"})`);
+        }
+        lines.push("");
+      }
+      return lines.join("\n");
+    } catch {
+      return "Amendment data unavailable.";
+    }
+  }
+
+  /**
+   * Generate convergence status markdown — per-agenda convergence tracking.
+   */
+  projectConvergenceStatus(): string {
+    try {
+      const rows = this.stmtParliamentConvergence.all() as Array<{ payload: string; timestamp: number }>;
+      if (rows.length === 0) return "No convergence data recorded.";
+
+      const COMMITTEES = ["principles", "definitions", "structure", "architecture", "scope", "research-questions"];
+      const latest = new Map<string, { converged: boolean; stableRounds: number; threshold: number; score: number; timestamp: number }>();
+
+      for (const row of rows) {
+        const p = JSON.parse(row.payload);
+        const agenda = (p.agendaId as string) ?? "unknown";
+        if (!latest.has(agenda)) {
+          latest.set(agenda, {
+            converged: p.converged ?? false,
+            stableRounds: p.stableRounds ?? 0,
+            threshold: p.threshold ?? 2,
+            score: p.convergenceScore ?? 0,
+            timestamp: row.timestamp,
+          });
+        }
+      }
+
+      const lines = ["## Convergence Status\n"];
+      lines.push("| Committee | Status | Stable | Score |");
+      lines.push("|-----------|--------|--------|-------|");
+
+      for (const c of COMMITTEES) {
+        const data = latest.get(c);
+        if (data) {
+          const status = data.converged ? "converged" : "pending";
+          lines.push(`| ${c} | ${status} | ${data.stableRounds}/${data.threshold} | ${data.score.toFixed(2)} |`);
+        } else {
+          lines.push(`| ${c} | — | 0/2 | — |`);
+        }
+      }
+      lines.push("");
+
+      return lines.join("\n");
+    } catch {
+      return "Convergence data unavailable.";
     }
   }
 }

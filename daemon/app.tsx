@@ -18,6 +18,7 @@ import { AgentPanel } from "./components/AgentPanel.js";
 import { TrackProgress } from "./components/TrackProgress.js";
 import { Header } from "./components/Header.js";
 import { FitnessPanel } from "./components/FitnessPanel.js";
+import { ParliamentPanel } from "./components/ParliamentPanel.js";
 
 interface AppProps {
   bus: QuorumBus;
@@ -132,6 +133,13 @@ export function App({ bus, stateReader }: AppProps) {
               </Box>
             )}
           </Box>
+
+          {/* Row 2.5: parliament */}
+          {fullState && fullState.parliament.sessionCount > 0 && (
+            <Box gap={2}>
+              <ParliamentPanel parliament={fullState.parliament} />
+            </Box>
+          )}
 
           {/* Row 3: finding stats + open findings + review progress */}
           {fullState && fullState.findingStats.total > 0 && (

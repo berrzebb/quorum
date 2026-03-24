@@ -132,6 +132,27 @@ export interface FitnessInfo {
   components: Record<string, { value: number; weight: number; label: string }> | null;
 }
 
+export interface ParliamentCommitteeStatus {
+  committee: string;
+  converged: boolean;
+  stableRounds: number;
+  threshold: number;
+  score: number;
+}
+
+export interface ParliamentInfo {
+  /** Per-committee convergence status. */
+  committees: ParliamentCommitteeStatus[];
+  /** Latest session verdict. */
+  lastVerdict: string | null;
+  /** Number of pending (unresolved) amendments. */
+  pendingAmendments: number;
+  /** Normal Form conformance (0-1). */
+  conformance: number | null;
+  /** Total parliament sessions recorded. */
+  sessionCount: number;
+}
+
 export interface FullState {
   gates: GateInfo[];
   items: ItemStateInfo[];
@@ -144,6 +165,7 @@ export interface FullState {
   fileThreads: FileThread[];
   recentEvents: QuorumEvent[];
   fitness: FitnessInfo;
+  parliament: ParliamentInfo;
 }
 
 // ── StateReader ──────────────────────────────
@@ -199,6 +221,7 @@ export class StateReader {
       fileThreads: this.findingThreads(),
       recentEvents: this.recentEvents(eventLimit),
       fitness: this.fitnessInfo(),
+      parliament: this.parliamentInfo(),
     };
   }
 
@@ -746,6 +769,64 @@ export class StateReader {
       return this.stmtLatestTransition.get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Parliament state: committee convergence, last verdict, pending amendments, conformance.
+   */
+  parliamentInfo(): ParliamentInfo {
+    const COMMITTEES = ["principles", "definitions", "structure", "architecture", "scope", "research-questions"];
+    const empty: ParliamentInfo = {
+      committees: COMMITTEES.map(c => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 })),
+      lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
+    };
+
+    try {
+      // Session count + last verdict
+      const sessions = this.store.query({ eventType: "parliament.session.digest" as import("../bus/events.js").EventType, limit: 100 });
+      empty.sessionCount = sessions.length;
+
+      if (sessions.length > 0) {
+        const last = sessions[sessions.length - 1]!;
+        empty.lastVerdict = (last.payload.summary as string) ?? null;
+      }
+
+      // Convergence per committee
+      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as import("../bus/events.js").EventType, limit: 50 });
+      const latestByCommittee = new Map<string, typeof convergenceEvents[0]>();
+      for (const e of convergenceEvents) {
+        const agenda = (e.payload.agendaId as string) ?? "";
+        if (!latestByCommittee.has(agenda)) latestByCommittee.set(agenda, e);
+      }
+      empty.committees = COMMITTEES.map(c => {
+        const e = latestByCommittee.get(c);
+        if (!e) return { committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 };
+        return {
+          committee: c,
+          converged: (e.payload.converged as boolean) ?? false,
+          stableRounds: (e.payload.stableRounds as number) ?? 0,
+          threshold: (e.payload.threshold as number) ?? 2,
+          score: (e.payload.convergenceScore as number) ?? 0,
+        };
+      });
+
+      // Pending amendments
+      const proposeEvents = this.store.query({ eventType: "parliament.amendment.propose" as import("../bus/events.js").EventType, limit: 50 });
+      const resolveEvents = this.store.query({ eventType: "parliament.amendment.resolve" as import("../bus/events.js").EventType, limit: 50 });
+      const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
+      empty.pendingAmendments = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
+
+      // Conformance (latest normal-form event)
+      const nfEvents = this.store.query({ eventType: "parliament.session.digest" as import("../bus/events.js").EventType, limit: 1 });
+      if (nfEvents.length > 0) {
+        const score = nfEvents[0]!.payload.convergenceScore as number | undefined;
+        if (typeof score === "number") empty.conformance = score;
+      }
+
+      return empty;
+    } catch {
+      return empty;
     }
   }
 }

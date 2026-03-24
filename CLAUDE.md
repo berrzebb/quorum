@@ -26,7 +26,7 @@ cli/index.ts           ← quorum <command> dispatcher
 daemon/index.ts         ← Ink TUI entry point (StateReader + LockService injection)
   ├→ app.tsx            ← GateStatus + AgentPanel + FitnessPanel + TrackProgress + AuditStream + ItemStates + Locks + Specialists
   ├→ state-reader.ts    ← SQLite-only state reader (gates, items, locks, specialists, tracks, fitness)
-  └→ components/        ← GateStatus, AgentPanel, FitnessPanel, AuditStream, TrackProgress, Header
+  └→ components/        ← GateStatus, AgentPanel, FitnessPanel, ParliamentPanel, AuditStream, TrackProgress, Header
 
 bus/
   ├→ bus.ts             ← QuorumBus (EventEmitter + SQLite/JSONL)
@@ -168,7 +168,7 @@ adapters/codex/
 ## Testing
 
 ```bash
-npm test                              # all (916 tests)
+npm test                              # all (961 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -188,4 +188,5 @@ node --test tests/language-registry.test.mjs # Language registry + fragment load
 node --test tests/agent-persona.test.mjs   # Agent persona loading + shared knowledge (22 tests)
 node --test tests/hook-runner.test.mjs     # HookRunner engine + loader + bridge (43 tests)
 node --test tests/multi-model-integration.test.mjs # 3-model integration: CLI adapters + NDJSON + hooks + consensus (23 tests)
+node --test tests/parliament-e2e.test.mjs          # Parliament E2E pipeline (13 tests)
 ```

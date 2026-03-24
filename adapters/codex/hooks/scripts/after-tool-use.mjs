@@ -104,6 +104,35 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
         file: watchPath, tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
       });
 
+      // Parliament session: T3 deliberative + parliament.enabled → diverge-converge protocol
+      if (triggerResult.mode === "deliberative" && cfg.parliament?.enabled) {
+        log("PARLIAMENT: T3 deliberative with parliament protocol enabled");
+        try {
+          const sessionResult = await bridge.runParliamentSession(
+            { prompt: content, evidence: watchPath },
+            {
+              agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
+              sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
+              consensus: consensus.roles ?? {},
+              eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
+              implementerTestimony: cfg.parliament?.testimony,
+              confluenceInput: { auditVerdict: undefined },
+            },
+          );
+          if (sessionResult?.verdict?.finalVerdict) {
+            log(`PARLIAMENT: verdict=${sessionResult.verdict.finalVerdict} converged=${sessionResult.convergence?.converged ?? false}`);
+            bridge.emitEvent("audit.verdict", "codex", {
+              verdict: sessionResult.verdict.finalVerdict,
+              summary: sessionResult.verdict.judgeSummary,
+              codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],
+              mode: "parliament",
+            });
+          }
+        } catch (err) {
+          log(`PARLIAMENT_ERROR: ${err.message}`);
+        }
+      }
+
       if (triggerResult.mode === "skip") {
         log("SKIP: T1 micro change");
         process.stdout.write(`[quorum] T1 skip (score: ${triggerResult.score.toFixed(2)})\n`);
