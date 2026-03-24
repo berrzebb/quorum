@@ -7,15 +7,15 @@
   "plugins": [
     {
       "name": "quorum",
-      "description": "Cross-model audit gate — multi-adapter (Claude Code + Gemini CLI), shared agent knowledge, fragment-only language specs, 19 MCP tools, 812 tests.",
+      "description": "Cross-model audit gate — parliament protocol, 5 enforcement gates, 21 MCP tools, 1004 tests.",
       "source": {
         "source": "url",
         "url": "https://github.com/berrzebb/quorum.git",
-        "sha": "PLACEHOLDER_SHA"
+        "sha": "2eb21f52a6cbe93eb603cab459a191c242966cd3"
       },
-      "version": "0.4.2",
+      "version": "0.4.4",
       "category": "development",
-      "keywords": ["code-review", "audit", "consensus", "mcp", "ai-agents"],
+      "keywords": ["code-review", "audit", "consensus", "mcp", "ai-agents", "parliament"],
       "homepage": "https://github.com/berrzebb/quorum"
     }
   ]
