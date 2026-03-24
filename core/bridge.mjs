@@ -30,7 +30,7 @@ async function loadModules() {
   if (_modules) return _modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -44,8 +44,13 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "parallel.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "meeting-log.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "amendment.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "confluence.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "normal-form.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "parliament-session.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod };
+    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
     return _modules;
   } catch {
     return null;
@@ -711,6 +716,62 @@ export async function checkHookGate(event, input = {}) {
   }
   const contexts = results.filter((r) => r.output.additional_context).map((r) => r.output.additional_context);
   return { allowed: true, additional_context: contexts.length > 0 ? contexts.join("\n") : undefined };
+}
+
+// ── Parliament Protocol ───────────────────────
+
+/**
+ * Run a full parliament session (diverge-converge + meeting log + amendments + confluence + normal form).
+ * Returns null if modules unavailable.
+ */
+export async function runParliamentSession(request, config) {
+  if (!_modules?.parliamentSessionMod || !_store) return null;
+  try {
+    return await _modules.parliamentSessionMod.runParliamentSession(_store, request, config);
+  } catch (err) {
+    if (process.env.QUORUM_DEBUG) console.error("[bridge] Parliament session failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Check convergence status for a standing committee agenda.
+ */
+export function checkParliamentConvergence(agendaId) {
+  if (!_modules?.meetingLogMod || !_store) return null;
+  try {
+    return _modules.meetingLogMod.checkConvergence(_store, agendaId);
+  } catch { return null; }
+}
+
+/**
+ * Propose an amendment.
+ */
+export function proposeAmendment(target, change, sponsor, sponsorRole, justification) {
+  if (!_modules?.amendmentMod || !_store) return null;
+  try {
+    return _modules.amendmentMod.proposeAmendment(_store, target, change, sponsor, sponsorRole, justification);
+  } catch { return null; }
+}
+
+/**
+ * Verify confluence (post-audit integrity).
+ */
+export function verifyConfluence(input) {
+  if (!_modules?.confluenceMod) return null;
+  try {
+    return _modules.confluenceMod.verifyConfluence(input);
+  } catch { return null; }
+}
+
+/**
+ * Get normal form convergence report.
+ */
+export function getConvergenceReport() {
+  if (!_modules?.normalFormMod || !_store) return null;
+  try {
+    return _modules.normalFormMod.generateConvergenceReport(_store);
+  } catch { return null; }
 }
 
 export function close() {

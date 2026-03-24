@@ -1,0 +1,215 @@
+/**
+ * Parliament Session Orchestrator — the glue that binds all parliamentary modules.
+ *
+ * Manages the full legislative session lifecycle:
+ *   startSession → runDeliberation → recordLog → checkConvergence
+ *   → resolveAmendments → verifyConfluence → trackNormalForm → endSession
+ *
+ * Fail-open: each step wraps errors so a failing step doesn't block the session.
+ * All state flows through EventStore — the session itself is stateless.
+ */
+
+import type { EventStore } from "./store.js";
+import type { AuditRequest } from "../providers/provider.js";
+import {
+  DeliberativeConsensus,
+  type ConsensusConfig,
+  type ConsensusVerdict,
+  type DivergeConvergeOptions,
+} from "../providers/consensus.js";
+import {
+  createMeetingLog,
+  storeMeetingLog,
+  checkConvergence,
+  generateCPS,
+  getMeetingLogs,
+  type MeetingLog,
+  type ConvergenceStatus,
+  type CPS,
+} from "./meeting-log.js";
+import {
+  resolveAmendment,
+  getAmendments,
+  type AmendmentResolution,
+} from "./amendment.js";
+import {
+  verifyConfluence,
+  type ConfluenceInput,
+  type ConfluenceResult,
+} from "./confluence.js";
+import {
+  generateConvergenceReport,
+  type ConvergenceReport,
+} from "./normal-form.js";
+import { createEvent, type ProviderKind } from "./events.js";
+
+// ── Types ────────────────────────────────────
+
+export interface SessionConfig {
+  /** Standing committee agenda ID for this session. */
+  agendaId: string;
+  /** Morning or afternoon session. */
+  sessionType: "morning" | "afternoon";
+  /** Consensus auditor configuration. */
+  consensus: ConsensusConfig;
+  /** Number of eligible voters for amendments. */
+  eligibleVoters: number;
+  /** Implementer testimony (optional). */
+  implementerTestimony?: string;
+  /** Confluence verification input (optional). */
+  confluenceInput?: Partial<ConfluenceInput>;
+}
+
+export interface SessionResult {
+  /** Consensus verdict from deliberation. */
+  verdict: ConsensusVerdict | null;
+  /** Meeting log recorded for this session. */
+  meetingLog: MeetingLog | null;
+  /** Whether the agenda has converged. */
+  convergence: ConvergenceStatus | null;
+  /** CPS generated (only if converged). */
+  cps: CPS | null;
+  /** Amendment resolutions processed. */
+  amendments: AmendmentResolution[];
+  /** Confluence verification result. */
+  confluence: ConfluenceResult | null;
+  /** Normal form convergence report. */
+  normalForm: ConvergenceReport | null;
+  /** Session duration in ms. */
+  duration: number;
+  /** Errors encountered (fail-open, non-blocking). */
+  errors: SessionError[];
+}
+
+interface SessionError {
+  phase: string;
+  message: string;
+}
+
+// ── Parliament Session ──────────────────────
+
+/**
+ * Run a full parliament session.
+ *
+ * Each phase is wrapped in try/catch — a failing phase produces an error entry
+ * but does not block subsequent phases (fail-open principle).
+ */
+export async function runParliamentSession(
+  store: EventStore,
+  request: AuditRequest,
+  config: SessionConfig,
+): Promise<SessionResult> {
+  const start = Date.now();
+  const errors: SessionError[] = [];
+
+  // Emit session start event
+  store.append(createEvent("parliament.session.start", "generic", {
+    agendaId: config.agendaId,
+    sessionType: config.sessionType,
+    eligibleVoters: config.eligibleVoters,
+  }));
+
+  // Phase 1: Deliberation (Diverge-Converge)
+  let verdict: ConsensusVerdict | null = null;
+  try {
+    const consensus = new DeliberativeConsensus(config.consensus);
+    const options: DivergeConvergeOptions = {};
+    if (config.implementerTestimony) {
+      options.implementerTestimony = config.implementerTestimony;
+    }
+    verdict = await consensus.runDivergeConverge(request, options);
+  } catch (err) {
+    errors.push({ phase: "deliberation", message: (err as Error).message });
+  }
+
+  // Phase 2: Record meeting log
+  let meetingLog: MeetingLog | null = null;
+  try {
+    meetingLog = createMeetingLog(
+      config.sessionType,
+      config.agendaId,
+      verdict?.registers ?? { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
+      verdict?.classifications ?? [],
+      verdict?.judgeSummary ?? "No deliberation result",
+    );
+    storeMeetingLog(store, meetingLog);
+  } catch (err) {
+    errors.push({ phase: "meeting-log", message: (err as Error).message });
+  }
+
+  // Phase 3: Check convergence
+  let convergence: ConvergenceStatus | null = null;
+  try {
+    convergence = checkConvergence(store, config.agendaId);
+  } catch (err) {
+    errors.push({ phase: "convergence", message: (err as Error).message });
+  }
+
+  // Phase 4: Generate CPS (only if converged)
+  let cps: CPS | null = null;
+  if (convergence?.converged) {
+    try {
+      const logs = getMeetingLogs(store, config.agendaId);
+      cps = generateCPS(logs);
+    } catch (err) {
+      errors.push({ phase: "cps", message: (err as Error).message });
+    }
+  }
+
+  // Phase 5: Resolve pending amendments
+  const amendments: AmendmentResolution[] = [];
+  try {
+    const pending = getAmendments(store).filter(a => a.status === "proposed");
+    for (const a of pending) {
+      const resolution = resolveAmendment(store, a.id, config.eligibleVoters);
+      amendments.push(resolution);
+    }
+  } catch (err) {
+    errors.push({ phase: "amendments", message: (err as Error).message });
+  }
+
+  // Phase 6: Confluence verification
+  let confluence: ConfluenceResult | null = null;
+  try {
+    const input: ConfluenceInput = {
+      ...(config.confluenceInput ?? {}),
+      auditVerdict: verdict?.finalVerdict,
+      cps: cps ?? undefined,
+    };
+    confluence = verifyConfluence(input);
+  } catch (err) {
+    errors.push({ phase: "confluence", message: (err as Error).message });
+  }
+
+  // Phase 7: Normal form tracking
+  let normalForm: ConvergenceReport | null = null;
+  try {
+    normalForm = generateConvergenceReport(store);
+  } catch (err) {
+    errors.push({ phase: "normal-form", message: (err as Error).message });
+  }
+
+  // Emit session digest event
+  store.append(createEvent("parliament.session.digest", "generic", {
+    agendaId: config.agendaId,
+    sessionType: config.sessionType,
+    verdictResult: verdict?.finalVerdict ?? "no-verdict",
+    converged: convergence?.converged ?? false,
+    amendmentsResolved: amendments.length,
+    confluencePassed: confluence?.passed ?? false,
+    errorCount: errors.length,
+    duration: Date.now() - start,
+  }));
+
+  return {
+    verdict,
+    meetingLog,
+    convergence,
+    cps,
+    amendments,
+    confluence,
+    normalForm,
+    duration: Date.now() - start,
+    errors,
+  };
+}
