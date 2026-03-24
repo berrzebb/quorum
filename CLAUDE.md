@@ -110,7 +110,7 @@ adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
-  ├→ skills/            ← 10 skills (adapter wrappers; see skills/ARCHITECTURE.md)
+  ├→ skills/            ← 14 skills (adapter wrappers; see skills/ARCHITECTURE.md)
   ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
