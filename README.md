@@ -53,6 +53,18 @@ claude plugin install quorum@berrzebb-plugins
 
 This registers 15 lifecycle hooks, 19 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
+### As a Gemini CLI extension
+
+For automatic hook integration with Gemini CLI:
+
+```bash
+gemini extensions install https://github.com/berrzebb/quorum.git
+# or for development:
+gemini extensions link adapters/gemini
+```
+
+This registers 5 hooks, 8 skills, 4 commands, and 19 MCP tools. Same audit engine as Claude Code.
+
 ### From source
 
 ```bash
@@ -134,15 +146,20 @@ Both paths use the same core engine: `bus/` + `providers/` + `core/`.
 
 ```
 quorum/
-├── cli/          ← unified entry point (works without any plugin)
-├── daemon/       ← Ink TUI dashboard + FitnessPanel (works standalone)
-├── bus/          ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator + ProcessMux
-├── providers/    ← consensus protocol + trigger (10-factor) + router + domain specialists + AST analyzer + agent loader
-├── core/         ← audit protocol (7 modules), templates, 19 MCP tools
-└── adapters/     ← optional IDE integrations (Claude Code hooks, Codex watcher)
+├── cli/              ← unified entry point (works without any plugin)
+├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
+├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
+├── providers/        ← consensus protocol + trigger (10-factor) + router + domain specialists + AST analyzer
+├── core/             ← audit protocol (7 modules), templates, 19 MCP tools
+├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
+├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
+└── adapters/
+    ├── shared/       ← adapter-agnostic business logic (8 modules)
+    ├── claude-code/  ← Claude Code hooks (15) + agents (12) + skills (9)
+    └── gemini/       ← Gemini CLI hooks (5) + skills (8) + commands (4)
 ```
 
-The `adapters/` layer is **optional**. Everything above it runs independently.
+The `adapters/` layer is **optional**. Everything above it runs independently. Adding a new adapter requires only I/O wrappers — business logic is in `adapters/shared/`.
 
 ## Core Concepts
 
@@ -163,6 +180,24 @@ For complex changes (T3), a 3-role protocol runs:
 1. **Advocate**: finds merit in the submission
 2. **Devil's Advocate**: challenges assumptions, checks root cause vs symptom
 3. **Judge**: weighs both opinions, delivers final verdict
+
+### Language Spec Fragments (v0.4.1)
+
+Quality patterns are defined per language in pluggable fragment files:
+
+```
+languages/typescript/
+  spec.mjs            ← core: id, name, extensions (3 lines)
+  spec.symbols.mjs    ← symbol extraction patterns
+  spec.imports.mjs    ← dependency parsing
+  spec.perf.mjs       ← performance anti-patterns
+  spec.a11y.mjs       ← accessibility patterns
+  spec.observability.mjs
+  spec.compat.mjs
+  spec.doc.mjs        ← documentation coverage
+```
+
+Adding a new language = `spec.mjs` (3 lines) + relevant fragments. Adding a domain to an existing language = one new fragment file. The registry (`languages/registry.mjs`) auto-discovers and merges fragments at load time.
 
 ### Domain Specialists (v0.3.0)
 
@@ -293,9 +328,9 @@ quorum is provider-agnostic. Bring your own auditor.
 | Provider | Mechanism | Plugin needed? |
 |----------|-----------|---------------|
 | Claude Code | 15 native hooks | Optional (auto-triggers) |
+| Gemini CLI | 5 hooks + 8 skills | Optional (`gemini extensions install`) |
 | Codex | File watch + state polling | No |
 | Cursor | — | Planned |
-| Gemini | — | Planned |
 | Manual | `quorum audit` | No |
 
 ## Tools & Verification
@@ -345,7 +380,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 743 tests
+npm test                # 812 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```
@@ -355,8 +390,8 @@ npm run build           # compile
 GitHub Actions builds cross-platform binaries on tag push:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.4.1
+git push origin v0.4.1
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 binaries in Releases
 ```
 

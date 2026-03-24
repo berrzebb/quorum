@@ -1,0 +1,5 @@
+prompt = """
+Run quorum verification checks. Pass arguments to filter: CQ, SEC, LEAK, DEP, SCOPE.
+
+!{quorum verify {{args}} 2>&1 || echo "quorum CLI not available"}
+"""

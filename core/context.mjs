@@ -46,11 +46,13 @@ function resolveRepoRoot() {
     return root;
   } catch { /* git not available or not in a repo */ }
 
-  // 2. Adapter layout fallback: adapters/claude-code/ installed under .claude/hooks/
+  // 2. Adapter layout fallback: adapter installed under .claude/hooks/ or similar
   //    quorum root is 2 levels above adapter dir, target repo is 3 more levels up
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const candidate = resolve(pluginRoot, "..", "..", "..");
+  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
+    ?? process.env.CLAUDE_PLUGIN_ROOT
+    ?? process.env.GEMINI_EXTENSION_ROOT;
+  if (adapterRoot) {
+    const candidate = resolve(adapterRoot, "..", "..", "..");
     if (existsSync(resolve(candidate, ".git"))) return candidate;
   }
 
@@ -78,10 +80,12 @@ function findConfigPath() {
   const projectConfig = resolve(PROJECT_CONFIG_DIR, "config.json");
   if (existsSync(projectConfig)) return projectConfig;
 
-  // 2. Plugin root (set by hooks.json)
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const p = resolve(pluginRoot, "config.json");
+  // 2. Adapter root (set by hooks.json — supports multiple runtimes)
+  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
+    ?? process.env.CLAUDE_PLUGIN_ROOT
+    ?? process.env.GEMINI_EXTENSION_ROOT;
+  if (adapterRoot) {
+    const p = resolve(adapterRoot, "config.json");
     if (existsSync(p)) return p;
   }
 
@@ -144,15 +148,17 @@ export function refreshConfigIfChanged() {
  * Resolve a plugin-relative path, checking project config dir first.
  * This allows project-scoped templates/references to override plugin defaults.
  *
- * Priority: PROJECT_CONFIG_DIR → CLAUDE_PLUGIN_ROOT → HOOKS_DIR
+ * Priority: PROJECT_CONFIG_DIR → QUORUM_ADAPTER_ROOT/CLAUDE_PLUGIN_ROOT/GEMINI_EXTENSION_ROOT → HOOKS_DIR
  */
 export function resolvePluginPath(relativePath) {
   const projectPath = resolve(PROJECT_CONFIG_DIR, relativePath);
   if (existsSync(projectPath)) return projectPath;
 
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const p = resolve(pluginRoot, relativePath);
+  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
+    ?? process.env.CLAUDE_PLUGIN_ROOT
+    ?? process.env.GEMINI_EXTENSION_ROOT;
+  if (adapterRoot) {
+    const p = resolve(adapterRoot, relativePath);
     if (existsSync(p)) return p;
   }
 
@@ -243,11 +249,13 @@ function resetPathCache() {
 // ── i18n (cached) ─────────────────────────────────────────
 const localeCache = new Map();
 
-/** Resolve locales directory — prefer CLAUDE_PLUGIN_ROOT so worktree copies can find locale files. */
+/** Resolve locales directory — prefer adapter root so worktree copies can find locale files. */
 function findLocalesDir() {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pluginRoot) {
-    const p = resolve(pluginRoot, "locales");
+  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
+    ?? process.env.CLAUDE_PLUGIN_ROOT
+    ?? process.env.GEMINI_EXTENSION_ROOT;
+  if (adapterRoot) {
+    const p = resolve(adapterRoot, "locales");
     if (existsSync(p)) return p;
   }
   return resolve(HOOKS_DIR, "locales");

@@ -1,0 +1,7 @@
+prompt = """
+Run a quorum analysis tool. Usage: /quorum-tools <tool_name> [args]
+
+Available tools: code_map, dependency_graph, blast_radius, audit_scan, coverage_map, audit_history, perf_scan, a11y_scan, compat_check, license_scan, i18n_validate, infra_scan, observability_check, doc_coverage, ai_guide.
+
+!{quorum tool {{args}} 2>&1 || echo "quorum CLI not available"}
+"""

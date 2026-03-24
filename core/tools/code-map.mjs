@@ -23,8 +23,16 @@ import { statSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import { parseFile as _parseFile, findEndLine, walkDir } from "./tool-core.mjs";
 
+// Try to load language registry for default extensions
+let _defaultExt = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
+try {
+  const { loadAll } = await import("../../languages/registry.mjs");
+  const reg = await loadAll();
+  if (reg.size > 0) _defaultExt = reg.allExtensions();
+} catch { /* fallback to legacy extensions */ }
+
 const DEFAULTS = {
-  extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]),
+  extensions: _defaultExt,
   maxDepth: 10,
   filters: null, // null = all types
   showRanges: false,

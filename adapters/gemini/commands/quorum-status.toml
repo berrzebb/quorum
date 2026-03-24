@@ -1,0 +1,5 @@
+prompt = """
+Show the current quorum audit gate status.
+
+!{quorum status 2>&1 || echo "quorum CLI not available"}
+"""

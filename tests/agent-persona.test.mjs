@@ -3,7 +3,9 @@
  * Agent Persona Integration Tests — verifies real persona files load correctly.
  *
  * Tests that adapters/claude-code/agents/*.md are parseable by AgentLoader
- * and contain expected sections.
+ * and contain expected sections. After shared-knowledge refactoring, agents
+ * reference agents/knowledge/ for protocol details — tests verify the binding
+ * file contains adapter-specific content and points to shared protocol.
  *
  * Run: node --test tests/agent-persona.test.mjs
  */
@@ -11,6 +13,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { resolve, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const { AgentLoader } = await import("../dist/providers/agent-loader.js");
@@ -56,22 +59,26 @@ describe("implementer persona", () => {
   it("contains frontmatter with model (no isolation — orchestrator creates worktree)", () => {
     const persona = loader.load("implementer");
     assert.ok(persona.content.includes("model: claude-sonnet-4-6"));
-    // implementer does NOT have isolation: worktree in frontmatter.
-    // The orchestrator creates the worktree; implementer runs inside it.
-    // Having isolation: worktree would cause double worktree creation.
     const frontmatter = persona.content.match(/---[\s\S]*?---/)?.[0] ?? "";
     assert.doesNotMatch(frontmatter, /isolation/);
   });
 
-  it("has Setup section", () => {
-    const section = loader.getSection("implementer", "Setup");
-    assert.ok(section, "Setup section missing");
-    assert.ok(section.includes("Worktree Environment Check"));
+  it("references shared protocol", () => {
+    const persona = loader.load("implementer");
+    assert.ok(persona.content.includes("agents/knowledge/implementer-protocol.md"));
   });
 
-  it("has Input section", () => {
-    const section = loader.getSection("implementer", "Input (provided by orchestrator)");
-    assert.ok(section, "Input section missing");
+  it("shared protocol has Setup and Input sections", () => {
+    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/implementer-protocol.md"), "utf8");
+    assert.ok(protocol.includes("## Setup"), "Setup section missing in shared protocol");
+    assert.ok(protocol.includes("Worktree Environment Check"));
+    assert.ok(protocol.includes("## Input (provided by orchestrator)"), "Input section missing in shared protocol");
+  });
+
+  it("has Claude Code tool mapping", () => {
+    const persona = loader.load("implementer");
+    assert.ok(persona.content.includes("CLAUDE_PLUGIN_ROOT"));
+    assert.ok(persona.content.includes("tool-runner.mjs"));
   });
 
   it("references consensus skills", () => {
@@ -103,10 +110,12 @@ describe("scout persona", () => {
     assert.ok(section.includes("tool-runner.mjs"));
   });
 
-  it("has Tool-First Principle section", () => {
-    const section = loader.getSection("scout", "Tool-First Principle");
-    assert.ok(section, "Tool-First Principle section missing");
-    assert.ok(section.includes("deterministic tools before LLM reasoning"));
+  it("references shared protocol with Tool-First Principle", () => {
+    const persona = loader.load("scout");
+    assert.ok(persona.content.includes("agents/knowledge/scout-protocol.md"));
+    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/scout-protocol.md"), "utf8");
+    assert.ok(protocol.includes("## Tool-First Principle"), "Tool-First Principle missing in shared protocol");
+    assert.ok(protocol.includes("deterministic tools before LLM reasoning"));
   });
 
   it("uses Opus model", () => {
@@ -133,11 +142,11 @@ describe("ui-reviewer persona", () => {
   it("has Setup section with dev server check", () => {
     const section = loader.getSection("ui-reviewer", "Setup");
     assert.ok(section, "Setup section missing");
-    assert.ok(section.includes("Verify Dev Server") || section.includes("dev server"));
+    assert.ok(section.includes("dev server") || section.includes("Verify dev server"));
   });
 
   it("has Input section", () => {
-    const section = loader.getSection("ui-reviewer", "Input (provided by orchestrator or user)");
+    const section = loader.getSection("ui-reviewer", "Input");
     assert.ok(section, "Input section missing");
   });
 });
@@ -158,6 +167,40 @@ describe("section extraction across all personas", () => {
       for (const [heading, content] of persona.sections) {
         assert.ok(content.trim().length > 0, `${name} section "${heading}" is empty`);
       }
+    }
+  });
+});
+
+// ═══ 6. Shared knowledge files exist ═════════════════════════════════
+
+describe("shared knowledge integrity", () => {
+  const knowledgeDir = resolve(QUORUM_ROOT, "agents", "knowledge");
+
+  it("core protocol files exist", () => {
+    assert.ok(existsSync(resolve(knowledgeDir, "implementer-protocol.md")));
+    assert.ok(existsSync(resolve(knowledgeDir, "scout-protocol.md")));
+    assert.ok(existsSync(resolve(knowledgeDir, "specialist-base.md")));
+  });
+
+  it("all 9 domain knowledge files exist", () => {
+    const domains = ["perf", "a11y", "compat", "compliance", "concurrency", "docs", "i18n", "infra", "observability"];
+    for (const d of domains) {
+      assert.ok(existsSync(resolve(knowledgeDir, "domains", `${d}.md`)), `${d}.md missing`);
+    }
+  });
+
+  it("specialist agents reference specialist-base.md", () => {
+    const specialists = [
+      "perf-analyst", "a11y-auditor", "compat-reviewer", "compliance-officer",
+      "concurrency-verifier", "doc-steward", "i18n-checker", "infra-validator",
+      "observability-inspector",
+    ];
+    for (const name of specialists) {
+      const persona = loader.load(name);
+      assert.ok(
+        persona.content.includes("agents/knowledge/specialist-base.md"),
+        `${name} does not reference specialist-base.md`
+      );
     }
   });
 });

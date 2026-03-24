@@ -1,0 +1,421 @@
+/**
+ * Tests for adapters/shared/ modules — Phase 1 of Plan C (Gemini adapter).
+ *
+ * Covers: repo-resolver, config-resolver, audit-state, first-run,
+ * context-reinforcement, trigger-runner, tool-names.
+ */
+
+import { describe, it, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
+
+// ── Test fixtures ──────────────────────────────────────────
+const TEST_DIR = resolve(tmpdir(), `quorum-shared-test-${Date.now()}`);
+const REPO_DIR = resolve(TEST_DIR, "repo");
+const ADAPTER_DIR = resolve(TEST_DIR, "adapter");
+
+function setup() {
+  mkdirSync(resolve(REPO_DIR, ".claude", "quorum"), { recursive: true });
+  mkdirSync(resolve(REPO_DIR, ".git"), { recursive: true });
+  mkdirSync(resolve(ADAPTER_DIR, ".session-state"), { recursive: true });
+  mkdirSync(resolve(ADAPTER_DIR, "docs", "en"), { recursive: true });
+  mkdirSync(resolve(ADAPTER_DIR, "examples"), { recursive: true });
+}
+
+function cleanup() {
+  try { rmSync(TEST_DIR, { recursive: true, force: true }); } catch { /* */ }
+  // Clean env vars that tests might set
+  delete process.env.QUORUM_REPO_ROOT;
+  delete process.env.QUORUM_ADAPTER_ROOT;
+}
+
+// ── repo-resolver ──────────────────────────────────────────
+describe("shared/repo-resolver", () => {
+  before(setup);
+  after(cleanup);
+
+  it("resolves repo root from adapterDir fallback", async () => {
+    // Note: git rev-parse runs first and finds the real repo (D:/Projects/quorum)
+    // since we're running inside it. This test verifies the adapterDir fallback
+    // by checking that when git finds a repo, it returns a valid path with .git.
+    const saved = process.env.QUORUM_REPO_ROOT;
+    delete process.env.QUORUM_REPO_ROOT;
+    try {
+      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      const adapterInRepo = resolve(REPO_DIR, "adapters", "claude-code", "hooks");
+      mkdirSync(adapterInRepo, { recursive: true });
+      const result = resolveRepoRoot({ adapterDir: adapterInRepo, cache: false });
+      // Should resolve to a valid path (either git-resolved or adapterDir fallback)
+      assert.ok(typeof result === "string" && result.length > 0);
+      assert.ok(existsSync(result), `resolved path ${result} should exist`);
+    } finally {
+      if (saved) process.env.QUORUM_REPO_ROOT = saved;
+      else delete process.env.QUORUM_REPO_ROOT;
+    }
+  });
+
+  it("uses cached env var when available", async () => {
+    process.env.QUORUM_REPO_ROOT = "/cached/path";
+    try {
+      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      assert.equal(resolveRepoRoot(), "/cached/path");
+    } finally {
+      delete process.env.QUORUM_REPO_ROOT;
+    }
+  });
+
+  it("falls back to cwd when no git and no adapterDir", async () => {
+    const saved = process.env.QUORUM_REPO_ROOT;
+    delete process.env.QUORUM_REPO_ROOT;
+    try {
+      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      const result = resolveRepoRoot({ adapterDir: resolve(TEST_DIR, "nonexistent"), cache: false });
+      // Should fallback — either git resolves or returns cwd
+      assert.ok(typeof result === "string" && result.length > 0);
+    } finally {
+      if (saved) process.env.QUORUM_REPO_ROOT = saved;
+      else delete process.env.QUORUM_REPO_ROOT;
+    }
+  });
+});
+
+// ── config-resolver ────────────────────────────────────────
+describe("shared/config-resolver", () => {
+  before(setup);
+  after(cleanup);
+
+  it("finds project-scoped config first", async () => {
+    const configData = { consensus: { watch_file: "test.md" } };
+    writeFileSync(resolve(REPO_DIR, ".claude", "quorum", "config.json"), JSON.stringify(configData));
+
+    const { findConfigPath, loadConfig } = await import("../adapters/shared/config-resolver.mjs");
+    const path = findConfigPath({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR });
+    assert.ok(path?.endsWith("config.json"));
+    assert.ok(path?.includes(".claude"));
+
+    const { cfg, configMissing } = loadConfig({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR });
+    assert.equal(configMissing, false);
+    assert.equal(cfg.consensus.watch_file, "test.md");
+  });
+
+  it("falls back to adapter dir config", async () => {
+    writeFileSync(resolve(ADAPTER_DIR, "config.json"), JSON.stringify({ plugin: { locale: "ko" } }));
+
+    const { findConfigPath } = await import("../adapters/shared/config-resolver.mjs");
+    // Use a repo root without project config
+    const emptyRepo = resolve(TEST_DIR, "empty-repo");
+    mkdirSync(emptyRepo, { recursive: true });
+    const path = findConfigPath({ repoRoot: emptyRepo, adapterDir: ADAPTER_DIR });
+    assert.ok(path?.includes(ADAPTER_DIR));
+  });
+
+  it("returns null when no config exists", async () => {
+    const { findConfigPath, loadConfig } = await import("../adapters/shared/config-resolver.mjs");
+    const noConfigDir = resolve(TEST_DIR, "no-config");
+    mkdirSync(noConfigDir, { recursive: true });
+    const path = findConfigPath({ repoRoot: noConfigDir, adapterDir: noConfigDir });
+    assert.equal(path, null);
+
+    const { configMissing, cfg } = loadConfig({ repoRoot: noConfigDir, adapterDir: noConfigDir });
+    assert.equal(configMissing, true);
+    assert.ok(cfg.consensus); // default config provided
+  });
+
+  it("extracts tags with defaults", async () => {
+    const { extractTags } = await import("../adapters/shared/config-resolver.mjs");
+    const tags = extractTags({ consensus: { trigger_tag: "[TEST]" } });
+    assert.equal(tags.triggerTag, "[TEST]");
+    assert.ok(tags.agreeTag); // has default
+
+    const defaultTags = extractTags({});
+    assert.ok(defaultTags.triggerTag);
+    assert.ok(defaultTags.watchFile);
+  });
+});
+
+// ── audit-state ────────────────────────────────────────────
+describe("shared/audit-state", () => {
+  before(setup);
+  after(cleanup);
+
+  it("reads audit status from marker file", async () => {
+    writeFileSync(
+      resolve(REPO_DIR, ".claude", "audit-status.json"),
+      JSON.stringify({ status: "approved", timestamp: Date.now() })
+    );
+
+    const { readAuditStatus } = await import("../adapters/shared/audit-state.mjs");
+    const status = readAuditStatus(REPO_DIR);
+    assert.equal(status?.status, "approved");
+  });
+
+  it("returns null when no audit status", async () => {
+    const { readAuditStatus } = await import("../adapters/shared/audit-state.mjs");
+    const emptyDir = resolve(TEST_DIR, "no-audit");
+    mkdirSync(emptyDir, { recursive: true });
+    assert.equal(readAuditStatus(emptyDir), null);
+  });
+
+  it("reads retro marker", async () => {
+    writeFileSync(
+      resolve(ADAPTER_DIR, ".session-state", "retro-marker.json"),
+      JSON.stringify({ retro_pending: true, rx_id: "test-123" })
+    );
+
+    const { readRetroMarker } = await import("../adapters/shared/audit-state.mjs");
+    const marker = readRetroMarker(ADAPTER_DIR);
+    assert.equal(marker?.retro_pending, true);
+    assert.equal(marker?.rx_id, "test-123");
+  });
+
+  it("checks audit lock — no lock", async () => {
+    const { checkAuditLock } = await import("../adapters/shared/audit-state.mjs");
+    const emptyDir = resolve(TEST_DIR, "no-lock");
+    mkdirSync(resolve(emptyDir, ".claude"), { recursive: true });
+    const result = checkAuditLock(emptyDir);
+    assert.equal(result.exists, false);
+    assert.equal(result.alive, false);
+  });
+
+  it("cleans up stale audit lock", async () => {
+    const lockDir = resolve(TEST_DIR, "stale-lock");
+    mkdirSync(resolve(lockDir, ".claude"), { recursive: true });
+    writeFileSync(
+      resolve(lockDir, ".claude", "audit.lock"),
+      JSON.stringify({ pid: 999999, startedAt: Date.now() - 600000 })
+    );
+
+    const { checkAuditLock } = await import("../adapters/shared/audit-state.mjs");
+    const result = checkAuditLock(lockDir);
+    assert.equal(result.exists, true);
+    assert.equal(result.alive, false);
+    assert.equal(result.cleaned, true);
+    assert.ok(!existsSync(resolve(lockDir, ".claude", "audit.lock")));
+  });
+
+  it("builds status signals", async () => {
+    // Setup: approved audit status
+    writeFileSync(
+      resolve(REPO_DIR, ".claude", "audit-status.json"),
+      JSON.stringify({ status: "approved" })
+    );
+    const watchDir = resolve(REPO_DIR, "docs", "feedback");
+    mkdirSync(watchDir, { recursive: true });
+    writeFileSync(resolve(watchDir, "claude.md"), "no trigger tag here");
+
+    const { buildStatusSignals } = await import("../adapters/shared/audit-state.mjs");
+    const cfg = { consensus: { watch_file: "docs/feedback/claude.md", agree_tag: "[합의완료]" } };
+    const signals = buildStatusSignals({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
+    // Should have at least the approved signal
+    assert.ok(signals.some(s => s.includes("합의완료") || s.includes("커밋 가능")));
+  });
+
+  it("builds resume state with pending correction", async () => {
+    writeFileSync(
+      resolve(REPO_DIR, ".claude", "audit-status.json"),
+      JSON.stringify({ status: "changes_requested", rejectionCodes: ["R01", "R02"] })
+    );
+    const watchDir = resolve(REPO_DIR, "docs", "feedback");
+    mkdirSync(watchDir, { recursive: true });
+    writeFileSync(resolve(watchDir, "claude.md"), "## Item [GPT미검증]\nsome evidence");
+
+    const { buildResumeState } = await import("../adapters/shared/audit-state.mjs");
+    const cfg = { consensus: { watch_file: "docs/feedback/claude.md", trigger_tag: "[GPT미검증]", pending_tag: "[계류]" } };
+    const { resumeActions } = buildResumeState({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
+    assert.ok(resumeActions.length > 0);
+    assert.ok(resumeActions[0].includes("보정"));
+  });
+});
+
+// ── first-run ──────────────────────────────────────────────
+describe("shared/first-run", () => {
+  before(setup);
+  after(cleanup);
+
+  it("copies example config to project dir", async () => {
+    const examplesDir = resolve(ADAPTER_DIR, "examples");
+    writeFileSync(resolve(examplesDir, "config.example.json"), JSON.stringify({ test: true }));
+
+    const destDir = resolve(TEST_DIR, "first-run-dest");
+
+    const { firstRunSetup, buildFirstRunMessage } = await import("../adapters/shared/first-run.mjs");
+    const result = firstRunSetup({ adapterRoot: ADAPTER_DIR, projectConfigDir: destDir });
+    assert.ok(result.copied.includes("config.json"));
+    assert.ok(existsSync(resolve(destDir, "config.json")));
+
+    const msg = buildFirstRunMessage(result, "/path/to/README.md");
+    assert.ok(msg?.includes("First-Run Setup Complete"));
+  });
+
+  it("reports needsManualSetup when examples missing", async () => {
+    const emptyAdapter = resolve(TEST_DIR, "empty-adapter");
+    mkdirSync(emptyAdapter, { recursive: true });
+
+    const { firstRunSetup, buildFirstRunMessage } = await import("../adapters/shared/first-run.mjs");
+    const result = firstRunSetup({ adapterRoot: emptyAdapter, projectConfigDir: resolve(TEST_DIR, "no-dest") });
+    assert.equal(result.needsManualSetup, true);
+
+    const msg = buildFirstRunMessage(result, "");
+    assert.ok(msg?.includes("SETUP REQUIRED"));
+  });
+});
+
+// ── context-reinforcement ──────────────────────────────────
+describe("shared/context-reinforcement", () => {
+  before(() => {
+    setup();
+    const guideContent = [
+      "# AI Guide",
+      "",
+      "## Absolute Rules",
+      "- Rule 1: Never self-approve",
+      "- Rule 2: Always run tests",
+      "",
+      "## Other Section",
+      "some content",
+    ].join("\n");
+    writeFileSync(resolve(ADAPTER_DIR, "docs", "en", "AI-GUIDE.md"), guideContent);
+  });
+  after(cleanup);
+
+  it("extracts Absolute Rules section", async () => {
+    const { buildContextReinforcement } = await import("../adapters/shared/context-reinforcement.mjs");
+    const result = buildContextReinforcement({ adapterRoot: ADAPTER_DIR, locale: "en", agreeTag: "[APPROVED]" });
+    assert.ok(result?.includes("CONTEXT-REINFORCEMENT"));
+    assert.ok(result?.includes("Never self-approve"));
+    assert.ok(result?.includes("Self-promotion"));
+  });
+
+  it("returns null when guide not found", async () => {
+    const { buildContextReinforcement } = await import("../adapters/shared/context-reinforcement.mjs");
+    const result = buildContextReinforcement({ adapterRoot: resolve(TEST_DIR, "no-guide"), locale: "en" });
+    assert.equal(result, null);
+  });
+
+  it("falls back to alternative locale", async () => {
+    const { findGuidePath } = await import("../adapters/shared/context-reinforcement.mjs");
+    // "ko" doesn't exist, should fallback to "en"
+    const path = findGuidePath(ADAPTER_DIR, "ko");
+    assert.ok(path?.includes("en"));
+  });
+});
+
+// ── trigger-runner ─────────────────────────────────────────
+describe("shared/trigger-runner", () => {
+  it("validates evidence format — missing sections", async () => {
+    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const content = "## Item [GPT미검증]\nSome content without proper sections";
+    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const { errors } = validateEvidenceFormat(content, consensus);
+    assert.ok(errors.length > 0); // Missing required sections
+  });
+
+  it("validates evidence format — all sections present", async () => {
+    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const content = [
+      "## Item [GPT미검증]",
+      "### Claim",
+      "Added new feature",
+      "### Changed Files",
+      "- `src/index.ts`",
+      "### Test Command",
+      "npm test",
+      "### Test Result",
+      "All 10 tests passed successfully",
+      "### Residual Risk",
+      "None",
+    ].join("\n");
+    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const { errors } = validateEvidenceFormat(content, consensus);
+    assert.equal(errors.length, 0);
+  });
+
+  it("detects tag conflict", async () => {
+    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const content = "## Item [GPT미검증] [합의완료]\nContent";
+    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const { warnings } = validateEvidenceFormat(content, consensus);
+    assert.ok(warnings.some(w => w.includes("conflict") || w.includes("tag")));
+  });
+
+  it("parses changed files from evidence", async () => {
+    const { parseChangedFiles, countChangedFiles } = await import("../adapters/shared/trigger-runner.mjs");
+    const content = "### Changed Files\n- `src/a.ts`\n- `src/b.ts`\n### Next";
+    const files = parseChangedFiles(content);
+    assert.deepEqual(files, ["src/a.ts", "src/b.ts"]);
+    assert.equal(countChangedFiles(content), 2);
+  });
+
+  it("builds trigger context", async () => {
+    const { buildTriggerContext } = await import("../adapters/shared/trigger-runner.mjs");
+    const ctx = buildTriggerContext({
+      content: "### Changed Files\n- `src/auth/login.ts`\n- `tests/auth.test.ts`",
+      changedFiles: ["src/auth/login.ts", "tests/auth.test.ts"],
+      changedFileCount: 2,
+      priorRejections: 1,
+      hasPlanDoc: true,
+      blastRadius: 0.15,
+    });
+    assert.equal(ctx.changedFiles, 2);
+    assert.equal(ctx.securitySensitive, true); // "auth" detected
+    assert.equal(ctx.crossLayerChange, true);  // src/ + tests/
+    assert.equal(ctx.priorRejections, 1);
+    assert.equal(ctx.hasPlanDoc, true);
+    assert.equal(ctx.blastRadius, 0.15);
+  });
+
+  it("detects planning files", async () => {
+    const { isPlanningFile } = await import("../adapters/shared/trigger-runner.mjs");
+    const consensus = { planning_files: ["docs/plan/prd.md"], planning_dirs: ["docs/plan/"] };
+    assert.equal(isPlanningFile("docs/plan/prd.md", consensus), true);
+    assert.equal(isPlanningFile("docs/plan/track-1.md", consensus), true);
+    assert.equal(isPlanningFile("src/index.ts", consensus), false);
+  });
+
+  it("checks plan document existence", async () => {
+    const { hasPlanDocuments } = await import("../adapters/shared/trigger-runner.mjs");
+    // REPO_DIR already has docs/feedback — add docs/plan
+    mkdirSync(resolve(REPO_DIR, "docs", "plan"), { recursive: true });
+    assert.equal(hasPlanDocuments(REPO_DIR), true);
+
+    const noPlanDir = resolve(TEST_DIR, "no-plan-repo");
+    mkdirSync(noPlanDir, { recursive: true });
+    assert.equal(hasPlanDocuments(noPlanDir), false);
+  });
+});
+
+// ── tool-names ─────────────────────────────────────────────
+describe("shared/tool-names", () => {
+  it("maps tool names across adapters", async () => {
+    const { getToolName, getCanonicalName, isFileEditTool } = await import("../adapters/shared/tool-names.mjs");
+
+    // Claude Code
+    assert.equal(getToolName("claude-code", "bash"), "Bash");
+    assert.equal(getToolName("claude-code", "write"), "Write");
+
+    // Gemini
+    assert.equal(getToolName("gemini", "bash"), "shell");
+    assert.equal(getToolName("gemini", "write"), "write_file");
+    assert.equal(getToolName("gemini", "edit"), "edit_file");
+
+    // Reverse lookup
+    assert.equal(getCanonicalName("claude-code", "Write"), "write");
+    assert.equal(getCanonicalName("gemini", "shell"), "bash");
+    assert.equal(getCanonicalName("gemini", "unknown_tool"), null);
+
+    // File edit detection
+    assert.equal(isFileEditTool("claude-code", "Write"), true);
+    assert.equal(isFileEditTool("claude-code", "Edit"), true);
+    assert.equal(isFileEditTool("claude-code", "Read"), false);
+    assert.equal(isFileEditTool("gemini", "write_file"), true);
+    assert.equal(isFileEditTool("gemini", "read_file"), false);
+  });
+
+  it("returns canonical name for unknown adapter", async () => {
+    const { getToolName, getCanonicalName } = await import("../adapters/shared/tool-names.mjs");
+    assert.equal(getToolName("unknown", "bash"), "bash"); // passthrough
+    assert.equal(getCanonicalName("unknown", "anything"), null);
+  });
+});

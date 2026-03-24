@@ -22,6 +22,31 @@ try {
   _createAstRefine = astBridge.createAstRefineCallback;
 } catch { /* AST bridge unavailable — regex-only mode */ }
 
+// Language registry — fail-safe dynamic spec loading
+let _langRegistry = null;
+let _getEndLineFinder = null;
+try {
+  const langMod = await import("../../languages/registry.mjs");
+  await langMod.loadAll();
+  _langRegistry = langMod.registry;
+  _getEndLineFinder = langMod.getEndLineFinder;
+} catch { /* Language registry unavailable — legacy hardcoded mode */ }
+
+/**
+ * Gather quality patterns for a domain across all registered languages.
+ * Falls back to legacy patterns when registry unavailable.
+ */
+function _gatherDomainPatterns(domain, legacyPatterns) {
+  if (!_langRegistry) return legacyPatterns;
+  const groups = _langRegistry.patternsForDomain(domain);
+  if (groups.length === 0) return legacyPatterns;
+  // Flatten all language patterns into a single array.
+  // runPatternScan filters by extension anyway, so mixing is safe.
+  const all = [];
+  for (const g of groups) all.push(...g.patterns);
+  return all;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ═══ Cache ══════════════════════════════════════════════════════════════
@@ -51,9 +76,14 @@ function getLatestMtime(target) {
 
 // ═══ code-map engine ════════════════════════════════════════════════════
 
-const CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
+/** Fallback extension set when language registry is unavailable. */
+const _LEGACY_CODE_EXT = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
 
-export const PATTERNS = [
+/** All registered language extensions, or legacy fallback. */
+const CODE_EXT = _langRegistry?.allExtensions() ?? _LEGACY_CODE_EXT;
+
+/** Legacy fallback patterns (JS/TS only). Used when registry unavailable. */
+const _LEGACY_PATTERNS = [
   { type: "fn", re: /^(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)/m },
   { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)\s*(?:=>|:\s*\w)/m },
   { type: "fn", re: /^(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?function/m },
@@ -65,6 +95,10 @@ export const PATTERNS = [
   { type: "import", re: /^import\s+(?:type\s+)?(?:\{([^}]+)\}|(\w+))\s+from\s+["']([^"']+)["']/m },
 ];
 
+/** Exported for backward compatibility. Resolves to language-aware patterns. */
+export const PATTERNS = _LEGACY_PATTERNS;
+
+/** Legacy brace-based end-line finder. Kept as default fallback. */
 export function findEndLine(lines, startIdx) {
   let depth = 0, started = false;
   for (let i = startIdx; i < lines.length; i++) {
@@ -77,20 +111,39 @@ export function findEndLine(lines, startIdx) {
   return startIdx + 1;
 }
 
+/**
+ * Parse a source file for symbols using language-aware patterns.
+ *
+ * Resolution order:
+ * 1. Language registry spec for this file's extension (dynamic, multi-language)
+ * 2. Legacy JS/TS patterns (fallback)
+ */
 export function parseFile(filePath, filters) {
   let content;
   try { content = readFileSync(filePath, "utf8"); } catch (err) {
     if (process.env.QUORUM_DEBUG) console.error(`[tool-core] parseFile: cannot read ${filePath}: ${err.message}`);
     return [];
   }
+
+  // Resolve language spec — registry first, legacy fallback
+  const spec = _langRegistry?.forFile(filePath);
+  const patterns = spec?.symbols ?? _LEGACY_PATTERNS;
+  const commentPrefixes = spec?.commentPrefixes ?? ["//", "/*", "*"];
+  const endLineFn = (spec && _getEndLineFinder)
+    ? _getEndLineFinder(spec)
+    : findEndLine;
+
   const lines = content.split(/\r?\n/);
   const symbols = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.trim() || line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) continue;
+    const trimmed = line.trimStart();
+    if (!trimmed) continue;
+    // Skip comment lines
+    if (commentPrefixes.some(p => trimmed.startsWith(p))) continue;
 
-    for (const { type, re } of PATTERNS) {
+    for (const { type, re } of patterns) {
       if (filters && !filters.has(type)) continue;
       const m = line.match(re);
       if (!m) continue;
@@ -99,7 +152,7 @@ export function parseFile(filePath, filters) {
       if (type === "import") {
         name = (m[1] || m[2] || "").trim();
         if (name.length > 40) name = name.slice(0, 37) + "...";
-        detail = ` from "${m[3]}"`;
+        if (m[3]) detail = ` from "${m[3]}"`;
       } else {
         name = m[1] || "";
         if (m[2] !== undefined) {
@@ -109,7 +162,7 @@ export function parseFile(filePath, filters) {
       }
 
       const lineNum = i + 1;
-      const endLine = findEndLine(lines, i);
+      const endLine = endLineFn(lines, i);
       symbols.push({ line: lineNum, endLine, type, name, detail });
       break;
     }
@@ -382,22 +435,40 @@ export function toolCoverageMap(params) {
 
 // ═══ Tool: dependency_graph ═════════════════════════════════════════════
 
-const IMPORT_RE = /^import\s+(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)(?:\s*,\s*(?:\{[^}]*\}|\w+))?\s+from\s+["']([^"']+)["']/;
-const REQUIRE_RE = /(?:require|import)\s*\(\s*["']([^"']+)["']\s*\)/;
-const EXPORT_FROM_RE = /^export\s+(?:type\s+)?\{[^}]*\}\s+from\s+["']([^"']+)["']/;
-const DYNAMIC_IMPORT_RE = /import\s*\(\s*["']([^"']+)["']\s*\)/;
+/** Legacy JS/TS import patterns. */
+const _LEGACY_IMPORT_PATTERNS = [
+  /^import\s+(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)(?:\s*,\s*(?:\{[^}]*\}|\w+))?\s+from\s+["']([^"']+)["']/,
+  /^export\s+(?:type\s+)?\{[^}]*\}\s+from\s+["']([^"']+)["']/,
+  /(?:require|import)\s*\(\s*["']([^"']+)["']\s*\)/,
+  /import\s*\(\s*["']([^"']+)["']\s*\)/,
+];
 
+// Re-export individual patterns for backward compatibility
+const IMPORT_RE = _LEGACY_IMPORT_PATTERNS[0];
+const EXPORT_FROM_RE = _LEGACY_IMPORT_PATTERNS[1];
+const REQUIRE_RE = _LEGACY_IMPORT_PATTERNS[2];
+const DYNAMIC_IMPORT_RE = _LEGACY_IMPORT_PATTERNS[3];
+
+/**
+ * Extract import specifiers from a source file.
+ * Uses language-aware patterns when registry is available.
+ */
 function extractImports(filePath) {
   let content;
   try { content = readFileSync(filePath, "utf8"); } catch (err) {
     if (process.env.QUORUM_DEBUG) console.error(`[tool-core] extractImports: cannot read ${filePath}: ${err.message}`);
     return [];
   }
+
+  const spec = _langRegistry?.forFile(filePath);
+  const importPatterns = spec?.imports?.patterns ?? _LEGACY_IMPORT_PATTERNS;
+  const commentPrefixes = spec?.commentPrefixes ?? ["//", "*"];
+
   const imports = [];
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
-    for (const re of [IMPORT_RE, EXPORT_FROM_RE, REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
+    if (commentPrefixes.some(p => trimmed.startsWith(p))) continue;
+    for (const re of importPatterns) {
       const m = trimmed.match(re);
       if (m && m[1]) {
         imports.push(m[1]);
@@ -1358,8 +1429,8 @@ export function toolPerfScan(params) {
   const cwd = process.cwd();
   return runPatternScan({
     targetPath: params.path,
-    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
-    patterns: PERF_PATTERNS,
+    extensions: _langRegistry?.extensionsForDomain("perf") ?? new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: _gatherDomainPatterns("perf", PERF_PATTERNS),
     toolName: "perf_scan",
     heading: "Performance Scan Results",
     passMsg: "no performance anti-patterns detected",
@@ -1385,8 +1456,8 @@ const COMPAT_PATTERNS = [
 export function toolCompatCheck(params) {
   return runPatternScan({
     targetPath: params.path,
-    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
-    patterns: COMPAT_PATTERNS,
+    extensions: _langRegistry?.extensionsForDomain("compat") ?? new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: _gatherDomainPatterns("compat", COMPAT_PATTERNS),
     toolName: "compat_check",
     heading: "Compatibility Check Results",
     passMsg: "no compatibility issues detected",
@@ -1499,7 +1570,7 @@ export function toolLicenseScan(params) {
   }
 
   // 2. Scan source for PII patterns
-  const extSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
+  const extSet = _langRegistry?.allExtensions() ?? new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]);
   const stat_ = statSync(target, { throwIfNoEntry: false });
   const files = stat_?.isDirectory() ? walkDir(target, extSet, 5) : [];
 
@@ -1507,9 +1578,11 @@ export function toolLicenseScan(params) {
     let content;
     try { content = readFileSync(file, "utf8"); } catch { continue; }
     const lines = content.split(/\r?\n/);
+    const spec = _langRegistry?.forFile(file);
+    const cPrefixes = spec?.commentPrefixes ?? ["//", "*"];
 
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trimStart().startsWith("//") || lines[i].trimStart().startsWith("*")) continue;
+      if (cPrefixes.some(p => lines[i].trimStart().startsWith(p))) continue;
       for (const pat of PII_PATTERNS) {
         if (pat.re.test(lines[i])) {
           findings.push({
@@ -1814,8 +1887,8 @@ const OBS_PATTERNS = [
 export function toolObservabilityCheck(params) {
   return runPatternScan({
     targetPath: params.path,
-    extensions: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
-    patterns: OBS_PATTERNS,
+    extensions: _langRegistry?.extensionsForDomain("observability") ?? new Set([".ts", ".tsx", ".js", ".jsx", ".mjs"]),
+    patterns: _gatherDomainPatterns("observability", OBS_PATTERNS),
     toolName: "observability_check",
     heading: "Observability Check Results",
     passMsg: "no observability gaps detected",
@@ -1825,8 +1898,10 @@ export function toolObservabilityCheck(params) {
 
 // ═══ Tool: doc_coverage ═════════════════════════════════════════════════
 
-const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|class|const|let|type|interface|enum)\s+(\w+)/;
-const JSDOC_START = /\/\*\*/;
+const _LEGACY_EXPORT_RE = /^export\s+(?:async\s+)?(?:function|class|const|let|type|interface|enum)\s+(\w+)/;
+const _LEGACY_JSDOC_START = /\/\*\*/;
+const EXPORT_RE = _LEGACY_EXPORT_RE;
+const JSDOC_START = _LEGACY_JSDOC_START;
 
 /**
  * Check documentation coverage: exported symbols without JSDoc,
@@ -1839,7 +1914,7 @@ export function toolDocCoverage(params) {
   const stat_ = statSync(target, { throwIfNoEntry: false });
   if (!stat_) return { error: `Not found: ${target}` };
 
-  const extSet = new Set([".ts", ".tsx", ".js", ".mjs"]);
+  const extSet = _langRegistry?.allExtensions() ?? new Set([".ts", ".tsx", ".js", ".mjs"]);
   const files = stat_.isDirectory() ? walkDir(target, extSet, 5) : [target];
 
   const findings = [];
@@ -1851,19 +1926,26 @@ export function toolDocCoverage(params) {
     try { content = readFileSync(file, "utf8"); } catch { continue; }
     const lines = content.split(/\r?\n/);
 
+    // Use language-specific doc patterns when available
+    const spec = _langRegistry?.forFile(file);
+    const exportRe = spec?.docPatterns?.exportRe ?? _LEGACY_EXPORT_RE;
+    const docStartRe = spec?.docPatterns?.docStartRe ?? _LEGACY_JSDOC_START;
+
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(EXPORT_RE);
+      const m = lines[i].match(exportRe);
       if (!m) continue;
 
       totalExports++;
 
-      // Check if previous non-empty line is end of JSDoc
+      // Check if previous non-empty line is end of doc comment
       let hasDoc = false;
       for (let j = i - 1; j >= Math.max(0, i - 15); j--) {
         const trimmed = lines[j].trim();
         if (trimmed === "") continue;
         if (trimmed === "*/" || trimmed.endsWith("*/")) { hasDoc = true; break; }
-        if (trimmed.startsWith("*") || JSDOC_START.test(trimmed)) { hasDoc = true; break; }
+        if (trimmed.startsWith("*") || docStartRe.test(trimmed)) { hasDoc = true; break; }
+        // Python: """ docstring check
+        if (trimmed.endsWith('"""') || trimmed.endsWith("'''")) { hasDoc = true; break; }
         break;
       }
 
@@ -1875,7 +1957,7 @@ export function toolDocCoverage(params) {
           line: i + 1,
           severity: "medium",
           label: "undocumented-export",
-          msg: `Exported "${m[1]}" has no JSDoc`,
+          msg: `Exported "${m[1]}" has no doc comment`,
         });
       }
     }
@@ -1956,7 +2038,7 @@ export function toolAiGuide(params) {
   }
 
   // ── Shared file list for key modules + entry points (single walkDir call) ──
-  const guideExtSet = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
+  const guideExtSet = _langRegistry?.allExtensions() ?? new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);
   const guideFiles = codeMapResult.error ? [] : walkDir(targetDir, guideExtSet, 3);
 
   // ── Synthesize: Key Modules (from code_map — files with most exports) ──
