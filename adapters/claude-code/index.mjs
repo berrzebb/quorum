@@ -18,7 +18,8 @@ import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus as c,
   findWatchFile, t, isHookEnabled, configMissing,
 } from "../../core/context.mjs";
-import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { readAuditStatus, AUDIT_STATUS, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { runParliamentIfEnabled } from "../../adapters/shared/parliament-runner.mjs";
 import { runParliamentIfEnabled } from "../../adapters/shared/parliament-runner.mjs";
 import * as bridge from "../../core/bridge.mjs";
 

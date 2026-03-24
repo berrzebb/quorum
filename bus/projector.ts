@@ -66,6 +66,28 @@ export class MarkdownProjector {
       ORDER BY timestamp DESC LIMIT 5
     `);
 
+    // Parliament views — read from events table
+    this.stmtParliamentSessions = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.session.digest'
+      ORDER BY timestamp DESC LIMIT 20
+    `);
+    this.stmtParliamentAmendments = db.prepare(`
+      SELECT event_type, payload, timestamp FROM events
+      WHERE event_type IN ('parliament.amendment.propose', 'parliament.amendment.vote', 'parliament.amendment.resolve')
+      ORDER BY timestamp DESC LIMIT 50
+    `);
+    this.stmtParliamentConvergence = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.convergence'
+      ORDER BY timestamp DESC LIMIT 10
+    `);
+    this.stmtParliamentCPS = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.cps.generated'
+      ORDER BY timestamp DESC LIMIT 5
+    `);
+
     this.stmtItemStates = db.prepare(`
       SELECT entity_id, to_state AS current_state, source, metadata, created_at
       FROM state_transitions st1
