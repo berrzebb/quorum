@@ -797,7 +797,7 @@ export class StateReader {
       const latestByCommittee = new Map<string, typeof convergenceEvents[0]>();
       for (const e of convergenceEvents) {
         const agenda = (e.payload.agendaId as string) ?? "";
-        if (!latestByCommittee.has(agenda)) latestByCommittee.set(agenda, e);
+        latestByCommittee.set(agenda, e);  // ASC order → last write = latest
       }
       empty.committees = COMMITTEES.map(c => {
         const e = latestByCommittee.get(c);

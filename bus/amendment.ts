@@ -200,6 +200,13 @@ export function resolveAmendment(
 export function getAmendments(store: EventStore): Amendment[] {
   const proposeEvents = store.query({ eventType: "parliament.amendment.propose" });
   const voteEvents = store.query({ eventType: "parliament.amendment.vote" });
+  const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" });
+
+  // Build resolve status map
+  const resolvedStatus = new Map<string, AmendmentStatus>();
+  for (const e of resolveEvents) {
+    resolvedStatus.set(e.payload.amendmentId as string, e.payload.status as AmendmentStatus);
+  }
 
   // Group votes by amendment
   const votesByAmendment = new Map<string, AmendmentVote[]>();
@@ -216,15 +223,18 @@ export function getAmendments(store: EventStore): Amendment[] {
     votesByAmendment.set(id, votes);
   }
 
-  return proposeEvents.map(e => ({
-    id: e.payload.amendmentId as string,
-    target: e.payload.target as AmendmentTarget,
-    change: e.payload.change as string,
-    sponsor: e.payload.sponsor as string,
-    sponsorRole: e.payload.sponsorRole as ParliamentRole,
-    justification: e.payload.justification as string,
-    status: (e.payload.status as AmendmentStatus) ?? "proposed",
-    votes: votesByAmendment.get(e.payload.amendmentId as string) ?? [],
-    proposedAt: e.timestamp,
-  }));
+  return proposeEvents.map(e => {
+    const id = e.payload.amendmentId as string;
+    return {
+      id,
+      target: e.payload.target as AmendmentTarget,
+      change: e.payload.change as string,
+      sponsor: e.payload.sponsor as string,
+      sponsorRole: e.payload.sponsorRole as ParliamentRole,
+      justification: e.payload.justification as string,
+      status: resolvedStatus.get(id) ?? "proposed",
+      votes: votesByAmendment.get(id) ?? [],
+      proposedAt: e.timestamp,
+    };
+  });
 }

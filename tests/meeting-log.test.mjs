@@ -38,7 +38,7 @@ describe("createMeetingLog", () => {
 
 describe("storeMeetingLog + getMeetingLogs", () => {
   let store;
-  beforeEach(() => { store = new EventStore(":memory:"); });
+  beforeEach(() => { store = new EventStore({ dbPath: ":memory:" }); });
 
   it("round-trips a meeting log through EventStore", () => {
     const log = createMeetingLog("afternoon", "definitions", {
@@ -70,7 +70,7 @@ describe("storeMeetingLog + getMeetingLogs", () => {
 
 describe("checkConvergence", () => {
   let store;
-  beforeEach(() => { store = new EventStore(":memory:"); });
+  beforeEach(() => { store = new EventStore({ dbPath: ":memory:" }); });
 
   it("not converged with fewer than 2 logs", () => {
     storeMeetingLog(store, createMeetingLog("morning", "arch", { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },

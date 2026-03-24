@@ -51,6 +51,14 @@ Read the reference guide before writing any document.
 
 **Interactive**: ask questions, present drafts, wait for approval. **Headless**: extract intent, auto-approve DRM, generate all, report. Note missing info as `[ASSUMPTION]`.
 
+## Phase 0: CPS Intake (Parliament Integration)
+
+Before capturing intent, check if a **Parliament CPS** exists. Read `.claude/parliament/cps-*.md` or call `quorum status`.
+
+If CPS exists: map CPS.Context→PRD §1, CPS.Problem→PRD §2 (gaps as goals), CPS.Solution→PRD §4 (builds as FRs). Skip Phase 1 if CPS covers full intent.
+
+If no CPS: Proceed to Phase 1.
+
 ## Phase 1: Capture Intent
 
 What problem? What does done look like? Who benefits? Scope boundary? Dependencies? Document language?
@@ -88,7 +96,7 @@ Run `blast_radius` before WB generation. Ratio > 0.1 = High/Critical. Levels: Lo
 
 ## Phase 5: DRM (Document Requirement Matrix)
 
-Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. Present DRM, confirm, then draft all `req` documents using references.
+Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. **Design Phase mandatory** for CPS-origin or 3+ WB tracks. **Design before WB** — naming conventions are binding law. See `skills/planner/references/design-phase.md`.
 
 ## Phase 5.5: FDE Failure Checklist
 

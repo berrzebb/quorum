@@ -313,11 +313,12 @@ function parseConvergeVerdict(raw: string): {
       },
       classifications: Array.isArray(parsed.classifications) ? parsed.classifications : [],
     };
-  } catch {
+  } catch (err) {
+    const hint = raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
     return {
       verdict: "changes_requested",
-      summary: "Failed to parse converge verdict",
-      codes: ["parse-error"],
+      summary: `Failed to parse converge verdict: ${err instanceof Error ? err.message : "unknown"}. Raw: ${hint}`,
+      codes: ["parse-error", "converge-verdict-malformed"],
       registers: { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
       classifications: [],
     };

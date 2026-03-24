@@ -29,6 +29,23 @@ Read the reference guide before writing any document.
 
 **Interactive**: ask questions, present drafts, wait for approval. **Headless**: extract intent, auto-approve DRM, generate all, report. Note missing info as `[ASSUMPTION]`.
 
+## Phase 0: CPS Intake (Parliament Integration)
+
+Before capturing intent, check if a **Parliament CPS** (Context-Problem-Solution) exists from prior deliberation sessions.
+
+**Check**: Read `.claude/parliament/cps-*.md` files, or call `quorum status` for CPS availability.
+
+If CPS exists:
+1. **CPS.Context → PRD §1** (Problem & Background): Use as-is. The parliament already established the context through multi-round deliberation.
+2. **CPS.Problem → PRD §2** (Goals & Success Metrics): Extract gap items as goals. Each gap becomes a measurable acceptance criterion.
+3. **CPS.Solution → PRD §4** (Tracks & Requirements): Build items become FR candidates. Buy items become dependency requirements.
+4. **CPS.Gaps → Phase 1.5 seed**: Pre-populate the MECE decomposition with gaps already identified by parliament's 5-classification.
+5. **Skip Phase 1** if CPS covers the full intent. Proceed directly to Phase 1.5 with CPS-derived actors/systems.
+
+If CPS does NOT exist: Proceed to Phase 1 as normal.
+
+In **headless mode**: Always check for CPS first. If found, use it as sole intent source without further prompting.
+
 ## Phase 1: Capture Intent
 
 What problem? What does done look like? Who benefits? Scope boundary? Dependencies? Document language?
@@ -71,6 +88,10 @@ Verify against existing plans: `execution-order.md`, `work-catalog.md`. Cross-re
 ## Phase 5: DRM (Document Requirement Matrix)
 
 Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. Present DRM, confirm, then draft all `req` documents using references.
+
+**Design Phase is mandatory** for tracks with CPS origin or 3+ WB items. DRM must include Design Phase row with `req` for: Spec (always for API tracks), Blueprint (always for 3+ modules), Domain Model (if persistence involved), Architecture (if infra decisions needed). See `references/design-phase.md`.
+
+**Design before WB** — Work Breakdowns must reference Design artifacts. Naming conventions in Blueprint are binding law for implementers.
 
 ## Phase 5.5: FDE Failure Checklist
 

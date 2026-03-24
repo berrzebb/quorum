@@ -156,10 +156,18 @@ export async function runParliamentSession(
     errors.push({ phase: "meeting-log", message: (err as Error).message });
   }
 
+  // Fetch logs once for Phase 3 + Phase 4 (avoids duplicate getMeetingLogs query)
+  let agendaLogs: MeetingLog[] = [];
+  try {
+    agendaLogs = getMeetingLogs(store, config.agendaId);
+  } catch (err) {
+    errors.push({ phase: "fetch-logs", message: (err as Error).message });
+  }
+
   // Phase 3: Check convergence + emit event
   let convergence: ConvergenceStatus | null = null;
   try {
-    convergence = checkConvergence(store, config.agendaId);
+    convergence = checkConvergence(store, config.agendaId, undefined, agendaLogs);
     store.append(createEvent("parliament.convergence", "generic", {
       agendaId: config.agendaId,
       converged: convergence.converged,
@@ -176,8 +184,7 @@ export async function runParliamentSession(
   let cps: CPS | null = null;
   if (convergence?.converged) {
     try {
-      const logs = getMeetingLogs(store, config.agendaId);
-      cps = generateCPS(logs);
+      cps = generateCPS(agendaLogs);
 
       // Persist CPS as event + KV for fast-path reads
       store.append(createEvent("parliament.cps.generated", "generic", {

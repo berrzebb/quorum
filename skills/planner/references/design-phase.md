@@ -6,8 +6,10 @@ After PRD confirmation and before Work Breakdown generation, produce 4 design ar
 
 ## When to Apply
 
-- **Always** for new product/feature tracks with 5+ WB items
-- **Selectively** for smaller tracks — at minimum produce Spec + Architecture
+- **Always** for tracks originating from Parliament CPS (CPS→Design is mandatory in the legislative flow)
+- **Always** for new product/feature tracks with 3+ WB items
+- **Minimum**: Spec + Architecture for any track with external API surface or persistence
+- Design artifacts are **laws** — they remove subjective implementation decisions. Skipping Design breaks the idempotency guarantee (`impl(A, law) = impl(B, law)`).
 
 ## Location
 

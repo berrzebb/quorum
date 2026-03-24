@@ -102,13 +102,15 @@ const COMMITTEE_PATTERNS: Record<StandingCommittee, RegExp> = {
   "research-questions": /\b(research|communicat|intent.classif|agent.cooperat|state.manage|workflow.visual|open.question)\b/i,
 };
 
+const COMMITTEE_ENTRIES = Object.entries(COMMITTEE_PATTERNS) as Array<[StandingCommittee, RegExp]>;
+
 /**
  * Route a topic to the appropriate standing committee(s) by keyword matching.
  * Returns multiple committees if topic spans concerns.
  */
 export function routeToCommittee(topic: string): StandingCommittee[] {
   const matches: StandingCommittee[] = [];
-  for (const [committee, pattern] of Object.entries(COMMITTEE_PATTERNS) as Array<[StandingCommittee, RegExp]>) {
+  for (const [committee, pattern] of COMMITTEE_ENTRIES) {
     if (pattern.test(topic)) {
       matches.push(committee);
     }
@@ -200,9 +202,10 @@ export function checkConvergence(
   store: EventStore,
   agendaId: string,
   config?: MeetingLogConfig,
+  prefetchedLogs?: MeetingLog[],
 ): ConvergenceStatus {
   const threshold = config?.convergenceThreshold ?? DEFAULT_CONVERGENCE_THRESHOLD;
-  const logs = getMeetingLogs(store, agendaId);
+  const logs = prefetchedLogs ?? getMeetingLogs(store, agendaId);
 
   if (logs.length < 2) {
     return { converged: false, stableRounds: 0, threshold, lastDelta: 1 };
