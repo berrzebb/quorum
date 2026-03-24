@@ -153,6 +153,36 @@ export async function run(args: string[]): Promise<void> {
     console.log(`  Event log:   \x1b[2mnone\x1b[0m`);
   }
 
+  // ── Parliament ─────────────────────────────
+  if (existsSync(dbPath)) {
+    try {
+      const { EventStore: ES } = await import("../../bus/store.js");
+      const store = new ES({ dbPath });
+      const sessions = store.query({ eventType: "parliament.session.digest" as any });
+      if (sessions.length > 0) {
+        console.log(`\n  \x1b[36mParliament\x1b[0m`);
+        console.log(`  Sessions:    ${sessions.length}`);
+
+        const last = sessions[sessions.length - 1]!;
+        const verdict = last.payload.verdictResult as string ?? "—";
+        const converged = last.payload.converged as boolean;
+        console.log(`  Last verdict: ${verdict} ${converged ? "\x1b[32m(converged)\x1b[0m" : ""}`);
+
+        // Check for pending amendments
+        const proposeEvents = store.query({ eventType: "parliament.amendment.propose" as any });
+        const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" as any });
+        const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
+        const pending = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
+        if (pending > 0) console.log(`  Amendments:  \x1b[33m${pending} pending\x1b[0m`);
+
+        // CPS available?
+        const cpsLatest = store.getKV("parliament.cps.latest");
+        if (cpsLatest) console.log(`  CPS:         \x1b[32mavailable\x1b[0m`);
+      }
+      store.close();
+    } catch { /* non-critical */ }
+  }
+
   console.log(`\n  \x1b[2mRun 'quorum daemon' for real-time TUI dashboard\x1b[0m\n`);
 }
 

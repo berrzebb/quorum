@@ -33,6 +33,9 @@ interface ParliamentArgs {
   judge?: string;
   testimony?: string;
   force?: boolean;
+  resume?: string;
+  history?: boolean;
+  detail?: string;
 }
 
 export function parseArgs(args: string[]): ParliamentArgs {
@@ -66,6 +69,15 @@ export function parseArgs(args: string[]): ParliamentArgs {
       case "--force":
       case "-f":
         result.force = true;
+        break;
+      case "--resume":
+        result.resume = args[++i];
+        break;
+      case "--history":
+        result.history = true;
+        break;
+      case "--detail":
+        result.detail = args[++i];
         break;
       default:
         if (!arg.startsWith("-")) positional.push(arg);
@@ -236,10 +248,27 @@ function printPhaseResult(result: SessionResult, round: number): void {
 
 // ── Main ─────────────────────────────────────
 
+// ── Checkpoint types ─────────────────────────
+
+interface SessionCheckpoint {
+  sessionId: string;
+  topic: string;
+  committee: string;
+  completedRounds: number;
+  totalRounds: number;
+  converged: boolean;
+  timestamp: number;
+}
+
 export async function run(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
 
-  if (!parsed.topic) {
+  // Handle --history (no topic required)
+  if (parsed.history) {
+    return showHistory(parsed.detail);
+  }
+
+  if (!parsed.topic && !parsed.resume) {
     showHelp();
     return;
   }
@@ -277,15 +306,44 @@ export async function run(args: string[]): Promise<void> {
   const sessionType = new Date().getHours() < 12 ? "morning" as const : "afternoon" as const;
   const parliamentCfg = cfg.parliament as Record<string, unknown> | undefined;
 
+  // Session ID for checkpoint (stable across rounds)
+  const sessionId = parsed.resume ?? `parliament-${committee}-${Date.now()}`;
+  let startRound = 1;
+
+  // Resume: load checkpoint and skip completed rounds
+  if (parsed.resume) {
+    const checkpoint = store.getKV(`parliament.checkpoint.${parsed.resume}`) as SessionCheckpoint | null;
+    if (checkpoint) {
+      startRound = checkpoint.completedRounds + 1;
+      console.log(`${C.cyan}Resuming session ${parsed.resume} from round ${startRound}${C.reset}`);
+      if (checkpoint.converged) {
+        console.log(`${C.green}Session already converged.${C.reset}`);
+        store.close();
+        return;
+      }
+      // Restore topic from checkpoint if not provided
+      if (!parsed.topic) parsed.topic = checkpoint.topic;
+    } else {
+      console.error(`${C.red}No checkpoint found for session: ${parsed.resume}${C.reset}`);
+      store.close();
+      process.exit(1);
+    }
+  }
+
+  // Print session ID on first run for future resume
+  if (!parsed.resume) {
+    console.log(`${C.dim}Session ID: ${sessionId} (use --resume to continue)${C.reset}\n`);
+  }
+
   // Run N rounds
-  for (let round = 1; round <= parsed.rounds; round++) {
+  for (let round = startRound; round <= parsed.rounds; round++) {
     printHeader(parsed.topic, committee, roles, round, parsed.rounds);
 
     const request: AuditRequest = {
       evidence: parsed.topic,
       prompt: buildDeliberationPrompt(parsed.topic, committee, round),
       files: [],
-      sessionId: `parliament-${Date.now()}`,
+      sessionId,
     };
 
     const sessionConfig: SessionConfig = {
@@ -302,8 +360,20 @@ export async function run(args: string[]): Promise<void> {
     const result = await runParliamentSession(store, request, sessionConfig);
     printPhaseResult(result, round);
 
+    // Checkpoint after each round
+    const converged = result.convergence?.converged ?? false;
+    store.setKV(`parliament.checkpoint.${sessionId}`, {
+      sessionId,
+      topic: parsed.topic,
+      committee,
+      completedRounds: round,
+      totalRounds: parsed.rounds,
+      converged,
+      timestamp: Date.now(),
+    } satisfies SessionCheckpoint);
+
     // If converged and CPS generated, persist to file + stop
-    if (result.convergence?.converged && result.cps) {
+    if (converged && result.cps) {
       writeCPSFile(result.cps, committee);
       if (round < parsed.rounds) {
         console.log(`\n${C.green}${C.bold}Converged at round ${round}/${parsed.rounds} — stopping early.${C.reset}`);
@@ -348,6 +418,64 @@ Consider:
 - Impact on existing systems
 
 Provide your honest assessment regardless of your assigned role.`;
+}
+
+// ── History ──────────────────────────────────
+
+function showHistory(detailId?: string): void {
+  const dbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
+  if (!existsSync(dbPath)) {
+    console.log(`${C.dim}No parliament sessions found.${C.reset}`);
+    return;
+  }
+
+  const store = new EventStore({ dbPath });
+  const events = store.query({ eventType: "parliament.session.digest" as import("../../bus/events.js").EventType });
+
+  if (events.length === 0) {
+    console.log(`${C.dim}No parliament sessions found.${C.reset}`);
+    store.close();
+    return;
+  }
+
+  if (detailId) {
+    // Show detail for a specific session
+    const match = events.find(e =>
+      (e.payload.sessionId as string)?.includes(detailId) ||
+      (e.payload.agendaId as string)?.includes(detailId),
+    );
+    if (!match) {
+      console.log(`${C.red}Session not found: ${detailId}${C.reset}`);
+    } else {
+      const p = match.payload;
+      console.log(`\n${C.cyan}${C.bold}Session Detail${C.reset}`);
+      console.log(`  Date:        ${new Date(match.timestamp).toISOString().slice(0, 19)}`);
+      console.log(`  Agenda:      ${p.agendaId ?? "—"}`);
+      console.log(`  Type:        ${p.sessionType ?? "—"}`);
+      console.log(`  Verdict:     ${p.verdictResult ?? "—"}`);
+      console.log(`  Converged:   ${p.converged ?? false}`);
+      console.log(`  Amendments:  ${p.amendmentsResolved ?? 0} resolved`);
+      console.log(`  Duration:    ${p.duration ?? "—"}ms`);
+      if (p.summary) console.log(`  Summary:     ${p.summary}`);
+    }
+    store.close();
+    return;
+  }
+
+  // Table listing
+  console.log(`\n${C.cyan}${C.bold}Parliament Session History${C.reset} (${events.length} sessions)\n`);
+  console.log(`${"Date".padEnd(20)} ${"Committee".padEnd(20)} ${"Verdict".padEnd(18)} ${"Conv".padEnd(6)}`);
+  console.log(`${C.dim}${"─".repeat(65)}${C.reset}`);
+
+  for (const e of events.slice(-20).reverse()) {
+    const date = new Date(e.timestamp).toISOString().slice(0, 16).replace("T", " ");
+    const agenda = String(e.payload.agendaId ?? "—").padEnd(20);
+    const verdict = String(e.payload.verdictResult ?? "—").padEnd(18);
+    const conv = (e.payload.converged as boolean) ? `${C.green}✓${C.reset}` : `${C.dim}○${C.reset}`;
+    console.log(`${date}   ${agenda} ${verdict} ${conv}`);
+  }
+
+  store.close();
 }
 
 // ── CPS file output ─────────────────────────

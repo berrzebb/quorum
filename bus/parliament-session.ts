@@ -28,6 +28,7 @@ import {
   type CPS,
 } from "./meeting-log.js";
 import {
+  proposeAmendment,
   resolveAmendment,
   getAmendments,
   type AmendmentResolution,
@@ -58,6 +59,8 @@ export interface SessionConfig {
   implementerTestimony?: string;
   /** Confluence verification input (optional). */
   confluenceInput?: Partial<ConfluenceInput>;
+  /** Max auto-proposed amendments from gap classifications (default: 5). */
+  maxAutoAmendments?: number;
 }
 
 export interface SessionResult {
@@ -71,6 +74,8 @@ export interface SessionResult {
   cps: CPS | null;
   /** Amendment resolutions processed. */
   amendments: AmendmentResolution[];
+  /** Number of amendments auto-proposed from gap classifications. */
+  autoProposedAmendments: number;
   /** Confluence verification result. */
   confluence: ConfluenceResult | null;
   /** Normal form convergence report. */
@@ -172,6 +177,25 @@ export async function runParliamentSession(
     }
   }
 
+  // Phase 4.5: Auto-propose amendments from gap classifications
+  let autoProposedAmendments = 0;
+  try {
+    const maxAuto = config.maxAutoAmendments ?? 5;
+    const gaps = (verdict?.classifications ?? []).filter(c => c.classification === "gap");
+    for (const gap of gaps.slice(0, maxAuto)) {
+      proposeAmendment(store, {
+        target: "design",
+        change: gap.action || gap.item,
+        sponsor: "judge",
+        sponsorRole: "judge",
+        justification: `Gap identified in deliberation: ${gap.item}`,
+      });
+      autoProposedAmendments++;
+    }
+  } catch (err) {
+    errors.push({ phase: "auto-amendment", message: (err as Error).message });
+  }
+
   // Phase 5: Resolve pending amendments
   const amendments: AmendmentResolution[] = [];
   try {
@@ -193,6 +217,22 @@ export async function runParliamentSession(
       cps: cps ?? undefined,
     };
     confluence = verifyConfluence(input);
+
+    // Auto-propose amendments from confluence suggestions
+    const maxAuto = config.maxAutoAmendments ?? 5;
+    const remainingSlots = maxAuto - autoProposedAmendments;
+    if (confluence.suggestedAmendments.length > 0 && remainingSlots > 0) {
+      for (const sa of confluence.suggestedAmendments.slice(0, remainingSlots)) {
+        proposeAmendment(store, {
+          target: sa.target,
+          change: sa.change,
+          sponsor: "confluence",
+          sponsorRole: "judge",
+          justification: `Confluence ${sa.source} mismatch: ${sa.justification}`,
+        });
+        autoProposedAmendments++;
+      }
+    }
   } catch (err) {
     errors.push({ phase: "confluence", message: (err as Error).message });
   }
@@ -223,6 +263,7 @@ export async function runParliamentSession(
     convergence,
     cps,
     amendments,
+    autoProposedAmendments,
     confluence,
     normalForm,
     duration: Date.now() - start,
