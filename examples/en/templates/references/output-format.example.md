@@ -15,7 +15,7 @@ This defines the format the auditor uses when outputting the verdict as response
 ## Timestamp
 
 - Audit completion timestamp is **added automatically by the system** — do not write it manually.
-- Format: `> Audit completed: YYYY-MM-DD HH:MM` (auto-appended to bottom of verdict.md)
+- Format: `> Audit completed: YYYY-MM-DD HH:MM` (recorded in SQLite EventStore)
 
 ## Required Sections (keep only these)
 

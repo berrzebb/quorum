@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { AUDIT_VERDICT } from "../../bus/events.js";
 
 export async function run(args: string[]): Promise<void> {
   // --attach: connect to running daemon TUI session via tmux/psmux
@@ -22,31 +23,29 @@ export async function run(args: string[]): Promise<void> {
   console.log("\n\x1b[36mquorum status\x1b[0m\n");
 
   // ── Gates ───────────────────────────────────
-  // Audit gate: check audit-status.json marker (ProcessMux manages agent coordination)
-  const auditStatusPath = resolve(repoRoot, ".claude", "audit-status.json");
+  // Audit gate: read audit-status.json marker
+  const GATE_LABELS: Record<string, string> = {
+    [AUDIT_VERDICT.CHANGES_REQUESTED]: "\x1b[33m● PENDING\x1b[0m",
+    [AUDIT_VERDICT.APPROVED]: "\x1b[32m● APPROVED\x1b[0m",
+    [AUDIT_VERDICT.INFRA_FAILURE]: "\x1b[31m● INFRA_FAILURE\x1b[0m",
+  };
   let auditGateLabel = "\x1b[32m● OPEN\x1b[0m";
-  if (existsSync(auditStatusPath)) {
-    try {
-      const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
-      if (status.status === "changes_requested") {
-        auditGateLabel = "\x1b[33m● PENDING\x1b[0m";
-      } else if (status.status === "approved") {
-        auditGateLabel = "\x1b[32m● APPROVED\x1b[0m";
-      } else if (status.status === "infra_failure") {
-        auditGateLabel = "\x1b[31m● INFRA_FAILURE\x1b[0m";
-      }
-    } catch { /* skip */ }
-  }
+  try {
+    const status = JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8")) as { status?: string };
+    auditGateLabel = GATE_LABELS[status.status ?? ""] ?? auditGateLabel;
+  } catch { /* no status file — default to OPEN */ }
   console.log(`  Audit gate:  ${auditGateLabel}`);
 
-  const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
-  const retroPending = existsSync(markerPath);
-  console.log(`  Retro gate:  ${retroPending ? "\x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m" : "\x1b[32m● OPEN\x1b[0m"}`);
-  if (retroPending) {
-    try {
-      const marker = JSON.parse(readFileSync(markerPath, "utf8"));
+  try {
+    const marker = JSON.parse(readFileSync(resolve(repoRoot, ".session-state", "retro-marker.json"), "utf8")) as { retro_pending?: boolean; session_id?: string; rx_id?: string };
+    if (marker.retro_pending) {
+      console.log(`  Retro gate:  \x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m`);
       console.log(`               session: ${marker.session_id ?? "?"}, rx: ${marker.rx_id ?? "?"}`);
-    } catch { /* skip */ }
+    } else {
+      console.log(`  Retro gate:  \x1b[32m● OPEN\x1b[0m`);
+    }
+  } catch {
+    console.log(`  Retro gate:  \x1b[32m● OPEN\x1b[0m`);
   }
 
   // ── Evidence items ──────────────────────────
@@ -79,7 +78,8 @@ export async function run(args: string[]): Promise<void> {
   }
 
   // Check main repo + all worktrees for evidence
-  const evidencePaths = findAllEvidence(repoRoot, watchFile);
+  const worktrees = getActiveWorktrees(repoRoot);
+  const evidencePaths = findAllEvidence(repoRoot, watchFile, worktrees);
 
   if (evidencePaths.length > 0) {
     console.log(`  Evidence:`);
@@ -105,7 +105,6 @@ export async function run(args: string[]): Promise<void> {
   }
 
   // ── Active worktrees ────────────────────────
-  const worktrees = getActiveWorktrees(repoRoot);
   if (worktrees.length > 0) {
     console.log(`  Worktrees:   ${worktrees.length} active`);
     for (const wt of worktrees) {
@@ -157,6 +156,34 @@ export async function run(args: string[]): Promise<void> {
     console.log(`  Event log:   \x1b[2mnone\x1b[0m`);
   }
 
+  // ── Parliament ─────────────────────────────
+  if (existsSync(dbPath)) {
+    try {
+      const { EventStore: ES } = await import("../../bus/store.js");
+      const store = new ES({ dbPath });
+      const sessions = store.query({ eventType: "parliament.session.digest" });
+      if (sessions.length > 0) {
+        console.log(`\n  \x1b[36mParliament\x1b[0m`);
+        console.log(`  Sessions:    ${sessions.length}`);
+
+        const last = sessions[sessions.length - 1]!;
+        const verdict = last.payload.verdictResult as string ?? "—";
+        const converged = last.payload.converged as boolean;
+        console.log(`  Last verdict: ${verdict} ${converged ? "\x1b[32m(converged)\x1b[0m" : ""}`);
+
+        // Check for pending amendments
+        const { getPendingAmendmentCount } = await import("../../bus/amendment.js");
+        const pending = getPendingAmendmentCount(store);
+        if (pending > 0) console.log(`  Amendments:  \x1b[33m${pending} pending\x1b[0m`);
+
+        // CPS available?
+        const cpsLatest = store.getKV("parliament.cps.latest");
+        if (cpsLatest) console.log(`  CPS:         \x1b[32mavailable\x1b[0m`);
+      }
+      store.close();
+    } catch { /* non-critical */ }
+  }
+
   console.log(`\n  \x1b[2mRun 'quorum daemon' for real-time TUI dashboard\x1b[0m\n`);
 }
 
@@ -173,7 +200,7 @@ interface EvidenceItem {
   status: "pending" | "approved" | "rejected" | "infra_failure";
 }
 
-function findAllEvidence(repoRoot: string, watchFile: string): EvidencePath[] {
+function findAllEvidence(repoRoot: string, watchFile: string, worktrees: Worktree[]): EvidencePath[] {
   const results: EvidencePath[] = [];
 
   // Main repo
@@ -183,7 +210,6 @@ function findAllEvidence(repoRoot: string, watchFile: string): EvidencePath[] {
   }
 
   // Worktrees
-  const worktrees = getActiveWorktrees(repoRoot);
   for (const wt of worktrees) {
     const wtPath = resolve(wt.path, watchFile);
     if (existsSync(wtPath)) {

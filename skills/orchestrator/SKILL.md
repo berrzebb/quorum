@@ -1,9 +1,6 @@
 ---
 name: quorum:orchestrator
-description: "Session orchestrator for quorum — reads handoff, picks unblocked tasks, distributes to parallel workers, tracks agent assignments, manages correction cycles. Use when starting a work session, distributing implementation work, reviewing completed output, or managing multi-agent workflows. Triggers on 'start session', 'distribute tasks', 'what's next', 'assign work', '세션 시작', 'orchestrate'."
-argument-hint: "[optional: task-id to assign]"
-disable-model-invocation: true
-allowed-tools: Read, Grep, Glob, Bash(node *), Bash(git *)
+description: "Session orchestrator — reads handoff, picks unblocked tasks, distributes to parallel workers, tracks agent assignments, manages correction cycles."
 ---
 
 # Orchestrator Protocol
@@ -26,25 +23,16 @@ Read the corresponding reference when entering each phase:
 
 | Context | Detection | Behavior |
 |---------|-----------|----------|
-| **Interactive** | Main session, user present | Present options → wait for selection → execute |
-| **Headless** | Subagent, no human | Auto-select unblocked tasks → execute → report |
+| **Interactive** | Main session, user present | Present options, wait for selection, execute |
+| **Headless** | Subagent, no human | Auto-select unblocked tasks, execute, report |
 
 **In headless mode, NEVER ask questions.** Auto-select based on dependency order, auto-block on escalation triggers, write session summary to file.
 
-## Setup
-
-Read config: `${CLAUDE_PLUGIN_ROOT}/core/config.json`
-- `consensus.watch_file` → evidence file path
-- `consensus.planning_dirs` → design document directories
-- `plugin.handoff_file` → session handoff path (default: `.claude/session-handoff.md`)
-
-Note: verdicts are in **SQLite** — query via `audit_history` tool or `quorum status`, not from markdown files.
-
 ## Session Start
 
-1. Review auto-injected context from `session-start.mjs`
-2. Parse handoff → build dependency graph → identify **all unblocked tasks**
-3. Check for active agents (tasks with `agent_id`) → present resumption options
+1. Review auto-injected context from session start
+2. Parse handoff -> build dependency graph -> identify **all unblocked tasks**
+3. Check for active agents (tasks with `agent_id`) -> present resumption options
 4. Present available tasks with dependencies, blocked status, and agent assignments
 5. Wait for user selection (interactive) or auto-select (headless)
 
@@ -63,90 +51,51 @@ Track agent assignments in the **handoff file**:
 ```
 
 Registry rules:
-1. **On spawn**: Record `agentId`, `worktreePath`, `worktreeBranch` in handoff
-2. **Correction**: SendMessage to existing `agent_id` — never spawn new agent
+1. **On spawn**: Record agent ID, worktree path, worktree branch in handoff
+2. **Correction**: Message existing agent — never spawn new agent
 3. **On completion**: Update status to `done`, keep agent fields
-4. **On restart**: Attempt `SendMessage` to resume `in-progress` tasks
+4. **On restart**: Attempt to resume `in-progress` tasks
 
 ## Core Loop
 
 ```
 Session Start
-    ↓
-Evaluate Tier → read references/tiers.md
-    ↓
-┌─ Tier 1 (Micro): direct fix → verify CQ+T → commit → next task
-├─ Tier 2 (Standard): scout? → worktree → audit cycle → retro → merge
-└─ Tier 3 (Complex): mandatory scout → worktree → full audit → post-merge regression → retro
-    ↓
+    |
+Evaluate Tier -> read references/tiers.md
+    |
++-- Tier 1 (Micro): direct fix -> verify CQ+T -> commit -> next task
++-- Tier 2 (Standard): scout? -> worktree -> audit cycle -> retro -> merge
++-- Tier 3 (Complex): mandatory scout -> worktree -> full audit -> post-merge regression -> retro
+    |
 Result Verification
-  ├─ [agree_tag] → Retro & Merge → read references/lifecycle.md
-  └─ [pending_tag] → Correction → read references/correction.md → loop
-    ↓
-Write Handoff → next task → loop
+  +-- [agree_tag] -> Retro & Merge -> read references/lifecycle.md
+  +-- [pending_tag] -> Correction -> read references/correction.md -> loop
+    |
+Write Handoff -> next task -> loop
 ```
 
 ## Task Distribution
 
 1. Extract from handoff: task ID, status, depends_on, blocks
-2. Gather context files:
-   - Done criteria: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/done-criteria.md`
-   - Evidence format: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/evidence-format.md`
-3. **Pre-spawn analysis** (for Tier 2/3 tasks):
-   ```bash
-   # Blast radius — estimate task impact before spawning
-   node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs blast_radius --path . --changed "<task-files>" --json
-   # Quality baseline — current state for comparison after implementation
-   node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern all --json
-   ```
+2. Gather context files (done criteria, evidence format)
+3. **Pre-spawn analysis** (for Tier 2/3): run `quorum tool blast_radius` and `quorum tool audit_scan` to assess impact
 4. Compose worker prompt with task context + scout blueprint (if available) + blast radius data
-5. Spawn implementer: `subagent_type: "quorum:implementer"`, `isolation: "worktree"`, `run_in_background: true`
-6. Record agent info in handoff, update status: `not-started` → `in-progress`
+5. Spawn implementer with worktree isolation, run in background
+6. Record agent info in handoff, update status: `not-started` -> `in-progress`
 7. **Continue working** — do not wait
-
-## Available Analysis Tools
-
-The orchestrator can use any of the 20 analysis tools for pre-spawn assessment and post-completion verification:
-
-| Category | Tools |
-|----------|-------|
-| Structure | `code_map`, `dependency_graph`, `blast_radius`, `act_analyze` |
-| Quality | `audit_scan`, `coverage_map`, `perf_scan`, `observability_check` |
-| Domain | `a11y_scan`, `compat_check`, `i18n_validate`, `license_scan`, `infra_scan`, `doc_coverage` |
-| RTM | `rtm_parse`, `rtm_merge` |
-| Audit | `audit_history` |
-| Guide | `ai_guide` |
-
-All tools: `node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs <tool_name> --json`
 
 ## Result Verification
 
 When worker completes:
 1. Read worker's **worktree** watch_file (not main repo)
-2. Query verdict from SQLite: `node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary --json`
-3. `[agree_tag]` → proceed to Retro & Merge (read `references/lifecycle.md`)
-4. `[pending_tag]` → Correction Cycle (read `references/correction.md`)
-
-## Planning
-
-When a task requires new track definition:
-1. Invoke `/quorum:planner` with the requirement
-2. Review planner output before proceeding
-
-## Dependency Resolution
-
-Before spawning, verify:
-1. All `depends_on` completed
-2. Required BE contracts exist (for FE tasks)
-3. Required infra in place
-4. **Scope does not overlap** with active agents' tasks
-
-Blocked → skip → select next unblocked.
+2. Query verdict: `quorum tool audit_history --summary --json`
+3. `[agree_tag]` -> proceed to Retro & Merge (read `references/lifecycle.md`)
+4. `[pending_tag]` -> Correction Cycle (read `references/correction.md`)
 
 ## Anti-Patterns
 
 - Do NOT implement code yourself — spawn workers
-- Do NOT spawn new agent for corrections — SendMessage to existing `agent_id`
+- Do NOT spawn new agent for corrections — message existing agent
 - Do NOT declare track "done" without pre-close scout (see `references/distribution.md`)
 - Do NOT hold worker context in your window — read from files
 - Do NOT distribute overlapping scopes in parallel

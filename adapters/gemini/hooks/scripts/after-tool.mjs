@@ -13,13 +13,8 @@ import { spawn } from "node:child_process";
 
 import { createHookContext, createDebugLogger, readStdinJson } from "../../../shared/hook-io.mjs";
 import { extractTags } from "../../../shared/config-resolver.mjs";
-import {
-  validateEvidenceFormat,
-  parseChangedFiles,
-  buildTriggerContext,
-  hasPlanDocuments,
-  isPlanningFile,
-} from "../../../shared/trigger-runner.mjs";
+import { evaluateAuditTrigger } from "../../../shared/audit-trigger.mjs";
+import { validateEvidenceFormat, isPlanningFile } from "../../../shared/trigger-runner.mjs";
 
 const { ADAPTER_DIR, REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);
 if (configMissing) process.exit(0);
@@ -49,10 +44,10 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
   if (errors.length > 0) {
     const errorList = errors.map((e) => `  • ${e}`).join("\n");
     // Gemini protocol: JSON on stdout, diagnostics on stderr
-    process.stderr.write(`[quorum] 증거 형식 불완전:\n${errorList}\n`);
+    process.stderr.write(`[quorum] Evidence format incomplete:\n${errorList}\n`);
     process.stdout.write(JSON.stringify({
       decision: "deny",
-      reason: `증거 형식 불완전: ${errors[0]}`,
+      reason: `Evidence format incomplete: ${errors[0]}`,
     }));
     log(`FORMAT_INCOMPLETE: ${errors.length} errors`);
     process.exit(2);
@@ -60,91 +55,31 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
 
   if (warnings.length > 0) {
     const warnList = warnings.map((w) => `  ⚠ ${w}`).join("\n");
-    process.stderr.write(`[quorum] 간이 감사 경고 (${warnings.length}건):\n${warnList}\n`);
+    process.stderr.write(`[quorum] Quick audit warnings (${warnings.length}):\n${warnList}\n`);
   }
 
   // ── Bridge: evaluate trigger ──
-  let bridge;
-  try {
-    bridge = await import("../../../../core/bridge.mjs");
-    await bridge.init(REPO_ROOT);
-    // Initialize HookRunner from config + HOOK.md
-    await bridge.initHookRunner(REPO_ROOT, cfg.hooks);
-  } catch (err) {
-    log(`BRIDGE_INIT_FAIL: ${err.message}`);
-    bridge = null;
+  const { triggerResult, spawnAllowed, denyReason } = await evaluateAuditTrigger({
+    repoRoot: REPO_ROOT, cfg, content, watchPath, source: "gemini", log,
+  });
+
+  if (denyReason) {
+    console.log(`[quorum] Audit blocked by hook: ${denyReason}`);
+    process.exit(0);
   }
 
-  if (bridge) {
-    // Fire pre-audit hooks — user can deny to block audit
-    const preGate = await bridge.checkHookGate("audit.submit", {
-      cwd: REPO_ROOT, metadata: { provider: "gemini", watchFile: watchPath },
-    });
-    if (!preGate.allowed) {
-      log(`HOOK_DENY: audit.submit blocked — ${preGate.reason}`);
-      console.log(`[quorum] Audit blocked by hook: ${preGate.reason}`);
-      bridge.close();
-      process.exit(0);
-    }
-    const changedFiles = parseChangedFiles(content);
-    const changedFileCount = changedFiles.length;
-
-    // Run domain detection + blast radius in parallel
-    const [detectionResult, blastResult] = await Promise.all([
-      bridge.detectDomains(changedFiles, content).catch(() => null),
-      changedFiles.length > 0
-        ? bridge.computeBlastRadius(changedFiles).catch(() => null)
-        : null,
-    ]);
-    const blastRadius = blastResult?.ratio;
-    const priorRejections = (bridge.queryEvents?.({ eventType: "audit.verdict" }) ?? [])
-      .filter((e) => e.payload?.verdict === "changes_requested").length;
-    const hasPlanDoc = hasPlanDocuments(REPO_ROOT);
-
-    const triggerCtx = buildTriggerContext({
-      content,
-      changedFiles,
-      changedFileCount,
-      detectionResult,
-      priorRejections,
-      hasPlanDoc,
-      blastRadius,
-    });
-
-    const triggerResult = bridge.evaluateTrigger(triggerCtx);
-    if (triggerResult) {
-      log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
-      bridge.emitEvent("audit.submit", "gemini", {
-        file: watchPath,
-        tier: triggerResult.tier,
-        mode: triggerResult.mode,
-        score: triggerResult.score,
-        reasons: triggerResult.reasons,
-      });
-
-      const minTier = cfg.experiment?.minimum_tier ?? 0;
-      if (triggerResult.mode === "skip" && minTier < 2) {
-        log("SKIP: T1 micro change");
-        process.stdout.write(JSON.stringify({
-          hookSpecificOutput: {
-            additionalContext: `[quorum] T1 micro change (score: ${triggerResult.score.toFixed(2)}) — audit skipped.`,
-          },
-        }));
-        bridge.close();
-        process.exit(0);
-      }
-    }
-
-    // Pre-spawn hook gate BEFORE close (close nulls _hookRunner)
-    const spawnGate = await bridge.checkHookGate("audit.spawn", {
-      cwd: REPO_ROOT, metadata: { provider: "gemini", watchFile: watchPath },
-    });
-    bridge.close();
-    if (!spawnGate.allowed) {
-      log(`HOOK_DENY: audit.spawn blocked — ${spawnGate.reason}`);
-      process.exit(0);
-    }
+  const minTier = cfg.experiment?.minimum_tier ?? 0;
+  if (triggerResult?.mode === "skip" && minTier < 2) {
+    log("SKIP: T1 micro change");
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        additionalContext: `[quorum] T1 micro change (score: ${triggerResult.score.toFixed(2)}) — audit skipped.`,
+      },
+    }));
+    process.exit(0);
   }
+
+  if (!spawnAllowed) process.exit(0);
 
   // ── Spawn audit process ──
   const auditScript = resolve(REPO_ROOT, "core", "audit.mjs");
@@ -168,17 +103,17 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
       // Gemini protocol: JSON on stdout
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
-          additionalContext: `[quorum] 감사 시작 (PID ${child.pid}) — ${triggerTag} 증거가 제출되었습니다.`,
+          additionalContext: `[quorum] Audit started (PID ${child.pid}) — ${triggerTag} evidence submitted.`,
         },
       }));
     } catch (err) {
       log(`SPAWN_ERROR: ${err.message}`);
-      process.stderr.write("[quorum] 감사 프로세스 시작 실패\n");
+      process.stderr.write("[quorum] Audit process spawn failed\n");
     }
   } else {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
-        additionalContext: `[quorum] ${triggerTag} 증거가 제출되었습니다. 수동 감사: quorum audit`,
+        additionalContext: `[quorum] ${triggerTag} evidence submitted. Manual audit: quorum audit`,
       },
     }));
   }

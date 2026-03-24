@@ -6,9 +6,12 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 export async function run(args: string[]): Promise<void> {
   const branch = args[0];
+  const force = args.includes("--force");
 
   if (!branch) {
     console.log(`
@@ -27,6 +30,26 @@ export async function run(args: string[]): Promise<void> {
   const target = targetIdx >= 0 ? args[targetIdx + 1] ?? "main" : "main";
 
   console.log(`\n\x1b[36mquorum merge\x1b[0m ${branch} → ${target}\n`);
+
+  // Parliament enforcement gates (skip with --force)
+  if (!force) {
+    const dbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
+    if (existsSync(dbPath)) {
+      try {
+        // @ts-expect-error MJS bridge has no type declarations
+        const bridge = await import("../../core/bridge.mjs");
+        await bridge.init(process.cwd());
+        const gate = bridge.checkParliamentGates();
+        if (!gate.allowed) {
+          console.log(`  \x1b[31m✗ Parliament gate blocked:\x1b[0m ${gate.reason}`);
+          console.log(`  \x1b[2mUse --force to bypass\x1b[0m\n`);
+          bridge.close();
+          process.exit(1);
+        }
+        bridge.close();
+      } catch { /* fail-open */ }
+    }
+  }
 
   // Check if branch exists
   const check = spawnSync("git", ["rev-parse", "--verify", branch], {

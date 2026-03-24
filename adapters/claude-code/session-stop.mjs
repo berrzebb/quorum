@@ -64,7 +64,7 @@ if (existsSync(resolve(clDir, ".git"))) {
 }
 
 // 3. Main repo: stage session artifacts only
-// handoffFile은 메모리 동기화(handoff-writer)로 관리 — git 커밋 불필요
+// handoffFile is managed by memory sync (handoff-writer) — no git commit needed
 const artifacts = [
   ".claude/CLAUDE.md",
 ];

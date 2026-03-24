@@ -17,6 +17,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
 
+type Bridge = Record<string, Function>;
+
+async function loadBridge(repoRoot: string): Promise<Bridge | null> {
+  try {
+    const url = pathToFileURL(resolve(repoRoot, "core", "bridge.mjs")).href;
+    const bridge: Bridge = await import(url);
+    await bridge.init(repoRoot);
+    return bridge;
+  } catch {
+    return null;
+  }
+}
+
 export async function run(args: string[]): Promise<void> {
   const repoRoot = process.cwd();
   const subcommand = args[0] ?? "start";
@@ -24,6 +37,12 @@ export async function run(args: string[]): Promise<void> {
   switch (subcommand) {
     case "start":
       await startOrchestration(repoRoot, args.slice(1));
+      break;
+    case "plan":
+      await interactivePlanner(repoRoot, args.slice(1));
+      break;
+    case "run":
+      await runImplementationLoop(repoRoot, args.slice(1));
       break;
     case "assign":
       await assignTrack(repoRoot, args[1], args.slice(2));
@@ -88,13 +107,7 @@ async function orchestrateTrack(
 ): Promise<void> {
   console.log(`\n  \x1b[1mOrchestrating: ${track.name}\x1b[0m (${track.items} items)\n`);
 
-  const toURL = (p: string) => pathToFileURL(p).href;
-  let bridge: Record<string, Function> | null = null;
-
-  try {
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* bridge non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // 1. Parse work breakdown → WorkItem[]
   const workItems = parseWorkBreakdown(track.path);
@@ -141,7 +154,7 @@ async function orchestrateTrack(
   // 3. Emit orchestration event
   if (bridge?.emitEvent) {
     try {
-      bridge.emitEvent("track.create", "claude-code", {
+      bridge.emitEvent("track.create", "generic", {
         trackId: track.name,
         total: track.items,
         completed: 0,
@@ -174,12 +187,7 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
   const tracks = findTracks(repoRoot);
   const track = tracks.find((t) => t.name === trackName);
 
-  let bridge: Record<string, Function> | null = null;
-  try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // Claim target files for this agent
   if (bridge?.claimFiles && track) {
@@ -202,7 +210,7 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
 
   // Emit assignment event
   if (bridge?.emitEvent) {
-    bridge.emitEvent("agent.spawn", "claude-code", {
+    bridge.emitEvent("agent.spawn", "generic", {
       agentId: agentName,
       role: "implementer",
       trackId: trackName,
@@ -220,12 +228,7 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
 async function showProgress(repoRoot: string): Promise<void> {
   console.log("\n\x1b[36mquorum orchestrate progress\x1b[0m\n");
 
-  let bridge: Record<string, Function> | null = null;
-  try {
-    const toURL = (p: string) => pathToFileURL(p).href;
-    bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
-    await bridge!.init(repoRoot);
-  } catch { /* non-critical */ }
+  let bridge = await loadBridge(repoRoot);
 
   // Show active claims
   if (bridge?.getClaims) {
@@ -382,6 +385,497 @@ function parseWorkBreakdown(wbPath: string): WorkItem[] {
   return items;
 }
 
+// ── Implementation Loop ─────────────────────
+
+async function runImplementationLoop(repoRoot: string, args: string[]): Promise<void> {
+  const trackName = args[0];
+  const provider = args.includes("--provider") ? args[args.indexOf("--provider") + 1] ?? "claude" : "claude";
+  const maxRetries = 3;
+
+  if (!trackName) {
+    console.log("  Usage: quorum orchestrate run <track> [--provider claude|codex|gemini]\n");
+    return;
+  }
+
+  console.log(`\n\x1b[36mquorum orchestrate run\x1b[0m — implementation loop\n`);
+  console.log(`  Track:    ${trackName}`);
+  console.log(`  Provider: ${provider}\n`);
+
+  let tracks = findTracks(repoRoot);
+  let track = tracks.find(t => t.name === trackName);
+
+  // Loop 1: If no track/WBs exist, auto-invoke planner from CPS
+  if (!track || parseWorkBreakdown(track.path).length === 0) {
+    const generated = await autoGenerateWBs(repoRoot, trackName, provider);
+    if (!generated) {
+      console.log(`  \x1b[31mNo WBs for '${trackName}' and auto-generation failed.\x1b[0m`);
+      console.log(`  Run planner manually or check CPS: quorum parliament --history\n`);
+      return;
+    }
+    // Re-scan after generation
+    tracks = findTracks(repoRoot);
+    track = tracks.find(t => t.name === trackName);
+    if (!track) {
+      console.log(`  \x1b[31mTrack still not found after planner.\x1b[0m\n`);
+      return;
+    }
+  }
+
+  const workItems = parseWorkBreakdown(track.path);
+  if (workItems.length === 0) {
+    console.log("  \x1b[33mNo parseable work items after planning.\x1b[0m\n");
+    return;
+  }
+
+  // Init bridge
+  let bridge = await loadBridge(repoRoot);
+
+  // Parliament gates
+  if (bridge?.checkParliamentGates) {
+    const gate = bridge.checkParliamentGates();
+    if (!gate.allowed) {
+      console.log(`  \x1b[31mParliament gate:\x1b[0m ${gate.reason}\n`);
+      if (bridge?.close) bridge.close();
+      return;
+    }
+  }
+
+  // Execution groups (dependency-aware)
+  let groups: Array<{ items: WorkItem[] }> = [];
+  if (bridge?.selectExecutionMode) {
+    const sel = bridge.selectExecutionMode(workItems);
+    if (sel?.plan?.groups) {
+      groups = sel.plan.groups.map((g: { items: WorkItem[] }) => ({ items: g.items }));
+      console.log(`  Mode: ${sel.mode}, ${groups.length} group(s)\n`);
+    }
+  }
+  if (groups.length === 0) groups = workItems.map(i => ({ items: [i] }));
+
+  // Init ProcessMux
+  const toURL = (p: string) => pathToFileURL(p).href;
+  let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux>;
+  try {
+    const muxMod = await import(toURL(resolve(DIST, "bus", "mux.js")));
+    mux = new muxMod.ProcessMux();
+  } catch {
+    console.log("  \x1b[31mProcessMux unavailable. Run: npm run build\x1b[0m\n");
+    if (bridge?.close) bridge.close();
+    return;
+  }
+
+  console.log(`  Mux: ${mux.getBackend()}\n${"═".repeat(60)}\n`);
+
+  let completedWBs = 0;
+  const totalWBs = workItems.length;
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi]!;
+    console.log(`  \x1b[1mGroup ${gi + 1}/${groups.length}\x1b[0m (${group.items.length} items)\n`);
+
+    const active: Array<{ item: WorkItem; sessionId: string; retries: number }> = [];
+
+    // Spawn agents for group
+    for (const item of group.items) {
+      if (bridge?.claimFiles && item.targetFiles.length > 0) {
+        bridge.claimFiles(`impl-${item.id}`, item.targetFiles, undefined, 1800_000);
+      }
+
+      try {
+        const cliArgs = provider === "codex"
+          ? ["exec", "--json", "-"]
+          : ["-p", "--output-format", "stream-json"];
+
+        const session = await mux.spawn({
+          name: `quorum-impl-${item.id}-${Date.now()}`,
+          command: provider,
+          args: cliArgs,
+          cwd: repoRoot,
+          env: { FEEDBACK_LOOP_ACTIVE: "1" },
+        });
+
+        mux.send(session.id, buildImplementerPrompt(item, trackName, repoRoot));
+        active.push({ item, sessionId: session.id, retries: 0 });
+        console.log(`    \x1b[32m+\x1b[0m ${item.id} spawned`);
+
+        if (bridge?.emitEvent) {
+          bridge.emitEvent("agent.spawn", "generic", {
+            agentId: `impl-${item.id}`, role: "implementer",
+            trackId: trackName, wbId: item.id, sessionId: session.id,
+          });
+        }
+      } catch (err) {
+        console.log(`    \x1b[31m!\x1b[0m ${item.id} failed: ${(err as Error).message}`);
+      }
+    }
+
+    // Poll loop
+    const POLL = 5000;
+    const TIMEOUT = 600_000;
+    const start = Date.now();
+
+    while (active.length > 0 && Date.now() - start < TIMEOUT) {
+      await new Promise(r => setTimeout(r, POLL));
+
+      for (let si = active.length - 1; si >= 0; si--) {
+        const s = active[si]!;
+        const cap = mux.capture(s.sessionId, 200);
+        if (!cap) continue;
+
+        const done = cap.output.includes('"type":"result"')
+          || cap.output.includes('"type":"turn.completed"')
+          || cap.output.includes('"stop_reason"');
+
+        if (!done) continue;
+
+        // Check verdict scoped to this WB item
+        const allVerdicts = bridge?.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
+        const itemVerdicts = allVerdicts.filter(
+          (v: { payload: Record<string, unknown> }) => v.payload.itemId === s.item.id,
+        );
+        const latest = itemVerdicts.length > 0 ? itemVerdicts[itemVerdicts.length - 1] : null;
+        const verdict = latest?.payload?.verdict as string | undefined;
+
+        if (verdict === "approved") {
+          console.log(`    \x1b[32m✓\x1b[0m ${s.item.id} approved`);
+          completedWBs++;
+          active.splice(si, 1);
+          try { await mux.kill(s.sessionId); } catch { /* ok */ }
+        } else if (verdict === "changes_requested" && s.retries < maxRetries) {
+          s.retries++;
+          console.log(`    \x1b[33m↻\x1b[0m ${s.item.id} correction ${s.retries}/${maxRetries}`);
+          mux.send(s.sessionId, "Your submission was rejected. Check: quorum tool audit_history --summary --json\nFix issues and resubmit evidence with [REVIEW_NEEDED].");
+        } else {
+          console.log(`    \x1b[31m✗\x1b[0m ${s.item.id} ${verdict ?? "timeout"}`);
+          active.splice(si, 1);
+          try { await mux.kill(s.sessionId); } catch { /* ok */ }
+        }
+      }
+
+      const pct = totalWBs > 0 ? Math.round((completedWBs / totalWBs) * 100) : 0;
+      const sec = Math.round((Date.now() - start) / 1000);
+      process.stdout.write(`\r    [${completedWBs}/${totalWBs}] ${pct}% ${sec}s ${active.length} active    `);
+    }
+
+    console.log();
+
+    // Cleanup timed-out sessions
+    for (const s of active) {
+      try { await mux.kill(s.sessionId); } catch { /* ok */ }
+    }
+    for (const item of group.items) {
+      if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
+    }
+  }
+
+  // Summary
+  console.log(`\n${"═".repeat(60)}\n`);
+  console.log(`  \x1b[1mResult:\x1b[0m ${completedWBs}/${totalWBs} WBs completed`);
+
+  if (completedWBs === totalWBs) {
+    console.log("  \x1b[32m✓ Track complete!\x1b[0m\n");
+    if (bridge?.emitEvent) {
+      bridge.emitEvent("track.complete", "generic", { trackId: trackName, total: totalWBs });
+    }
+
+    // Loop 2: Auto-retro
+    console.log("  \x1b[36mAuto-retro...\x1b[0m");
+    await autoRetro(repoRoot);
+
+    // Loop 3: Auto-merge (if in worktree)
+    await autoMerge(repoRoot, bridge);
+  } else {
+    console.log(`  \x1b[33m${totalWBs - completedWBs} incomplete. Run again or check progress.\x1b[0m\n`);
+  }
+
+  await mux.cleanup();
+  if (bridge?.close) bridge.close();
+}
+
+// ── Interactive Planner (replaces interview.ts) ──
+
+async function interactivePlanner(repoRoot: string, args: string[]): Promise<void> {
+  const trackName = args[0];
+  const providerIdx = args.indexOf("--provider");
+  const provider = providerIdx >= 0 ? args[providerIdx + 1] ?? "claude" : "claude";
+
+  if (!trackName) {
+    console.log("  Usage: quorum orchestrate plan <track> [--provider claude|codex|gemini]\n");
+    console.log("  Interactive planner with Socratic questioning. Reads CPS if available.\n");
+    return;
+  }
+
+  console.log(`\n\x1b[36mquorum orchestrate plan\x1b[0m\n`);
+
+  // Load CPS
+  let cpsContent = "";
+  const cpsDir = resolve(repoRoot, ".claude", "parliament");
+  if (existsSync(cpsDir)) {
+    const cpsFiles = readdirSync(cpsDir).filter(f => f.startsWith("cps-") && f.endsWith(".md"));
+    if (cpsFiles.length > 0) {
+      cpsContent = readFileSync(resolve(cpsDir, cpsFiles[cpsFiles.length - 1]!), "utf8");
+      console.log(`  \x1b[32m✓\x1b[0m CPS loaded`);
+    }
+  }
+
+  // Load planner protocol
+  let protocol = "";
+  for (const p of [resolve(repoRoot, "skills", "planner", "SKILL.md")]) {
+    if (existsSync(p)) { protocol = readFileSync(p, "utf8"); break; }
+  }
+
+  const planDir = resolve(repoRoot, "docs", "plan");
+  const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
+
+  const cpsSection = cpsContent
+    ? `## Parliament CPS (Phase 0)\n${cpsContent}\nMap: Context→PRD§1, Problem→PRD§2, Solution→PRD§4.`
+    : "## No CPS — Socratic mode. Ask: What problem? Who benefits? Done criteria? Out of scope? Constraints?";
+
+  const systemPrompt = `# Planner: ${trackName}
+Output to: ${planDir}/${trackName}/
+
+${cpsSection}
+
+## Parliament Feedback
+If ambiguity cannot be resolved: tell user to run quorum parliament "<topic>".
+
+## Output
+1. PRD (${planDir}/${trackName}/PRD.md)
+2. Design: Spec, Blueprint (Naming Conventions!), Domain Model, Architecture (${planDir}/${trackName}/design/)
+3. Work Breakdown (${planDir}/${trackName}/work-breakdown.md) — IDs: ${prefix}-1, ${prefix}-2, ...
+
+Rules: Design MANDATORY. Blueprint naming = law. Ask before assuming. User's language.
+
+${protocol}`;
+
+  console.log(`  Track: ${trackName}, Provider: ${provider}, CPS: ${cpsContent ? "yes" : "Socratic"}\n`);
+
+  // Spawn LLM with stdio: "inherit" for direct user interaction
+  const { spawnSync: spawn } = await import("node:child_process");
+  const cliArgs = provider === "claude"
+    ? ["-p", "--append-system-prompt", systemPrompt]
+    : provider === "codex" ? ["exec", "-"] : ["-p"];
+
+  spawn(provider, cliArgs, {
+    cwd: repoRoot, stdio: "inherit",
+    env: { ...process.env },
+    shell: process.platform === "win32",
+  });
+
+  // Check result
+  const wbPath = resolve(planDir, trackName, "work-breakdown.md");
+  if (existsSync(wbPath)) {
+    console.log(`\n  \x1b[32m✓ WBs generated.\x1b[0m Next: quorum orchestrate run ${trackName}\n`);
+  }
+}
+
+// ── Auto-generate WBs from CPS (headless) ───
+
+async function autoGenerateWBs(repoRoot: string, trackName: string, provider: string): Promise<boolean> {
+  // Check if CPS exists
+  const cpsDir = resolve(repoRoot, ".claude", "parliament");
+  const cpsFiles = existsSync(cpsDir)
+    ? readdirSync(cpsDir).filter(f => f.startsWith("cps-") && f.endsWith(".md"))
+    : [];
+
+  if (cpsFiles.length === 0) {
+    console.log("  \x1b[33mNo CPS found. Run parliament first: quorum parliament \"topic\"\x1b[0m\n");
+    return false;
+  }
+
+  const latestCps = readFileSync(resolve(cpsDir, cpsFiles[cpsFiles.length - 1]!), "utf8");
+  console.log(`  \x1b[36mAuto-planning from CPS...\x1b[0m\n`);
+
+  // Read planner skill protocol
+  let plannerProtocol = "";
+  const skillPaths = [
+    resolve(repoRoot, "skills", "planner", "SKILL.md"),
+    resolve(repoRoot, "adapters", "claude-code", "skills", "planner", "SKILL.md"),
+  ];
+  for (const p of skillPaths) {
+    if (existsSync(p)) { plannerProtocol = readFileSync(p, "utf8"); break; }
+  }
+
+  // Spawn planner agent via ProcessMux
+  const toURL = (p: string) => pathToFileURL(p).href;
+  let ProcessMux;
+  try {
+    const muxMod = await import(toURL(resolve(DIST, "bus", "mux.js")));
+    ProcessMux = muxMod.ProcessMux;
+  } catch { return false; }
+
+  const mux = new ProcessMux();
+  const planningDir = resolve(repoRoot, "docs", "plan");
+
+  try {
+    const session = await mux.spawn({
+      name: `quorum-planner-${Date.now()}`,
+      command: provider,
+      args: provider === "codex" ? ["exec", "--json", "-"] : ["-p", "--output-format", "stream-json"],
+      cwd: repoRoot,
+      env: { FEEDBACK_LOOP_ACTIVE: "1" },
+    });
+
+    const prompt = `# Auto-Planning from Parliament CPS
+
+## CPS (Context-Problem-Solution)
+${latestCps}
+
+## Track Name
+${trackName}
+
+## Instructions
+You are the planner. The parliament has produced the above CPS through deliberation.
+
+1. Read the CPS above (Phase 0 — CPS Intake)
+2. Generate a PRD from CPS: Context→§1, Problem→§2, Solution→§4
+3. Generate Work Breakdown with WB IDs (e.g., ${trackName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3)}-1, ${trackName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3)}-2, ...)
+4. Write to: ${planningDir}/${trackName}/work-breakdown.md
+5. Include: ## WB-ID Title, First touch files (backtick-quoted), Prerequisites
+
+${plannerProtocol}`;
+
+    mux.send(session.id, prompt);
+
+    // Poll for completion (3 min timeout)
+    const timeout = 180_000;
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      await new Promise(r => setTimeout(r, 5000));
+      const cap = mux.capture(session.id, 200);
+      if (!cap) continue;
+      if (cap.output.includes('"type":"result"') || cap.output.includes('"stop_reason"') || cap.output.includes('"type":"turn.completed"')) {
+        break;
+      }
+    }
+
+    await mux.kill(session.id);
+    await mux.cleanup();
+
+    // Check if WBs were actually created
+    const wbPath = resolve(planningDir, trackName, "work-breakdown.md");
+    if (existsSync(wbPath)) {
+      console.log(`  \x1b[32m✓ WBs generated:\x1b[0m ${wbPath}\n`);
+      return true;
+    }
+
+    // Also check for files matching the track name
+    const newTracks = findTracks(repoRoot);
+    if (newTracks.some(t => t.name === trackName)) {
+      console.log(`  \x1b[32m✓ Track found after planning\x1b[0m\n`);
+      return true;
+    }
+
+    console.log("  \x1b[33mPlanner completed but WBs not found on disk.\x1b[0m\n");
+    return false;
+  } catch (err) {
+    console.log(`  \x1b[31mPlanner failed: ${(err as Error).message}\x1b[0m\n`);
+    await mux.cleanup();
+    return false;
+  }
+}
+
+// ── Auto-retro (release session gate) ───────
+
+async function autoRetro(repoRoot: string): Promise<void> {
+  const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
+
+  if (existsSync(markerPath)) {
+    try {
+      const { rmSync: rm } = await import("node:fs");
+      rm(markerPath);
+      console.log("  \x1b[32m✓ Retro marker cleared — session gate released.\x1b[0m");
+    } catch (err) {
+      console.log(`  \x1b[33m⚠ Could not clear retro marker: ${(err as Error).message}\x1b[0m`);
+    }
+  } else {
+    console.log("  \x1b[2mNo retro marker (gate already open).\x1b[0m");
+  }
+
+  // Emit retro complete event
+  try {
+    const b = await loadBridge(repoRoot);
+    if (b?.emitEvent) {
+      b.emitEvent("retro.complete", "generic", { auto: true, timestamp: Date.now() });
+    }
+  } catch { /* non-critical */ }
+}
+
+// ── Auto-merge (if in worktree) ─────────────
+
+async function autoMerge(repoRoot: string, bridge: Record<string, Function> | null): Promise<void> {
+  const { spawnSync } = await import("node:child_process");
+
+  // Detect if we're in a worktree
+  const gitDir = spawnSync("git", ["rev-parse", "--git-dir"], {
+    cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+  });
+
+  const isWorktree = gitDir.stdout?.includes("/worktrees/") || gitDir.stdout?.includes("\\worktrees\\");
+
+  if (!isWorktree) {
+    console.log("  \x1b[2mNot in worktree — skip auto-merge. Run: quorum merge <branch>\x1b[0m\n");
+    return;
+  }
+
+  // Get current branch
+  const branchResult = spawnSync("git", ["branch", "--show-current"], {
+    cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+  });
+  const branch = branchResult.stdout?.trim();
+
+  if (!branch) {
+    console.log("  \x1b[33m⚠ Could not detect current branch for auto-merge.\x1b[0m\n");
+    return;
+  }
+
+  // Parliament gates check
+  if (bridge?.checkParliamentGates) {
+    const gate = bridge.checkParliamentGates();
+    if (!gate.allowed) {
+      console.log(`  \x1b[33m⚠ Merge blocked by parliament gate: ${gate.reason}\x1b[0m\n`);
+      return;
+    }
+  }
+
+  console.log(`  \x1b[36mAuto-merge: ${branch} → main\x1b[0m`);
+
+  // Switch to main, merge, switch back
+  const merge = spawnSync("git", ["merge", "--squash", branch], {
+    cwd: repoRoot, encoding: "utf8", stdio: "inherit", windowsHide: true,
+  });
+
+  if (merge.status === 0) {
+    console.log("  \x1b[32m✓ Squash merge staged. Review and commit.\x1b[0m\n");
+  } else {
+    console.log("  \x1b[33m⚠ Merge had issues. Resolve manually.\x1b[0m\n");
+  }
+}
+
+function buildImplementerPrompt(item: WorkItem, trackName: string, repoRoot: string): string {
+  let protocol = "";
+  try {
+    const p = resolve(repoRoot, "agents", "knowledge", "implementer-protocol.md");
+    if (existsSync(p)) protocol = readFileSync(p, "utf8");
+  } catch { /* ok */ }
+
+  const files = item.targetFiles.length > 0
+    ? item.targetFiles.map(f => `- ${f}`).join("\n")
+    : "Identify targets from context.";
+
+  return `# Task: ${item.id} (Track: ${trackName})
+
+## Target Files
+${files}
+
+${item.dependsOn ? `## Dependencies: ${item.dependsOn.join(", ")}` : ""}
+
+## Instructions
+Implement this work breakdown item. Follow the implementer protocol.
+After implementation, submit evidence with [REVIEW_NEEDED] tag.
+
+${protocol}`;
+}
+
 function showHelp(): void {
   console.log(`
 \x1b[36mquorum orchestrate\x1b[0m — session orchestration
@@ -389,14 +883,16 @@ function showHelp(): void {
 \x1b[1mUsage:\x1b[0m quorum orchestrate [subcommand]
 
 \x1b[1mSubcommands:\x1b[0m
-  start [track]              Select and orchestrate a track (interactive)
+  start [track]              Select and orchestrate a track
+  plan <track> [--provider]  Interactive planner (Socratic + CPS)
+  run <track> [--provider]   Execute WBs (full implementation loop)
   assign <track> [--agent]   Assign track to an agent
   progress                   Show orchestration progress
 
 \x1b[1mExamples:\x1b[0m
-  quorum orchestrate                         Interactive track selection
-  quorum orchestrate start evaluation-pipeline   Direct track selection
-  quorum orchestrate assign tenant-runtime --agent impl-1
+  quorum orchestrate plan auth-track               Socratic planning session
+  quorum orchestrate run payment-track --provider claude  Full execution
+  quorum orchestrate assign my-track --agent impl-1
   quorum orchestrate progress
 `);
 }

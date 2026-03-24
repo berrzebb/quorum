@@ -1,24 +1,23 @@
 ---
 name: quorum:doc-sync
-description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AI-GUIDE, TOOLS — EN/KO), L2 RTM, L3 design docs. Use before squash commit, after version bump, or when doc numbers look wrong. Triggers on 'sync docs', 'fix docs', 'doc mismatch', 'update documentation numbers', '문서 동기화', 'docs are outdated'."
-model: claude-sonnet-4-6
-allowed-tools: Read, Grep, Glob, Bash(node *), Bash(npm test*), Bash(ls *), Bash(wc *), Bash(git diff*), Bash(git log*), Bash(git status*), Edit, Write
+description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AI-GUIDE, TOOLS — EN/KO), L2 RTM, L3 design docs."
 ---
 
 # Doc-Sync
 
 Extract facts from code and fix numeric/structural mismatches across all documentation layers.
 
-## Protocol
+## 3 Layers
 
-Read the full protocol before starting: `${CLAUDE_PLUGIN_ROOT}/../../agents/knowledge/doc-sync-protocol.md`
+| Layer | Scope | Reference |
+|-------|-------|-----------|
+| **L1** | Public docs (README, AI-GUIDE, TOOLS — EN/KO) | `references/l1-public-docs.md` |
+| **L2** | RTM status transitions | `references/l2-rtm.md` |
+| **L3** | Design docs (PRD, Work Catalog, Track Map) | `references/l3-design-docs.md` |
 
-## References
+## Core Protocol
 
-Layer-specific rules (read the relevant reference before each phase):
-- `references/l1-public-docs.md` — Public doc numeric sync rules (hook counts, tool counts, test counts, event types)
-- `references/l2-rtm.md` — RTM status transition rules
-- `references/l3-design-docs.md` — Design doc status update rules
+Read and follow: `agents/knowledge/doc-sync-protocol.md`
 
 ## Target Documents (L1)
 
@@ -33,72 +32,32 @@ Layer-specific rules (read the relevant reference before each phase):
 | `docs/en/TOOLS.md` | EN | Tool catalog with parameters |
 | `docs/ko/TOOLS.md` | KO | Same, Korean |
 
-## Execution
+## 5 Phases
 
 ### Phase 1: Fact Extraction
 
-Run extraction commands to collect current facts from code:
-
-```bash
-# Hook count
-grep -r '"event"' adapters/*/hooks/hooks.json | wc -l
-
-# Tool count
-ls core/tools/*.mjs | grep -v tool-runner | wc -l
-
-# Test count
-npm test 2>&1 | tail -5
-
-# Event types
-grep -c "'" bus/events.ts
-
-# Language specs
-ls languages/*/spec.mjs | wc -l
-```
-
-Collect all facts into a comparison table: `| Fact | Code Value | Doc Value | Match? |`
+Collect current facts from code (hook counts, tool counts, test counts, event types, language specs). Build a comparison table: `| Fact | Code Value | Doc Value | Match? |`
 
 ### Phase 2: L1 — Public Doc Sync
 
-For each L1 target file:
-1. Read current content
-2. Compare documented numbers against Phase 1 facts
-3. Fix mismatches with Edit (preserve surrounding context)
-4. Verify EN/KO parity — both languages must show identical numbers
+For each L1 target file: compare documented numbers against Phase 1 facts, fix mismatches, verify EN/KO parity (both languages must show identical numbers).
 
-### Phase 3: L2 — RTM Sync
+### Phase 3: L2 — RTM Sync (skip if no planning_dir)
 
-If `planning_dir` exists and contains RTM files:
-1. Read RTM files via `rtm_parse` tool
-2. Cross-reference requirement status against code state
-3. Update status columns (not-started → in-progress → verified)
+Cross-reference requirement status against code state. Update status columns (not-started -> in-progress -> verified).
 
-Skip if no planning directory exists.
+### Phase 4: L3 — Design Doc Sync (skip if no planning_dir)
 
-### Phase 4: L3 — Design Doc Sync
-
-If `planning_dir` exists:
-1. Update Work Breakdown status based on implementation state
-2. Recalculate Work Catalog numbers (total items, completed, percentages)
-3. Reflect changes in PRD Track Map
-
-Skip if no planning directory exists.
+Update Work Breakdown status, recalculate Work Catalog numbers, reflect changes in PRD Track Map.
 
 ### Phase 5: Report
 
-Output a structured summary:
-
-```markdown
+```
 ## Doc-Sync Report
-
 ### L1: Public Docs
 | Fact | Before | After | Files Changed |
-|------|--------|-------|---------------|
-| Hook count | 20 | 22 | README.md, README.ko.md |
-
 ### L2: RTM — [N changes / skipped]
 ### L3: Design Docs — [N changes / skipped]
-
 Total files modified: N
 ```
 
@@ -106,5 +65,5 @@ Total files modified: N
 
 | Context | Behavior |
 |---------|----------|
-| **Interactive** | Show fact table → confirm changes → apply → report |
-| **Headless** | Auto-extract → auto-fix all mismatches → output report |
+| **Interactive** | Show fact table, confirm changes, apply, report |
+| **Headless** | Auto-extract, auto-fix all mismatches, output report |

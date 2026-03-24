@@ -3,6 +3,7 @@ name: quorum:orchestrator
 description: "Session orchestrator for quorum — reads handoff, picks unblocked tasks, distributes to parallel workers, tracks agent assignments, manages correction cycles. Use when starting a work session, distributing implementation work, reviewing completed output, or managing multi-agent workflows. Triggers on 'start session', 'distribute tasks', 'what's next', 'assign work', '세션 시작', 'orchestrate'."
 argument-hint: "[optional: task-id to assign]"
 disable-model-invocation: true
+model: claude-sonnet-4-6
 allowed-tools: Read, Grep, Glob, Bash(node *), Bash(git *)
 ---
 

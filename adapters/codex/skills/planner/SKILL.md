@@ -2,10 +2,14 @@
 name: quorum-planner
 description: "Design tasks into tracks with work breakdowns. Writes and maintains PRDs, generates DRM-driven documents. Use for feature planning, PRD writing, or adjusting existing plans. Triggers on 'plan', 'add feature', 'write PRD', 'design tasks'."
 argument-hint: "<requirement or feature description>"
+model: codex
 allowed-tools: read_file, write_file, shell, find_files, search
 ---
 
 # Planner Protocol
+
+## References
+Shared references at `skills/planner/references/`. Read the relevant reference before each phase.
 
 Analyze feature requests, maintain PRDs, define tracks. Do not generate documents immediately — understand, research, confirm scope first.
 
@@ -25,20 +29,21 @@ Analyze feature requests, maintain PRDs, define tracks. Do not generate document
 
 Config: `.quorum/config.json` — `consensus.planning_dirs`, `plugin.locale`.
 
-## Document Map (10 types)
+## Document Map (11 types)
 
 | Document | Location | Reference |
 |----------|----------|-----------|
-| PRD | `{planning_dir}/PRD.md` | `references/prd.md` |
-| Execution Order | `{planning_dir}/execution-order.md` | `references/execution-order.md` |
-| Work Catalog | `{planning_dir}/work-catalog.md` | `references/work-catalog.md` |
-| ADR | `{planning_dir}/adr/ADR-{NNN}-{slug}.md` | `references/adr.md` |
-| Track README | `{planning_dir}/{track}/README.md` | `references/track-readme.md` |
-| Work Breakdown | `{planning_dir}/{track}/work-breakdown.md` | `references/work-breakdown.md` |
-| API Contract | `{planning_dir}/{track}/api-contract.md` | `references/api-contract.md` |
-| Test Strategy | `{planning_dir}/{track}/test-strategy.md` | `references/test-strategy.md` |
-| UI Spec | `{planning_dir}/{track}/ui-spec.md` | `references/ui-spec.md` |
-| Data Model | `{planning_dir}/{track}/data-model.md` | `references/data-model.md` |
+| PRD | `{planning_dir}/PRD.md` | `skills/planner/references/prd.md` |
+| Execution Order | `{planning_dir}/execution-order.md` | `skills/planner/references/execution-order.md` |
+| Work Catalog | `{planning_dir}/work-catalog.md` | `skills/planner/references/work-catalog.md` |
+| ADR | `{planning_dir}/adr/ADR-{NNN}-{slug}.md` | `skills/planner/references/adr.md` |
+| Track README | `{planning_dir}/{track}/README.md` | `skills/planner/references/track-readme.md` |
+| Work Breakdown | `{planning_dir}/{track}/work-breakdown.md` | `skills/planner/references/work-breakdown.md` |
+| API Contract | `{planning_dir}/{track}/api-contract.md` | `skills/planner/references/api-contract.md` |
+| Test Strategy | `{planning_dir}/{track}/test-strategy.md` | `skills/planner/references/test-strategy.md` |
+| UI Spec | `{planning_dir}/{track}/ui-spec.md` | `skills/planner/references/ui-spec.md` |
+| Data Model | `{planning_dir}/{track}/data-model.md` | `skills/planner/references/data-model.md` |
+| **Design Phase** | `{planning_dir}/{track}/design/` | `skills/planner/references/design-phase.md` |
 
 Read the reference guide before writing any document.
 
@@ -46,9 +51,29 @@ Read the reference guide before writing any document.
 
 **Interactive**: ask questions, present drafts, wait for approval. **Headless**: extract intent, auto-approve DRM, generate all, report. Note missing info as `[ASSUMPTION]`.
 
+## Phase 0: CPS Intake (Parliament Integration)
+
+Before capturing intent, check if a **Parliament CPS** exists. Read `.claude/parliament/cps-*.md` or call `quorum status`.
+
+If CPS exists: map CPS.Context→PRD §1, CPS.Problem→PRD §2 (gaps as goals), CPS.Solution→PRD §4 (builds as FRs). Skip Phase 1 if CPS covers full intent.
+
+If no CPS: Proceed to Phase 1.
+
 ## Phase 1: Capture Intent
 
 What problem? What does done look like? Who benefits? Scope boundary? Dependencies? Document language?
+
+## Phase 1.5: MECE Decomposition
+
+Before writing the PRD, perform structured requirements decomposition. Read `skills/planner/references/mece-decomposition.md` for the full guide.
+
+1. **Actor Decomposition** — identify all stakeholders (ME: no role overlap)
+2. **System Decomposition** — derive required systems per actor (ME: clear boundaries)
+3. **Domain Coverage** — check cross-cutting concerns (CE: no gaps)
+
+Present Actor Map + System Map + Domain Checklist to user. **Wait for confirmation before Phase 2.**
+
+In headless mode, extract actors/systems from prompt context. Mark uncertain domains as `[ASSUMPTION]`.
 
 ## Phase 2: PRD
 
@@ -71,7 +96,20 @@ Run `blast_radius` before WB generation. Ratio > 0.1 = High/Critical. Levels: Lo
 
 ## Phase 5: DRM (Document Requirement Matrix)
 
-Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. Present DRM, confirm, then draft all `req` documents using references.
+Track x document-type grid. Each cell: `req`, `n/a`, or `deferred`. **Design Phase mandatory** for CPS-origin or 3+ WB tracks. **Design before WB** — naming conventions are binding law. See `skills/planner/references/design-phase.md`.
+
+## Phase 5.5: FDE Failure Checklist
+
+After DRM confirmation, before drafting Work Breakdowns, analyze failure scenarios for P0/P1 FRs. Read `skills/planner/references/fde-checklist.md` for the full guide.
+
+1. For each P0/P1 FR, build a failure table (scenario, severity, impact, mitigation, new WB?)
+2. HIGH severity failures — mandatory new WB
+3. MEDIUM severity failures — new WB unless explicitly deferred by user
+4. Present failure analysis and derived WBs to user
+
+**Wait for confirmation before proceeding to WB drafting.**
+
+In headless mode, auto-generate failure analysis for external dependencies and data persistence. Note assumptions as `[FDE-ASSUMPTION]`.
 
 ## Phase 7: Write & Register
 

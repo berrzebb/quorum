@@ -94,7 +94,7 @@ try {
 // Load i18n only when retro is pending (avoid overhead on every tool call)
 const { t } = await import("../../core/context.mjs");
 
-// retro_pending일 때만 stdin 읽기
+// Only read stdin when retro_pending
 let raw;
 try {
   const chunks = [];

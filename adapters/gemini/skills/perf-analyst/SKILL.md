@@ -76,43 +76,12 @@ Other languages currently use regex-only scanning. AST refinement is TypeScript-
 
 ## What to Look For
 
-1. **N+1 queries** — loops issuing individual DB/API calls instead of batched
-2. **Unbounded fetches** — SELECTs without LIMIT, API calls without pagination
-3. **O(n^2) loops** — nested iterations over the same or correlated collections in hot paths
-4. **Bundle size** — unnecessary dependencies, non-tree-shakeable imports, large polyfills
-5. **Missing memoization** — repeated expensive computations without caching
-6. **Main thread blocking** — synchronous I/O, heavy computation without workers
+Read `agents/knowledge/domains/perf.md` for focus areas (6) and checklist (PF-1 through PF-6).
 
 ## Anti-Patterns
 
-- Do NOT flag micro-optimizations (e.g., `for` vs `forEach` in cold paths)
-- Do NOT suggest premature optimization for code that runs once at startup
-- Do NOT assume database schema — verify with `grep` or tool output before claiming missing indexes
-- Do NOT review outside the performance domain — ignore style, naming, or logic bugs
+See `agents/knowledge/domains/perf.md` (section: Anti-Patterns).
 
 ## Output Format
 
-Respond with this exact JSON structure:
-
-```json
-{
-  "verdict": "approved | changes_requested | infra_failure",
-  "reasoning": "overall performance assessment",
-  "codes": ["perf-regression", "perf-gap"],
-  "findings": [
-    {
-      "file": "path/to/file.ts",
-      "line": 42,
-      "severity": "high | medium | low",
-      "issue": "N+1 query inside map() — each iteration calls fetchUser()",
-      "suggestion": "batch with fetchUsers(ids) before the loop"
-    }
-  ],
-  "confidence": 0.85
-}
-```
-
-- `verdict`: `changes_requested` if any high-severity finding; `approved` if low/medium only
-- `codes`: use `perf-regression` (existing perf degraded) or `perf-gap` (missed optimization)
-- `findings`: every finding MUST include file, line, severity, issue, and suggestion
-- `confidence`: 0.0-1.0 — lower if tool output was incomplete or evidence insufficient
+See `agents/knowledge/specialist-base.md` (section: Output Format) for the JSON schema. Use rejection codes `perf-regression` (existing perf degraded) or `perf-gap` (missed optimization).

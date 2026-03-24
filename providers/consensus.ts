@@ -13,6 +13,12 @@
 import type { Auditor, AuditRequest, AuditResult } from "./provider.js";
 import { extractJson } from "./auditors/parse.js";
 
+type Verdict = "approved" | "changes_requested" | "infra_failure";
+
+function normalizeVerdict(v: unknown): Verdict {
+  return v === "approved" ? "approved" : v === "infra_failure" ? "infra_failure" : "changes_requested";
+}
+
 // ── Role definitions ──────────────────────────
 
 export interface ConsensusRole {
@@ -211,6 +217,11 @@ function buildConvergeJudgePrompt(
 
 Two reviewers have completed their free-form analysis. Your job:
 
+### Confidence Weighting
+When reviewers disagree, weight their opinions by confidence score.
+A reviewer with 0.9 confidence outweighs one with 0.3 confidence.
+If both have similar confidence, evaluate the reasoning quality instead.
+
 ### Phase B: Converge into 4 Registers
 Classify all observations into:
 1. **Status Changes**: What changed since last review?
@@ -270,7 +281,7 @@ function parseDivergeOpinion(raw: string, role: "advocate" | "devil"): { opinion
     return {
       opinion: {
         role,
-        verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+        verdict: normalizeVerdict(parsed.verdict),
         reasoning: parsed.reasoning ?? "",
         codes: Array.isArray(parsed.codes) ? parsed.codes : [],
         confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
@@ -297,7 +308,7 @@ function parseConvergeVerdict(raw: string): {
     if (!json) throw new Error("No JSON found");
     const parsed = JSON.parse(json);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+      verdict: normalizeVerdict(parsed.verdict),
       summary: parsed.summary ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       registers: {
@@ -308,11 +319,12 @@ function parseConvergeVerdict(raw: string): {
       },
       classifications: Array.isArray(parsed.classifications) ? parsed.classifications : [],
     };
-  } catch {
+  } catch (err) {
+    const hint = raw.length > 200 ? raw.slice(0, 200) + "..." : raw;
     return {
       verdict: "changes_requested",
-      summary: "Failed to parse converge verdict",
-      codes: ["parse-error"],
+      summary: `Failed to parse converge verdict: ${err instanceof Error ? err.message : "unknown"}. Raw: ${hint}`,
+      codes: ["parse-error", "converge-verdict-malformed"],
       registers: { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
       classifications: [],
     };
@@ -330,7 +342,7 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
     const parsed = JSON.parse(json);
     return {
       role,
-      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+      verdict: normalizeVerdict(parsed.verdict),
       reasoning: parsed.reasoning ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
       confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
@@ -355,7 +367,7 @@ function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_reques
     if (!json) throw new Error("No JSON found");
     const parsed = JSON.parse(json);
     return {
-      verdict: parsed.verdict === "approved" ? "approved" : parsed.verdict === "infra_failure" ? "infra_failure" : "changes_requested",
+      verdict: normalizeVerdict(parsed.verdict),
       summary: parsed.summary ?? "",
       codes: Array.isArray(parsed.codes) ? parsed.codes : [],
     };
@@ -475,7 +487,7 @@ export class DeliberativeConsensus {
       advocateResult.items, devilResult.items,
     );
 
-    let convergeVerdict: ReturnType<typeof parseConvergeVerdict> extends Promise<infer T> ? T : ReturnType<typeof parseConvergeVerdict>;
+    let convergeVerdict: ReturnType<typeof parseConvergeVerdict>;
     try {
       const judgeResult = await this.config.judge.audit(convergeRequest);
       convergeVerdict = parseConvergeVerdict(judgeResult.raw);

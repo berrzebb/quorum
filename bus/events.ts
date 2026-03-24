@@ -89,16 +89,39 @@ export type EventType =
   | "parliament.debate.round"
   | "parliament.amendment.propose"
   | "parliament.amendment.vote"
+  | "parliament.amendment.resolve"
   | "parliament.convergence"
-  | "parliament.session.digest";
+  | "parliament.meeting.log"
+  | "parliament.session.digest"
+  | "parliament.session.normalform"
+  | "parliament.cps.generated";
 
 // ── Typed payloads ────────────────────────────────────
 
+/** Canonical audit verdict status values. Shared across MJS and TS layers. */
+export const AUDIT_VERDICT = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes_requested",
+  INFRA_FAILURE: "infra_failure",
+} as const;
+
+export type AuditVerdict = typeof AUDIT_VERDICT[keyof typeof AUDIT_VERDICT];
+
+export const AMENDMENT_STATUS = {
+  PROPOSED: "proposed",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  DEFERRED: "deferred",
+} as const;
+
+export type AmendmentStatusType = typeof AMENDMENT_STATUS[keyof typeof AMENDMENT_STATUS];
+
 export interface AuditVerdictPayload {
   itemId: string;
-  verdict: "approved" | "changes_requested" | "infra_failure";
+  verdict: AuditVerdict;
   codes?: string[];
   summary?: string;
+  mode?: string;
 }
 
 export interface AgentSpawnPayload {
@@ -331,13 +354,24 @@ export interface ParliamentConvergencePayload {
 }
 
 export interface ParliamentSessionDigestPayload {
+  agendaId: string;
   sessionType: "morning" | "afternoon";
-  agendaItems: string[];
-  classifications: Record<MeetingClassification, number>;
-  amendmentsProposed: number;
-  amendmentsApproved: number;
-  convergenceScore: number;
-  summary: string;
+  verdictResult: string;
+  converged: boolean;
+  amendmentsResolved: number;
+  confluencePassed: boolean;
+  errorCount: number;
+  duration: number;
+}
+
+export interface ParliamentCPSPayload {
+  context: string;
+  problem: string;
+  solution: string;
+  sourceLogIds: string[];
+  gapCount: number;
+  buildCount: number;
+  agendaId: string;
 }
 
 // ── Fitness types ────────────────────────────────────

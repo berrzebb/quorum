@@ -1,14 +1,21 @@
 ---
 name: quorum:tools
-description: "Run any of the 20 quorum analysis tools via CLI — codebase (code_map, dependency_graph, blast_radius), quality (audit_scan, coverage_map, perf_scan, a11y_scan), domain checks (compat, i18n, license, infra, observability, doc_coverage), RTM/FVM, and audit_history. Use whenever you need code analysis, pattern scanning, or domain checks — even if the MCP server is unavailable. Triggers on 'run tool', 'scan code', 'check dependencies', 'analyze', '도구 실행'."
+description: "Run any of the 20 quorum analysis tools via CLI — codebase, quality, domain checks, RTM/FVM, and audit_history. Use whenever you need code analysis or domain checks. Triggers on 'run tool', 'scan code', 'check dependencies', 'analyze'."
 argument-hint: "<tool_name> [context or parameters]"
 model: claude-sonnet-4-6
 allowed-tools: Read, Bash(node *), Bash(git *)
 ---
 
-# quorum:tools
+# quorum:tools (Claude Code)
 
-CLI interface for the 20 analysis tools that power the quorum workflow. These tools run via `tool-runner.mjs` — same logic as the MCP server, but invoked through Bash instead of JSON-RPC.
+CLI interface for the 20 analysis tools that power the quorum workflow. These tools run via `tool-runner.mjs` — same logic as the MCP server, but invoked through `Bash` instead of JSON-RPC.
+
+## Claude Code Tool Mapping
+
+| Operation | Tool |
+|-----------|------|
+| Read file | `Read` |
+| Run command | `Bash` |
 
 ## Tool Runner Path
 
@@ -22,6 +29,10 @@ node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs <tool_name> --param value 
 ```
 
 Add `--json` to any command for structured JSON output instead of formatted text.
+
+## Tool References
+
+For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
 
 ## Tool Selection Guide
 
@@ -42,7 +53,7 @@ Language-aware scans using the **language registry** (`languages/{lang}/spec.{do
 
 | Need | Tool | Reference |
 |------|------|-----------|
-| Performance regressions (N+1, O(n²), bundle size) | `perf_scan` | [perf-scan.md](references/perf-scan.md) |
+| Performance regressions (N+1, O(n^2), bundle size) | `perf_scan` | [perf-scan.md](references/perf-scan.md) |
 | Accessibility issues (missing labels, contrast) | `a11y_scan` | [a11y-scan.md](references/a11y-scan.md) |
 | API compatibility breaks, deprecation usage | `compat_check` | [compat-check.md](references/compat-check.md) |
 | Hardcoded strings, missing locale keys | `i18n_validate` | [i18n-validate.md](references/i18n-validate.md) |
@@ -53,9 +64,7 @@ Language-aware scans using the **language registry** (`languages/{lang}/spec.{do
 
 ### Supported Languages
 
-Domain scans are **language-aware** — the registry (`languages/{lang}/spec.{domain}.mjs`) auto-detects project languages and applies language-specific patterns. Currently supports TypeScript, Go, Python, Rust, Java (5 languages × 7 fragments each).
-
-Read `references/languages.md` for the full coverage matrix, pattern format, and how to add new languages.
+Domain scans are **language-aware** — the registry (`languages/{lang}/spec.{domain}.mjs`) auto-detects project languages and applies language-specific patterns. Currently supports TypeScript, Go, Python, Rust, Java (5 languages x 7 fragments each).
 
 ### RTM & FVM
 
@@ -63,7 +72,7 @@ Read `references/languages.md` for the full coverage matrix, pattern format, and
 |------|------|-----------|
 | Read RTM rows, filter by req_id or status | `rtm_parse` | [rtm-parse.md](references/rtm-parse.md) |
 | Merge worktree RTM files into base | `rtm_merge` | [rtm-merge.md](references/rtm-merge.md) |
-| Generate FE×API×BE×Auth verification matrix | `fvm_generate` | [fvm-generate.md](references/fvm-generate.md) |
+| Generate FE x API x BE x Auth verification matrix | `fvm_generate` | [fvm-generate.md](references/fvm-generate.md) |
 | Execute FVM rows against live server | `fvm_validate` | [fvm-validate.md](references/fvm-validate.md) |
 
 ### Audit & Guide
@@ -72,6 +81,20 @@ Read `references/languages.md` for the full coverage matrix, pattern format, and
 |------|------|-----------|
 | Query verdict history, detect rejection patterns | `audit_history` | [audit-history.md](references/audit-history.md) |
 | Project onboarding guide (synthesized overview) | `ai_guide` | [ai-guide.md](references/ai-guide.md) |
+
+## MCP <-> CLI Equivalence
+
+Claude Code has direct MCP access to quorum tools. Every MCP tool call maps 1:1 to a CLI command:
+
+| MCP Call | CLI Equivalent |
+|----------|---------------|
+| `mcp__quorum__code_map({path: "src/"})` | `node tool-runner.mjs code_map --path src/` |
+| `mcp__quorum__blast_radius({path: "src/", changed: "a.ts"})` | `node tool-runner.mjs blast_radius --path src/ --changed a.ts` |
+| `mcp__quorum__perf_scan({path: "src/"})` | `node tool-runner.mjs perf_scan --path src/` |
+| `mcp__quorum__a11y_scan({path: "src/"})` | `node tool-runner.mjs a11y_scan --path src/` |
+| `mcp__quorum__audit_history({summary: true})` | `node tool-runner.mjs audit_history --summary` |
+
+Use MCP when available (richer type info). Fall back to CLI via `Bash` when MCP server is unavailable.
 
 ## Quick Examples
 
@@ -88,30 +111,6 @@ node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs blast_radius --path src/ -
 # Performance scan (hybrid: regex + AST)
 node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs perf_scan --path src/
 
-# Accessibility scan (JSX/TSX only)
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs a11y_scan --path src/components/
-
-# Compatibility check
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs compat_check --path src/
-
-# i18n validation
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs i18n_validate --path src/
-
-# License scan
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs license_scan --path .
-
-# Observability check (missing logging/metrics)
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs observability_check --path src/
-
-# Doc coverage
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs doc_coverage --path src/
-
-# Pattern scan for type-safety issues
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_scan --pattern type-safety
-
-# Parse RTM, filter by requirement ID
-node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs rtm_parse --path docs/rtm.md --req_id EV-1
-
 # Audit history summary
 node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary --json
 ```
@@ -120,19 +119,5 @@ node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary --
 
 - Exit code 0 = success (text to stdout, summary to stderr)
 - Exit code 1 = error (message to stderr)
-- Missing required params → error message lists what's needed
+- Missing required params = error message lists what's needed
 - `--json` flag outputs structured JSON for programmatic use
-
-## MCP ↔ CLI Equivalence
-
-Every MCP tool call maps 1:1 to a CLI command:
-
-| MCP Call | CLI Equivalent |
-|----------|---------------|
-| `mcp__quorum__code_map({path: "src/"})` | `node tool-runner.mjs code_map --path src/` |
-| `mcp__quorum__blast_radius({path: "src/", changed: "a.ts"})` | `node tool-runner.mjs blast_radius --path src/ --changed a.ts` |
-| `mcp__quorum__perf_scan({path: "src/"})` | `node tool-runner.mjs perf_scan --path src/` |
-| `mcp__quorum__a11y_scan({path: "src/"})` | `node tool-runner.mjs a11y_scan --path src/` |
-| `mcp__quorum__audit_history({summary: true})` | `node tool-runner.mjs audit_history --summary` |
-
-The output format is identical — same text, same summary.

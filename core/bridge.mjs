@@ -30,7 +30,7 @@ async function loadModules() {
   if (_modules) return _modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -44,9 +44,33 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "parallel.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "parliament-gate.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod };
+    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
     return _modules;
+  } catch {
+    return null;
+  }
+}
+
+// ── Parliament lazy-load (meeting-log, amendment, confluence, normal-form, parliament-session) ──
+// These 5 modules are only needed for T3 deliberative sessions, not every hook invocation.
+
+let _parliamentModules = null;
+
+async function loadParliamentModules() {
+  if (_parliamentModules) return _parliamentModules;
+  try {
+    const toURL = (p) => pathToFileURL(p).href;
+    const [meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod] = await Promise.all([
+      import(toURL(resolve(DIST, "bus", "meeting-log.js"))),
+      import(toURL(resolve(DIST, "bus", "amendment.js"))),
+      import(toURL(resolve(DIST, "bus", "confluence.js"))),
+      import(toURL(resolve(DIST, "bus", "normal-form.js"))),
+      import(toURL(resolve(DIST, "bus", "parliament-session.js"))),
+    ]);
+    _parliamentModules = { meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
+    return _parliamentModules;
   } catch {
     return null;
   }
@@ -713,6 +737,126 @@ export async function checkHookGate(event, input = {}) {
   return { allowed: true, additional_context: contexts.length > 0 ? contexts.join("\n") : undefined };
 }
 
+// ── Parliament Protocol (lazy-loaded) ─────────
+
+/**
+ * Run a full parliament session (diverge-converge + meeting log + amendments + confluence + normal form).
+ * Returns null if modules unavailable.
+ */
+export async function runParliamentSession(request, config) {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.parliamentSessionMod) return null;
+  try {
+    return await pMods.parliamentSessionMod.runParliamentSession(_store, request, config);
+  } catch (err) {
+    if (process.env.QUORUM_DEBUG) console.error("[bridge] Parliament session failed:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Check convergence status for a standing committee agenda.
+ */
+export async function checkParliamentConvergence(agendaId) {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.meetingLogMod) return null;
+  try {
+    return pMods.meetingLogMod.checkConvergence(_store, agendaId);
+  } catch { return null; }
+}
+
+/**
+ * Propose an amendment.
+ * @param {object} options - { target, change, sponsor, sponsorRole, justification }
+ */
+export async function proposeAmendment(options) {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.amendmentMod) return null;
+  try {
+    return pMods.amendmentMod.proposeAmendment(_store, options);
+  } catch { return null; }
+}
+
+/**
+ * Verify confluence (post-audit integrity).
+ */
+export async function verifyConfluence(input) {
+  const pMods = await loadParliamentModules();
+  if (!pMods?.confluenceMod) return null;
+  try {
+    return pMods.confluenceMod.verifyConfluence(input);
+  } catch { return null; }
+}
+
+/**
+ * Get normal form convergence report.
+ */
+export async function getConvergenceReport() {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.normalFormMod) return null;
+  try {
+    return pMods.normalFormMod.generateConvergenceReport(_store);
+  } catch { return null; }
+}
+
+// ── Parliament Enforcement Gates ─────────────
+
+/**
+ * Check all parliament gates: amendments, verdict, confluence.
+ * Returns { allowed: boolean, reason?: string } — fail-open on error.
+ */
+export function checkParliamentGates(options = {}) {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try {
+    return _modules.parliamentGateMod.checkAllGates(_store, options);
+  } catch { return { allowed: true }; }
+}
+
+/**
+ * Check individual gates for fine-grained control.
+ */
+export function checkAmendmentGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkAmendmentGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkVerdictGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkVerdictGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkConfluenceGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkConfluenceGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkDesignGate(planningDir, trackName) {
+  if (!_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkDesignGate(planningDir, trackName); }
+  catch { return { allowed: true }; }
+}
+
+/**
+ * Create Auditor instances from role→provider string mappings.
+ * Bridges adapters/shared/parliament-runner.mjs → providers/auditors/factory.ts.
+ */
+export function createConsensusAuditors(roles, cwd) {
+  try {
+    const toURL = (p) => pathToFileURL(p).href;
+    const factoryPath = resolve(DIST, "providers", "auditors", "factory.js");
+    return import(toURL(factoryPath)).then(mod =>
+      mod.createConsensusAuditors(roles, cwd ?? process.cwd())
+    );
+  } catch { return null; }
+}
+
 export function close() {
   if (_store) {
     try { _store.close(); } catch { /* ignore */ }
@@ -721,6 +865,7 @@ export function close() {
   _router = null;
   _lockService = null;
   _modules = null;
+  _parliamentModules = null;
   _domainMod = null;
   _routerMod2 = null;
   _specialistMod = null;

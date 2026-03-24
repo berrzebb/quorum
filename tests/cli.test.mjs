@@ -102,7 +102,7 @@ describe("quorum setup", () => {
   });
 
   it("creates config and directories", () => {
-    const result = runCli(["setup"], { cwd: tmpDir });
+    const result = runCli(["setup", "--yes"], { cwd: tmpDir });
     assert.equal(result.status, 0);
     assert.ok(result.stdout.includes("Setup complete"));
 
@@ -116,7 +116,7 @@ describe("quorum setup", () => {
     const configPath = join(tmpDir, ".claude", "quorum", "config.json");
     const before = readFileSync(configPath, "utf8");
 
-    const result = runCli(["setup"], { cwd: tmpDir });
+    const result = runCli(["setup", "--yes"], { cwd: tmpDir });
     assert.equal(result.status, 0);
 
     const after = readFileSync(configPath, "utf8");
@@ -145,12 +145,10 @@ describe("quorum tool", () => {
 // ═══ 5. Ask ═══════════════════════════════════════════════════════════
 
 describe("quorum ask", () => {
-  it("shows help with no args", () => {
+  it("shows deprecated message", () => {
     const result = runCli(["ask"]);
     assert.equal(result.status, 0);
-    assert.ok(result.stdout.includes("Providers:"));
-    assert.ok(result.stdout.includes("codex"));
-    assert.ok(result.stdout.includes("claude"));
+    assert.ok(result.stdout.includes("Deprecated"));
   });
 });
 

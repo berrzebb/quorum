@@ -88,30 +88,11 @@ Fix any findings before evidence submission to avoid unnecessary correction roun
 
 ## Correction Round Flow
 
-When your evidence receives `[pending_tag]`:
-
-1. **Read rejection** — query audit history from SQLite via `quorum tool audit_history`. The verdict contains specific rejection codes and correction instructions.
-2. **Fix each issue** — address every rejection code. Do NOT ignore low-severity findings.
-3. **Re-verify** — run CQ, tests, and `audit_scan` again after fixes.
-4. **Re-submit evidence** — atomic write to `watch_file` with updated Forward RTM rows, tagged `[trigger_tag]`.
-5. **Wait for re-audit** — same 2-phase timeout (soft 2 min → hard 3 min).
-
-Repeat until `[agree_tag]` or `infra_failure`. Do NOT exit with `[pending_tag]` active.
+Read the full correction flow in `agents/knowledge/implementer-protocol.md` (section: Correction Round Flow).
 
 ## Completion Gate
 
-**Do NOT exit without verifying ALL of these:**
-
-| # | Condition | Verification |
-|---|-----------|-------------|
-| 1 | Code changes exist | `git diff --name-only` |
-| 2 | CQ passed | linter/type check exit 0 |
-| 3 | Tests passed | test runner exit 0 |
-| 4 | Evidence submitted | watch_file contains `[trigger_tag]` |
-| 5 | Audit approved | SQLite verdict contains `[agree_tag]` |
-| 6 | WIP committed | `git log -1 --oneline` shows WIP commit |
-
-**Allowed exits**: Normal (all 6 met) | Infra failure (stash + diagnostic) | Cancelled
+See `agents/knowledge/implementer-protocol.md` (section: Completion Gate) for the 6-condition table.
 
 ## Key Rules
 

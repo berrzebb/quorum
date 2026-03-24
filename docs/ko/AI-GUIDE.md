@@ -36,7 +36,7 @@
 
 ## 트리거 평가
 
-매 감사 전에 10개 팩터의 점수를 합산하여 합의 모드를 결정한다:
+매 감사 전에 12개 팩터의 점수를 합산하여 합의 모드를 결정한다:
 
 | 팩터 | 가중치 | 설명 |
 |------|--------|------|
@@ -173,6 +173,18 @@ quorum tool audit_scan --pattern all
 | **No drift** | 동일 거절 코드가 계속 반복 | 상위 티어로 에스컬레이션 |
 | **Diminishing returns** | 개선률이 단조 감소 | 상위 티어로 에스컬레이션 |
 | **Fitness plateau** | 피트니스 점수 기울기 ≈ 0 (최근 N회) | 상위 티어로 에스컬레이션 |
+
+## 의회 프로토콜 (Parliament)
+
+`parliament.enabled` 설정 또는 `quorum parliament` CLI 사용 시:
+
+1. **발산-수렴**: 3명의 의원이 자유 발언 → Judge가 4개 MECE 레지스터 + 5-분류(gap/strength/out/buy/build)로 수렴
+2. **미팅 로그**: N회 세션 축적 → 수렴 감지 → CPS (Context-Problem-Solution) 생성
+3. **개정안**: gap 분류에서 자동 발의; 과반수 투표 (구현자는 진술권만, 투표권 없음)
+4. **강제 게이트**: 5개 게이트가 프로토콜 위반 시 작업 차단 (amendment/verdict/confluence/design/regression)
+5. **Blueprint 린트**: `quorum tool blueprint_lint` — 설계 Blueprint의 네이밍 규칙 대비 소스 검증
+
+`quorum parliament --history`로 과거 세션 조회. `--mux`로 daemon 관찰 가능한 심의 실행.
 
 ## 세션 게이트
 

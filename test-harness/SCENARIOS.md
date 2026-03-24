@@ -191,7 +191,7 @@ This test harness validates the consensus-loop full cycle using a 3-track TypeSc
 ```
 1. Audit re-runs on corrected evidence
 2. All criteria pass → [APPROVED]
-3. respond.mjs syncs [APPROVED] to claude.md
+3. respond.mjs reads verdict from SQLite → side-effects
 4. retrospective.mjs writes retro-marker.json
 5. session-gate blocks until retro completes
 6. User/orchestrator completes retrospective
@@ -200,7 +200,6 @@ This test harness validates the consensus-loop full cycle using a 3-track TypeSc
 
 ### Expected Output
 - SQLite verdict: [APPROVED] for all SL-* items
-- claude.md: tags promoted to [APPROVED]
 - retro-marker.json: status `retro_pending`
 - After retro: session-gate unblocked
 - Worktree merged to main branch

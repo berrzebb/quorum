@@ -1,60 +1,80 @@
 ---
 name: quorum:guide
-description: "Guide for writing evidence packages for the quorum watch file. Use when preparing code review submissions, structuring feedback evidence, or addressing audit rejections. Triggers on 'how to submit evidence', 'evidence format', 'write evidence', 'prepare for audit', 'what goes in the watch file', '증거 작성'."
-version: 1.0.0
+description: "Guide for writing evidence packages for the quorum watch file. Use when preparing code review submissions, structuring feedback evidence, or addressing audit rejections. Triggers on 'how to submit evidence', 'evidence format', 'write evidence', 'prepare for audit', 'what goes in the watch file'."
+model: claude-sonnet-4-6
 allowed-tools: Read, Grep, Bash(node *), Bash(git diff *), Bash(git status *)
 ---
 
-# quorum — Evidence Package Guide
+# Quorum Evidence Guide (Claude Code)
 
-When submitting code changes for consensus review, write a properly structured evidence package in the watch file.
+Help the user write a proper evidence package for the quorum audit process.
+
+## Claude Code Tool Mapping
+
+| Operation | Tool |
+|-----------|------|
+| Read file | `Read` |
+| Run command | `Bash` |
+| Search content | `Grep` |
 
 ## Step 0: Read Config
 
-Read `${CLAUDE_PLUGIN_ROOT}/core/config.json` first:
-- `consensus.watch_file` → submission path
-- `consensus.trigger_tag` / `agree_tag` / `pending_tag` → actual tag values
-- `plugin.locale` → locale for templates
+Read `${CLAUDE_PLUGIN_ROOT}/core/config.json` with `Read` to determine the watch file path and tag values:
+- `consensus.watch_file` — submission path
+- `consensus.trigger_tag` / `agree_tag` / `pending_tag` — actual tag values
+- `plugin.locale` — locale for templates
 
-Note: verdicts are stored in **SQLite**, not in separate markdown files. Use `quorum status` or `audit_history` tool to check previous verdicts.
+All subsequent steps use these values.
 
-## Step 1: Write Evidence
+## Evidence Template
 
-Follow the format defined in `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/evidence-format.md`.
+The evidence must be written in the watch file (from config.json) and must include these required sections:
 
-Required sections: **Claim**, **Changed Files**, **Test Command**, **Test Result**, **Residual Risk**.
+```markdown
+## [Item Name] [trigger_tag]
 
-Key rules:
-- **Test Command** must be executable as-is — no glob patterns, use explicit file paths
-- **Test Result** must be actual terminal output, not summaries
-- **Claim** must match the actual code changes (verify with `git diff`)
-- **Changed Files** paths must use backtick formatting
-- Every changed file must pass the per-file checks from `quality_rules.presets`
-- Use a single **Write** to the watch file (not sequential Edits)
+### Claim
+What was done and why.
 
-## Step 2: Tag Lifecycle
+### Changed Files
+- `path/to/file1.ts`
+- `path/to/file2.ts`
 
-```
-[trigger_tag] → auditor reviews → verdict in SQLite
-                                  ├→ [agree_tag] applied → retro → merge
-                                  └→ [pending_tag] applied → fix → re-submit
+### Test Command
+```bash
+npm test
 ```
 
-## Step 3: Addressing Rejections
+### Test Result
+All 28 tests passed. No regressions.
 
-When auditor returns `[pending_tag]`:
+### Residual Risk
+None / Description of remaining risks.
+```
 
-1. Check rejection details: `node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary`
-2. Common rejection codes: `test-gap`, `claim-drift`, `scope-mismatch`, `quality-violation`
-3. Fix each cited issue at the specific file:line locations
-4. Update the evidence package with corrected claims, tests, and results
-5. Keep the `[trigger_tag]` to trigger a new audit cycle
+## Key Rules
 
-Full rejection code reference: `${CLAUDE_PLUGIN_ROOT}/core/templates/references/${locale}/rejection-codes.md`
+1. **Never self-approve** — use `trigger_tag` (from config), never `agree_tag`
+2. **Test commands must be specific** — no globs, no wildcards
+3. **Test results must include actual output** — copy from terminal
+4. **Changed files must exist** — must match `git diff --name-only`
+5. **Verdicts are in SQLite** — do not look for verdict.md or gpt.md files
+
+## Handling Rejections
+
+When a previous audit was rejected:
+
+1. Check rejection history:
+   ```bash
+   node ${CLAUDE_PLUGIN_ROOT}/core/tools/tool-runner.mjs audit_history --summary
+   ```
+2. Read the rejection reasons from the audit history output
+3. Address each rejection point in the new evidence
+4. Re-submit with `trigger_tag` — the audit gate re-evaluates automatically
 
 ## Execution Context
 
 | Context | Behavior |
 |---------|----------|
-| **Interactive** | Walk through evidence preparation step by step |
-| **Headless** | Generate evidence from git diff → write to watch file → apply trigger_tag |
+| **Interactive** | Read config, show template with resolved tags, guide user through each section |
+| **Headless** | Read config, scaffold evidence from `git diff`, fill placeholders, write to watch file |

@@ -1,6 +1,6 @@
 {
   "name": "quorum-audit",
-  "version": "0.4.2",
+  "version": "0.4.4",
   "description": "Cross-model audit gate with structural enforcement. Edit → audit → agree → retro → commit.",
   "type": "module",
   "author": {
@@ -34,6 +34,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "preversion": "npm run version-sync",
+    "postversion": "npm run version-sync",
     "prepublishOnly": "npm run build",
     "package": "pkg dist/cli/index.js --compress GZip",
     "dev": "tsx daemon/index.ts",
@@ -42,7 +44,8 @@
     "test:single": "node --test",
     "mcp": "node core/tools/mcp-server.mjs",
     "tool": "node core/tools/tool-runner.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version-sync": "node --input-type=module -e \"import{readFileSync as r,writeFileSync as w}from'fs';const v=JSON.parse(r('package.json','utf8')).version;const f='adapters/gemini/gemini-extension.json';const j=JSON.parse(r(f,'utf8'));j.version=v;w(f,JSON.stringify(j,null,2)+'\\n');console.log('Synced '+v+' → '+f)\""
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
