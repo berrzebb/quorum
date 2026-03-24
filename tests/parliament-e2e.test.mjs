@@ -117,10 +117,10 @@ describe("E2E: Amendment propose → vote → resolve", () => {
 
   it("runs full amendment lifecycle with majority voting", () => {
     // Propose
-    const amendment = proposeAmendment(
-      store, "architecture", "Add caching layer",
-      "advocate-1", "advocate", "Reduces latency",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "architecture", change: "Add caching layer",
+      sponsor: "advocate-1", sponsorRole: "advocate", justification: "Reduces latency",
+    });
     assert.equal(amendment.status, "proposed");
 
     // Vote: 3 voters, 2 for → majority (VotePosition: "for"/"against"/"abstain")
@@ -286,10 +286,10 @@ describe("E2E: Full integrated pipeline", () => {
     assert.ok(cps.builds.length > 0, "CPS should identify builds");
 
     // Phase 3: Propose amendment (gap discovered during session)
-    const amendment = proposeAmendment(
-      store, "architecture", "Add rate limiting middleware",
-      "devil-1", "devil", "Gap identified: missing rate limit",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "architecture", change: "Add rate limiting middleware",
+      sponsor: "devil-1", sponsorRole: "devil", justification: "Gap identified: missing rate limit",
+    });
 
     // Vote and resolve (VotePosition: "for"/"against"/"abstain")
     voteOnAmendment(store, amendment.id, "advocate-1", "advocate", "for", 0.8);

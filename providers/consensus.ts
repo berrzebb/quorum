@@ -480,7 +480,7 @@ export class DeliberativeConsensus {
       advocateResult.items, devilResult.items,
     );
 
-    let convergeVerdict: ReturnType<typeof parseConvergeVerdict> extends Promise<infer T> ? T : ReturnType<typeof parseConvergeVerdict>;
+    let convergeVerdict: ReturnType<typeof parseConvergeVerdict>;
     try {
       const judgeResult = await this.config.judge.audit(convergeRequest);
       convergeVerdict = parseConvergeVerdict(judgeResult.raw);

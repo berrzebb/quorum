@@ -30,7 +30,7 @@ async function loadModules() {
   if (_modules) return _modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -44,14 +44,32 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "parallel.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
-      import(toURL(resolve(DIST, "bus", "meeting-log.js"))).catch(() => null),
-      import(toURL(resolve(DIST, "bus", "amendment.js"))).catch(() => null),
-      import(toURL(resolve(DIST, "bus", "confluence.js"))).catch(() => null),
-      import(toURL(resolve(DIST, "bus", "normal-form.js"))).catch(() => null),
-      import(toURL(resolve(DIST, "bus", "parliament-session.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
+    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod };
     return _modules;
+  } catch {
+    return null;
+  }
+}
+
+// ── Parliament lazy-load (meeting-log, amendment, confluence, normal-form, parliament-session) ──
+// These 5 modules are only needed for T3 deliberative sessions, not every hook invocation.
+
+let _parliamentModules = null;
+
+async function loadParliamentModules() {
+  if (_parliamentModules) return _parliamentModules;
+  try {
+    const toURL = (p) => pathToFileURL(p).href;
+    const [meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod] = await Promise.all([
+      import(toURL(resolve(DIST, "bus", "meeting-log.js"))),
+      import(toURL(resolve(DIST, "bus", "amendment.js"))),
+      import(toURL(resolve(DIST, "bus", "confluence.js"))),
+      import(toURL(resolve(DIST, "bus", "normal-form.js"))),
+      import(toURL(resolve(DIST, "bus", "parliament-session.js"))),
+    ]);
+    _parliamentModules = { meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
+    return _parliamentModules;
   } catch {
     return null;
   }
@@ -718,16 +736,18 @@ export async function checkHookGate(event, input = {}) {
   return { allowed: true, additional_context: contexts.length > 0 ? contexts.join("\n") : undefined };
 }
 
-// ── Parliament Protocol ───────────────────────
+// ── Parliament Protocol (lazy-loaded) ─────────
 
 /**
  * Run a full parliament session (diverge-converge + meeting log + amendments + confluence + normal form).
  * Returns null if modules unavailable.
  */
 export async function runParliamentSession(request, config) {
-  if (!_modules?.parliamentSessionMod || !_store) return null;
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.parliamentSessionMod) return null;
   try {
-    return await _modules.parliamentSessionMod.runParliamentSession(_store, request, config);
+    return await pMods.parliamentSessionMod.runParliamentSession(_store, request, config);
   } catch (err) {
     if (process.env.QUORUM_DEBUG) console.error("[bridge] Parliament session failed:", err.message);
     return null;
@@ -737,40 +757,48 @@ export async function runParliamentSession(request, config) {
 /**
  * Check convergence status for a standing committee agenda.
  */
-export function checkParliamentConvergence(agendaId) {
-  if (!_modules?.meetingLogMod || !_store) return null;
+export async function checkParliamentConvergence(agendaId) {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.meetingLogMod) return null;
   try {
-    return _modules.meetingLogMod.checkConvergence(_store, agendaId);
+    return pMods.meetingLogMod.checkConvergence(_store, agendaId);
   } catch { return null; }
 }
 
 /**
  * Propose an amendment.
+ * @param {object} options - { target, change, sponsor, sponsorRole, justification }
  */
-export function proposeAmendment(target, change, sponsor, sponsorRole, justification) {
-  if (!_modules?.amendmentMod || !_store) return null;
+export async function proposeAmendment(options) {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.amendmentMod) return null;
   try {
-    return _modules.amendmentMod.proposeAmendment(_store, target, change, sponsor, sponsorRole, justification);
+    return pMods.amendmentMod.proposeAmendment(_store, options);
   } catch { return null; }
 }
 
 /**
  * Verify confluence (post-audit integrity).
  */
-export function verifyConfluence(input) {
-  if (!_modules?.confluenceMod) return null;
+export async function verifyConfluence(input) {
+  const pMods = await loadParliamentModules();
+  if (!pMods?.confluenceMod) return null;
   try {
-    return _modules.confluenceMod.verifyConfluence(input);
+    return pMods.confluenceMod.verifyConfluence(input);
   } catch { return null; }
 }
 
 /**
  * Get normal form convergence report.
  */
-export function getConvergenceReport() {
-  if (!_modules?.normalFormMod || !_store) return null;
+export async function getConvergenceReport() {
+  if (!_store) return null;
+  const pMods = await loadParliamentModules();
+  if (!pMods?.normalFormMod) return null;
   try {
-    return _modules.normalFormMod.generateConvergenceReport(_store);
+    return pMods.normalFormMod.generateConvergenceReport(_store);
   } catch { return null; }
 }
 
@@ -782,6 +810,7 @@ export function close() {
   _router = null;
   _lockService = null;
   _modules = null;
+  _parliamentModules = null;
   _domainMod = null;
   _routerMod2 = null;
   _specialistMod = null;

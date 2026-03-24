@@ -89,8 +89,10 @@ export type EventType =
   | "parliament.debate.round"
   | "parliament.amendment.propose"
   | "parliament.amendment.vote"
+  | "parliament.amendment.resolve"
   | "parliament.convergence"
-  | "parliament.session.digest";
+  | "parliament.session.digest"
+  | "parliament.cps.generated";
 
 // ── Typed payloads ────────────────────────────────────
 
@@ -338,6 +340,16 @@ export interface ParliamentSessionDigestPayload {
   amendmentsApproved: number;
   convergenceScore: number;
   summary: string;
+}
+
+export interface ParliamentCPSPayload {
+  context: string;
+  problem: string;
+  solution: string;
+  sourceLogIds: string[];
+  gapCount: number;
+  buildCount: number;
+  agendaId: string;
 }
 
 // ── Fitness types ────────────────────────────────────

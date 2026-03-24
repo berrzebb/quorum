@@ -27,9 +27,9 @@ describe("proposeAmendment", () => {
   it("creates amendment and stores event", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "design", "Add caching layer", "agent-1", "advocate", "Reduces latency by 50%",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "design", change: "Add caching layer", sponsor: "agent-1", sponsorRole: "advocate", justification: "Reduces latency by 50%",
+    });
 
     assert.ok(amendment.id.startsWith("A-"));
     assert.equal(amendment.target, "design");
@@ -56,9 +56,9 @@ describe("voteOnAmendment", () => {
   it("voting role succeeds", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "prd", "Expand scope", "agent-1", "advocate", "User feedback",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "prd", change: "Expand scope", sponsor: "agent-1", sponsorRole: "advocate", justification: "User feedback",
+    });
 
     const result = voteOnAmendment(store, amendment.id, "agent-2", "judge", "for", 0.9);
 
@@ -78,9 +78,9 @@ describe("voteOnAmendment", () => {
   it("implementer role is rejected", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "wb", "Split task 3", "agent-1", "advocate", "Too large",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "wb", change: "Split task 3", sponsor: "agent-1", sponsorRole: "advocate", justification: "Too large",
+    });
 
     const result = voteOnAmendment(store, amendment.id, "agent-impl", "implementer", "for", 0.8);
 
@@ -102,9 +102,9 @@ describe("resolveAmendment", () => {
   it("2 for, 1 against (3 eligible) → approved", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "design", "New API pattern", "agent-1", "advocate", "Better DX",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "design", change: "New API pattern", sponsor: "agent-1", sponsorRole: "advocate", justification: "Better DX",
+    });
 
     voteOnAmendment(store, amendment.id, "agent-adv", "advocate", "for", 0.9);
     voteOnAmendment(store, amendment.id, "agent-judge", "judge", "for", 0.85);
@@ -125,9 +125,9 @@ describe("resolveAmendment", () => {
   it("1 for, 2 against → rejected", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "scope", "Remove feature X", "agent-1", "devil", "Too complex",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "scope", change: "Remove feature X", sponsor: "agent-1", sponsorRole: "devil", justification: "Too complex",
+    });
 
     voteOnAmendment(store, amendment.id, "agent-adv", "advocate", "against", 0.8);
     voteOnAmendment(store, amendment.id, "agent-judge", "judge", "against", 0.75);
@@ -147,9 +147,9 @@ describe("resolveAmendment", () => {
   it("only 1 vote of 3 eligible → deferred (quorum not met)", () => {
     const store = createStore();
 
-    const amendment = proposeAmendment(
-      store, "prd", "Add requirement", "agent-1", "judge", "Missing coverage",
-    );
+    const amendment = proposeAmendment(store, {
+      target: "prd", change: "Add requirement", sponsor: "agent-1", sponsorRole: "judge", justification: "Missing coverage",
+    });
 
     voteOnAmendment(store, amendment.id, "agent-adv", "advocate", "for", 0.9);
 
@@ -170,12 +170,12 @@ describe("getAmendments", () => {
   it("returns all amendments with grouped votes", () => {
     const store = createStore();
 
-    const a1 = proposeAmendment(
-      store, "design", "Change A", "agent-1", "advocate", "Reason A",
-    );
-    const a2 = proposeAmendment(
-      store, "wb", "Change B", "agent-2", "devil", "Reason B",
-    );
+    const a1 = proposeAmendment(store, {
+      target: "design", change: "Change A", sponsor: "agent-1", sponsorRole: "advocate", justification: "Reason A",
+    });
+    const a2 = proposeAmendment(store, {
+      target: "wb", change: "Change B", sponsor: "agent-2", sponsorRole: "devil", justification: "Reason B",
+    });
 
     // Votes on first amendment
     voteOnAmendment(store, a1.id, "agent-judge", "judge", "for", 0.9);

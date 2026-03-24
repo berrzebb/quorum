@@ -84,3 +84,29 @@ export function createConsensusAuditors(
 export function listAuditorProviders(): string[] {
   return ["codex", "claude", "openai", "gemini"];
 }
+
+/**
+ * Check availability of all consensus auditors.
+ * Returns list of unavailable roles for pre-flight validation.
+ */
+export async function checkAvailability(
+  auditors: { advocate: Auditor; devil: Auditor; judge: Auditor },
+): Promise<{ allAvailable: boolean; unavailable: Array<{ role: string; provider: string }> }> {
+  const checks = await Promise.all(
+    (["advocate", "devil", "judge"] as const).map(async (role) => {
+      const auditor = auditors[role];
+      try {
+        const ok = await auditor.available();
+        return { role, available: ok };
+      } catch {
+        return { role, available: false };
+      }
+    }),
+  );
+
+  const unavailable = checks
+    .filter(c => !c.available)
+    .map(c => ({ role: c.role, provider: c.role }));
+
+  return { allAvailable: unavailable.length === 0, unavailable };
+}

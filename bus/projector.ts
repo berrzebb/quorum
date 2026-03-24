@@ -57,6 +57,7 @@ export class MarkdownProjector {
   private stmtParliamentSessions: Database.Statement;
   private stmtParliamentAmendments: Database.Statement;
   private stmtParliamentConvergence: Database.Statement;
+  private stmtParliamentCPS: Database.Statement;
 
   constructor(db: Database.Database, config: ProjectorConfig) {
     this.db = db;
@@ -81,6 +82,11 @@ export class MarkdownProjector {
       SELECT payload, timestamp FROM events
       WHERE event_type = 'parliament.convergence'
       ORDER BY timestamp DESC LIMIT 10
+    `);
+    this.stmtParliamentCPS = db.prepare(`
+      SELECT payload, timestamp FROM events
+      WHERE event_type = 'parliament.cps.generated'
+      ORDER BY timestamp DESC LIMIT 5
     `);
 
     this.stmtItemStates = db.prepare(`
@@ -406,6 +412,32 @@ export class MarkdownProjector {
       return lines.join("\n");
     } catch {
       return "Convergence data unavailable.";
+    }
+  }
+
+  /**
+   * Generate CPS (Context-Problem-Solution) markdown from parliament events.
+   */
+  projectCPS(): string {
+    try {
+      const rows = this.stmtParliamentCPS.all() as Array<{ payload: string; timestamp: number }>;
+      if (rows.length === 0) return "No CPS generated yet.";
+
+      const lines = [`## CPS Documents (${rows.length})\n`];
+      for (const row of rows) {
+        const p = JSON.parse(row.payload);
+        const date = new Date(row.timestamp).toISOString().slice(0, 16).replace("T", " ");
+        const agenda = (p.agendaId as string) ?? "—";
+        lines.push(`### ${agenda} (${date})`);
+        lines.push(`**Context**: ${p.context ?? "—"}`);
+        lines.push(`**Problem**: ${p.problem ?? "—"}`);
+        lines.push(`**Solution**: ${p.solution ?? "—"}`);
+        lines.push(`Gaps: ${p.gapCount ?? 0}, Builds: ${p.buildCount ?? 0}`);
+        lines.push("");
+      }
+      return lines.join("\n");
+    } catch {
+      return "CPS data unavailable.";
     }
   }
 }

@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 
 import { createHookContext, createDebugLogger, readStdinJson } from "../../../shared/hook-io.mjs";
 import { extractTags } from "../../../shared/config-resolver.mjs";
+import { runParliamentIfEnabled } from "../../../shared/parliament-runner.mjs";
 import {
   validateEvidenceFormat,
   parseChangedFiles,
@@ -123,32 +124,8 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
       });
 
       // Parliament session: T3 deliberative + parliament.enabled → diverge-converge protocol
-      if (triggerResult.mode === "deliberative" && cfg.parliament?.enabled) {
-        log("PARLIAMENT: T3 deliberative with parliament protocol enabled");
-        try {
-          const sessionResult = await bridge.runParliamentSession(
-            { prompt: content, evidence: watchPath },
-            {
-              agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
-              sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
-              consensus: consensus.roles ?? {},
-              eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
-              implementerTestimony: cfg.parliament?.testimony,
-              confluenceInput: { auditVerdict: undefined },
-            },
-          );
-          if (sessionResult?.verdict?.finalVerdict) {
-            log(`PARLIAMENT: verdict=${sessionResult.verdict.finalVerdict} converged=${sessionResult.convergence?.converged ?? false}`);
-            bridge.emitEvent("audit.verdict", "gemini", {
-              verdict: sessionResult.verdict.finalVerdict,
-              summary: sessionResult.verdict.judgeSummary,
-              codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],
-              mode: "parliament",
-            });
-          }
-        } catch (err) {
-          log(`PARLIAMENT_ERROR: ${err.message}`);
-        }
+      if (triggerResult.mode === "deliberative") {
+        await runParliamentIfEnabled(bridge, cfg, content, watchPath, "gemini", undefined, log);
       }
 
       const minTier = cfg.experiment?.minimum_tier ?? 0;

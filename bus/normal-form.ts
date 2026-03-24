@@ -91,15 +91,13 @@ export function computeConformance(
 // ── Provider Tracking ───────────────────────
 
 /**
- * Build convergence data for a specific provider from EventStore.
+ * Build convergence data for a specific provider from pre-filtered verdict events.
+ * Accepts events directly to avoid redundant EventStore queries (N+1 fix).
  */
-export function trackProviderConvergence(
-  store: EventStore,
+export function trackProviderConvergenceFromEvents(
   provider: ProviderKind,
+  verdictEvents: Array<{ timestamp: number; payload: Record<string, unknown>; source: ProviderKind }>,
 ): ProviderConvergence {
-  const verdictEvents = store.query({ eventType: "audit.verdict" })
-    .filter(e => e.source === provider);
-
   const stages: StageConformance[] = [];
   let approvedCount = 0;
   let totalRounds = verdictEvents.length;
@@ -155,23 +153,40 @@ export function trackProviderConvergence(
 }
 
 /**
+ * Build convergence data for a specific provider from EventStore.
+ * Convenience wrapper that queries the store — use trackProviderConvergenceFromEvents
+ * when you already have the events to avoid redundant queries.
+ */
+export function trackProviderConvergence(
+  store: EventStore,
+  provider: ProviderKind,
+): ProviderConvergence {
+  const verdictEvents = store.query({ eventType: "audit.verdict" })
+    .filter(e => e.source === provider);
+  return trackProviderConvergenceFromEvents(provider, verdictEvents);
+}
+
+/**
  * Generate a full convergence report across all providers.
+ * Single query — groups by provider in JS to avoid N+1 store queries.
  */
 export function generateConvergenceReport(store: EventStore): ConvergenceReport {
-  // Find all providers that have submitted verdicts
+  // Single query: fetch all verdict events once, group by provider in memory
   const allEvents = store.query({ eventType: "audit.verdict" });
-  const providers = new Set<ProviderKind>();
+  const byProvider = new Map<ProviderKind, typeof allEvents>();
   for (const e of allEvents) {
-    providers.add(e.source);
+    const arr = byProvider.get(e.source) ?? [];
+    arr.push(e);
+    byProvider.set(e.source, arr);
   }
 
   const convergences: ProviderConvergence[] = [];
-  for (const provider of providers) {
-    convergences.push(trackProviderConvergence(store, provider));
+  for (const [provider, events] of byProvider) {
+    convergences.push(trackProviderConvergenceFromEvents(provider, events));
   }
 
   const convergedProviders = convergences.filter(c => c.normalFormReached);
-  const allConverged = providers.size > 0 && convergedProviders.length === providers.size;
+  const allConverged = byProvider.size > 0 && convergedProviders.length === byProvider.size;
   const avgRoundsToNormalForm = convergedProviders.length > 0
     ? convergedProviders.reduce((sum, c) => sum + c.totalRounds, 0) / convergedProviders.length
     : null;

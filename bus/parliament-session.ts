@@ -145,12 +145,28 @@ export async function runParliamentSession(
     errors.push({ phase: "convergence", message: (err as Error).message });
   }
 
-  // Phase 4: Generate CPS (only if converged)
+  // Phase 4: Generate CPS (only if converged) + persist
   let cps: CPS | null = null;
   if (convergence?.converged) {
     try {
       const logs = getMeetingLogs(store, config.agendaId);
       cps = generateCPS(logs);
+
+      // Persist CPS as event + KV for fast-path reads
+      store.append(createEvent("parliament.cps.generated", "generic", {
+        context: cps.context,
+        problem: cps.problem,
+        solution: cps.solution,
+        sourceLogIds: cps.sourceLogIds,
+        gapCount: cps.gaps.length,
+        buildCount: cps.builds.length,
+        agendaId: config.agendaId,
+      }));
+      store.setKV("parliament.cps.latest", {
+        ...cps,
+        agendaId: config.agendaId,
+        generatedAt: cps.generatedAt,
+      });
     } catch (err) {
       errors.push({ phase: "cps", message: (err as Error).message });
     }

@@ -19,6 +19,7 @@ import {
   findWatchFile, t, isHookEnabled, configMissing,
 } from "../../core/context.mjs";
 import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
+import { runParliamentIfEnabled } from "../../adapters/shared/parliament-runner.mjs";
 import * as bridge from "../../core/bridge.mjs";
 
 const debugLog = resolve(HOOKS_DIR, plugin.debug_log ?? "debug.log");
@@ -461,30 +462,8 @@ async function main() {
         }, { sessionId });
 
         // Parliament session: T3 deliberative + parliament.enabled → diverge-converge protocol
-        if (triggerResult.mode === "deliberative" && cfg.parliament?.enabled) {
-          log("PARLIAMENT: T3 deliberative with parliament protocol enabled — launching session");
-          const sessionResult = await bridge.runParliamentSession(
-            { prompt: freshContent, evidence: watchPath },
-            {
-              agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
-              sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
-              consensus: cfg.consensus?.roles ?? {},
-              eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
-              implementerTestimony: cfg.parliament?.testimony,
-              confluenceInput: { auditVerdict: undefined },
-            },
-          );
-          if (sessionResult) {
-            log(`PARLIAMENT: verdict=${sessionResult.verdict?.finalVerdict ?? "none"} converged=${sessionResult.convergence?.converged ?? false} errors=${sessionResult.errors.length}`);
-            if (sessionResult.verdict?.finalVerdict) {
-              bridge.emitEvent("audit.verdict", "claude-code", {
-                verdict: sessionResult.verdict.finalVerdict,
-                summary: sessionResult.verdict.judgeSummary,
-                codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],
-                mode: "parliament",
-              }, { sessionId });
-            }
-          }
+        if (triggerResult.mode === "deliberative") {
+          await runParliamentIfEnabled(bridge, cfg, freshContent, watchPath, "claude-code", sessionId, log);
         }
 
         // T1 skip: no audit needed — unless minimum_tier overrides

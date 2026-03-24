@@ -61,17 +61,22 @@ const VOTING_ROLES: ParliamentRole[] = ["advocate", "devil", "judge", "specialis
 
 // ── Amendment Manager ───────────────────────
 
+export interface ProposeAmendmentOptions {
+  target: AmendmentTarget;
+  change: string;
+  sponsor: string;
+  sponsorRole: ParliamentRole;
+  justification: string;
+}
+
 /**
  * Propose a new amendment.
  */
 export function proposeAmendment(
   store: EventStore,
-  target: AmendmentTarget,
-  change: string,
-  sponsor: string,
-  sponsorRole: ParliamentRole,
-  justification: string,
+  options: ProposeAmendmentOptions,
 ): Amendment {
+  const { target, change, sponsor, sponsorRole, justification } = options;
   const id = `A-${randomUUID().slice(0, 8)}`;
 
   const payload: ParliamentAmendmentProposePayload = {
@@ -141,6 +146,8 @@ export function resolveAmendment(
   amendmentId: string,
   totalEligibleVoters: number,
 ): AmendmentResolution {
+  // TODO: EventStore.query() only supports eventType filter — no payload-level indexing.
+  // If amendment volume grows, add a SQLite index on payload->>'amendmentId' or use aggregateId.
   const voteEvents = store.query({ eventType: "parliament.amendment.vote" })
     .filter(e => e.payload.amendmentId === amendmentId);
 
@@ -168,6 +175,14 @@ export function resolveAmendment(
   const approved = quorumMet && votesFor > votesAgainst;
 
   const status: AmendmentStatus = approved ? "approved" : quorumMet ? "rejected" : "deferred";
+
+  store.append(createEvent("parliament.amendment.resolve", "generic", {
+    amendmentId,
+    status,
+    approved,
+    votesFor,
+    votesAgainst,
+  } as unknown as Record<string, unknown>));
 
   return {
     status,

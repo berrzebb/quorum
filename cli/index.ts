@@ -71,6 +71,10 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "Manage agent processes (spawn/list/capture/kill)",
     handler: () => import("./commands/agent.js").then((m) => m.run(args)),
   },
+  parliament: {
+    description: "Run parliamentary deliberation on a topic",
+    handler: () => import("./commands/parliament.js").then((m) => m.run(args)),
+  },
   ask: {
     description: "Query a provider directly",
     handler: () => import("./commands/ask.js").then((m) => m.run(args)),
@@ -124,6 +128,7 @@ function showHelp(): void {
   quorum daemon               Start TUI dashboard
   quorum status               Check audit gate status
   quorum audit                Trigger manual audit
+  quorum parliament "topic"    Run parliamentary deliberation
   quorum ask codex "review"   Ask Codex to review
   quorum tool code_map        Run code_map analysis
 

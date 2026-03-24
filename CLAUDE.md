@@ -20,6 +20,7 @@ cli/index.ts           ← quorum <command> dispatcher
   ├→ commands/audit.ts      ← manual audit trigger
   ├→ commands/plan.ts       ← work breakdown listing
   ├→ commands/orchestrate.ts ← track orchestration (WB parser + selectMode + claims)
+  ├→ commands/parliament.ts ← parliamentary deliberation CLI (topic → 3-role consensus → CPS)
   ├→ commands/ask.ts        ← provider direct query
   └→ commands/tool.ts       ← MCP tool CLI
 
@@ -69,7 +70,7 @@ core/
   ├→ audit/             ← split audit modules (args, session, scope, pre-verify, codex-runner, solo-verdict, index)
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
-  ├→ tools/             ← 19 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, ai_guide, ...)
+  ├→ tools/             ← 20 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, ai_guide, ...)
   └→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
 
 languages/
@@ -87,7 +88,7 @@ agents/knowledge/          ← Cross-adapter shared protocols
   ├→ ui-review-protocol.md    ← UI-1~8 verification checklist, report format, completion gate
   ├→ doc-sync-protocol.md     ← 3-layer fact extraction, numeric mismatch, section parity
   ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
-  └→ domains/{perf,a11y,...}.md ← 9 domain knowledge files
+  └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
 
 adapters/shared/           ← Adapter-agnostic business logic (17 modules)
   ├→ repo-resolver.mjs     ← resolveRepoRoot() (git → env → fallback)
@@ -129,7 +130,7 @@ adapters/codex/
 - **Bridge**: `core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe — hooks run in legacy mode if dist/ is unavailable.
 - **Consensus Gate**: evidence → trigger eval → domain detection → specialist tools → T1 skip / T2 simple / T3 deliberative → verdict → retro → commit.
 - **SQLite Unified State**: `state_transitions`, `locks`, `kv_state` tables + `events` — single source of truth. No verdict files (verdict.md/gpt.md eliminated). `audit-status.json` marker for fast-path hook detection.
-- **Domain Specialists**: Zero-cost file pattern matching → 8 deterministic tools + 10 LLM agents activated conditionally per domain × tier (incl. security).
+- **Domain Specialists**: Zero-cost file pattern matching → 20 deterministic tools + domain-specific LLM agents activated conditionally per domain × tier. 11 domains: perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security.
 - **Atomic Locks**: `LockService` uses INSERT...ON CONFLICT for TOCTOU-free lock acquisition (replaces JSON lock files).
 - **Provider-per-Role**: `config.json` `consensus.roles` maps roles to providers (e.g. advocate→openai, devil→claude, judge→codex). `createConsensusAuditors()` in factory.ts.
 - **Finding-Level Bus**: `MessageBus` enables per-finding submit/ack/resolve via SQLite events. Replaces file-based IPC for reviewer communication.
@@ -162,13 +163,14 @@ adapters/codex/
 - **Amendment Protocol**: `amendment.ts` — legislative change management. `proposeAmendment()` → `voteOnAmendment()` → `resolveAmendment()`. Majority voting (>50% of eligible). Implementer has testimony but no vote. All amendments stored as parliament.amendment.* events.
 - **Confluence Verification**: `confluence.ts` — post-audit whole-system integrity. 4 checks: Law↔Code (audit result), Part↔Whole (integration tests), Intent↔Result (CPS gaps), Law↔Law (amendment contradictions). Suggests amendments for mismatches.
 - **Normal Form Convergence**: `normal-form.ts` — tracks Raw Output → Autofix → Manual Fix → Normal Form (100%). Per-provider convergence tracking. Conformance = fitness(40%) + audit pass rate(40%) + confluence(20%). Goal: any implementer converges to same Normal Form regardless of starting point.
+- **Parliament CLI**: `quorum parliament "<topic>"` — runs 3-role diverge-converge deliberation on a user topic. Auto-routes to standing committee via `routeToCommittee()`. Supports `--rounds N` for multi-round convergence, `--committee`, `--advocate/--devil/--judge` provider overrides, `--testimony`. Output: verdict → 4 registers → 5 classifications → convergence → CPS.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
 
 ## Testing
 
 ```bash
-npm test                              # all (961 tests)
+npm test                              # all (983 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -189,4 +191,5 @@ node --test tests/agent-persona.test.mjs   # Agent persona loading + shared know
 node --test tests/hook-runner.test.mjs     # HookRunner engine + loader + bridge (43 tests)
 node --test tests/multi-model-integration.test.mjs # 3-model integration: CLI adapters + NDJSON + hooks + consensus (23 tests)
 node --test tests/parliament-e2e.test.mjs          # Parliament E2E pipeline (13 tests)
+node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing + routing (22 tests)
 ```

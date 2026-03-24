@@ -27,7 +27,8 @@ Analyze feature requests, maintain PRDs, define tracks. Do not generate document
 
 ## Tool References
 
-For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
+For tool parameters and examples, see: `skills/consensus-tools/references/`
+For planner document templates, see: `skills/planner/references/`
 
 ## Setup
 

@@ -27,8 +27,6 @@ export async function run(args: string[]): Promise<void> {
 
   console.log("\n\x1b[36mquorum audit\x1b[0m — manual audit trigger\n");
 
-  // Note: audit.lock eliminated — ProcessMux + SQLite LockService manage agent coordination.
-
   // Check watch file
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
   let watchFile = "docs/feedback/claude.md";
