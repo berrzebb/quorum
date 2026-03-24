@@ -12,7 +12,7 @@
  */
 
 import type { EventStore } from "./store.js";
-import type { ProviderKind, AuditVerdictPayload } from "./events.js";
+import { AUDIT_VERDICT, type ProviderKind, type AuditVerdictPayload, type AuditVerdict } from "./events.js";
 import type { FitnessScore } from "./fitness.js";
 import type { ConfluenceResult } from "./confluence.js";
 
@@ -54,7 +54,7 @@ export interface ConvergenceReport {
   timestamp: number;
 }
 
-const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", "normal-form"];
+export const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", "normal-form"];
 
 // ── Stage Classification ────────────────────
 
@@ -68,11 +68,11 @@ const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", 
  */
 export function classifyStage(
   auditRounds: number,
-  lastVerdict: "approved" | "changes_requested" | "infra_failure" | null,
+  lastVerdict: AuditVerdict | null,
   confluencePassed: boolean,
 ): ConformanceStage {
   if (auditRounds === 0) return "raw-output";
-  if (lastVerdict === "approved" && confluencePassed) return "normal-form";
+  if (lastVerdict === AUDIT_VERDICT.APPROVED && confluencePassed) return "normal-form";
   if (auditRounds <= 2) return "autofix";
   return "manual-fix";
 }
@@ -125,17 +125,17 @@ export function trackProviderConvergenceFromEvents(
   for (const e of verdictEvents) {
     currentRound++;
     const verdict = (e.payload as unknown as AuditVerdictPayload).verdict;
-    if (verdict === "approved") approvedCount++;
+    if (verdict === AUDIT_VERDICT.APPROVED) approvedCount++;
 
     const passRate = approvedCount / currentRound;
     // Estimate conformance at each round
     const conformance = computeConformance(
       passRate * 0.8 + 0.2, // rough fitness proxy
       passRate,
-      verdict === "approved" ? 1 : 0,
+      verdict === AUDIT_VERDICT.APPROVED ? 1 : 0,
     );
 
-    const stage = classifyStage(currentRound, verdict, verdict === "approved");
+    const stage = classifyStage(currentRound, verdict, verdict === AUDIT_VERDICT.APPROVED);
 
     if (stage !== lastStage) {
       // Detect regression: stage moved backward
@@ -227,7 +227,7 @@ function estimateRawConformance(
   if (verdictEvents.length === 0) return 50; // unknown → assume 50%
 
   const first = verdictEvents[0]!.payload as unknown as AuditVerdictPayload;
-  if (first.verdict === "approved") return 95;
+  if (first.verdict === AUDIT_VERDICT.APPROVED) return 95;
   if (first.verdict === "infra_failure") return 50;
 
   // changes_requested: estimate from code count

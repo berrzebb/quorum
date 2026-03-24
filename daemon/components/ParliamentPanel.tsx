@@ -17,8 +17,8 @@ interface ParliamentPanelProps {
 }
 
 export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
-  const { committees, lastVerdict, pendingAmendments, conformance, sessionCount } = parliament;
-  const hasData = sessionCount > 0 || committees.some(c => c.stableRounds > 0);
+  const { committees, lastVerdict, pendingAmendments, conformance, sessionCount, liveSessions } = parliament;
+  const hasData = sessionCount > 0 || committees.some(c => c.stableRounds > 0) || (liveSessions?.length ?? 0) > 0;
 
   return (
     <Box flexDirection="column" borderStyle="single" paddingX={1} width={42}>
@@ -29,6 +29,23 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
         <Text dimColor>No parliament sessions yet</Text>
       ) : (
         <>
+          {/* Live mux sessions */}
+          {liveSessions && liveSessions.length > 0 && (
+            <Box flexDirection="column">
+              <Text color="cyan" bold>LIVE ({liveSessions.length})</Text>
+              {liveSessions.map((s) => {
+                const age = Math.round((Date.now() - s.startedAt) / 1000);
+                const roleColor = s.role === "advocate" ? "green" : s.role === "devil" ? "red" : "blue";
+                return (
+                  <Text key={s.id}>
+                    <Text color={roleColor}>{padRight(s.role, 10)}</Text>
+                    <Text dimColor>{s.backend} {age}s</Text>
+                  </Text>
+                );
+              })}
+            </Box>
+          )}
+
           {/* Session count + amendments */}
           <Box gap={1}>
             <Text>Sessions: <Text bold>{sessionCount}</Text></Text>

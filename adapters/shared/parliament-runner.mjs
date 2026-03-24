@@ -30,11 +30,10 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
 
   const parliamentCfg = {
     agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
-    sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
+    sessionType: cfg.parliament?.sessionType ?? (new Date().getHours() < 12 ? "morning" : "afternoon"),
     consensus: consensusConfig,
     eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
     implementerTestimony: cfg.parliament?.testimony,
-    confluenceInput: { auditVerdict: undefined },
   };
 
   try {

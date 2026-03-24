@@ -16,6 +16,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EventStore } from "./store.js";
 import type { EventType } from "./events.js";
+import { AUDIT_VERDICT } from "./events.js";
+import { STAGE_ORDER, type ConformanceStage } from "./normal-form.js";
 
 // ── Gate result ─────────────────────────────
 
@@ -59,13 +61,13 @@ export function checkAmendmentGate(store: EventStore): GateResult {
  */
 export function checkVerdictGate(store: EventStore): GateResult {
   try {
-    const verdicts = store.query({ eventType: "audit.verdict" as EventType, limit: 1 });
+    const verdicts = store.query({ eventType: "audit.verdict" as EventType });
     if (verdicts.length === 0) return { allowed: true }; // No audits yet
 
-    const latest = verdicts[verdicts.length - 1]!;
+    const latest = verdicts[verdicts.length - 1]!; // ASC order → last = newest
     const verdict = latest.payload.verdict as string;
 
-    if (verdict !== "approved") {
+    if (verdict !== AUDIT_VERDICT.APPROVED) {
       return {
         allowed: false,
         reason: `Latest audit verdict: "${verdict}". Merge requires "approved".`,
@@ -140,9 +142,6 @@ export function checkDesignGate(planningDir: string, trackName: string): GateRes
 
 // ── Regression gate ─────────────────────────
 
-export type ConformanceStage = "raw-output" | "autofix" | "manual-fix" | "normal-form";
-
-const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", "normal-form"];
 
 /**
  * Detect if a provider's conformance stage has regressed.

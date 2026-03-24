@@ -96,9 +96,27 @@ export type EventType =
 
 // ── Typed payloads ────────────────────────────────────
 
+/** Canonical audit verdict status values. Shared across MJS and TS layers. */
+export const AUDIT_VERDICT = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes_requested",
+  INFRA_FAILURE: "infra_failure",
+} as const;
+
+export type AuditVerdict = typeof AUDIT_VERDICT[keyof typeof AUDIT_VERDICT];
+
+export const AMENDMENT_STATUS = {
+  PROPOSED: "proposed",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  DEFERRED: "deferred",
+} as const;
+
+export type AmendmentStatusType = typeof AMENDMENT_STATUS[keyof typeof AMENDMENT_STATUS];
+
 export interface AuditVerdictPayload {
   itemId: string;
-  verdict: "approved" | "changes_requested" | "infra_failure";
+  verdict: AuditVerdict;
   codes?: string[];
   summary?: string;
 }

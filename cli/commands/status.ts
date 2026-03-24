@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { AUDIT_VERDICT } from "../../bus/events.js";
 
 export async function run(args: string[]): Promise<void> {
   // --attach: connect to running daemon TUI session via tmux/psmux
@@ -24,9 +25,9 @@ export async function run(args: string[]): Promise<void> {
   // ── Gates ───────────────────────────────────
   // Audit gate: read audit-status.json marker
   const GATE_LABELS: Record<string, string> = {
-    changes_requested: "\x1b[33m● PENDING\x1b[0m",
-    approved: "\x1b[32m● APPROVED\x1b[0m",
-    infra_failure: "\x1b[31m● INFRA_FAILURE\x1b[0m",
+    [AUDIT_VERDICT.CHANGES_REQUESTED]: "\x1b[33m● PENDING\x1b[0m",
+    [AUDIT_VERDICT.APPROVED]: "\x1b[32m● APPROVED\x1b[0m",
+    [AUDIT_VERDICT.INFRA_FAILURE]: "\x1b[31m● INFRA_FAILURE\x1b[0m",
   };
   let auditGateLabel = "\x1b[32m● OPEN\x1b[0m";
   try {

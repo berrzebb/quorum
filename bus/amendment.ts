@@ -145,11 +145,11 @@ export function resolveAmendment(
   store: EventStore,
   amendmentId: string,
   totalEligibleVoters: number,
+  prefetchedVotes?: Array<{ payload: Record<string, unknown> }>,
 ): AmendmentResolution {
-  // TODO: EventStore.query() only supports eventType filter — no payload-level indexing.
-  // If amendment volume grows, add a SQLite index on payload->>'amendmentId' or use aggregateId.
-  const voteEvents = store.query({ eventType: "parliament.amendment.vote" })
-    .filter(e => e.payload.amendmentId === amendmentId);
+  const voteEvents = prefetchedVotes
+    ?? store.query({ eventType: "parliament.amendment.vote" })
+        .filter(e => e.payload.amendmentId === amendmentId);
 
   // Deduplicate: last vote per voter wins
   const latestVotes = new Map<string, { position: VotePosition; confidence: number }>();
@@ -239,7 +239,12 @@ export function getAmendments(store: EventStore): Amendment[] {
   });
 }
 
-/** Count amendments still in "proposed" status. */
+/** Count amendments still in "proposed" status. Lightweight — skips vote queries. */
 export function getPendingAmendmentCount(store: EventStore): number {
-  return getAmendments(store).filter(a => a.status === "proposed").length;
+  const proposed = store.query({ eventType: "parliament.amendment.propose" });
+  const resolved = new Set(
+    store.query({ eventType: "parliament.amendment.resolve" })
+      .map(e => (e.payload as unknown as { amendmentId: string }).amendmentId),
+  );
+  return proposed.filter(e => !resolved.has((e.payload as unknown as { amendmentId: string }).amendmentId)).length;
 }

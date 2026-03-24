@@ -91,6 +91,7 @@ export function listAuditorProviders(): string[] {
  */
 export async function checkAvailability(
   auditors: { advocate: Auditor; devil: Auditor; judge: Auditor },
+  roles?: Record<string, string>,
 ): Promise<{ allAvailable: boolean; unavailable: Array<{ role: string; provider: string }> }> {
   const checks = await Promise.all(
     (["advocate", "devil", "judge"] as const).map(async (role) => {
@@ -106,7 +107,7 @@ export async function checkAvailability(
 
   const unavailable = checks
     .filter(c => !c.available)
-    .map(c => ({ role: c.role, provider: c.role }));
+    .map(c => ({ role: c.role, provider: roles?.[c.role] ?? c.role }));
 
   return { allAvailable: unavailable.length === 0, unavailable };
 }

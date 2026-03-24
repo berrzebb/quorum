@@ -13,11 +13,13 @@
  */
 
 import type Database from "better-sqlite3";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import type { EventStore } from "../bus/store.js";
 import type { LockInfo } from "../bus/lock.js";
 import { COMMITTEE_IDS } from "../bus/meeting-log.js";
 import { getPendingAmendmentCount } from "../bus/amendment.js";
-import type { Finding } from "../bus/events.js";
+import type { Finding, EventType } from "../bus/events.js";
 import type {
   QuorumEvent,
   FindingDetectPayload,
@@ -142,6 +144,13 @@ export interface ParliamentCommitteeStatus {
   score: number;
 }
 
+export interface ParliamentLiveSession {
+  id: string;
+  role: string;
+  backend: string;
+  startedAt: number;
+}
+
 export interface ParliamentInfo {
   /** Per-committee convergence status. */
   committees: ParliamentCommitteeStatus[];
@@ -153,6 +162,8 @@ export interface ParliamentInfo {
   conformance: number | null;
   /** Total parliament sessions recorded. */
   sessionCount: number;
+  /** Active mux sessions (from .claude/agents/) */
+  liveSessions: ParliamentLiveSession[];
 }
 
 export interface FullState {
@@ -781,11 +792,12 @@ export class StateReader {
     const empty: ParliamentInfo = {
       committees: COMMITTEE_IDS.map(c => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 })),
       lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
+      liveSessions: this.readLiveParliamentSessions(),
     };
 
     try {
       // Session count + last verdict
-      const sessions = this.store.query({ eventType: "parliament.session.digest" as import("../bus/events.js").EventType, limit: 100 });
+      const sessions = this.store.query({ eventType: "parliament.session.digest" as EventType, limit: 100 });
       empty.sessionCount = sessions.length;
 
       if (sessions.length > 0) {
@@ -794,7 +806,7 @@ export class StateReader {
       }
 
       // Convergence per committee
-      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as import("../bus/events.js").EventType, limit: 50 });
+      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as EventType, limit: 50 });
       const latestByCommittee = new Map<string, typeof convergenceEvents[0]>();
       for (const e of convergenceEvents) {
         const agenda = (e.payload.agendaId as string) ?? "";
@@ -825,6 +837,37 @@ export class StateReader {
       return empty;
     } catch {
       return empty;
+    }
+  }
+
+  /**
+   * Read active parliament mux sessions from .claude/agents/ directory.
+   */
+  private readLiveParliamentSessions(): ParliamentLiveSession[] {
+    try {
+      const agentsDir = resolve(process.cwd(), ".claude", "agents");
+      if (!existsSync(agentsDir)) return [];
+
+      const files = readdirSync(agentsDir).filter(f => f.endsWith(".json"));
+      const sessions: ParliamentLiveSession[] = [];
+
+      for (const f of files) {
+        try {
+          const data = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
+          if (data.type === "parliament" && data.status === "running") {
+            sessions.push({
+              id: data.id,
+              role: data.role ?? "unknown",
+              backend: data.backend ?? "raw",
+              startedAt: data.startedAt ?? 0,
+            });
+          }
+        } catch { /* skip corrupt files */ }
+      }
+
+      return sessions;
+    } catch {
+      return [];
     }
   }
 }

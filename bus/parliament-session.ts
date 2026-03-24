@@ -224,12 +224,20 @@ export async function runParliamentSession(
     errors.push({ phase: "auto-amendment", message: (err as Error).message });
   }
 
-  // Phase 5: Resolve pending amendments
+  // Phase 5: Resolve pending amendments (pre-fetch all votes once to avoid N+1)
   const amendments: AmendmentResolution[] = [];
   try {
     const pending = getAmendments(store).filter(a => a.status === "proposed");
+    const allVotes = store.query({ eventType: "parliament.amendment.vote" });
+    const votesByAmendment = new Map<string, typeof allVotes>();
+    for (const v of allVotes) {
+      const aid = v.payload.amendmentId as string;
+      const arr = votesByAmendment.get(aid) ?? [];
+      arr.push(v);
+      votesByAmendment.set(aid, arr);
+    }
     for (const a of pending) {
-      const resolution = resolveAmendment(store, a.id, config.eligibleVoters);
+      const resolution = resolveAmendment(store, a.id, config.eligibleVoters, votesByAmendment.get(a.id) ?? []);
       amendments.push(resolution);
     }
   } catch (err) {

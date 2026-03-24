@@ -17,9 +17,11 @@ import { resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { EventStore } from "../../bus/store.js";
 import { createConsensusAuditors, checkAvailability } from "../../providers/auditors/factory.js";
+import { createMuxConsensusAuditors } from "../../providers/auditors/mux.js";
+import { ProcessMux } from "../../bus/mux.js";
 import { routeToCommittee, type StandingCommittee, STANDING_COMMITTEES } from "../../bus/meeting-log.js";
 import { runParliamentSession, type SessionResult, type SessionConfig } from "../../bus/parliament-session.js";
-import type { AuditRequest } from "../../providers/provider.js";
+import type { AuditRequest, Auditor } from "../../providers/provider.js";
 
 // ── Arg parsing ─────────────────────────────
 
@@ -35,6 +37,7 @@ interface ParliamentArgs {
   resume?: string;
   history?: boolean;
   detail?: string;
+  mux?: boolean;
 }
 
 export function parseArgs(args: string[]): ParliamentArgs {
@@ -77,6 +80,9 @@ export function parseArgs(args: string[]): ParliamentArgs {
         break;
       case "--detail":
         result.detail = args[++i];
+        break;
+      case "--mux":
+        result.mux = true;
         break;
       default:
         if (!arg.startsWith("-")) positional.push(arg);
@@ -282,16 +288,25 @@ export async function run(args: string[]): Promise<void> {
   const dbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
   const store = new EventStore({ dbPath });
 
+  let mux: ProcessMux | null = null;
   try {
-    // Create auditors
+    // Create auditors — MuxAuditor if --mux, standalone otherwise
     const cwd = process.cwd();
-    const auditors = createConsensusAuditors(roles, cwd);
+    let auditors: { advocate: Auditor; devil: Auditor; judge: Auditor };
+
+    if (parsed.mux) {
+      mux = new ProcessMux();
+      auditors = createMuxConsensusAuditors(roles, cwd, mux);
+      console.log(`${C.dim}Mux mode: ${mux.getBackend()} (sessions visible in daemon TUI)${C.reset}\n`);
+    } else {
+      auditors = createConsensusAuditors(roles, cwd);
+    }
 
     // Pre-flight: check auditor availability (skip with --force)
     if (!parsed.force) {
-      const availability = await checkAvailability(auditors);
+      const availability = await checkAvailability(auditors, roles);
       if (!availability.allAvailable) {
-        const missing = availability.unavailable.map(u => `${u.role} (${roles[u.role]})`).join(", ");
+        const missing = availability.unavailable.map(u => `${u.role} (${u.provider})`).join(", ");
         console.error(`${C.red}Unavailable auditors: ${missing}${C.reset}`);
         console.error(`${C.dim}Use --force to skip this check${C.reset}`);
         process.exit(1);
@@ -380,6 +395,9 @@ export async function run(args: string[]): Promise<void> {
       }
     }
   } finally {
+    if (mux) {
+      try { await mux.cleanup(); } catch { /* ok */ }
+    }
     store.close();
   }
 }
