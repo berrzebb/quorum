@@ -802,7 +802,7 @@ export class StateReader {
 
       if (sessions.length > 0) {
         const last = sessions[sessions.length - 1]!;
-        empty.lastVerdict = (last.payload.summary as string) ?? null;
+        empty.lastVerdict = (last.payload.verdictResult as string) ?? null;
       }
 
       // Convergence per committee

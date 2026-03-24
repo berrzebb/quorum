@@ -16,6 +16,7 @@
 import { resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { EventStore } from "../../bus/store.js";
+import { AUDIT_VERDICT, AMENDMENT_STATUS } from "../../bus/events.js";
 import { createConsensusAuditors, checkAvailability } from "../../providers/auditors/factory.js";
 import { createMuxConsensusAuditors } from "../../providers/auditors/mux.js";
 import { ProcessMux } from "../../bus/mux.js";
@@ -149,7 +150,7 @@ function printPhaseResult(result: SessionResult, round: number): void {
   // Verdict
   if (result.verdict) {
     const v = result.verdict;
-    const verdictColor = v.finalVerdict === "approved" ? C.green : v.finalVerdict === "changes_requested" ? C.yellow : C.red;
+    const verdictColor = v.finalVerdict === AUDIT_VERDICT.APPROVED ? C.green : v.finalVerdict === AUDIT_VERDICT.CHANGES_REQUESTED ? C.yellow : C.red;
     console.log(`${C.bold}Verdict:${C.reset} ${verdictColor}${v.finalVerdict}${C.reset} (mode: ${v.mode})`);
 
     // Opinions
@@ -221,7 +222,7 @@ function printPhaseResult(result: SessionResult, round: number): void {
   if (result.amendments.length > 0) {
     console.log(`\n${C.dim}── Amendments ──${C.reset}`);
     for (const a of result.amendments) {
-      const color = a.status === "approved" ? C.green : a.status === "rejected" ? C.red : C.yellow;
+      const color = a.status === AMENDMENT_STATUS.APPROVED ? C.green : a.status === AMENDMENT_STATUS.REJECTED ? C.red : C.yellow;
       console.log(`  ${color}${a.status}${C.reset}: ${a.votesFor} for / ${a.votesAgainst} against`);
     }
   }

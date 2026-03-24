@@ -71,7 +71,7 @@ core/
   ├→ audit/             ← split audit modules (args, session, scope, pre-verify, codex-runner, solo-verdict, index)
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
-  ├→ tools/             ← 20 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, ai_guide, ...)
+  ├→ tools/             ← 21 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, ...)
   └→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
 
 languages/
@@ -171,13 +171,14 @@ adapters/codex/
 - **Parliament Enforcement Gates**: `bus/parliament-gate.ts` — 5 structural gates that BLOCK work: Amendment gate, Verdict gate, Confluence gate, Design gate, Regression gate. `checkAllGates()` runs all at once. `quorum merge --force` to bypass. Bridge exports all gate functions.
 - **MuxAuditor**: `providers/auditors/mux.ts` — Auditor implementation backed by ProcessMux (tmux/psmux). `--mux` flag in parliament CLI spawns LLM sessions as mux panes. Sessions saved to `.claude/agents/` (daemon-discoverable). `createMuxConsensusAuditors()` creates 3 mux-backed auditors sharing one ProcessMux instance. Daemon TUI shows live sessions (role, backend, age).
 - **Parliament Session Observability**: Daemon `ParliamentPanel` shows: live mux sessions (LIVE section with role/backend/age), committee convergence, pending amendments, Normal Form conformance, session count.
+- **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
 
 ## Testing
 
 ```bash
-npm test                              # all (1006 tests)
+npm test                              # all (1018 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -200,4 +201,5 @@ node --test tests/multi-model-integration.test.mjs # 3-model integration: CLI ad
 node --test tests/parliament-e2e.test.mjs          # Parliament E2E pipeline (13 tests)
 node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing + routing (28 tests)
 node --test tests/parliament-gate.test.mjs         # Parliament enforcement gates (16 tests)
+node --test tests/blueprint-lint.test.mjs          # Blueprint naming convention lint (12 tests)
 ```

@@ -92,6 +92,7 @@ export type EventType =
   | "parliament.amendment.resolve"
   | "parliament.convergence"
   | "parliament.session.digest"
+  | "parliament.session.normalform"
   | "parliament.cps.generated";
 
 // ── Typed payloads ────────────────────────────────────

@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import type { EventStore } from "./store.js";
 import {
   createEvent,
+  AMENDMENT_STATUS,
+  type AmendmentStatusType,
   type ParliamentAmendmentProposePayload,
   type ParliamentAmendmentVotePayload,
   type ParliamentRole,
@@ -20,7 +22,7 @@ import {
 // ── Types ────────────────────────────────────
 
 export type AmendmentTarget = "prd" | "design" | "wb" | "scope";
-export type AmendmentStatus = "proposed" | "approved" | "rejected" | "deferred";
+export type AmendmentStatus = AmendmentStatusType;
 export type VotePosition = "for" | "against" | "abstain";
 
 export interface Amendment {
@@ -90,7 +92,7 @@ export function proposeAmendment(
   store.append(createEvent("parliament.amendment.propose", "generic", {
     ...payload,
     sponsorRole,
-    status: "proposed",
+    status: AMENDMENT_STATUS.PROPOSED,
   }));
 
   return {
@@ -100,7 +102,7 @@ export function proposeAmendment(
     sponsor,
     sponsorRole,
     justification,
-    status: "proposed",
+    status: AMENDMENT_STATUS.PROPOSED,
     votes: [],
     proposedAt: Date.now(),
   };
@@ -174,7 +176,7 @@ export function resolveAmendment(
   const quorumMet = totalVoted > totalEligibleVoters / 2;
   const approved = quorumMet && votesFor > votesAgainst;
 
-  const status: AmendmentStatus = approved ? "approved" : quorumMet ? "rejected" : "deferred";
+  const status: AmendmentStatus = approved ? AMENDMENT_STATUS.APPROVED : quorumMet ? AMENDMENT_STATUS.REJECTED : AMENDMENT_STATUS.DEFERRED;
 
   store.append(createEvent("parliament.amendment.resolve", "generic", {
     amendmentId,
@@ -232,7 +234,7 @@ export function getAmendments(store: EventStore): Amendment[] {
       sponsor: e.payload.sponsor as string,
       sponsorRole: e.payload.sponsorRole as ParliamentRole,
       justification: e.payload.justification as string,
-      status: resolvedStatus.get(id) ?? "proposed",
+      status: resolvedStatus.get(id) ?? AMENDMENT_STATUS.PROPOSED,
       votes: votesByAmendment.get(id) ?? [],
       proposedAt: e.timestamp,
     };

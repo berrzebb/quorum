@@ -46,6 +46,7 @@ import {
   toolInfraScan,
   toolObservabilityCheck,
   toolDocCoverage,
+  toolBlueprintLint,
   toolAiGuide,
 } from "./tool-core.mjs";
 
@@ -292,6 +293,18 @@ const TOOLS = [
       },
     },
   },
+  // ── Enforcement tools ─────────────────
+  {
+    name: "blueprint_lint",
+    description: "Check source code against Blueprint naming conventions. Parses naming tables from design/ markdown, scans source for violations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        design_dir: { type: "string", description: "Path to design directory with Blueprint markdown (default: docs/design)" },
+        path: { type: "string", description: "Source directory or file to scan (default: cwd)" },
+      },
+    },
+  },
   // ── Synthesis tools ──────────────────
   {
     name: "ai_guide",
@@ -432,6 +445,7 @@ async function handleRequest(req) {
         infra_scan: toolInfraScan,
         observability_check: toolObservabilityCheck,
         doc_coverage: toolDocCoverage,
+        blueprint_lint: toolBlueprintLint,
       };
       if (SPECIALIST_DISPATCH[name]) {
         const result = SPECIALIST_DISPATCH[name](args || {});

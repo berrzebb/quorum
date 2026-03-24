@@ -45,6 +45,7 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
     if (sessionResult?.verdict?.finalVerdict) {
       if (log) log(`PARLIAMENT: verdict=${sessionResult.verdict.finalVerdict} converged=${sessionResult.convergence?.converged ?? false}`);
       bridge.emitEvent("audit.verdict", source, {
+        itemId: `parliament:${watchPath}`,
         verdict: sessionResult.verdict.finalVerdict,
         summary: sessionResult.verdict.judgeSummary,
         codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],

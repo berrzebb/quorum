@@ -354,7 +354,7 @@ export class MarkdownProjector {
         const resolve = data.events.find(e => e.type === "parliament.amendment.resolve");
 
         const target = (propose?.payload.target as string) ?? "—";
-        const status = (resolve?.payload.resolution as string) ?? "pending";
+        const status = (resolve?.payload.status as string) ?? "pending";
         lines.push(`### ${id.slice(0, 8)} — ${status}`);
         lines.push(`- **Target**: ${target}`);
         if (propose?.payload.change) lines.push(`- **Change**: ${propose.payload.change}`);

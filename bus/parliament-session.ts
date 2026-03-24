@@ -42,7 +42,7 @@ import {
   generateConvergenceReport,
   type ConvergenceReport,
 } from "./normal-form.js";
-import { createEvent, type ProviderKind } from "./events.js";
+import { createEvent, AMENDMENT_STATUS, type ProviderKind } from "./events.js";
 
 // ── Types ────────────────────────────────────
 
@@ -227,7 +227,7 @@ export async function runParliamentSession(
   // Phase 5: Resolve pending amendments (pre-fetch all votes once to avoid N+1)
   const amendments: AmendmentResolution[] = [];
   try {
-    const pending = getAmendments(store).filter(a => a.status === "proposed");
+    const pending = getAmendments(store).filter(a => a.status === AMENDMENT_STATUS.PROPOSED);
     const allVotes = store.query({ eventType: "parliament.amendment.vote" });
     const votesByAmendment = new Map<string, typeof allVotes>();
     for (const v of allVotes) {
@@ -277,7 +277,7 @@ export async function runParliamentSession(
   try {
     normalForm = generateConvergenceReport(store);
     if (normalForm) {
-      store.append(createEvent("parliament.session.digest", "generic", {
+      store.append(createEvent("parliament.session.normalform", "generic", {
         subType: "normal-form",
         allConverged: normalForm.allConverged,
         avgRoundsToNormalForm: normalForm.avgRoundsToNormalForm,
