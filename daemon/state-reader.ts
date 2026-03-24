@@ -817,11 +817,11 @@ export class StateReader {
       const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
       empty.pendingAmendments = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
 
-      // Conformance (latest normal-form event)
-      const nfEvents = this.store.query({ eventType: "parliament.session.digest" as import("../bus/events.js").EventType, limit: 1 });
-      if (nfEvents.length > 0) {
-        const score = nfEvents[0]!.payload.convergenceScore as number | undefined;
-        if (typeof score === "number") empty.conformance = score;
+      // Conformance — reuse already-fetched sessions (last digest's conformance field)
+      if (sessions.length > 0) {
+        const lastSession = sessions[sessions.length - 1]!;
+        const score = lastSession.payload.conformance as number | undefined;
+        empty.conformance = typeof score === "number" ? score : null;
       }
 
       return empty;

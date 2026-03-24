@@ -163,14 +163,15 @@ adapters/codex/
 - **Amendment Protocol**: `amendment.ts` — legislative change management. `proposeAmendment()` → `voteOnAmendment()` → `resolveAmendment()`. Majority voting (>50% of eligible). Implementer has testimony but no vote. All amendments stored as parliament.amendment.* events.
 - **Confluence Verification**: `confluence.ts` — post-audit whole-system integrity. 4 checks: Law↔Code (audit result), Part↔Whole (integration tests), Intent↔Result (CPS gaps), Law↔Law (amendment contradictions). Suggests amendments for mismatches.
 - **Normal Form Convergence**: `normal-form.ts` — tracks Raw Output → Autofix → Manual Fix → Normal Form (100%). Per-provider convergence tracking. Conformance = fitness(40%) + audit pass rate(40%) + confluence(20%). Goal: any implementer converges to same Normal Form regardless of starting point.
-- **Parliament CLI**: `quorum parliament "<topic>"` — runs 3-role diverge-converge deliberation on a user topic. Auto-routes to standing committee via `routeToCommittee()`. Supports `--rounds N` for multi-round convergence, `--committee`, `--advocate/--devil/--judge` provider overrides, `--testimony`. Output: verdict → 4 registers → 5 classifications → convergence → CPS.
+- **Parliament CLI**: `quorum parliament "<topic>"` — runs 3-role diverge-converge deliberation. Auto-routes to standing committee. Supports `--rounds N`, `--committee`, `--advocate/--devil/--judge`, `--testimony`, `--force`, `--resume <id>`, `--history`, `--detail`. CPS persisted as `parliament.cps.generated` event + KV + `.claude/parliament/cps-*.md`. Gap classifications auto-propose amendments (Phase 4.5). Auditor availability pre-checked. Session checkpoint/resume via EventStore KV.
+- **Parliament Config**: `config.json` `parliament` section: `convergenceThreshold`, `eligibleVoters`, `maxRounds`, `maxAutoAmendments`, `roles` (overrides consensus.roles). Priority: CLI flags > parliament.roles > consensus.roles > defaults.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
 
 ## Testing
 
 ```bash
-npm test                              # all (983 tests)
+npm test                              # all (990+ tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

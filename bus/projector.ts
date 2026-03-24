@@ -75,7 +75,7 @@ export class MarkdownProjector {
     `);
     this.stmtParliamentAmendments = db.prepare(`
       SELECT event_type, payload, timestamp FROM events
-      WHERE event_type LIKE 'parliament.amendment.%'
+      WHERE event_type IN ('parliament.amendment.propose', 'parliament.amendment.vote', 'parliament.amendment.resolve')
       ORDER BY timestamp DESC LIMIT 50
     `);
     this.stmtParliamentConvergence = db.prepare(`

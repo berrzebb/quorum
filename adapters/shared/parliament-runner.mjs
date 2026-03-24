@@ -2,6 +2,14 @@
  * Run parliament session if enabled in config.
  * Extracted from 3 adapter hooks to eliminate copy-paste.
  *
+ * NOTE: `cfg.consensus.roles` is a Record<string, string> (e.g. {advocate: "openai"}).
+ * `parliament-session.ts` expects `ConsensusConfig` with actual Auditor instances.
+ * `bridge.runParliamentSession()` passes the config through to parliament-session unchanged,
+ * so the caller MUST supply pre-constructed auditors via `cfg.consensus.auditors` if available,
+ * or this will only work in environments where bridge handles auditor creation externally.
+ * When roles are plain strings, the session will fail-open at the deliberation phase
+ * (parliament-session wraps each phase in try/catch).
+ *
  * @param {object} bridge - core/bridge.mjs module
  * @param {object} cfg - full config object
  * @param {string} content - watch file content (evidence)
@@ -15,10 +23,15 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
   if (!cfg.parliament?.enabled) return null;
 
   const consensus = cfg.consensus ?? {};
+
+  // Prefer pre-built auditors (ConsensusConfig with Auditor instances).
+  // Fall back to roles record — parliament-session will fail-open at deliberation phase.
+  const consensusConfig = consensus.auditors ?? consensus.roles ?? {};
+
   const parliamentCfg = {
     agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
     sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
-    consensus: consensus.roles ?? {},
+    consensus: consensusConfig,
     eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
     implementerTestimony: cfg.parliament?.testimony,
     confluenceInput: { auditVerdict: undefined },

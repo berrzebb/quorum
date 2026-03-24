@@ -181,3 +181,40 @@ describe("parliament CLI edge cases", () => {
     assert.equal(result.topic, "결제 시스템을 마이크로서비스로 전환하는 전략 논의");
   });
 });
+
+// ═══ 5. New v2 Flags ═════════════════════════════════════════════
+
+describe("parliament CLI v2 flags", () => {
+  it("parses --force flag", () => {
+    const result = parseArgs(["--force", "테스트"]);
+    assert.equal(result.force, true);
+    assert.equal(result.topic, "테스트");
+  });
+
+  it("parses -f shorthand for force", () => {
+    const result = parseArgs(["-f", "테스트"]);
+    assert.equal(result.force, true);
+  });
+
+  it("parses --resume flag with session ID", () => {
+    const result = parseArgs(["--resume", "parliament-arch-1234567"]);
+    assert.equal(result.resume, "parliament-arch-1234567");
+  });
+
+  it("parses --history flag", () => {
+    const result = parseArgs(["--history"]);
+    assert.equal(result.history, true);
+    assert.equal(result.topic, "");
+  });
+
+  it("parses --detail flag with session ID", () => {
+    const result = parseArgs(["--detail", "architecture"]);
+    assert.equal(result.detail, "architecture");
+  });
+
+  it("combines resume with rounds", () => {
+    const result = parseArgs(["--resume", "sess-123", "--rounds", "5"]);
+    assert.equal(result.resume, "sess-123");
+    assert.equal(result.rounds, 5);
+  });
+});

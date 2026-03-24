@@ -35,12 +35,14 @@ export async function run(args: string[]): Promise<void> {
   } catch { /* no status file — default to OPEN */ }
   console.log(`  Audit gate:  ${auditGateLabel}`);
 
-  let retroPending = false;
   try {
     const marker = JSON.parse(readFileSync(resolve(repoRoot, ".session-state", "retro-marker.json"), "utf8")) as { retro_pending?: boolean; session_id?: string; rx_id?: string };
-    retroPending = !!marker.retro_pending;
-    console.log(`  Retro gate:  \x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m`);
-    console.log(`               session: ${marker.session_id ?? "?"}, rx: ${marker.rx_id ?? "?"}`);
+    if (marker.retro_pending) {
+      console.log(`  Retro gate:  \x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m`);
+      console.log(`               session: ${marker.session_id ?? "?"}, rx: ${marker.rx_id ?? "?"}`);
+    } else {
+      console.log(`  Retro gate:  \x1b[32m● OPEN\x1b[0m`);
+    }
   } catch {
     console.log(`  Retro gate:  \x1b[32m● OPEN\x1b[0m`);
   }
@@ -158,7 +160,7 @@ export async function run(args: string[]): Promise<void> {
     try {
       const { EventStore: ES } = await import("../../bus/store.js");
       const store = new ES({ dbPath });
-      const sessions = store.query({ eventType: "parliament.session.digest" as any });
+      const sessions = store.query({ eventType: "parliament.session.digest" });
       if (sessions.length > 0) {
         console.log(`\n  \x1b[36mParliament\x1b[0m`);
         console.log(`  Sessions:    ${sessions.length}`);
@@ -169,8 +171,8 @@ export async function run(args: string[]): Promise<void> {
         console.log(`  Last verdict: ${verdict} ${converged ? "\x1b[32m(converged)\x1b[0m" : ""}`);
 
         // Check for pending amendments
-        const proposeEvents = store.query({ eventType: "parliament.amendment.propose" as any });
-        const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" as any });
+        const proposeEvents = store.query({ eventType: "parliament.amendment.propose" });
+        const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" });
         const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
         const pending = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
         if (pending > 0) console.log(`  Amendments:  \x1b[33m${pending} pending\x1b[0m`);

@@ -13,9 +13,8 @@
  *   quorum parliament --testimony "기존 DB 제약 있음" "주문 테이블 리팩토링"
  */
 
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { EventStore } from "../../bus/store.js";
 import { createConsensusAuditors, checkAvailability } from "../../providers/auditors/factory.js";
 import { routeToCommittee, type StandingCommittee, STANDING_COMMITTEES } from "../../bus/meeting-log.js";
@@ -93,12 +92,9 @@ export function parseArgs(args: string[]): ParliamentArgs {
 function loadConfig(): Record<string, unknown> {
   const candidates = [
     resolve(process.cwd(), ".claude", "quorum", "config.json"),
-    resolve(process.cwd(), ".quorum", "config.json"),
   ];
   for (const p of candidates) {
-    if (existsSync(p)) {
-      try { return JSON.parse(readFileSync(p, "utf8")); } catch { /* skip */ }
-    }
+    try { return JSON.parse(readFileSync(p, "utf8")); } catch { continue; }
   }
   return {};
 }

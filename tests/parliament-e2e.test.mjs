@@ -322,7 +322,56 @@ describe("E2E: Full integrated pipeline", () => {
   });
 });
 
-// ═══ 8. 6 Standing Committees exist ══════════════════════════════
+// ═══ 8. CPS Event Persistence ════════════════════════════════════
+
+describe("E2E: CPS event persistence", () => {
+  let store;
+  beforeEach(() => { store = createStore(); });
+
+  it("stores CPS as event and KV when convergence detected", async () => {
+    const cls = makeClassifications();
+    const regs = makeRegisters();
+
+    // Accumulate to convergence (3 identical sessions)
+    for (let i = 0; i < 3; i++) {
+      storeMeetingLog(store, createMeetingLog("morning", "architecture", regs, cls, `s-${i}`));
+    }
+
+    // Check convergence
+    const convergence = checkConvergence(store, "architecture");
+    assert.equal(convergence.converged, true);
+
+    // Generate CPS and store (mimicking parliament-session.ts Phase 4)
+    const logs = getMeetingLogs(store, "architecture");
+    const cps = generateCPS(logs);
+    assert.ok(cps.context.length > 0);
+
+    // Simulate what parliament-session.ts does
+    const { createEvent } = await import("../dist/bus/events.js");
+    store.append(createEvent("parliament.cps.generated", "generic", {
+      context: cps.context,
+      problem: cps.problem,
+      solution: cps.solution,
+      sourceLogIds: cps.sourceLogIds,
+      gapCount: cps.gaps.length,
+      buildCount: cps.builds.length,
+      agendaId: "architecture",
+    }));
+    store.setKV("parliament.cps.latest", cps);
+
+    // Verify event stored
+    const cpsEvents = store.query({}).filter(e => e.type === "parliament.cps.generated");
+    assert.equal(cpsEvents.length, 1);
+    assert.equal(cpsEvents[0].payload.agendaId, "architecture");
+
+    // Verify KV stored
+    const kvCps = store.getKV("parliament.cps.latest");
+    assert.ok(kvCps);
+    assert.ok(kvCps.context);
+  });
+});
+
+// ═══ 9. 6 Standing Committees exist ══════════════════════════════
 
 describe("E2E: Standing committees configuration", () => {
   it("has exactly 6 standing committees", () => {

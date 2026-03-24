@@ -106,6 +106,7 @@ export async function runParliamentSession(
 ): Promise<SessionResult> {
   const start = Date.now();
   const errors: SessionError[] = [];
+  const maxAutoAmendments = config.maxAutoAmendments ?? 5;
 
   // Emit session start event
   store.append(createEvent("parliament.session.start", "generic", {
@@ -117,12 +118,25 @@ export async function runParliamentSession(
   // Phase 1: Deliberation (Diverge-Converge)
   let verdict: ConsensusVerdict | null = null;
   try {
+    store.append(createEvent("parliament.debate.round", "generic", {
+      agendaId: config.agendaId,
+      phase: "diverge",
+      status: "started",
+    }));
     const consensus = new DeliberativeConsensus(config.consensus);
     const options: DivergeConvergeOptions = {};
     if (config.implementerTestimony) {
       options.implementerTestimony = config.implementerTestimony;
     }
     verdict = await consensus.runDivergeConverge(request, options);
+    store.append(createEvent("parliament.debate.round", "generic", {
+      agendaId: config.agendaId,
+      phase: "converge",
+      status: "completed",
+      verdict: verdict.finalVerdict,
+      opinionsCount: verdict.opinions.length,
+      classificationsCount: verdict.classifications?.length ?? 0,
+    }));
   } catch (err) {
     errors.push({ phase: "deliberation", message: (err as Error).message });
   }
@@ -142,10 +156,18 @@ export async function runParliamentSession(
     errors.push({ phase: "meeting-log", message: (err as Error).message });
   }
 
-  // Phase 3: Check convergence
+  // Phase 3: Check convergence + emit event
   let convergence: ConvergenceStatus | null = null;
   try {
     convergence = checkConvergence(store, config.agendaId);
+    store.append(createEvent("parliament.convergence", "generic", {
+      agendaId: config.agendaId,
+      converged: convergence.converged,
+      stableRounds: convergence.stableRounds,
+      threshold: convergence.threshold,
+      lastDelta: convergence.lastDelta,
+      convergenceScore: meetingLog?.convergenceScore ?? 0,
+    }));
   } catch (err) {
     errors.push({ phase: "convergence", message: (err as Error).message });
   }
@@ -180,9 +202,8 @@ export async function runParliamentSession(
   // Phase 4.5: Auto-propose amendments from gap classifications
   let autoProposedAmendments = 0;
   try {
-    const maxAuto = config.maxAutoAmendments ?? 5;
     const gaps = (verdict?.classifications ?? []).filter(c => c.classification === "gap");
-    for (const gap of gaps.slice(0, maxAuto)) {
+    for (const gap of gaps.slice(0, maxAutoAmendments)) {
       proposeAmendment(store, {
         target: "design",
         change: gap.action || gap.item,
@@ -219,8 +240,7 @@ export async function runParliamentSession(
     confluence = verifyConfluence(input);
 
     // Auto-propose amendments from confluence suggestions
-    const maxAuto = config.maxAutoAmendments ?? 5;
-    const remainingSlots = maxAuto - autoProposedAmendments;
+    const remainingSlots = maxAutoAmendments - autoProposedAmendments;
     if (confluence.suggestedAmendments.length > 0 && remainingSlots > 0) {
       for (const sa of confluence.suggestedAmendments.slice(0, remainingSlots)) {
         proposeAmendment(store, {
@@ -237,10 +257,24 @@ export async function runParliamentSession(
     errors.push({ phase: "confluence", message: (err as Error).message });
   }
 
-  // Phase 7: Normal form tracking
+  // Phase 7: Normal form tracking + emit event
   let normalForm: ConvergenceReport | null = null;
   try {
     normalForm = generateConvergenceReport(store);
+    if (normalForm) {
+      store.append(createEvent("parliament.session.digest", "generic", {
+        subType: "normal-form",
+        allConverged: normalForm.allConverged,
+        avgRoundsToNormalForm: normalForm.avgRoundsToNormalForm,
+        providerCount: normalForm.providers.length,
+        providers: normalForm.providers.map(p => ({
+          provider: p.provider,
+          stage: p.currentStage,
+          normalFormReached: p.normalFormReached,
+          totalRounds: p.totalRounds,
+        })),
+      }));
+    }
   } catch (err) {
     errors.push({ phase: "normal-form", message: (err as Error).message });
   }
