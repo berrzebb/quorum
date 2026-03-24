@@ -54,9 +54,12 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
   const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
 
+  // Build CLI args: system prompt + initial message (the topic)
+  const initialPrompt = `Plan track "${trackName}". ${cpsContent ? "CPS is available — use it." : "No CPS — start with Socratic questions to clarify requirements."}`;
+
   const cliArgs: string[] = [];
   if (provider === "claude") {
-    cliArgs.push("--append-system-prompt", systemPrompt);
+    cliArgs.push("--append-system-prompt", systemPrompt, "-p", initialPrompt, "--resume");
   } else if (provider === "codex") {
     cliArgs.push("--instructions", systemPrompt);
   } else {
