@@ -49,8 +49,9 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
   // Spawn interactive LLM session (NOT -p/print mode)
   // System prompt is injected via --append-system-prompt (Claude) or temp file
   const { spawnSync } = await import("node:child_process");
-  // @ts-expect-error MJS module has no type declarations
-  const { resolveBinary } = await import("../../../core/cli-runner.mjs");
+  // cli-runner.mjs is a source MJS file (not compiled to dist/), resolve from package root
+  const quorumRoot = resolve(DIST, "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
 
   const cliArgs: string[] = [];
