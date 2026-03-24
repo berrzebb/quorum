@@ -11,7 +11,7 @@
       "source": {
         "source": "url",
         "url": "https://github.com/berrzebb/quorum.git",
-        "sha": "98803a469dceb848bd7623ec80eb4350ba951bed"
+        "sha": "1da7d30aa24846521ba6fda98c3ff32595108282"
       },
       "version": "0.4.0",
       "category": "development",
