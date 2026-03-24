@@ -2,6 +2,7 @@
 name: quorum:guide
 description: "Guide for writing evidence packages for the quorum watch file. Use when preparing code review submissions, structuring feedback evidence, or addressing audit rejections. Triggers on 'how to submit evidence', 'evidence format', 'write evidence', 'prepare for audit', 'what goes in the watch file', '증거 작성'."
 version: 1.0.0
+model: claude-sonnet-4-6
 allowed-tools: Read, Grep, Bash(node *), Bash(git diff *), Bash(git status *)
 ---
 

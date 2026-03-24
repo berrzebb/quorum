@@ -2,24 +2,19 @@
  * Health Check — diagnose issues that could trap agents.
  *
  * Scans for:
- * 1. Unresolved placeholders in evidence files
- * 2. (removed — ProcessMux manages agent coordination, locks eliminated)
- * 3. Orphan retro markers (retro-marker without active session)
- * 4. Stagnation in audit history (spinning/oscillation)
- * 5. Zombie worktrees (branch deleted but directory remains)
- * 6. Config mismatches (planning_dirs pointing to nonexistent dirs)
- * 7. Missing template files referenced in config
- * 8. Broken import paths in hooks
+ * - Orphan retro markers (retro-marker without active session)
+ * - Stagnation in audit history (spinning/oscillation)
+ * - Zombie worktrees (branch deleted but directory remains)
+ * - Config mismatches (planning_dirs pointing to nonexistent dirs)
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import { execFileSync } from "node:child_process";
 
 export function runHealthCheck(repoRoot) {
   const issues = [];
 
-  checkPlaceholders(repoRoot, issues);
   checkRetroMarkers(repoRoot, issues);
   checkAuditStagnation(repoRoot, issues);
   checkWorktrees(repoRoot, issues);
@@ -53,12 +48,6 @@ export function formatHealthCheck(issues) {
 }
 
 // ── Checks ────────────────────────────────────
-
-function checkPlaceholders(_repoRoot, _issues) {
-  // Verdict files eliminated — verdicts stored in SQLite only.
-  // No file-based placeholder checks needed.
-}
-
 
 function checkRetroMarkers(repoRoot, issues) {
   const markers = findFiles(repoRoot, "retro-marker.json", 5);

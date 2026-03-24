@@ -9,7 +9,7 @@ import { resolve, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
-import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
+import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -126,14 +126,14 @@ try {
 // 3a. Audit status
 const auditStatus = readAuditStatus(REPO_ROOT);
 if (auditStatus) {
-  if (auditStatus.status === "changes_requested") {
+  if (auditStatus.status === AUDIT_STATUS.CHANGES_REQUESTED) {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
     resumeActions.push(
       `${pendingTag} 보정이 필요합니다.`
       + (rejectionCodes.length > 0 ? `\n  반려 코드: ${rejectionCodes.join(", ")}` : "")
       + `\n  → 감사 결과를 확인하고 코드를 수정한 뒤 증거를 재제출하세요.`
     );
-  } else if (auditStatus.status === "approved") {
+  } else if (auditStatus.status === AUDIT_STATUS.APPROVED) {
     context += `Current audit status: ${agreeTag} — 합의 완료 상태\n`;
   }
 }

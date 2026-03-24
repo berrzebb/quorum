@@ -3,6 +3,7 @@ name: quorum:merge
 description: "Squash-merge a worktree branch into the target branch with a structured commit message. Use after audit consensus ([agree_tag]) and retrospective completion. Triggers on 'merge worktree', 'squash merge', 'finalize work', 'merge back to main', '워크트리 머지'. Do NOT use for regular git merge — this is specifically for quorum worktree branches."
 argument-hint: "[target-branch]"
 disable-model-invocation: true
+model: claude-sonnet-4-6
 context: fork
 allowed-tools: Read, Grep, Glob, Bash(git *)
 ---

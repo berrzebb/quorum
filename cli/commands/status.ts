@@ -22,31 +22,27 @@ export async function run(args: string[]): Promise<void> {
   console.log("\n\x1b[36mquorum status\x1b[0m\n");
 
   // ── Gates ───────────────────────────────────
-  // Audit gate: check audit-status.json marker (ProcessMux manages agent coordination)
-  const auditStatusPath = resolve(repoRoot, ".claude", "audit-status.json");
+  // Audit gate: read audit-status.json marker
+  const GATE_LABELS: Record<string, string> = {
+    changes_requested: "\x1b[33m● PENDING\x1b[0m",
+    approved: "\x1b[32m● APPROVED\x1b[0m",
+    infra_failure: "\x1b[31m● INFRA_FAILURE\x1b[0m",
+  };
   let auditGateLabel = "\x1b[32m● OPEN\x1b[0m";
-  if (existsSync(auditStatusPath)) {
-    try {
-      const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
-      if (status.status === "changes_requested") {
-        auditGateLabel = "\x1b[33m● PENDING\x1b[0m";
-      } else if (status.status === "approved") {
-        auditGateLabel = "\x1b[32m● APPROVED\x1b[0m";
-      } else if (status.status === "infra_failure") {
-        auditGateLabel = "\x1b[31m● INFRA_FAILURE\x1b[0m";
-      }
-    } catch { /* skip */ }
-  }
+  try {
+    const status = JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8")) as { status?: string };
+    auditGateLabel = GATE_LABELS[status.status ?? ""] ?? auditGateLabel;
+  } catch { /* no status file — default to OPEN */ }
   console.log(`  Audit gate:  ${auditGateLabel}`);
 
-  const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
-  const retroPending = existsSync(markerPath);
-  console.log(`  Retro gate:  ${retroPending ? "\x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m" : "\x1b[32m● OPEN\x1b[0m"}`);
-  if (retroPending) {
-    try {
-      const marker = JSON.parse(readFileSync(markerPath, "utf8"));
-      console.log(`               session: ${marker.session_id ?? "?"}, rx: ${marker.rx_id ?? "?"}`);
-    } catch { /* skip */ }
+  let retroPending = false;
+  try {
+    const marker = JSON.parse(readFileSync(resolve(repoRoot, ".session-state", "retro-marker.json"), "utf8")) as { retro_pending?: boolean; session_id?: string; rx_id?: string };
+    retroPending = !!marker.retro_pending;
+    console.log(`  Retro gate:  \x1b[31m● BLOCKED (Bash/Agent locked)\x1b[0m`);
+    console.log(`               session: ${marker.session_id ?? "?"}, rx: ${marker.rx_id ?? "?"}`);
+  } catch {
+    console.log(`  Retro gate:  \x1b[32m● OPEN\x1b[0m`);
   }
 
   // ── Evidence items ──────────────────────────

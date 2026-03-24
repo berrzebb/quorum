@@ -1,6 +1,7 @@
 ---
 name: quorum:status
 description: "Show current quorum gate status — audit verdicts, pending reviews, retro marker, active locks, agent assignments. All state from SQLite. Use to check what's happening before starting work, after a break, or to see audit results. Triggers on 'status', 'what's happening', 'show state', 'check gate', '현재 상태', '상태 확인'. Do NOT use for code verification — use quorum:verify instead."
+model: claude-sonnet-4-6
 allowed-tools: Read, Bash(node *), Bash(git *)
 ---
 

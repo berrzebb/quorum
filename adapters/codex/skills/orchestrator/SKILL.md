@@ -2,6 +2,7 @@
 name: quorum-orchestrator
 description: "Session orchestrator — reads handoff, picks unblocked tasks, distributes to parallel workers, manages correction cycles. Use when starting a work session or distributing implementation work. Triggers on 'start session', 'distribute tasks', 'what's next'."
 disable-model-invocation: true
+model: codex
 allowed-tools: read_file, shell, find_files, search
 ---
 

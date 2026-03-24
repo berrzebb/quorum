@@ -3,13 +3,17 @@
  *
  * Deduplicates state reading logic from session-start.mjs and prompt-submit.mjs.
  * Returns pure data — no stdout writes.
- *
- * Note: audit.lock file-based locking has been eliminated.
- * ProcessMux + SQLite LockService now manage agent coordination.
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
+/** Canonical audit verdict status values. */
+export const AUDIT_STATUS = /** @type {const} */ ({
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes_requested",
+  INFRA_FAILURE: "infra_failure",
+});
 
 /**
  * Read audit-status.json marker.
@@ -18,10 +22,8 @@ import { resolve } from "node:path";
  * @returns {object|null} Parsed audit status or null
  */
 export function readAuditStatus(repoRoot) {
-  const p = resolve(repoRoot, ".claude", "audit-status.json");
-  if (!existsSync(p)) return null;
   try {
-    return JSON.parse(readFileSync(p, "utf8"));
+    return JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8"));
   } catch {
     return null;
   }
@@ -34,10 +36,8 @@ export function readAuditStatus(repoRoot) {
  * @returns {object|null} Parsed retro marker or null
  */
 export function readRetroMarker(adapterDir) {
-  const p = resolve(adapterDir, ".session-state", "retro-marker.json");
-  if (!existsSync(p)) return null;
   try {
-    return JSON.parse(readFileSync(p, "utf8"));
+    return JSON.parse(readFileSync(resolve(adapterDir, ".session-state", "retro-marker.json"), "utf8"));
   } catch {
     return null;
   }
@@ -51,10 +51,8 @@ export function readRetroMarker(adapterDir) {
  * @returns {string} File content or empty string
  */
 export function readWatchContent(repoRoot, watchFile) {
-  const p = resolve(repoRoot, watchFile);
-  if (!existsSync(p)) return "";
   try {
-    return readFileSync(p, "utf8");
+    return readFileSync(resolve(repoRoot, watchFile), "utf8");
   } catch {
     return "";
   }
@@ -84,8 +82,8 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
   const watchContent = readWatchContent(repoRoot, watchFile);
   const auditStatus = readAuditStatus(repoRoot);
   const hasTrigger = watchContent.includes(triggerTag);
-  const isPending = auditStatus?.status === "changes_requested";
-  const isApproved = auditStatus?.status === "approved";
+  const isPending = auditStatus?.status === AUDIT_STATUS.CHANGES_REQUESTED;
+  const isApproved = auditStatus?.status === AUDIT_STATUS.APPROVED;
 
   if (isPending && hasTrigger) {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
@@ -180,8 +178,8 @@ export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
   const watchContent = readWatchContent(repoRoot, watchFile);
   const auditStatus = readAuditStatus(repoRoot);
   const hasTrigger = watchContent.includes(triggerTag);
-  const isPending = auditStatus?.status === "changes_requested";
-  const isApproved = auditStatus?.status === "approved";
+  const isPending = auditStatus?.status === AUDIT_STATUS.CHANGES_REQUESTED;
+  const isApproved = auditStatus?.status === AUDIT_STATUS.APPROVED;
 
   if (isPending && hasTrigger) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;

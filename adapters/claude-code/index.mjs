@@ -18,7 +18,7 @@ import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus as c,
   findWatchFile, t, isHookEnabled, configMissing,
 } from "../../core/context.mjs";
-import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
+import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
 import * as bridge from "../../core/bridge.mjs";
 
 const debugLog = resolve(HOOKS_DIR, plugin.debug_log ?? "debug.log");
@@ -222,7 +222,7 @@ function check_pending_response() {
   if (result?.stdout) process.stdout.write(t("index.sync.output", { out: result.stdout }));
 
   const status = readAuditStatus(REPO_ROOT);
-  if (status?.status === "approved") {
+  if (status?.status === AUDIT_STATUS.APPROVED) {
     process.stdout.write(t("index.sync.arrived_agreed", { tag: c.agree_tag }));
   } else if (status) {
     const statusMsg = `status: ${status.status}, pending: ${status.pendingCount}, codes: ${(status.rejectionCodes ?? []).join(", ")}`;

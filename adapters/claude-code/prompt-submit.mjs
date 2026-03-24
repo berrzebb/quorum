@@ -10,7 +10,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { readAuditStatus } from "../../adapters/shared/audit-state.mjs";
+import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -68,10 +68,10 @@ if (existsSync(retroMarker)) {
 // 2. Audit status
 const auditStatus = readAuditStatus(REPO_ROOT);
 if (auditStatus) {
-  if (auditStatus.status === "changes_requested") {
+  if (auditStatus.status === AUDIT_STATUS.CHANGES_REQUESTED) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;
     signals.push(`❌ ${pendingTag} 보정 필요 (반려 ${codeCount}건) — 감사 결과 확인 후 수정 & 재제출`);
-  } else if (auditStatus.status === "approved") {
+  } else if (auditStatus.status === AUDIT_STATUS.APPROVED) {
     signals.push(`✅ ${agreeTag} — 커밋 가능`);
   }
 }
