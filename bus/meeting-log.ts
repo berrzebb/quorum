@@ -91,6 +91,32 @@ export const STANDING_COMMITTEES: Record<StandingCommittee, { name: string; item
   "research-questions": { name: "Research Questions", items: ["Requirements", "Communication Protocol", "Intent Classification", "Agent Cooperation", "State Management", "Workflow Visualization"] },
 };
 
+// ── Committee Routing ────────────────────────
+
+const COMMITTEE_PATTERNS: Record<StandingCommittee, RegExp> = {
+  "principles": /\b(boundar|mental.model|hallucin|human.in.the.loop|hitl|audit.trail|principle|i\/o)\b/i,
+  "definitions": /\b(agent.example|agent.call|sub.?agent|context.defin|definition|terminolog)\b/i,
+  "structure": /\b(hierarch|relation|parent.child|composition|inheritance|tree.struct)\b/i,
+  "architecture": /\b(overview|dataflow|data.flow|api.design|protocol|system.diagram|architect)\b/i,
+  "scope": /\b(in.scope|out.scope|exclude|scope.bound|mvp|defer|phase.out)\b/i,
+  "research-questions": /\b(research|communicat|intent.classif|agent.cooperat|state.manage|workflow.visual|open.question)\b/i,
+};
+
+/**
+ * Route a topic to the appropriate standing committee(s) by keyword matching.
+ * Returns multiple committees if topic spans concerns.
+ */
+export function routeToCommittee(topic: string): StandingCommittee[] {
+  const matches: StandingCommittee[] = [];
+  for (const [committee, pattern] of Object.entries(COMMITTEE_PATTERNS) as Array<[StandingCommittee, RegExp]>) {
+    if (pattern.test(topic)) {
+      matches.push(committee);
+    }
+  }
+  // Fallback: unmatched topics go to research-questions
+  return matches.length > 0 ? matches : ["research-questions"];
+}
+
 // ── Core Functions ───────────────────────────
 
 const DEFAULT_CONVERGENCE_THRESHOLD = 2;

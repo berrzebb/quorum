@@ -211,6 +211,11 @@ function buildConvergeJudgePrompt(
 
 Two reviewers have completed their free-form analysis. Your job:
 
+### Confidence Weighting
+When reviewers disagree, weight their opinions by confidence score.
+A reviewer with 0.9 confidence outweighs one with 0.3 confidence.
+If both have similar confidence, evaluate the reasoning quality instead.
+
 ### Phase B: Converge into 4 Registers
 Classify all observations into:
 1. **Status Changes**: What changed since last review?

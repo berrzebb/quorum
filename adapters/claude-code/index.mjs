@@ -460,6 +460,33 @@ async function main() {
           reasons: triggerResult.reasons,
         }, { sessionId });
 
+        // Parliament session: T3 deliberative + parliament.enabled → diverge-converge protocol
+        if (triggerResult.mode === "deliberative" && cfg.parliament?.enabled) {
+          log("PARLIAMENT: T3 deliberative with parliament protocol enabled — launching session");
+          const sessionResult = await bridge.runParliamentSession(
+            { prompt: freshContent, evidence: watchPath },
+            {
+              agendaId: cfg.parliament?.defaultAgenda ?? "research-questions",
+              sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
+              consensus: cfg.consensus?.roles ?? {},
+              eligibleVoters: cfg.parliament?.eligibleVoters ?? 3,
+              implementerTestimony: cfg.parliament?.testimony,
+              confluenceInput: { auditVerdict: undefined },
+            },
+          );
+          if (sessionResult) {
+            log(`PARLIAMENT: verdict=${sessionResult.verdict?.finalVerdict ?? "none"} converged=${sessionResult.convergence?.converged ?? false} errors=${sessionResult.errors.length}`);
+            if (sessionResult.verdict?.finalVerdict) {
+              bridge.emitEvent("audit.verdict", "claude-code", {
+                verdict: sessionResult.verdict.finalVerdict,
+                summary: sessionResult.verdict.judgeSummary,
+                codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],
+                mode: "parliament",
+              }, { sessionId });
+            }
+          }
+        }
+
         // T1 skip: no audit needed — unless minimum_tier overrides
         const minTier = cfg.experiment?.minimum_tier ?? 0;
         if (triggerResult.mode === "skip" && minTier < 2) {
