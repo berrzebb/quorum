@@ -401,16 +401,29 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
   console.log(`  Track:    ${trackName}`);
   console.log(`  Provider: ${provider}\n`);
 
-  const tracks = findTracks(repoRoot);
-  const track = tracks.find(t => t.name === trackName);
-  if (!track) {
-    console.log(`  \x1b[31mTrack '${trackName}' not found.\x1b[0m\n`);
-    return;
+  let tracks = findTracks(repoRoot);
+  let track = tracks.find(t => t.name === trackName);
+
+  // Loop 1: If no track/WBs exist, auto-invoke planner from CPS
+  if (!track || parseWorkBreakdown(track.path).length === 0) {
+    const generated = await autoGenerateWBs(repoRoot, trackName, provider);
+    if (!generated) {
+      console.log(`  \x1b[31mNo WBs for '${trackName}' and auto-generation failed.\x1b[0m`);
+      console.log(`  Run planner manually or check CPS: quorum parliament --history\n`);
+      return;
+    }
+    // Re-scan after generation
+    tracks = findTracks(repoRoot);
+    track = tracks.find(t => t.name === trackName);
+    if (!track) {
+      console.log(`  \x1b[31mTrack still not found after planner.\x1b[0m\n`);
+      return;
+    }
   }
 
   const workItems = parseWorkBreakdown(track.path);
   if (workItems.length === 0) {
-    console.log("  \x1b[33mNo parseable work items.\x1b[0m\n");
+    console.log("  \x1b[33mNo parseable work items after planning.\x1b[0m\n");
     return;
   }
 
@@ -560,16 +573,207 @@ async function runImplementationLoop(repoRoot: string, args: string[]): Promise<
   console.log(`  \x1b[1mResult:\x1b[0m ${completedWBs}/${totalWBs} WBs completed`);
 
   if (completedWBs === totalWBs) {
-    console.log("  \x1b[32m✓ Track complete! Next: quorum retro → quorum merge\x1b[0m\n");
+    console.log("  \x1b[32m✓ Track complete!\x1b[0m\n");
     if (bridge?.emitEvent) {
       bridge.emitEvent("track.complete", "claude-code", { trackId: trackName, total: totalWBs });
     }
+
+    // Loop 2: Auto-retro
+    console.log("  \x1b[36mAuto-retro...\x1b[0m");
+    await autoRetro(repoRoot);
+
+    // Loop 3: Auto-merge (if in worktree)
+    await autoMerge(repoRoot, bridge);
   } else {
     console.log(`  \x1b[33m${totalWBs - completedWBs} incomplete. Run again or check progress.\x1b[0m\n`);
   }
 
   await mux.cleanup();
   if (bridge?.close) bridge.close();
+}
+
+// ── Auto-generate WBs from CPS ──────────────
+
+async function autoGenerateWBs(repoRoot: string, trackName: string, provider: string): Promise<boolean> {
+  // Check if CPS exists
+  const cpsDir = resolve(repoRoot, ".claude", "parliament");
+  const cpsFiles = existsSync(cpsDir)
+    ? readdirSync(cpsDir).filter(f => f.startsWith("cps-") && f.endsWith(".md"))
+    : [];
+
+  if (cpsFiles.length === 0) {
+    console.log("  \x1b[33mNo CPS found. Run parliament first: quorum parliament \"topic\"\x1b[0m\n");
+    return false;
+  }
+
+  const latestCps = readFileSync(resolve(cpsDir, cpsFiles[cpsFiles.length - 1]!), "utf8");
+  console.log(`  \x1b[36mAuto-planning from CPS...\x1b[0m\n`);
+
+  // Read planner skill protocol
+  let plannerProtocol = "";
+  const skillPaths = [
+    resolve(repoRoot, "skills", "planner", "SKILL.md"),
+    resolve(repoRoot, "adapters", "claude-code", "skills", "planner", "SKILL.md"),
+  ];
+  for (const p of skillPaths) {
+    if (existsSync(p)) { plannerProtocol = readFileSync(p, "utf8"); break; }
+  }
+
+  // Spawn planner agent via ProcessMux
+  const toURL = (p: string) => pathToFileURL(p).href;
+  let ProcessMux;
+  try {
+    const muxMod = await import(toURL(resolve(DIST, "bus", "mux.js")));
+    ProcessMux = muxMod.ProcessMux;
+  } catch { return false; }
+
+  const mux = new ProcessMux();
+  const planningDir = resolve(repoRoot, "docs", "plan");
+
+  try {
+    const session = await mux.spawn({
+      name: `quorum-planner-${Date.now()}`,
+      command: provider,
+      args: provider === "codex" ? ["exec", "--json", "-"] : ["-p", "--output-format", "stream-json"],
+      cwd: repoRoot,
+      env: { FEEDBACK_LOOP_ACTIVE: "1" },
+    });
+
+    const prompt = `# Auto-Planning from Parliament CPS
+
+## CPS (Context-Problem-Solution)
+${latestCps}
+
+## Track Name
+${trackName}
+
+## Instructions
+You are the planner. The parliament has produced the above CPS through deliberation.
+
+1. Read the CPS above (Phase 0 — CPS Intake)
+2. Generate a PRD from CPS: Context→§1, Problem→§2, Solution→§4
+3. Generate Work Breakdown with WB IDs (e.g., ${trackName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3)}-1, ${trackName.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3)}-2, ...)
+4. Write to: ${planningDir}/${trackName}/work-breakdown.md
+5. Include: ## WB-ID Title, First touch files (backtick-quoted), Prerequisites
+
+${plannerProtocol}`;
+
+    mux.send(session.id, prompt);
+
+    // Poll for completion (3 min timeout)
+    const timeout = 180_000;
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      await new Promise(r => setTimeout(r, 5000));
+      const cap = mux.capture(session.id, 200);
+      if (!cap) continue;
+      if (cap.output.includes('"type":"result"') || cap.output.includes('"stop_reason"') || cap.output.includes('"type":"turn.completed"')) {
+        break;
+      }
+    }
+
+    await mux.kill(session.id);
+    await mux.cleanup();
+
+    // Check if WBs were actually created
+    const wbPath = resolve(planningDir, trackName, "work-breakdown.md");
+    if (existsSync(wbPath)) {
+      console.log(`  \x1b[32m✓ WBs generated:\x1b[0m ${wbPath}\n`);
+      return true;
+    }
+
+    // Also check for files matching the track name
+    const newTracks = findTracks(repoRoot);
+    if (newTracks.some(t => t.name === trackName)) {
+      console.log(`  \x1b[32m✓ Track found after planning\x1b[0m\n`);
+      return true;
+    }
+
+    console.log("  \x1b[33mPlanner completed but WBs not found on disk.\x1b[0m\n");
+    return false;
+  } catch (err) {
+    console.log(`  \x1b[31mPlanner failed: ${(err as Error).message}\x1b[0m\n`);
+    await mux.cleanup();
+    return false;
+  }
+}
+
+// ── Auto-retro (release session gate) ───────
+
+async function autoRetro(repoRoot: string): Promise<void> {
+  const markerPath = resolve(repoRoot, ".session-state", "retro-marker.json");
+
+  if (existsSync(markerPath)) {
+    try {
+      const { rmSync: rm } = await import("node:fs");
+      rm(markerPath);
+      console.log("  \x1b[32m✓ Retro marker cleared — session gate released.\x1b[0m");
+    } catch (err) {
+      console.log(`  \x1b[33m⚠ Could not clear retro marker: ${(err as Error).message}\x1b[0m`);
+    }
+  } else {
+    console.log("  \x1b[2mNo retro marker (gate already open).\x1b[0m");
+  }
+
+  // Emit retro complete event
+  try {
+    const toURL = (p: string) => pathToFileURL(p).href;
+    const bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    if (bridge?.emitEvent) {
+      bridge.emitEvent("retro.complete", "claude-code", { auto: true, timestamp: Date.now() });
+    }
+  } catch { /* non-critical */ }
+}
+
+// ── Auto-merge (if in worktree) ─────────────
+
+async function autoMerge(repoRoot: string, bridge: Record<string, Function> | null): Promise<void> {
+  const { spawnSync } = await import("node:child_process");
+
+  // Detect if we're in a worktree
+  const gitDir = spawnSync("git", ["rev-parse", "--git-dir"], {
+    cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+  });
+
+  const isWorktree = gitDir.stdout?.includes("/worktrees/") || gitDir.stdout?.includes("\\worktrees\\");
+
+  if (!isWorktree) {
+    console.log("  \x1b[2mNot in worktree — skip auto-merge. Run: quorum merge <branch>\x1b[0m\n");
+    return;
+  }
+
+  // Get current branch
+  const branchResult = spawnSync("git", ["branch", "--show-current"], {
+    cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+  });
+  const branch = branchResult.stdout?.trim();
+
+  if (!branch) {
+    console.log("  \x1b[33m⚠ Could not detect current branch for auto-merge.\x1b[0m\n");
+    return;
+  }
+
+  // Parliament gates check
+  if (bridge?.checkParliamentGates) {
+    const gate = bridge.checkParliamentGates();
+    if (!gate.allowed) {
+      console.log(`  \x1b[33m⚠ Merge blocked by parliament gate: ${gate.reason}\x1b[0m\n`);
+      return;
+    }
+  }
+
+  console.log(`  \x1b[36mAuto-merge: ${branch} → main\x1b[0m`);
+
+  // Switch to main, merge, switch back
+  const merge = spawnSync("git", ["merge", "--squash", branch], {
+    cwd: repoRoot, encoding: "utf8", stdio: "inherit", windowsHide: true,
+  });
+
+  if (merge.status === 0) {
+    console.log("  \x1b[32m✓ Squash merge staged. Review and commit.\x1b[0m\n");
+  } else {
+    console.log("  \x1b[33m⚠ Merge had issues. Resolve manually.\x1b[0m\n");
+  }
 }
 
 function buildImplementerPrompt(item: WorkItem, trackName: string, repoRoot: string): string {
