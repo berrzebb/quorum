@@ -19,7 +19,7 @@ cli/index.ts           ← quorum <command> dispatcher
   ├→ commands/status.ts     ← gate status (--attach/--capture for mux remote view)
   ├→ commands/audit.ts      ← manual audit trigger
   ├→ commands/plan.ts       ← work breakdown listing
-  ├→ commands/orchestrate.ts ← track orchestration (WB parser + selectMode + claims)
+  ├→ commands/orchestrate.ts ← track orchestration (WB parser + selectMode + claims + run loop)
   ├→ commands/parliament.ts ← parliamentary deliberation CLI (topic → 3-role consensus → CPS)
   ├→ commands/ask.ts        ← provider direct query
   └→ commands/tool.ts       ← MCP tool CLI
@@ -172,6 +172,7 @@ adapters/codex/
 - **MuxAuditor**: `providers/auditors/mux.ts` — Auditor implementation backed by ProcessMux (tmux/psmux). `--mux` flag in parliament CLI spawns LLM sessions as mux panes. Sessions saved to `.claude/agents/` (daemon-discoverable). `createMuxConsensusAuditors()` creates 3 mux-backed auditors sharing one ProcessMux instance. Daemon TUI shows live sessions (role, backend, age).
 - **Parliament Session Observability**: Daemon `ParliamentPanel` shows: live mux sessions (LIVE section with role/backend/age), committee convergence, pending amendments, Normal Form conformance, session count.
 - **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
+- **Implementation Loop**: `quorum orchestrate run <track> --provider claude` — full WB execution loop. Reads WBs → dependency-aware groups → spawns agents via ProcessMux → sends implementer protocol → polls for audit verdict → correction rounds on rejection (max 3) → next WB on approval. Parliament gates checked before start. File claims prevent conflicts. Events: agent.spawn, track.progress, track.complete.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
 
