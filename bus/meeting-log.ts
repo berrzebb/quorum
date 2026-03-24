@@ -91,6 +91,8 @@ export const STANDING_COMMITTEES: Record<StandingCommittee, { name: string; item
   "research-questions": { name: "Research Questions", items: ["Requirements", "Communication Protocol", "Intent Classification", "Agent Cooperation", "State Management", "Workflow Visualization"] },
 };
 
+export const COMMITTEE_IDS = Object.keys(STANDING_COMMITTEES) as StandingCommittee[];
+
 // ── Committee Routing ────────────────────────
 
 const COMMITTEE_PATTERNS: Record<StandingCommittee, RegExp> = {

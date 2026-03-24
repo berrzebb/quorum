@@ -12,6 +12,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import type Database from "better-sqlite3";
+import { COMMITTEE_IDS } from "./meeting-log.js";
 
 // ── Types ────────────────────────────────────
 
@@ -377,7 +378,6 @@ export class MarkdownProjector {
       const rows = this.stmtParliamentConvergence.all() as Array<{ payload: string; timestamp: number }>;
       if (rows.length === 0) return "No convergence data recorded.";
 
-      const COMMITTEES = ["principles", "definitions", "structure", "architecture", "scope", "research-questions"];
       const latest = new Map<string, { converged: boolean; stableRounds: number; threshold: number; score: number; timestamp: number }>();
 
       for (const row of rows) {
@@ -398,7 +398,7 @@ export class MarkdownProjector {
       lines.push("| Committee | Status | Stable | Score |");
       lines.push("|-----------|--------|--------|-------|");
 
-      for (const c of COMMITTEES) {
+      for (const c of COMMITTEE_IDS) {
         const data = latest.get(c);
         if (data) {
           const status = data.converged ? "converged" : "pending";

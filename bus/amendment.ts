@@ -182,7 +182,7 @@ export function resolveAmendment(
     approved,
     votesFor,
     votesAgainst,
-  } as unknown as Record<string, unknown>));
+  }));
 
   return {
     status,
@@ -237,4 +237,9 @@ export function getAmendments(store: EventStore): Amendment[] {
       proposedAt: e.timestamp,
     };
   });
+}
+
+/** Count amendments still in "proposed" status. */
+export function getPendingAmendmentCount(store: EventStore): number {
+  return getAmendments(store).filter(a => a.status === "proposed").length;
 }

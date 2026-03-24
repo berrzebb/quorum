@@ -39,6 +39,10 @@ export interface ProviderConvergence {
   normalFormReached: boolean;
   /** Total rounds from raw output to current stage. */
   totalRounds: number;
+  /** Whether a regression was detected (stage moved backward). */
+  regressed: boolean;
+  /** Previous stage before regression (null if no regression). */
+  regressionFrom?: ConformanceStage;
 }
 
 export interface ConvergenceReport {
@@ -49,6 +53,8 @@ export interface ConvergenceReport {
   avgRoundsToNormalForm: number | null;
   timestamp: number;
 }
+
+const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", "normal-form"];
 
 // ── Stage Classification ────────────────────
 
@@ -105,6 +111,8 @@ export function trackProviderConvergenceFromEvents(
   // Track stage transitions
   let currentRound = 0;
   let lastStage: ConformanceStage = "raw-output";
+  let regressed = false;
+  let regressionFrom: ConformanceStage | undefined;
 
   // Raw output stage (always exists)
   stages.push({
@@ -130,6 +138,11 @@ export function trackProviderConvergenceFromEvents(
     const stage = classifyStage(currentRound, verdict, verdict === "approved");
 
     if (stage !== lastStage) {
+      // Detect regression: stage moved backward
+      if (STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(lastStage)) {
+        regressed = true;
+        regressionFrom = lastStage;
+      }
       stages.push({
         stage,
         conformance,
@@ -149,6 +162,8 @@ export function trackProviderConvergenceFromEvents(
     currentStage,
     normalFormReached,
     totalRounds,
+    regressed,
+    regressionFrom,
   };
 }
 

@@ -213,7 +213,7 @@ export async function runParliamentSession(
     for (const gap of gaps.slice(0, maxAutoAmendments)) {
       proposeAmendment(store, {
         target: "design",
-        change: gap.action || gap.item,
+        change: gap.action ?? gap.item,
         sponsor: "judge",
         sponsorRole: "judge",
         justification: `Gap identified in deliberation: ${gap.item}`,

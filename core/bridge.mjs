@@ -30,7 +30,7 @@ async function loadModules() {
   if (_modules) return _modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -44,8 +44,9 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "parallel.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "parliament-gate.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod };
+    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
     return _modules;
   } catch {
     return null;
@@ -800,6 +801,46 @@ export async function getConvergenceReport() {
   try {
     return pMods.normalFormMod.generateConvergenceReport(_store);
   } catch { return null; }
+}
+
+// ── Parliament Enforcement Gates ─────────────
+
+/**
+ * Check all parliament gates: amendments, verdict, confluence.
+ * Returns { allowed: boolean, reason?: string } — fail-open on error.
+ */
+export function checkParliamentGates(options = {}) {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try {
+    return _modules.parliamentGateMod.checkAllGates(_store, options);
+  } catch { return { allowed: true }; }
+}
+
+/**
+ * Check individual gates for fine-grained control.
+ */
+export function checkAmendmentGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkAmendmentGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkVerdictGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkVerdictGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkConfluenceGate() {
+  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkConfluenceGate(_store); }
+  catch { return { allowed: true }; }
+}
+
+export function checkDesignGate(planningDir, trackName) {
+  if (!_modules?.parliamentGateMod) return { allowed: true };
+  try { return _modules.parliamentGateMod.checkDesignGate(planningDir, trackName); }
+  catch { return { allowed: true }; }
 }
 
 export function close() {

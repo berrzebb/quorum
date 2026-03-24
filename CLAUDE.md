@@ -47,6 +47,7 @@ bus/
   ├→ amendment.ts       ← Amendment process (propose/vote/resolve, majority voting)
   ├→ confluence.ts      ← Confluence verification (4-point post-audit integrity: law-code/part-whole/intent-result/law-law)
   ├→ normal-form.ts     ← Normal form convergence tracking (raw-output → autofix → manual-fix → normal-form)
+  ├→ parliament-gate.ts ← Enforcement gates (5 gates: amendment, verdict, confluence, design, regression)
   └→ mux.ts             ← ProcessMux (tmux/psmux/raw)
 
 providers/
@@ -167,13 +168,14 @@ adapters/codex/
 - **Parliament Config**: `config.json` `parliament` section: `convergenceThreshold`, `eligibleVoters`, `maxRounds`, `maxAutoAmendments`, `roles` (overrides consensus.roles). Priority: CLI flags > parliament.roles > consensus.roles > defaults.
 - **CPS→Planner Pipeline**: Planner Phase 0 (CPS Intake) reads parliament CPS before Phase 1. CPS.Context→PRD §1, CPS.Problem→PRD §2, CPS.Solution→PRD §4. Skips Phase 1 if CPS covers full intent. Design Phase is mandatory for CPS-origin tracks (DRM must include Design row). Design before WB — Blueprint naming conventions are binding law.
 - **Parliament Events**: `parliament.convergence` emitted per session (fixes TUI display). `parliament.debate.round` emitted for diverge/converge phases. `parliament.cps.generated` for CPS persistence. Normal-form report emitted as session.digest subType.
+- **Parliament Enforcement Gates**: `bus/parliament-gate.ts` — 5 structural gates that BLOCK work (not just document): Amendment gate (pending amendments → block impl), Verdict gate (changes_requested → block merge), Confluence gate (failed → block merge), Design gate (missing artifacts → block WB), Regression gate (stage regression detection). `checkAllGates()` runs all at once. `quorum merge --force` to bypass. Bridge exports: `checkParliamentGates()`, `checkAmendmentGate()`, `checkVerdictGate()`, `checkConfluenceGate()`, `checkDesignGate()`.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
 
 ## Testing
 
 ```bash
-npm test                              # all (990+ tests)
+npm test                              # all (1006 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -194,5 +196,6 @@ node --test tests/agent-persona.test.mjs   # Agent persona loading + shared know
 node --test tests/hook-runner.test.mjs     # HookRunner engine + loader + bridge (43 tests)
 node --test tests/multi-model-integration.test.mjs # 3-model integration: CLI adapters + NDJSON + hooks + consensus (23 tests)
 node --test tests/parliament-e2e.test.mjs          # Parliament E2E pipeline (13 tests)
-node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing + routing (22 tests)
+node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing + routing (28 tests)
+node --test tests/parliament-gate.test.mjs         # Parliament enforcement gates (16 tests)
 ```

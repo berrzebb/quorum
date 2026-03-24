@@ -15,6 +15,8 @@
 import type Database from "better-sqlite3";
 import type { EventStore } from "../bus/store.js";
 import type { LockInfo } from "../bus/lock.js";
+import { COMMITTEE_IDS } from "../bus/meeting-log.js";
+import { getPendingAmendmentCount } from "../bus/amendment.js";
 import type { Finding } from "../bus/events.js";
 import type {
   QuorumEvent,
@@ -776,9 +778,8 @@ export class StateReader {
    * Parliament state: committee convergence, last verdict, pending amendments, conformance.
    */
   parliamentInfo(): ParliamentInfo {
-    const COMMITTEES = ["principles", "definitions", "structure", "architecture", "scope", "research-questions"];
     const empty: ParliamentInfo = {
-      committees: COMMITTEES.map(c => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 })),
+      committees: COMMITTEE_IDS.map(c => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 })),
       lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
     };
 
@@ -799,7 +800,7 @@ export class StateReader {
         const agenda = (e.payload.agendaId as string) ?? "";
         latestByCommittee.set(agenda, e);  // ASC order → last write = latest
       }
-      empty.committees = COMMITTEES.map(c => {
+      empty.committees = COMMITTEE_IDS.map(c => {
         const e = latestByCommittee.get(c);
         if (!e) return { committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 };
         return {
@@ -812,10 +813,7 @@ export class StateReader {
       });
 
       // Pending amendments
-      const proposeEvents = this.store.query({ eventType: "parliament.amendment.propose" as import("../bus/events.js").EventType, limit: 50 });
-      const resolveEvents = this.store.query({ eventType: "parliament.amendment.resolve" as import("../bus/events.js").EventType, limit: 50 });
-      const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
-      empty.pendingAmendments = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
+      empty.pendingAmendments = getPendingAmendmentCount(this.store);
 
       // Conformance — reuse already-fetched sessions (last digest's conformance field)
       if (sessions.length > 0) {

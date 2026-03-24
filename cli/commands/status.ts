@@ -171,10 +171,8 @@ export async function run(args: string[]): Promise<void> {
         console.log(`  Last verdict: ${verdict} ${converged ? "\x1b[32m(converged)\x1b[0m" : ""}`);
 
         // Check for pending amendments
-        const proposeEvents = store.query({ eventType: "parliament.amendment.propose" });
-        const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" });
-        const resolvedIds = new Set(resolveEvents.map(e => e.payload.amendmentId as string));
-        const pending = proposeEvents.filter(e => !resolvedIds.has(e.payload.amendmentId as string)).length;
+        const { getPendingAmendmentCount } = await import("../../bus/amendment.js");
+        const pending = getPendingAmendmentCount(store);
         if (pending > 0) console.log(`  Amendments:  \x1b[33m${pending} pending\x1b[0m`);
 
         // CPS available?
