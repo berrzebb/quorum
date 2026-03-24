@@ -28,8 +28,8 @@ let _requiredCacheKey = null;
 export function validateEvidenceFormat(content, consensus, t = (k) => k) {
   const errors = [];
   const warnings = [];
-  const triggerTag = consensus.trigger_tag ?? "[GPT미검증]";
-  const agreeTag = consensus.agree_tag ?? "[합의완료]";
+  const triggerTag = consensus.trigger_tag ?? "[REVIEW_NEEDED]";
+  const agreeTag = consensus.agree_tag ?? "[APPROVED]";
 
   const triggerSection = content.split(/^## /m).find((s) => s.includes(triggerTag));
   if (!triggerSection) return { errors, warnings };

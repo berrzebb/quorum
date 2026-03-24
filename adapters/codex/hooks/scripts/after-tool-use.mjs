@@ -14,12 +14,8 @@ import { spawn } from "node:child_process";
 
 import { createHookContext, createDebugLogger, readStdinJson } from "../../../shared/hook-io.mjs";
 import { extractTags } from "../../../shared/config-resolver.mjs";
-import {
-  validateEvidenceFormat,
-  parseChangedFiles,
-  buildTriggerContext,
-  hasPlanDocuments,
-} from "../../../shared/trigger-runner.mjs";
+import { evaluateAuditTrigger } from "../../../shared/audit-trigger.mjs";
+import { validateEvidenceFormat } from "../../../shared/trigger-runner.mjs";
 
 const { ADAPTER_DIR, REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);
 if (configMissing) process.exit(0);
@@ -57,70 +53,22 @@ if (normalized.endsWith(watchFile.toLowerCase())) {
   }
 
   // ── Bridge: evaluate trigger ──
-  let bridge;
-  try {
-    bridge = await import("../../../../core/bridge.mjs");
-    await bridge.init(REPO_ROOT);
-    await bridge.initHookRunner(REPO_ROOT, cfg.hooks);
-  } catch (err) {
-    log(`BRIDGE_INIT_FAIL: ${err.message}`);
-    bridge = null;
+  const { triggerResult, spawnAllowed, denyReason } = await evaluateAuditTrigger({
+    repoRoot: REPO_ROOT, cfg, content, watchPath, source: "codex", log,
+  });
+
+  if (denyReason) {
+    process.stderr.write(`[quorum] Audit blocked: ${denyReason}\n`);
+    process.exit(0);
   }
 
-  if (bridge) {
-    const preGate = await bridge.checkHookGate("audit.submit", {
-      cwd: REPO_ROOT, metadata: { provider: "codex", watchFile: watchPath },
-    });
-    if (!preGate.allowed) {
-      log(`HOOK_DENY: ${preGate.reason}`);
-      process.stderr.write(`[quorum] Audit blocked: ${preGate.reason}\n`);
-      bridge.close();
-      process.exit(0);
-    }
-
-    const changedFiles = parseChangedFiles(content);
-    const changedFileCount = changedFiles.length;
-
-    // Run domain detection + blast radius in parallel
-    const [detectionResult, blastResult] = await Promise.all([
-      bridge.detectDomains(changedFiles, content).catch(() => null),
-      changedFiles.length > 0
-        ? bridge.computeBlastRadius(changedFiles).catch(() => null)
-        : null,
-    ]);
-    const blastRadius = blastResult?.ratio;
-    const priorRejections = (bridge.queryEvents?.({ eventType: "audit.verdict" }) ?? [])
-      .filter((e) => e.payload?.verdict === "changes_requested").length;
-    const hasPlanDoc = hasPlanDocuments(REPO_ROOT);
-
-    const triggerCtx = buildTriggerContext({
-      content, changedFiles, changedFileCount, detectionResult, priorRejections, hasPlanDoc, blastRadius,
-    });
-
-    const triggerResult = bridge.evaluateTrigger(triggerCtx);
-    if (triggerResult) {
-      log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
-      bridge.emitEvent("audit.submit", "codex", {
-        file: watchPath, tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
-      });
-
-      if (triggerResult.mode === "skip") {
-        log("SKIP: T1 micro change");
-        process.stdout.write(`[quorum] T1 skip (score: ${triggerResult.score.toFixed(2)})\n`);
-        bridge.close();
-        process.exit(0);
-      }
-    }
-
-    const spawnGate = await bridge.checkHookGate("audit.spawn", {
-      cwd: REPO_ROOT, metadata: { provider: "codex", watchFile: watchPath },
-    });
-    bridge.close();
-    if (!spawnGate.allowed) {
-      log(`HOOK_DENY: audit.spawn blocked — ${spawnGate.reason}`);
-      process.exit(0);
-    }
+  if (triggerResult?.mode === "skip") {
+    log("SKIP: T1 micro change");
+    process.stdout.write(`[quorum] T1 skip (score: ${triggerResult.score.toFixed(2)})\n`);
+    process.exit(0);
   }
+
+  if (!spawnAllowed) process.exit(0);
 
   // ── Spawn audit ──
   const quorumRoot = resolve(ADAPTER_DIR, "..", "..");

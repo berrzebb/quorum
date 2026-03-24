@@ -72,12 +72,7 @@ All 20 analysis tools are available for verification. Key tools for doc-sync:
 | `doc_coverage` | Verify documentation completeness claims |
 | `coverage_map` | Verify test coverage numbers |
 
-Run via: `node ${PLUGIN_ROOT}/core/tools/tool-runner.mjs <tool> --json`
-
-Where `${PLUGIN_ROOT}` resolves to:
-- Claude Code: `${CLAUDE_PLUGIN_ROOT}`
-- Gemini: `${GEMINI_EXTENSION_ROOT}`
-- Codex: project root (quorum package directory)
+Run via: `quorum tool <tool> --json`
 
 ## 3-Adapter Awareness
 
@@ -110,3 +105,15 @@ The fragment-based language registry (`languages/{lang}/spec.{domain}.mjs`) affe
 - **EN/KO parity** — both language variants must show identical numeric values
 - **Verdicts are in SQLite** — do NOT look for verdict.md or gpt.md files
 - **Context-aware matching** — when fixing a number, verify it refers to the correct entity (e.g., "22 hooks" might mean Claude Code hooks specifically, not total)
+
+## Completion Gate
+
+| # | Condition | Verification |
+|---|-----------|-------------|
+| 1 | Fact table produced | All extraction commands ran, comparison table output |
+| 2 | L1 mismatches fixed | Zero numeric discrepancies between code and docs |
+| 3 | EN/KO parity verified | Same numbers in both language variants |
+| 4 | L2/L3 processed or skipped | Each layer has "N changes" or "skipped" status |
+| 5 | Report output | 3-layer summary with before/after values |
+
+A doc-sync run is complete only when all 5 conditions are met.

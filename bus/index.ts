@@ -13,7 +13,7 @@ export type { OrchestratorMode, ModeSelection } from "./orchestrator.js";
 export { detectRepeatPatterns, suggestRules, analyzeAndSuggest } from "./auto-learn.js";
 export type { RepeatPattern, RuleSuggestion, LearningSummary } from "./auto-learn.js";
 export { MarkdownProjector } from "./projector.js";
-export type { ProjectorConfig, ItemState, ProjectionDiff } from "./projector.js";
+export type { ProjectorConfig, ItemState } from "./projector.js";
 export { ProcessMux, ensureMuxBackend } from "./mux.js";
 export type { MuxBackend, MuxSession, SpawnOptions, CaptureResult } from "./mux.js";
 export { detectStagnation } from "./stagnation.js";

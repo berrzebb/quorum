@@ -163,6 +163,51 @@ export class ProcessMux extends EventEmitter {
     return [...this.sessions.values()];
   }
 
+  /**
+   * Split a session's view — creates a new pane alongside the existing one.
+   * tmux: split-window in same session
+   * psmux: split in same session
+   * raw: no-op (raw backend doesn't support panes)
+   *
+   * Returns the new pane's session, or null if split is not supported.
+   */
+  async split(sessionId: string, opts: SpawnOptions): Promise<MuxSession | null> {
+    const parent = this.sessions.get(sessionId);
+    if (!parent || parent.status !== "running") return null;
+
+    const child: MuxSession = {
+      id: `${opts.name}-${Date.now()}`,
+      name: opts.name,
+      backend: this.backend,
+      startedAt: Date.now(),
+      status: "running",
+    };
+
+    const cmd = opts.args ? `${opts.command} ${opts.args.join(" ")}` : opts.command;
+
+    switch (this.backend) {
+      case "tmux":
+        spawnSync("tmux", [
+          "split-window", "-t", parent.name, "-h",
+          ...(opts.cwd ? ["-c", opts.cwd] : []),
+          cmd,
+        ], { windowsHide: true });
+        break;
+      case "psmux":
+        spawnSync("psmux", [
+          "split", parent.name, cmd,
+        ], { windowsHide: true });
+        break;
+      case "raw":
+        // Raw backend: fall back to regular spawn (no pane splitting)
+        return this.spawn(opts);
+    }
+
+    this.sessions.set(child.id, child);
+    this.emit("spawn", child);
+    return child;
+  }
+
   /** Get active session count. */
   active(): number {
     let count = 0;

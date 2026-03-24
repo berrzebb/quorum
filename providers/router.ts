@@ -58,11 +58,14 @@ const TIER_ORDER: Tier[] = ["frugal", "standard", "frontier"];
 export class TierRouter {
   private failureCounters = new Map<string, number>();
   private successCounters = new Map<string, number>();
+  private lateralCounters = new Map<string, number>();
   private overrides = new Map<string, Tier>();
   private baseTiers = new Map<string, Tier>();
   private escalationThreshold: number;
   private downgradeThreshold: number;
   private costs: Record<Tier, number>;
+  /** Max lateral attempts before halting (default: 3). */
+  private maxLateral = 3;
 
   constructor(config: RouterConfig = {}) {
     this.escalationThreshold = config.escalationThreshold ?? 2;
@@ -140,6 +143,24 @@ export class TierRouter {
     }
 
     return { escalated: false, tier: null };
+  }
+
+  /**
+   * Attempt lateral movement: switch to a different approach instead of escalating.
+   * Used when frontier + repeated failures — try domain specialist instead of higher tier.
+   * Returns "halt" if max lateral attempts exceeded.
+   */
+  lateral(taskKey: string, domain?: string): { action: "lateral" | "halt"; domain?: string; attempts: number } {
+    const attempts = (this.lateralCounters.get(taskKey) ?? 0) + 1;
+    this.lateralCounters.set(taskKey, attempts);
+
+    if (attempts > this.maxLateral) {
+      return { action: "halt", attempts };
+    }
+
+    // Reset failure counters — fresh start with different approach
+    this.failureCounters.set(taskKey, 0);
+    return { action: "lateral", domain, attempts };
   }
 
   /** Get current tier override for a task. */

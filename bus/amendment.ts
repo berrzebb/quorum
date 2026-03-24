@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import type { EventStore } from "./store.js";
 import {
   createEvent,
+  AMENDMENT_STATUS,
+  type AmendmentStatusType,
   type ParliamentAmendmentProposePayload,
   type ParliamentAmendmentVotePayload,
   type ParliamentRole,
@@ -20,7 +22,7 @@ import {
 // ── Types ────────────────────────────────────
 
 export type AmendmentTarget = "prd" | "design" | "wb" | "scope";
-export type AmendmentStatus = "proposed" | "approved" | "rejected" | "deferred";
+export type AmendmentStatus = AmendmentStatusType;
 export type VotePosition = "for" | "against" | "abstain";
 
 export interface Amendment {
@@ -61,17 +63,22 @@ const VOTING_ROLES: ParliamentRole[] = ["advocate", "devil", "judge", "specialis
 
 // ── Amendment Manager ───────────────────────
 
+export interface ProposeAmendmentOptions {
+  target: AmendmentTarget;
+  change: string;
+  sponsor: string;
+  sponsorRole: ParliamentRole;
+  justification: string;
+}
+
 /**
  * Propose a new amendment.
  */
 export function proposeAmendment(
   store: EventStore,
-  target: AmendmentTarget,
-  change: string,
-  sponsor: string,
-  sponsorRole: ParliamentRole,
-  justification: string,
+  options: ProposeAmendmentOptions,
 ): Amendment {
+  const { target, change, sponsor, sponsorRole, justification } = options;
   const id = `A-${randomUUID().slice(0, 8)}`;
 
   const payload: ParliamentAmendmentProposePayload = {
@@ -85,7 +92,7 @@ export function proposeAmendment(
   store.append(createEvent("parliament.amendment.propose", "generic", {
     ...payload,
     sponsorRole,
-    status: "proposed",
+    status: AMENDMENT_STATUS.PROPOSED,
   }));
 
   return {
@@ -95,7 +102,7 @@ export function proposeAmendment(
     sponsor,
     sponsorRole,
     justification,
-    status: "proposed",
+    status: AMENDMENT_STATUS.PROPOSED,
     votes: [],
     proposedAt: Date.now(),
   };
@@ -140,9 +147,11 @@ export function resolveAmendment(
   store: EventStore,
   amendmentId: string,
   totalEligibleVoters: number,
+  prefetchedVotes?: Array<{ payload: Record<string, unknown> }>,
 ): AmendmentResolution {
-  const voteEvents = store.query({ eventType: "parliament.amendment.vote" })
-    .filter(e => e.payload.amendmentId === amendmentId);
+  const voteEvents = prefetchedVotes
+    ?? store.query({ eventType: "parliament.amendment.vote" })
+        .filter(e => e.payload.amendmentId === amendmentId);
 
   // Deduplicate: last vote per voter wins
   const latestVotes = new Map<string, { position: VotePosition; confidence: number }>();
@@ -167,7 +176,15 @@ export function resolveAmendment(
   const quorumMet = totalVoted > totalEligibleVoters / 2;
   const approved = quorumMet && votesFor > votesAgainst;
 
-  const status: AmendmentStatus = approved ? "approved" : quorumMet ? "rejected" : "deferred";
+  const status: AmendmentStatus = approved ? AMENDMENT_STATUS.APPROVED : quorumMet ? AMENDMENT_STATUS.REJECTED : AMENDMENT_STATUS.DEFERRED;
+
+  store.append(createEvent("parliament.amendment.resolve", "generic", {
+    amendmentId,
+    status,
+    approved,
+    votesFor,
+    votesAgainst,
+  }));
 
   return {
     status,
@@ -185,6 +202,13 @@ export function resolveAmendment(
 export function getAmendments(store: EventStore): Amendment[] {
   const proposeEvents = store.query({ eventType: "parliament.amendment.propose" });
   const voteEvents = store.query({ eventType: "parliament.amendment.vote" });
+  const resolveEvents = store.query({ eventType: "parliament.amendment.resolve" });
+
+  // Build resolve status map
+  const resolvedStatus = new Map<string, AmendmentStatus>();
+  for (const e of resolveEvents) {
+    resolvedStatus.set(e.payload.amendmentId as string, e.payload.status as AmendmentStatus);
+  }
 
   // Group votes by amendment
   const votesByAmendment = new Map<string, AmendmentVote[]>();
@@ -201,15 +225,28 @@ export function getAmendments(store: EventStore): Amendment[] {
     votesByAmendment.set(id, votes);
   }
 
-  return proposeEvents.map(e => ({
-    id: e.payload.amendmentId as string,
-    target: e.payload.target as AmendmentTarget,
-    change: e.payload.change as string,
-    sponsor: e.payload.sponsor as string,
-    sponsorRole: e.payload.sponsorRole as ParliamentRole,
-    justification: e.payload.justification as string,
-    status: (e.payload.status as AmendmentStatus) ?? "proposed",
-    votes: votesByAmendment.get(e.payload.amendmentId as string) ?? [],
-    proposedAt: e.timestamp,
-  }));
+  return proposeEvents.map(e => {
+    const id = e.payload.amendmentId as string;
+    return {
+      id,
+      target: e.payload.target as AmendmentTarget,
+      change: e.payload.change as string,
+      sponsor: e.payload.sponsor as string,
+      sponsorRole: e.payload.sponsorRole as ParliamentRole,
+      justification: e.payload.justification as string,
+      status: resolvedStatus.get(id) ?? AMENDMENT_STATUS.PROPOSED,
+      votes: votesByAmendment.get(id) ?? [],
+      proposedAt: e.timestamp,
+    };
+  });
+}
+
+/** Count amendments still in "proposed" status. Lightweight — skips vote queries. */
+export function getPendingAmendmentCount(store: EventStore): number {
+  const proposed = store.query({ eventType: "parliament.amendment.propose" });
+  const resolved = new Set(
+    store.query({ eventType: "parliament.amendment.resolve" })
+      .map(e => e.payload.amendmentId as string),
+  );
+  return proposed.filter(e => !resolved.has(e.payload.amendmentId as string)).length;
 }

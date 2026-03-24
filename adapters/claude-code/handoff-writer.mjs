@@ -98,8 +98,8 @@ function findMemoryDir(repoRoot) {
 
 const FRONTMATTER_TEMPLATES = {
   ko: {
-    name: "세션 핸드오프",
-    description: "진행 중인 작업 목록 — 세션 시작 시 반드시 읽고 이어할 작업 확인",
+    name: "session-handoff",
+    description: "Active task list — read at session start to resume pending work",
   },
   en: {
     name: "Session Handoff",
@@ -135,7 +135,7 @@ export function syncHandoffToMemory(repoRoot, handoffRelPath, opts = {}) {
 
   const memoryFile = resolve(memoryDir, "session_handoff.md");
 
-  // "Newer wins" — 세션 중 메모리를 직접 수정했다면 repo 버전으로 덮어쓰지 않음
+  // "Newer wins" — do not overwrite if memory was edited directly during the session
   if (existsSync(memoryFile)) {
     try {
       const repoMtime = statSync(repoHandoff).mtimeMs;
@@ -143,7 +143,7 @@ export function syncHandoffToMemory(repoRoot, handoffRelPath, opts = {}) {
       if (memMtime > repoMtime) {
         return { success: true, memoryDir, skipped: "memory_is_newer" };
       }
-    } catch { /* stat 실패 시 기존 동작 유지 */ }
+    } catch { /* on stat failure, keep existing behavior */ }
   }
 
   const content = readFileSync(repoHandoff, "utf8");

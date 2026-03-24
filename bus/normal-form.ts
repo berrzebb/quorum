@@ -12,7 +12,7 @@
  */
 
 import type { EventStore } from "./store.js";
-import type { ProviderKind, AuditVerdictPayload } from "./events.js";
+import { AUDIT_VERDICT, type ProviderKind, type AuditVerdictPayload, type AuditVerdict } from "./events.js";
 import type { FitnessScore } from "./fitness.js";
 import type { ConfluenceResult } from "./confluence.js";
 
@@ -39,6 +39,10 @@ export interface ProviderConvergence {
   normalFormReached: boolean;
   /** Total rounds from raw output to current stage. */
   totalRounds: number;
+  /** Whether a regression was detected (stage moved backward). */
+  regressed: boolean;
+  /** Previous stage before regression (null if no regression). */
+  regressionFrom?: ConformanceStage;
 }
 
 export interface ConvergenceReport {
@@ -49,6 +53,8 @@ export interface ConvergenceReport {
   avgRoundsToNormalForm: number | null;
   timestamp: number;
 }
+
+export const STAGE_ORDER: ConformanceStage[] = ["raw-output", "autofix", "manual-fix", "normal-form"];
 
 // ── Stage Classification ────────────────────
 
@@ -62,11 +68,11 @@ export interface ConvergenceReport {
  */
 export function classifyStage(
   auditRounds: number,
-  lastVerdict: "approved" | "changes_requested" | "infra_failure" | null,
+  lastVerdict: AuditVerdict | null,
   confluencePassed: boolean,
 ): ConformanceStage {
   if (auditRounds === 0) return "raw-output";
-  if (lastVerdict === "approved" && confluencePassed) return "normal-form";
+  if (lastVerdict === AUDIT_VERDICT.APPROVED && confluencePassed) return "normal-form";
   if (auditRounds <= 2) return "autofix";
   return "manual-fix";
 }
@@ -91,15 +97,13 @@ export function computeConformance(
 // ── Provider Tracking ───────────────────────
 
 /**
- * Build convergence data for a specific provider from EventStore.
+ * Build convergence data for a specific provider from pre-filtered verdict events.
+ * Accepts events directly to avoid redundant EventStore queries (N+1 fix).
  */
-export function trackProviderConvergence(
-  store: EventStore,
+export function trackProviderConvergenceFromEvents(
   provider: ProviderKind,
+  verdictEvents: Array<{ timestamp: number; payload: Record<string, unknown>; source: ProviderKind }>,
 ): ProviderConvergence {
-  const verdictEvents = store.query({ eventType: "audit.verdict" })
-    .filter(e => e.source === provider);
-
   const stages: StageConformance[] = [];
   let approvedCount = 0;
   let totalRounds = verdictEvents.length;
@@ -107,6 +111,8 @@ export function trackProviderConvergence(
   // Track stage transitions
   let currentRound = 0;
   let lastStage: ConformanceStage = "raw-output";
+  let regressed = false;
+  let regressionFrom: ConformanceStage | undefined;
 
   // Raw output stage (always exists)
   stages.push({
@@ -119,19 +125,24 @@ export function trackProviderConvergence(
   for (const e of verdictEvents) {
     currentRound++;
     const verdict = (e.payload as unknown as AuditVerdictPayload).verdict;
-    if (verdict === "approved") approvedCount++;
+    if (verdict === AUDIT_VERDICT.APPROVED) approvedCount++;
 
     const passRate = approvedCount / currentRound;
     // Estimate conformance at each round
     const conformance = computeConformance(
       passRate * 0.8 + 0.2, // rough fitness proxy
       passRate,
-      verdict === "approved" ? 1 : 0,
+      verdict === AUDIT_VERDICT.APPROVED ? 1 : 0,
     );
 
-    const stage = classifyStage(currentRound, verdict, verdict === "approved");
+    const stage = classifyStage(currentRound, verdict, verdict === AUDIT_VERDICT.APPROVED);
 
     if (stage !== lastStage) {
+      // Detect regression: stage moved backward
+      if (STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(lastStage)) {
+        regressed = true;
+        regressionFrom = lastStage;
+      }
       stages.push({
         stage,
         conformance,
@@ -151,27 +162,46 @@ export function trackProviderConvergence(
     currentStage,
     normalFormReached,
     totalRounds,
+    regressed,
+    regressionFrom,
   };
 }
 
 /**
+ * Build convergence data for a specific provider from EventStore.
+ * Convenience wrapper that queries the store — use trackProviderConvergenceFromEvents
+ * when you already have the events to avoid redundant queries.
+ */
+export function trackProviderConvergence(
+  store: EventStore,
+  provider: ProviderKind,
+): ProviderConvergence {
+  const verdictEvents = store.query({ eventType: "audit.verdict" })
+    .filter(e => e.source === provider);
+  return trackProviderConvergenceFromEvents(provider, verdictEvents);
+}
+
+/**
  * Generate a full convergence report across all providers.
+ * Single query — groups by provider in JS to avoid N+1 store queries.
  */
 export function generateConvergenceReport(store: EventStore): ConvergenceReport {
-  // Find all providers that have submitted verdicts
+  // Single query: fetch all verdict events once, group by provider in memory
   const allEvents = store.query({ eventType: "audit.verdict" });
-  const providers = new Set<ProviderKind>();
+  const byProvider = new Map<ProviderKind, typeof allEvents>();
   for (const e of allEvents) {
-    providers.add(e.source);
+    const arr = byProvider.get(e.source) ?? [];
+    arr.push(e);
+    byProvider.set(e.source, arr);
   }
 
   const convergences: ProviderConvergence[] = [];
-  for (const provider of providers) {
-    convergences.push(trackProviderConvergence(store, provider));
+  for (const [provider, events] of byProvider) {
+    convergences.push(trackProviderConvergenceFromEvents(provider, events));
   }
 
   const convergedProviders = convergences.filter(c => c.normalFormReached);
-  const allConverged = providers.size > 0 && convergedProviders.length === providers.size;
+  const allConverged = byProvider.size > 0 && convergedProviders.length === byProvider.size;
   const avgRoundsToNormalForm = convergedProviders.length > 0
     ? convergedProviders.reduce((sum, c) => sum + c.totalRounds, 0) / convergedProviders.length
     : null;
@@ -197,8 +227,8 @@ function estimateRawConformance(
   if (verdictEvents.length === 0) return 50; // unknown → assume 50%
 
   const first = verdictEvents[0]!.payload as unknown as AuditVerdictPayload;
-  if (first.verdict === "approved") return 95;
-  if (first.verdict === "infra_failure") return 50;
+  if (first.verdict === AUDIT_VERDICT.APPROVED) return 95;
+  if (first.verdict === AUDIT_VERDICT.INFRA_FAILURE) return 50;
 
   // changes_requested: estimate from code count
   const codeCount = first.codes?.length ?? 0;

@@ -13,6 +13,7 @@
 
 import type { EventStore } from "./store.js";
 import type { CPS } from "./meeting-log.js";
+import { AUDIT_VERDICT, type AuditVerdict } from "./events.js";
 
 // ── Types ────────────────────────────────────
 
@@ -48,7 +49,7 @@ export interface ConfluenceInput {
   /** Number of integration test failures. */
   integrationFailures?: number;
   /** Audit verdict for the current scope. */
-  auditVerdict?: "approved" | "changes_requested" | "infra_failure";
+  auditVerdict?: AuditVerdict;
   /** Active amendment count that may conflict. */
   pendingAmendments?: number;
   /** Detected law contradictions (from manual or automated check). */
@@ -116,10 +117,10 @@ export function verifyConfluence(input: ConfluenceInput): ConfluenceResult {
 // ── Individual Checks ────────────────────────
 
 function checkLawCode(input: ConfluenceInput): ConfluenceCheck {
-  if (input.auditVerdict === "approved") {
+  if (input.auditVerdict === AUDIT_VERDICT.APPROVED) {
     return { type: "law-code", passed: true, detail: "Audit approved — law and code aligned", severity: "info" };
   }
-  if (input.auditVerdict === "changes_requested") {
+  if (input.auditVerdict === AUDIT_VERDICT.CHANGES_REQUESTED) {
     return { type: "law-code", passed: false, detail: "Audit requested changes — law-code mismatch exists", severity: "error" };
   }
   return { type: "law-code", passed: true, detail: "No audit verdict available — skipping", severity: "info" };
@@ -147,7 +148,7 @@ function checkIntentResult(input: ConfluenceInput): ConfluenceCheck {
   }
 
   // If there are gaps remaining and audit passed, the intent may not be fully addressed
-  if (input.cps.gaps.length > 0 && input.auditVerdict === "approved") {
+  if (input.cps.gaps.length > 0 && input.auditVerdict === AUDIT_VERDICT.APPROVED) {
     return {
       type: "intent-result",
       passed: false,

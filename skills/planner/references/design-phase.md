@@ -6,8 +6,10 @@ After PRD confirmation and before Work Breakdown generation, produce 4 design ar
 
 ## When to Apply
 
-- **Always** for new product/feature tracks with 5+ WB items
-- **Selectively** for smaller tracks — at minimum produce Spec + Architecture
+- **Always** for tracks originating from Parliament CPS (CPS→Design is mandatory in the legislative flow)
+- **Always** for new product/feature tracks with 3+ WB items
+- **Minimum**: Spec + Architecture for any track with external API surface or persistence
+- Design artifacts are **laws** — they remove subjective implementation decisions. Skipping Design breaks the idempotency guarantee (`impl(A, law) = impl(B, law)`).
 
 ## Location
 
@@ -23,11 +25,11 @@ Translates FR/NFR acceptance criteria into technical terms.
 # Technical Spec: {Track Name}
 
 ## FR-1: {Title}
-- **Input**: HTTP POST /api/restaurants, body: { name, location, category }
-- **Output**: 201 Created, body: { id, name, location, category, createdAt }
-- **Validation**: name required (1-100 chars), location required (lat/lng), category enum
-- **Error responses**: 400 (validation), 409 (duplicate name), 500 (server error)
-- **Performance**: p95 < 200ms
+- **Input**: EventStore.append(event: QuorumEvent)
+- **Output**: void (persisted to SQLite WAL)
+- **Validation**: event.type must be valid EventType, payload JSON-serializable
+- **Error responses**: throws on closed store, fail-open on WAL contention
+- **Performance**: p95 < 5ms per append (WAL mode)
 ```
 
 Each FR maps to a concrete input/output/validation/error specification.
@@ -42,21 +44,26 @@ Defines modules, their interfaces, and contracts between them.
 ## Module Map
 | Module | Responsibility | Exposes | Consumes |
 |--------|---------------|---------|----------|
-| RestaurantService | CRUD operations | createRestaurant(), getRestaurants() | Database |
-| LocationService | GPS tracking | trackDriver(), getLocation() | GPS API |
+| ParliamentSession | 7-phase session orchestration | runParliamentSession() | EventStore, Consensus, MeetingLog |
+| MeetingLog | Accumulation + convergence | createMeetingLog(), checkConvergence() | EventStore |
+| BlueprintParser | Naming rule extraction | extractNamingRules(), parseBlueprints() | Filesystem |
 
 ## Interface Contracts
 | Interface | Method | Signature | Notes |
 |-----------|--------|-----------|-------|
-| IRestaurantService | create | (input: CreateRestaurantInput) => Promise<Restaurant> | Throws ValidationError |
+| Auditor | audit | (request: AuditRequest) => Promise<AuditResult> | Throws on timeout |
+| Auditor | available | () => Promise<boolean> | Never throws |
 
 ## Naming Conventions
 | Concept | Name | Rationale |
 |---------|------|-----------|
-| Restaurant list | `Restaurants` | Plural noun, not RestaurantList — per Definition law |
+| Audit verdict values | `AuditVerdict` | Type alias, not enum — per TypeScript conventions |
+| Parliament session runner | `runParliamentSession` | Function, not class — stateless orchestration |
+| Event store | `EventStore` | PascalCase class, not eventStore or event_store |
+| Meeting classification | `MeetingClassification` | Union type, not enum — "gap" / "strength" / "out" / "buy" / "build" |
 ```
 
-**The Naming Conventions table is critical** — it removes subjective naming decisions from implementers.
+**The Naming Conventions table is critical** — it removes subjective naming decisions from implementers. Enforced by `quorum tool blueprint_lint`.
 
 ### 3. Domain Model
 
@@ -68,18 +75,21 @@ Defines core domain objects and their relationships.
 ## Entities
 | Entity | Key Fields | Relationships |
 |--------|-----------|--------------|
-| Restaurant | id, name, location, category | has many Orders |
-| Order | id, customerId, restaurantId, status | belongs to Restaurant, Customer |
+| QuorumEvent | id, type, source, payload, timestamp | stored in EventStore |
+| Amendment | id, target, change, sponsor, status, votes[] | proposed/voted/resolved via events |
+| MeetingLog | id, agendaId, registers, classifications | stored as parliament.session.digest event |
 
 ## Value Objects
 | Name | Fields | Used By |
 |------|--------|---------|
-| Location | lat, lng | Restaurant, Driver |
+| ConvergenceRegisters | statusChanges, decisions, requirementChanges, risks | ConsensusVerdict, MeetingLog |
+| CPS | context, problem, solution, gaps[], builds[] | ParliamentSession, Planner |
 
 ## State Machines
 | Entity | States | Transitions |
 |--------|--------|------------|
-| Order | created → accepted → preparing → delivering → delivered | Only forward transitions |
+| Amendment | proposed → approved/rejected/deferred | Only forward; resolved is terminal |
+| ConformanceStage | raw-output → autofix → manual-fix → normal-form | Forward only; regression is detected |
 ```
 
 ### 4. Architecture
@@ -90,19 +100,22 @@ Defines system topology and data flow.
 # Architecture: {Track Name}
 
 ## System Diagram
-[Describe components and connections — can reference external diagram tools]
+[3-Layer Adapter: I/O (adapter) → Business (shared) → Core+Bus (bridge)]
 
 ## Data Flow
 | Flow | Source → Target | Protocol | Data |
 |------|----------------|----------|------|
-| Order creation | Customer App → API Server | REST | CreateOrderRequest |
-| Location update | Driver App → Location Service | WebSocket | { driverId, lat, lng } |
+| Audit trigger | PostToolUse hook → bridge.mjs | MJS import | TriggerContext |
+| Parliament session | CLI/Hook → parliament-session.ts | Direct call | AuditRequest + SessionConfig |
+| Event persistence | Any module → EventStore | SQLite WAL | QuorumEvent |
+| TUI polling | StateReader → SQLite | Prepared stmt | FullState (1s interval) |
 
 ## Infrastructure
 | Component | Technology | Justification |
 |-----------|-----------|--------------|
-| Database | PostgreSQL | Relational data, ACID required |
-| Cache | Redis | Session + location caching |
+| Event store | SQLite WAL | Single-file, concurrent reads, ACID |
+| Process mux | tmux/psmux/raw | Cross-platform agent session management |
+| TUI | Ink (React for CLI) | Component-based terminal UI |
 ```
 
 ## DRM Integration

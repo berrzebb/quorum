@@ -7,7 +7,7 @@ Shared protocol for all domain specialist reviewers. Each specialist extends thi
 - **Evidence markdown**: the author's claim, changed files, and test results
 - **Changed files list**: paths of all modified files
 - **Diff content**: the actual code changes
-- **Tool results** (if available): output from the domain-specific deterministic tool
+- **Tool results**: output from the domain-specific deterministic tool. **Tools are mandatory** — run the domain tool before producing a verdict. If the tool fails, set verdict to `infra_failure`.
 
 Your review is injected into the evidence as a "Specialist Opinion" that the main consensus roles (Advocate/Devil/Judge) will see.
 

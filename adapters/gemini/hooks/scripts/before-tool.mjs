@@ -51,6 +51,6 @@ if (ALLOWED_TOOLS.includes(toolName)) {
 }
 
 // Block other tools — Gemini protocol: JSON on stdout + exit 2
-const reason = `[quorum] 회고 미완료 — ${toolName} 차단됨. echo session-self-improvement-complete 으로 해제`;
+const reason = `[quorum] Retro incomplete — ${toolName} blocked. Run: echo session-self-improvement-complete`;
 process.stdout.write(JSON.stringify({ decision: "deny", reason }));
 process.exit(2);

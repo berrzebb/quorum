@@ -78,5 +78,21 @@
       "label": "clippy",
       "command": "cargo clippy --quiet -- -D warnings"
     }
-  ]
+  ],
+
+  "parliament": {
+    "_readme": "Parliament protocol settings. Used by 'quorum parliament' CLI and hook-triggered sessions.",
+    "enabled": true,
+    "convergenceThreshold": 2,
+    "eligibleVoters": 3,
+    "maxRounds": 10,
+    "maxAutoAmendments": 5,
+    "defaultAgenda": "research-questions",
+    "roles": {
+      "_readme": "Provider specs for parliament members. Format: 'provider' or 'provider:model'. Falls back to consensus.roles if omitted.",
+      "advocate": "claude",
+      "devil": "claude",
+      "judge": "claude"
+    }
+  }
 }

@@ -200,6 +200,70 @@ export async function run(args: string[]): Promise<void> {
       break;
     }
 
+    case "attach": {
+      const sessionId = args[1];
+      if (!sessionId) {
+        console.log("  Usage: quorum agent attach <session-id>\n");
+        console.log("  Attaches to a mux session for interactive terminal relay.");
+        console.log("  Detach: Ctrl+B D (tmux) or Ctrl+\\ (psmux)\n");
+        return;
+      }
+
+      const { spawnSync } = await import("node:child_process");
+      const attachBackend = await ensureMuxBackend();
+
+      if (attachBackend === "raw") {
+        // Raw backend: polling relay (stdin → send, capture → stdout)
+        console.log(`\x1b[36mAttaching to ${sessionId} (raw relay)...\x1b[0m`);
+        console.log(`\x1b[2mType messages. Ctrl+C to detach.\x1b[0m\n`);
+
+        const attachMux = new ProcessMux("raw");
+        const { createInterface: rl } = await import("node:readline");
+        const iface = rl({ input: process.stdin, output: process.stdout, prompt: "\x1b[36m>\x1b[0m " });
+
+        // Poll output in background
+        const pollTimer = setInterval(() => {
+          const cap = attachMux.capture(sessionId, 20);
+          if (cap?.output) {
+            process.stdout.write("\r" + cap.output + "\n");
+            iface.prompt();
+          }
+        }, 2000);
+
+        iface.prompt();
+        iface.on("line", (line: string) => {
+          attachMux.send(sessionId, line);
+          iface.prompt();
+        });
+        iface.on("close", () => {
+          clearInterval(pollTimer);
+          console.log("\n\x1b[2mDetached.\x1b[0m\n");
+        });
+
+        await new Promise<void>((resolve) => iface.on("close", resolve));
+      } else if (attachBackend === "tmux") {
+        // Find session name from ID (agent state file)
+        const stateFile = resolve(process.cwd(), ".claude", "agents", `${sessionId}.json`);
+        const sessionName = existsSync(stateFile)
+          ? JSON.parse(readFileSync(stateFile, "utf8")).name ?? sessionId
+          : sessionId;
+
+        console.log(`\x1b[36mAttaching to tmux session: ${sessionName}\x1b[0m`);
+        console.log(`\x1b[2mDetach: Ctrl+B D\x1b[0m\n`);
+        spawnSync("tmux", ["attach", "-t", sessionName], { stdio: "inherit" });
+      } else {
+        // psmux
+        const stateFile = resolve(process.cwd(), ".claude", "agents", `${sessionId}.json`);
+        const sessionName = existsSync(stateFile)
+          ? JSON.parse(readFileSync(stateFile, "utf8")).name ?? sessionId
+          : sessionId;
+
+        console.log(`\x1b[36mAttaching to psmux session: ${sessionName}\x1b[0m`);
+        spawnSync("psmux", ["attach", sessionName], { stdio: "inherit", windowsHide: true });
+      }
+      break;
+    }
+
     case "cleanup": {
       const backend = await ensureMuxBackend();
       const mux = new ProcessMux(backend);
@@ -224,6 +288,7 @@ function showHelp(): void {
 
 \x1b[1mSubcommands:\x1b[0m
   spawn <name> <cmd> [args]   Spawn an agent process
+  attach <id>                 Interactive terminal relay to a session
   send <id> <message>         Send input to a running agent
   list                        List active sessions
   capture <id> [--tail N]     Capture output from a session
@@ -232,8 +297,8 @@ function showHelp(): void {
 
 \x1b[1mExamples:\x1b[0m
   quorum agent spawn impl-1 claude -p "implement track TN-1"
+  quorum agent attach impl-1                    Interactive relay
   quorum agent send impl-1 "/quorum:verify"
-  quorum agent send impl-1 "switch to track B"
   quorum agent capture impl-1
   quorum agent kill impl-1
 `);

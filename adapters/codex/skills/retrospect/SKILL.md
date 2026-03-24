@@ -2,6 +2,7 @@
 name: quorum-retrospect
 description: "Extract learnings from audit history and conversation, manage memories. Use after completing a track, during retrospective, or for memory maintenance. Triggers on 'what did we learn', 'retrospective', 'memory cleanup', '회고'."
 argument-hint: "[track name or 'all']"
+model: codex
 allowed-tools: read_file, write_file, shell, find_files, search
 ---
 
