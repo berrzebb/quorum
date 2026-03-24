@@ -4,19 +4,26 @@ Verify frontend implementation against UI specifications using a real browser. T
 
 ## Browser Automation
 
-| Adapter | Method |
-|---------|--------|
-| Claude Code | Chrome MCP tools (`tabs_create`, `navigate`, `read_page`, `javascript_tool`) |
-| Gemini | `shell` + Playwright/Puppeteer scripts |
-| Codex | `shell` + Playwright/Puppeteer scripts |
+Choose the best available method in priority order:
+
+| Priority | Method | When Available |
+|:--------:|--------|----------------|
+| 1 | **Chrome MCP** (`tabs_create`, `navigate`, `read_page`, `javascript_tool`) | Claude Code with claude-in-chrome plugin |
+| 2 | **AgentBrowser** (headless browser API) | When AgentBrowser MCP is configured |
+| 3 | **Playwright** (`npx playwright test` or scripted `page.*` API) | When `@playwright/test` is installed |
+| 4 | **Puppeteer** (`npx puppeteer` or scripted) | When `puppeteer` is installed |
+
+Chrome MCP is preferred because it uses the user's actual browser — reflecting real rendering, extensions, and auth state. Playwright/Puppeteer run headless and may miss environment-specific issues.
+
+If no browser tool is available → report `infra_failure`.
 
 ## Setup
 
-1. **Verify dev server** is running (do NOT start it yourself)
-2. **Read UI spec** from the planning directory — extract component hierarchy, states, interactions, a11y requirements
-3. **Check browser tools** are available (Playwright, Puppeteer, or Chrome MCP)
+1. **Check browser tools** — detect which method is available (priority order above)
+2. **Verify dev server** is running: `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000` (or configured port). Do NOT start it yourself.
+3. **Read UI spec** from the planning directory — extract component hierarchy, states, interactions, a11y requirements
 
-If dev server is not running or browser tools unavailable → report `infra_failure`, do NOT attempt to start services.
+If dev server is not running → report `infra_failure`, do NOT attempt to start services.
 
 ## Verification Checklist
 

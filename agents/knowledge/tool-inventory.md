@@ -8,7 +8,7 @@
 quorum tool <tool_name> [--param value] [--json]
 ```
 
-Or directly: `node {PLUGIN_ROOT}/core/tools/tool-runner.mjs <tool_name> [--param value]`
+Or directly: `node {ADAPTER_ROOT}/core/tools/tool-runner.mjs <tool_name> [--param value]`
 
 Add `--json` to any command for structured JSON output.
 
@@ -53,7 +53,7 @@ Language-aware scans using `languages/{lang}/spec.{domain}.mjs` fragments. Auto-
 
 | Tool | Purpose |
 |------|---------|
-| `audit_history` | Query verdict history from SQLite. Detect rejection patterns |
+| `audit_history` | Query verdict history from SQLite. `--summary` for aggregate stats, `--json` for structured output |
 | `ai_guide` | Synthesize code_map + dependency_graph + doc_coverage into onboarding guide |
 
 ## Detailed References

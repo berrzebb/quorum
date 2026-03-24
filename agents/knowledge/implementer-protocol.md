@@ -59,9 +59,10 @@ After fixing each target, update: Status, Exists, Impl, Test Case, Test Result, 
 - Tag with `[trigger_tag]` from config
 
 ### 6. Wait for Audit Result
+Poll via `quorum tool audit_history --summary --json` to check verdict status.
 Two-phase timeout: soft (2 min, 4 polls × 30s) → hard (3 min, 6 polls × 30s).
 - **[agree_tag]** → WIP commit
-- **[pending_tag]** → fix → resubmit
+- **[pending_tag]** → Correction Round Flow (see below)
 - **infra_failure** → git stash, exit with diagnostic
 
 ### 7. WIP Commit (MANDATORY after [agree_tag])
