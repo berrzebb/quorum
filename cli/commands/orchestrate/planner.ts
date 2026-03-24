@@ -46,15 +46,26 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
 
   console.log(`  Track: ${trackName}, Provider: ${provider}, CPS: ${cpsContent ? "yes" : "Socratic"}\n`);
 
+  // Spawn interactive LLM session (NOT -p/print mode)
+  // System prompt is injected via --append-system-prompt (Claude) or temp file
   const { spawnSync } = await import("node:child_process");
-  const cliArgs = provider === "claude"
-    ? ["-p", "--append-system-prompt", systemPrompt]
-    : provider === "codex" ? ["exec", "-"] : ["-p"];
+  // @ts-expect-error MJS module has no type declarations
+  const { resolveBinary } = await import("../../../core/cli-runner.mjs");
+  const bin = resolveBinary(provider);
 
-  spawnSync(provider, cliArgs, {
-    cwd: repoRoot, stdio: "inherit",
+  const cliArgs: string[] = [];
+  if (provider === "claude") {
+    cliArgs.push("--append-system-prompt", systemPrompt);
+  } else if (provider === "codex") {
+    cliArgs.push("--instructions", systemPrompt);
+  } else {
+    cliArgs.push("--system-prompt", systemPrompt);
+  }
+
+  spawnSync(bin, cliArgs, {
+    cwd: repoRoot,
+    stdio: "inherit",
     env: { ...process.env },
-    shell: process.platform === "win32",
   });
 
   const wbPath = resolve(planDir, trackName, "work-breakdown.md");
