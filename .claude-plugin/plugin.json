@@ -1,11 +1,7 @@
 {
   "name": "quorum",
-  "displayName": "quorum — Cross-Model Audit Gate",
   "version": "0.4.0",
   "description": "Cross-model audit gate with autonomous quality loop — AST hybrid scanning, fitness gate, blast radius analysis, structured orchestration, 19 MCP tools, 743 tests.",
-  "engines": {
-    "claude-code": ">=2.1.78"
-  },
   "author": {
     "name": "berrzebb",
     "url": "https://github.com/berrzebb"

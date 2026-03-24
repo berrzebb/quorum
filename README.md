@@ -47,11 +47,11 @@ Works with **any AI coding tool** — Claude Code, Codex, Cursor, Gemini, or man
 For automatic hook integration (event-driven audit on every edit):
 
 ```bash
-claude plugin marketplace add berrzebb/claude-plugins
-claude plugin install quorum@quorum
+claude plugin marketplace add berrzebb/quorum
+claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 12 lifecycle hooks, 19 MCP tools, and 9 skills automatically. The CLI still works alongside the plugin.
+This registers 15 lifecycle hooks, 19 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### From source
 
@@ -292,7 +292,7 @@ quorum is provider-agnostic. Bring your own auditor.
 
 | Provider | Mechanism | Plugin needed? |
 |----------|-----------|---------------|
-| Claude Code | 12 native hooks | Optional (auto-triggers) |
+| Claude Code | 15 native hooks | Optional (auto-triggers) |
 | Codex | File watch + state polling | No |
 | Cursor | — | Planned |
 | Gemini | — | Planned |

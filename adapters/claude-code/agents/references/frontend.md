@@ -1,3 +1,7 @@
+---
+description: Frontend implementation reference for UI components, state management, and accessibility patterns
+---
+
 # Frontend Implementation Reference
 
 Read this when implementing WB items that touch frontend code (`web/`, `src/dashboard/`, or UI components).
