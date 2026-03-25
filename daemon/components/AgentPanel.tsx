@@ -1,5 +1,8 @@
 /**
  * Agent Panel — real-time view of active agents and their roles.
+ *
+ * Uses SQLite events (via fullState.recentEvents) instead of bus EventEmitter
+ * so that external CLI events (orchestrate run, parliament, etc.) are visible.
  */
 
 import React from "react";
@@ -65,7 +68,7 @@ function deriveAgents(events: QuorumEvent[]): AgentState[] {
   const agents = new Map<string, AgentState>();
 
   for (const event of events) {
-    const id = (event.agentId ?? event.payload.name) as string | undefined;
+    const id = (event.agentId ?? event.payload.agentId ?? event.payload.name) as string | undefined;
     if (!id) continue;
 
     switch (event.type) {

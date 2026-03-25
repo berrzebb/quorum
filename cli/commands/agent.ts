@@ -42,7 +42,7 @@ async function emitAgentEvent(repoRoot: string, type: string, payload: Record<st
 export async function run(args: string[]): Promise<void> {
   const subcommand = args[0];
 
-  if (!subcommand) {
+  if (!subcommand || subcommand === "--help" || subcommand === "-h") {
     showHelp();
     return;
   }

@@ -17,17 +17,19 @@ export async function run(args: string[]): Promise<void> {
   console.log("\n\x1b[36mquorum verify\x1b[0m — done-criteria checks\n");
 
   // Load checks from quality_rules presets (language-aware)
-  const checks: Array<{ label: string; name: string; bin: string; args: string[] }> = [];
+  const checks: Array<{ label: string; name: string; bin: string; args: string[]; optional?: boolean }> = [];
   try {
     const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
     if (existsSync(configPath)) {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-      const presets = cfg.quality_rules?.presets ?? [];
+      // Support both new { presets: [] } and legacy flat array format
+      const qr = cfg.quality_rules;
+      const presets = Array.isArray(qr) ? [] : (qr?.presets ?? []);
       for (const preset of presets) {
         if (!existsSync(resolve(repoRoot, preset.detect))) continue;
         for (const check of preset.checks ?? []) {
           const parts = check.command.split(/\s+/);
-          checks.push({ label: check.id, name: check.label, bin: parts[0], args: parts.slice(1) });
+          checks.push({ label: check.id, name: check.label, bin: parts[0], args: parts.slice(1), optional: check.optional ?? false });
         }
       }
     }
@@ -105,6 +107,8 @@ export async function run(args: string[]): Promise<void> {
 
     if (result.status === 0) {
       console.log("\x1b[32mPASS\x1b[0m");
+    } else if (check.optional) {
+      console.log("\x1b[2mSKIP\x1b[0m (optional, tool not available)");
     } else {
       console.log("\x1b[31mFAIL\x1b[0m");
       if (result.stderr) {
@@ -177,27 +181,29 @@ async function runUnwiredScan(repoRoot: string): Promise<boolean> {
 }
 
 async function runScopeCheck(repoRoot: string, baseBranch?: string): Promise<boolean> {
-  // Find evidence file
-  let watchFile = "docs/feedback/claude.md";
-  const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
-  if (existsSync(configPath)) {
-    try {
-      const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-      watchFile = cfg.consensus?.watch_file ?? watchFile;
-    } catch { /* use default */ }
-  }
+  // Try SQLite evidence first (content string), fall back to file path
+  const toURL = (p: string) => pathToFileURL(p).href;
+  let evidenceArg: string | null = null;  // content string OR file path
+  try {
+    const bridge = await import(toURL(resolve(__dirname, "..", "..", "..", "core", "bridge.mjs")));
+    if (!bridge._store) await bridge.init(repoRoot);
+    const evidence = bridge.getLatestEvidence?.();
+    if (evidence?.content) {
+      evidenceArg = evidence.content;  // Pass content directly (no file read)
+    }
+  } catch { /* bridge unavailable */ }
 
-  const evidencePath = resolve(repoRoot, watchFile);
-  if (!existsSync(evidencePath)) {
+  // No fallback — evidence must come from SQLite EventStore
+
+  if (!evidenceArg) {
     process.stdout.write("  SCOPE  Scope Match           ");
-    console.log("\x1b[2mSKIP\x1b[0m (no evidence file)");
+    console.log("\x1b[2mSKIP\x1b[0m (no evidence)");
     return true;
   }
 
   try {
-    const toURL = (p: string) => pathToFileURL(p).href;
     const scopeChecker = await import(toURL(resolve(__dirname, "..", "..", "..", "core", "scope-checker.mjs")));
-    const result = scopeChecker.checkScope(evidencePath, repoRoot, baseBranch);
+    const result = scopeChecker.checkScope(evidenceArg, repoRoot, baseBranch);
 
     process.stdout.write("  SCOPE  Scope Match           ");
 

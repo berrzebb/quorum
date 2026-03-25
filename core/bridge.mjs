@@ -135,6 +135,7 @@ function getClaimService() {
  * Returns true if TS modules are available, false if running in legacy mode.
  */
 export async function init(repoRoot) {
+  if (!repoRoot || !existsSync(repoRoot)) return false;
   const mods = await loadModules();
   if (!mods) return false;
   getStore(repoRoot);
@@ -285,7 +286,7 @@ export function setState(key, value) {
 
 /**
  * Get the latest submitted evidence content from KV store.
- * Returns { content, watchFile, changedFiles, timestamp } or null.
+ * Returns { content, changedFiles, timestamp } or null.
  */
 export function getLatestEvidence() {
   return getState("evidence:latest");
@@ -588,6 +589,46 @@ export function getMessageBus() {
   } catch {
     return null;
   }
+}
+
+// ── Agent Communication (query/response) ────
+
+/** Post a query to another agent (or broadcast). Returns queryId or null. */
+export function postAgentQuery(fromAgent, question, toAgent, context) {
+  const mb = getMessageBus();
+  if (!mb) return null;
+  try { return mb.postQuery({ fromAgent, question, toAgent, context }); } catch { return null; }
+}
+
+/** Respond to an agent query. */
+export function respondToAgentQuery(queryId, fromAgent, answer, confidence) {
+  const mb = getMessageBus();
+  if (!mb) return;
+  try { mb.respondToQuery({ queryId, fromAgent, answer, confidence }); } catch { /* fail-open */ }
+}
+
+/** Poll for queries addressed to this agent (or broadcast). */
+export function pollAgentQueries(agentId, since) {
+  const mb = getMessageBus();
+  if (!mb) return [];
+  try { return mb.pollQueries(agentId, since); } catch { return []; }
+}
+
+/** Get all responses to a specific query. */
+export function getQueryResponses(queryId) {
+  const mb = getMessageBus();
+  if (!mb) return [];
+  try { return mb.getResponses(queryId); } catch { return []; }
+}
+
+/** Get the agent roster for a track. */
+export function getAgentRoster(trackId) {
+  return getState(`agent:roster:${trackId ?? "default"}`);
+}
+
+/** Set the agent roster for a track. */
+export function setAgentRoster(trackId, roster) {
+  return setState(`agent:roster:${trackId ?? "default"}`, roster);
 }
 
 /**

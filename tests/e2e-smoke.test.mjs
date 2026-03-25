@@ -60,7 +60,6 @@ describe("E2E: full audit cycle", () => {
 
   it("step 1: evidence submission triggers audit event", () => {
     bus.emit(createEvent("evidence.write", "claude-code", {
-      file: "docs/feedback/claude.md",
       itemId: "TN-1",
     }));
 

@@ -39,7 +39,7 @@ Shared references at `skills/orchestrator/references/`. Read the relevant refere
 
 ## Setup
 
-Config: `.quorum/config.json` — `consensus.watch_file`, `consensus.planning_dirs`, `plugin.handoff_file`. Verdicts in **SQLite** via `quorum tool audit_history --summary --json`, NOT markdown files.
+Config: `.quorum/config.json` — `consensus.planning_dirs`, `plugin.handoff_file`. Evidence via `audit_submit` MCP tool. Verdicts in **SQLite** via `quorum tool audit_history --summary --json`, NOT markdown files.
 
 ## Session Start
 

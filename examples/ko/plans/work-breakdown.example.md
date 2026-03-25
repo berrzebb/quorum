@@ -20,7 +20,7 @@
 ## CL-1 핵심 합의 루프
 
 - 목표:
-  - watch_file 편집 + trigger_tag → audit_script → agree_tag 감지
+  - audit_submit 도구 호출 + trigger_tag → audit_script → agree_tag 감지
 - 선행 조건:
   - 없음
 - 주요 파일:
@@ -31,7 +31,7 @@
 ## CL-2 미확인 응답 자동 동기화
 
 - 목표:
-  - 임의 파일 편집 → 응답 파일이 감시 파일보다 최신인지 확인 → respond_script 실행
+  - 임의 파일 편집 → 응답 파일이 증거보다 최신인지 확인 → respond_script 실행
 - 선행 조건:
   - CL-1
 - 주요 파일:

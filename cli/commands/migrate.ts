@@ -105,19 +105,8 @@ export async function run(args: string[]): Promise<void> {
     steps.push({ label: "Session state", status: "skip", detail: "no active retro marker" });
   }
 
-  // 4. Watch/respond files
-  let watchFile = "docs/feedback/claude.md";
-  try {
-    const cfg = JSON.parse(readFileSync(existsSync(newConfig) ? newConfig : oldConfig, "utf8"));
-    watchFile = cfg.consensus?.watch_file ?? watchFile;
-  } catch { /* use default */ }
-
-  const watchPath = resolve(repoRoot, watchFile);
-  if (existsSync(watchPath)) {
-    steps.push({ label: "Watch file", status: "done", detail: `${watchFile} (no migration needed)` });
-  } else {
-    steps.push({ label: "Watch file", status: "skip", detail: `${watchFile} not found` });
-  }
+  // 4. Watch file check removed — evidence is now in SQLite via audit_submit tool
+  steps.push({ label: "Evidence", status: "done", detail: "SQLite EventStore (audit_submit tool)" });
 
   // 5. MCP server registration
   const mcpPath = resolve(repoRoot, ".mcp.json");

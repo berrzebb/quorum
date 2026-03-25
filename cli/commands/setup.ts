@@ -120,7 +120,6 @@ export async function run(args: string[]): Promise<void> {
         },
       },
       consensus: {
-        watch_file: "docs/feedback/claude.md",
         trigger_tag: "[REVIEW_NEEDED]",
         agree_tag: "[APPROVED]",
         pending_tag: "[CHANGES_REQUESTED]",
@@ -134,15 +133,8 @@ export async function run(args: string[]): Promise<void> {
     steps.push({ label: "config.json exists", ok: true });
   }
 
-  // 3. Feedback directory
-  const feedbackDir = resolve(repoRoot, "docs", "feedback");
-  if (!existsSync(feedbackDir)) {
-    mkdirSync(feedbackDir, { recursive: true });
-    writeFileSync(resolve(feedbackDir, "claude.md"), "# Evidence\n\nNo submissions yet.\n");
-    steps.push({ label: "Created docs/feedback/", ok: true });
-  } else {
-    steps.push({ label: "docs/feedback/ exists", ok: true });
-  }
+  // 3. Evidence storage — SQLite EventStore (no feedback directory needed)
+  steps.push({ label: "Evidence: SQLite EventStore (audit_submit tool)", ok: true });
 
   // 4. MCP server registration
   const mcpPath = resolve(repoRoot, ".mcp.json");

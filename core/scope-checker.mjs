@@ -13,14 +13,17 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 
 /**
- * @param {string} evidencePath - Path to the evidence markdown file
+ * @param {string} evidencePath - Path to the evidence markdown file OR evidence content string
  * @param {string} repoRoot - Repository root
  * @param {string} [baseBranch] - Base branch for diff (default: HEAD~1)
  * @returns {{ match: boolean, missing: string[], extra: string[], diffFiles: string[], evidenceFiles: string[] }}
  */
 export function checkScope(evidencePath, repoRoot, baseBranch) {
   const diffFiles = getDiffFiles(repoRoot, baseBranch);
-  const evidenceFiles = parseEvidenceFiles(evidencePath);
+  // Accept raw content string (primary) or file path (legacy fallback)
+  const evidenceFiles = (typeof evidencePath === "string" && evidencePath.includes("\n"))
+    ? parseEvidenceContent(evidencePath)
+    : parseEvidenceFiles(evidencePath);
 
   const diffSet = new Set(diffFiles.map(normalize));
   const evidenceSet = new Set(evidenceFiles.map(normalize));
@@ -102,9 +105,14 @@ function getDiffFiles(repoRoot, baseBranch) {
 // ── Evidence parser ───────────────────────────
 
 function parseEvidenceFiles(evidencePath) {
-  if (!existsSync(evidencePath)) return [];
+  // Legacy: accept file path string (no longer primary path — audit_submit sends content directly)
+  if (!evidencePath || typeof evidencePath !== "string") return [];
+  // If it looks like content (has newlines), parse directly
+  if (evidencePath.includes("\n")) return parseEvidenceContent(evidencePath);
+  return [];
+}
 
-  const content = readFileSync(evidencePath, "utf8");
+function parseEvidenceContent(content) {
   const files = [];
 
   // Find "### Changed Files" section

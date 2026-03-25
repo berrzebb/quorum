@@ -15,8 +15,7 @@
   },
 
   "consensus": {
-    "_readme": "Repo-scoped paths — resolved relative to the repository root.",
-    "watch_file": "docs/review/author.md",
+    "_readme": "Evidence submission via audit_submit MCP tool → SQLite. planning_dirs are repo-root relative.",
     "trigger_tag": "[REVIEW_NEEDED]",
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]",
@@ -27,7 +26,7 @@
       "docs/design"
     ],
     "sections": {
-      "_readme": "Section heading strings used to parse consensus documents. Must match the actual headings in your watch_file.",
+      "_readme": "Section heading strings used to parse consensus documents.",
       "audit_scope":         "Audit Scope",
       "final_verdict":       "Final Verdict",
       "agreed_anchor":       "Agreed",

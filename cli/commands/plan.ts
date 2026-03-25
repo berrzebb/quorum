@@ -243,7 +243,7 @@ function scanForBreakdowns(dir: string, tracks: Track[]): void {
             items.push({ id: bracketMatch[1]!, title: bracketMatch[2]!.trim(), status: "open" });
             continue;
           }
-          const idMatch = line.match(/^##\s+([A-Z]{2,}-\d+[A-Za-z]?)\s+(.*)/);
+          const idMatch = line.match(/^#{2,3}\s+([A-Z]{2,}-\d+[A-Za-z]?)[:\s]\s*(.*)/);
           if (idMatch) {
             items.push({ id: idMatch[1]!, title: idMatch[2]!.trim(), status: "open" });
           }

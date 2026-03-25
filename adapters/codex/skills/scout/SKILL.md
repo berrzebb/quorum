@@ -1,6 +1,6 @@
 ---
 name: quorum-scout
-description: "Read-only RTM generator — analyzes work-breakdowns against codebase using 20 tools, produces 3 RTMs (Forward, Backward, Bidirectional) and gap reports. Use before distributing work."
+description: "Read-only RTM generator — analyzes work-breakdowns against codebase using 22 tools, produces 3 RTMs (Forward, Backward, Bidirectional) and gap reports. Use before distributing work."
 model: codex
 allowed-tools: read_file, shell, find_files, search
 ---
@@ -26,7 +26,7 @@ Full 8-phase execution flow, output rules, and anti-patterns: `agents/knowledge/
 
 ## Tool Inventory
 
-Full tool catalog: `agents/knowledge/tool-inventory.md` (20 tools, 5 categories). Key tools for scout:
+Full tool catalog: `agents/knowledge/tool-inventory.md` (22 tools, 5 categories). Key tools for scout:
 
 ```bash
 # Codebase structure

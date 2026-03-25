@@ -13,7 +13,7 @@ export async function run(args: string[]): Promise<void> {
   const branch = args[0];
   const force = args.includes("--force");
 
-  if (!branch) {
+  if (!branch || branch === "--help" || branch === "-h") {
     console.log(`
 \x1b[36mquorum merge\x1b[0m — squash-merge worktree
 

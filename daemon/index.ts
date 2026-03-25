@@ -31,7 +31,6 @@ interface DaemonConfig extends ProviderConfig {
 
 function loadConfig(repoRoot: string): DaemonConfig {
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
-  let watchFile = "docs/feedback/claude.md";
   let auditorModel = "codex";
   let triggerTag = "[REVIEW_NEEDED]";
   let agreeTag = "[APPROVED]";
@@ -41,7 +40,6 @@ function loadConfig(repoRoot: string): DaemonConfig {
   if (existsSync(configPath)) {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-      watchFile = cfg.consensus?.watch_file ?? watchFile;
       auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
       triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
       agreeTag = cfg.consensus?.agree_tag ?? agreeTag;
@@ -54,7 +52,6 @@ function loadConfig(repoRoot: string): DaemonConfig {
 
   return {
     repoRoot,
-    watchFile,
     triggerTag,
     agreeTag,
     pendingTag,
@@ -78,19 +75,20 @@ export default async function startDaemon(): Promise<void> {
       if (!inSession) {
         const mux = new ProcessMux(backend);
         try {
-          await mux.spawn({
+          const session = await mux.spawn({
             name: DASHBOARD_SESSION,
             command: process.execPath,
             args: [resolve(__dirname, "index.js")],
             cwd: repoRoot,
             env: { QUORUM_IN_MUX_SESSION: "1" },
           });
+          if (session.status === "error") throw new Error("session status: error");
           console.log(`Dashboard running in ${backend} session: ${DASHBOARD_SESSION}`);
-          console.log(`Attach: ${backend === "tmux" ? "tmux attach -t" : "psmux attach"} ${DASHBOARD_SESSION}`);
+          console.log(`Attach: ${backend === "tmux" ? "tmux attach -t" : "psmux attach -t"} ${DASHBOARD_SESSION}`);
           return;
-        } catch {
+        } catch (err) {
           // Mux spawn failed — fall through to direct TUI rendering
-          console.log("Mux session creation failed — running TUI directly.");
+          console.log(`Mux session creation failed — running TUI directly. ${process.env.QUORUM_DEBUG ? (err as Error).message : ""}`);
         }
       }
     }

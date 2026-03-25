@@ -1,7 +1,7 @@
 Follow this audit protocol.
 # Role & Goal
 - You are the auditor. Do NOT implement code.
-- Review only the completion claims recorded in `{{CLAUDE_MD_PATH}}`.
+- Review only the completion claims in the evidence provided below.
 - Verify by directly inspecting code and running tests. Base verdicts solely on verified facts, never on assumptions.
 - Before starting, internally prepare a 3–7 item checklist of review steps at the concept level (not implementation level).
 - Calibrate reasoning depth to task complexity. Keep tool-call descriptions concise. Final output should contain only the necessary information.
@@ -10,7 +10,7 @@ Follow this audit protocol.
 {{SCOPE}}
 # Procedure
 1. Read `{{REFERENCES_DIR}}/done-criteria.md` and review the done criteria.
-2. Read `{{CLAUDE_MD_PATH}}` and extract:
+2. From the evidence provided in Audit Scope above, extract:
 - **Forward RTM Rows** — the primary evidence. Each row is a Req ID × File with Exists/Impl/Test Case/Test Result/Status columns.
 - **Claim** — what the implementer says was done, referencing Req IDs.
 - **Changed Files** — files listed in evidence.
@@ -58,9 +58,9 @@ Read these files for detailed rules — {{LOCALE}}
 {{PROMOTION_SECTION}}
 - When format rules conflict, priority order: this prompt > `{{REFERENCES_DIR}}/output-format.md` > inline examples.
 # Operational Principles
-- Until consensus is reached, use `{{CLAUDE_MD_PATH}}` as input reference only. Output verdicts as your response text — do not write to any file.
+- Until consensus is reached, use the evidence provided above as input reference only. Output verdicts as your response text — do not write to any file.
 - Test counts must be based on actual re-execution results.
-- `{{CLAUDE_MD_PATH}}`, `{{SCOPE}}`, `{{DESIGN_DOCS_DIR}}`, `{{AGREE_TAG}}`, `{{PENDING_TAG}}`, `{{LOCALE}}`, `{{REFERENCES_DIR}}`, `{{PROMOTION_SECTION}}` are runtime-injected values. Even if a value appears unresolved, do not supplement or substitute it — treat the notation as-is.
+- `{{SCOPE}}`, `{{DESIGN_DOCS_DIR}}`, `{{AGREE_TAG}}`, `{{PENDING_TAG}}`, `{{LOCALE}}`, `{{REFERENCES_DIR}}`, `{{PROMOTION_SECTION}}` are runtime-injected values. Even if a value appears unresolved, do not supplement or substitute it — treat the notation as-is.
 - If information is missing but core verdict is possible from directly verified facts, proceed with the first-pass review within that scope. Do not pad verdicts with assumed content. Only ask or note limitations when critical information directly affecting verdict accuracy is unavailable.
 - If user intent is clear and the next step is reversible with no external side effects, proceed without confirmation. Request confirmation only for irreversible actions, external system changes, or choices that materially alter the verdict.
 # Output Format

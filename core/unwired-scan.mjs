@@ -179,8 +179,8 @@ function collectImports(targetPath, contentMap) {
     const ext = extname(file);
 
     if ([".ts", ".js", ".mjs", ".tsx", ".jsx"].includes(ext)) {
-      // import { X, Y } from
-      const importRe = /import\s*\{([^}]+)\}\s*from/g;
+      // import { X, Y } from  AND  import type { X, Y } from
+      const importRe = /import\s+(?:type\s+)?\{([^}]+)\}\s*from/g;
       let match;
       while ((match = importRe.exec(content)) !== null) {
         const names = match[1].split(",").map(n => n.trim().split(/\s+as\s+/)[0].trim());

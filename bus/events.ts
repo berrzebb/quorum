@@ -234,7 +234,6 @@ export interface EvidenceSubmitPayload {
 
 /** Payload for evidence.write — raw evidence content stored in SQLite as single source of truth. */
 export interface EvidenceContentPayload {
-  watchFile: string;
   content: string;
   changedFiles: string[];
   triggerTag: string;

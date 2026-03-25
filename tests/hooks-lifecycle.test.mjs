@@ -202,9 +202,7 @@ describe("WorktreeRemove hook", () => {
       parent_repo: tmpRepo,
     }));
 
-    // Write a fake evidence file
-    mkdirSync(join(wtPath, "docs", "feedback"), { recursive: true });
-    writeFileSync(join(wtPath, "docs", "feedback", "claude.md"), "## [REVIEW_NEEDED] Test\n### Claim\nTest");
+    // Evidence is now in SQLite — no file creation needed
   });
 
   after(() => {

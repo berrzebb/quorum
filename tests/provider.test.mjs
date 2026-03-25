@@ -75,14 +75,8 @@ describe("ClaudeCodeProvider", () => {
     const events = [];
     bus.on("session.start", (e) => events.push(e));
 
-    // Create minimal watch file structure
-    const feedbackDir = join(tmpDir, "docs", "feedback");
-    mkdirSync(feedbackDir, { recursive: true });
-    writeFileSync(join(feedbackDir, "claude.md"), "# Evidence\n");
-
     await provider.start(bus, {
       repoRoot: tmpDir,
-      watchFile: "docs/feedback/claude.md",
       auditor: { model: "codex" },
     });
 

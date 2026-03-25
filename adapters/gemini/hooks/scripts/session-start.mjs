@@ -40,7 +40,7 @@ if (configMissing) {
   }
 }
 
-const { watchFile, triggerTag, agreeTag, pendingTag } = extractTags(cfg);
+const { triggerTag, agreeTag, pendingTag } = extractTags(cfg);
 
 let context = "";
 

@@ -34,7 +34,6 @@ try { cfg = JSON.parse(readFileSync(configPath, "utf8")); } catch { process.exit
 
 const locale = cfg.plugin?.locale ?? "en";
 const t = createT(locale);
-const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
 const triggerTag = cfg.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
 const agreeTag = cfg.consensus?.agree_tag ?? "[APPROVED]";
 const pendingTag = cfg.consensus?.pending_tag ?? "[CHANGES_REQUESTED]";

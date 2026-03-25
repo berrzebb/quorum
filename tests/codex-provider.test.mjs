@@ -45,13 +45,10 @@ describe("CodexProvider", () => {
     const events = [];
     bus.on("session.start", (e) => events.push(e));
 
-    const feedbackDir = join(tmpDir, "start-test", "docs", "feedback");
-    mkdirSync(feedbackDir, { recursive: true });
-    writeFileSync(join(feedbackDir, "claude.md"), "# Evidence\n");
+    mkdirSync(join(tmpDir, "start-test"), { recursive: true });
 
     await provider.start(bus, {
       repoRoot: join(tmpDir, "start-test"),
-      watchFile: "docs/feedback/claude.md",
       auditor: { model: "codex" },
     });
 
@@ -82,14 +79,11 @@ describe("CodexProvider", () => {
     bus.on("agent.complete", (e) => completeEvents.push(e));
 
     const root = join(tmpDir, "agent-test");
-    const feedbackDir = join(root, "docs", "feedback");
     const codexDir = join(root, ".codex");
-    mkdirSync(feedbackDir, { recursive: true });
-    writeFileSync(join(feedbackDir, "claude.md"), "# Evidence\n");
+    mkdirSync(root, { recursive: true });
 
     await provider.start(bus, {
       repoRoot: root,
-      watchFile: "docs/feedback/claude.md",
       auditor: { model: "codex" },
     });
 

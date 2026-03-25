@@ -1,6 +1,6 @@
 ---
 name: quorum-guide
-description: "Guide for writing evidence packages for the quorum watch file. Use when preparing code review submissions, structuring feedback evidence, or addressing audit rejections. Triggers on 'how to submit evidence', 'evidence format', 'write evidence', 'prepare for audit', 'what goes in the watch file'."
+description: "Guide for writing evidence packages for the quorum audit. Use when preparing code review submissions, structuring feedback evidence, or addressing audit rejections. Triggers on 'how to submit evidence', 'evidence format', 'write evidence', 'prepare for audit', 'how to submit audit'."
 model: gemini-2.5-flash
 allowed-tools: read_file, write_file, shell
 ---
@@ -11,17 +11,17 @@ Help the user write a proper evidence package for the quorum audit process.
 
 ## Step 0: Read Config
 
-Read `config.json` to determine the watch file path and tag values:
+Read `config.json` to determine the tag values:
 
 ```bash
 shell: cat .quorum/config.json
 ```
 
-Extract: `watch_file`, `trigger_tag`, `agree_tag` from the config. All subsequent steps use these values.
+Extract: `trigger_tag`, `agree_tag` from the config. Use `audit_submit` tool for evidence submission. All subsequent steps use these values.
 
 ## Evidence Template
 
-The evidence must be written in the watch file (from config.json) and must include these required sections:
+The evidence must be submitted via `audit_submit` tool and must include these required sections:
 
 ```markdown
 ## [Item Name] [trigger_tag]
@@ -70,4 +70,4 @@ When a previous audit was rejected:
 | Context | Behavior |
 |---------|----------|
 | **Interactive** | Read config, show template with resolved tags, guide user through each section |
-| **Headless** | Read config, scaffold evidence from `git diff`, fill placeholders, write to watch file |
+| **Headless** | Read config, scaffold evidence from `git diff`, fill placeholders, submit via audit_submit tool |

@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 21 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 22 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -76,7 +76,7 @@ codex -c features.codex_hooks=true
 
 This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
 
-This registers 11 hooks, 8 skills, 4 commands, and 21 MCP tools. Same audit engine as Claude Code.
+This registers 11 hooks, 8 skills, 4 commands, and 22 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -120,10 +120,10 @@ What it migrates:
 | Config | `.claude/consensus-loop/config.json` | `.claude/quorum/config.json` |
 | Audit history | `.claude/audit-history.jsonl` | SQLite EventStore |
 | Session state | `.session-state/retro-marker.json` | Preserved (shared location) |
-| Watch/respond files | `docs/feedback/claude.md` | No change needed |
+| Evidence submission | `docs/feedback/claude.md` | `audit_submit` MCP tool |
 | MCP server | `.mcp.json` consensus-loop entry | Cloned as quorum entry |
 
-Your existing watch file and evidence are preserved — quorum reads the same files.
+Your existing evidence is preserved — quorum reads from SQLite via audit_submit tool.
 
 ## How it works
 
@@ -163,7 +163,7 @@ quorum/
 ├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
 ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
 ├── providers/        ← consensus protocol + trigger (12-factor) + router + domain specialists + AST analyzer
-├── core/             ← audit protocol (7 modules), templates, 21 MCP tools
+├── core/             ← audit protocol (7 modules), templates, 22 MCP tools
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
 └── adapters/
@@ -262,15 +262,17 @@ The `perf_scan` tool uses hybrid scanning: regex detects `while(true)`, AST veri
 
 Inspired by Karpathy's autoresearch: **what is measurable is not asked to the LLM.**
 
-Five components combine into a 0.0–1.0 fitness score:
+Seven components combine into a 0.0–1.0 fitness score:
 
 | Component | Weight | Input |
 |-----------|--------|-------|
-| Type Safety | 0.25 | `as any` count per KLOC |
-| Test Coverage | 0.25 | Line + branch coverage |
+| Type Safety | 0.20 | `as any` count per KLOC |
+| Test Coverage | 0.20 | Line + branch coverage |
 | Pattern Scan | 0.20 | HIGH-severity findings |
 | Build Health | 0.15 | tsc + eslint pass rate |
-| Complexity | 0.15 | Avg cyclomatic complexity |
+| Complexity | 0.10 | Avg cyclomatic complexity |
+| Security | 0.10 | Vulnerability findings |
+| Dependencies | 0.05 | Outdated/vulnerable deps |
 
 The **FitnessLoop** gates LLM audit with 3 decisions:
 - **auto-reject**: score drop >0.15 or absolute <0.3 → skip LLM audit (cost savings)
@@ -279,7 +281,7 @@ The **FitnessLoop** gates LLM audit with 3 decisions:
 
 ### Conditional Trigger
 
-Not every change needs full consensus. A 12-factor scoring system (6 base + domain + plan + fitness + blast radius + velocity + stagnation) determines the audit level:
+Not every change needs full consensus. A 13-factor scoring system (6 base + domain + plan + fitness + blast radius + velocity + stagnation + interaction multipliers) determines the audit level:
 
 | Tier | Score | Mode |
 |------|-------|------|
@@ -457,7 +459,7 @@ Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/k
 ## Tests
 
 ```bash
-npm test                # 921 tests
+npm test                # 1055 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```

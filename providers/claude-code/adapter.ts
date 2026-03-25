@@ -9,7 +9,7 @@
  * 2. Standalone: adapter watches files directly (for when hooks aren't installed)
  */
 
-import { existsSync, readFileSync, watchFile, unwatchFile, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { QuorumBus } from "../../bus/bus.js";
 import { createEvent } from "../../bus/events.js";
@@ -43,7 +43,6 @@ export class ClaudeCodeProvider implements QuorumProvider {
     this.bus = bus;
     this.config = config;
 
-    const watchPath = resolve(config.repoRoot, config.watchFile);
     const inboxPath = resolve(config.repoRoot, ".claude", "quorum-inbox.jsonl");
 
     // Mode 1: Poll hook-generated inbox
@@ -51,8 +50,7 @@ export class ClaudeCodeProvider implements QuorumProvider {
       this.pollInbox(inboxPath);
     }
 
-    // Mode 2: Watch evidence file for changes
-    this.watchEvidence(watchPath);
+    // Evidence comes from SQLite EventStore (no file watching needed)
 
     // Note: audit.lock monitoring removed — ProcessMux + SQLite LockService
     // now manage agent coordination. Audit state is tracked via audit-status.json
@@ -69,10 +67,7 @@ export class ClaudeCodeProvider implements QuorumProvider {
     }
     this.intervals = [];
 
-    if (this.config) {
-      const watchPath = resolve(this.config.repoRoot, this.config.watchFile);
-      unwatchFile(watchPath);
-    }
+    // watchEvidence removed — evidence via audit_submit tool now
 
     this.bus = null;
     this.config = null;
@@ -130,28 +125,6 @@ export class ClaudeCodeProvider implements QuorumProvider {
       lastLineCount = lines.length;
       lastSize = currentSize;
     }, 1000));
-  }
-
-  private watchEvidence(watchPath: string): void {
-    if (!existsSync(watchPath)) return;
-
-    let lastMtime = statSync(watchPath).mtimeMs;
-
-    watchFile(watchPath, { interval: 2000 }, (curr) => {
-      if (curr.mtimeMs <= lastMtime || !this.bus) return;
-      lastMtime = curr.mtimeMs;
-
-      const content = readFileSync(watchPath, "utf8");
-      const tag = this.config?.triggerTag ?? "[REVIEW_NEEDED]";
-      const hasTrigger = content.includes(tag);
-
-      if (hasTrigger) {
-        this.bus.emit(createEvent("audit.submit", "claude-code", {
-          file: watchPath,
-        }));
-        this.lastEventTime = Date.now();
-      }
-    });
   }
 
   // watchAuditLock removed — ProcessMux + SQLite LockService manage agent coordination.

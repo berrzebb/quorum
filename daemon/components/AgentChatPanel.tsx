@@ -21,12 +21,57 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
+import { existsSync, readFileSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
 import type { ProcessMux, MuxSession } from "../../bus/mux.js";
 import type { ParliamentLiveSession } from "../state-reader.js";
 
 interface Props {
   mux: ProcessMux;
   liveSessions: ParliamentLiveSession[];
+}
+
+/**
+ * Parse stream-json NDJSON output into human-readable lines.
+ * Extracts assistant text from content_block_delta / result events.
+ */
+function parseStreamJson(rawLines: string[]): string[] {
+  const textParts: string[] = [];
+
+  // capture-pane pads lines with spaces — trimEnd before joining to fix wrapped JSON
+  const joined = rawLines.map(l => l.trimEnd()).join("");
+  const entries = joined.split(/(?=\{"type":)/);
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed.startsWith("{")) continue;
+    try {
+      const obj = JSON.parse(trimmed);
+
+      // Claude stream-json: content_block_delta with text
+      if (obj.type === "content_block_delta" && obj.delta?.text) {
+        textParts.push(obj.delta.text);
+        continue;
+      }
+
+      // Claude stream-json: result with final text
+      if (obj.type === "result" && obj.result) {
+        textParts.push(obj.result);
+        continue;
+      }
+
+      // Tool use
+      if (obj.type === "content_block_start" && obj.content_block?.type === "tool_use") {
+        textParts.push(`[tool: ${obj.content_block.name}]`);
+        continue;
+      }
+    } catch { /* not JSON, show raw */ }
+  }
+
+  if (textParts.length === 0) return rawLines;  // fallback: show raw
+
+  // Join text parts and re-split into display lines
+  const fullText = textParts.join("");
+  return fullText.split("\n").filter(Boolean).slice(-30);
 }
 
 export function AgentChatPanel({ mux, liveSessions }: Props) {
@@ -36,22 +81,61 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
   const [inputBuffer, setInputBuffer] = useState("");
   const [inputMode, setInputMode] = useState(false);
 
+  // Register external sessions in effect (not render body)
+  useEffect(() => {
+    for (const ls of liveSessions) {
+      mux.registerExternal({
+        id: ls.id,
+        name: ls.name,
+        backend: ls.backend as import("../../bus/mux.js").MuxBackend,
+        startedAt: ls.startedAt,
+        status: "running",
+      });
+    }
+  }, [liveSessions.map(ls => ls.id).join()]);
+
   const sessions = mux.list().filter(s => s.status === "running");
 
-  // Poll all visible sessions (selected + pinned)
+  // Build outputFile lookup from liveSessions
+  const outputFileMap = new Map<string, string>();
+  for (const ls of liveSessions) {
+    if (ls.outputFile) outputFileMap.set(ls.id, ls.outputFile);
+  }
+
+  // Poll ALL sessions — prefer output file over capture-pane
   useEffect(() => {
     if (sessions.length === 0) return;
 
     const poll = () => {
-      const visibleIds = new Set<string>();
-      if (sessions[selectedIdx]) visibleIds.add(sessions[selectedIdx]!.id);
-      for (const id of pinnedIds) visibleIds.add(id);
-
       const next = new Map(outputs);
-      for (const id of visibleIds) {
-        const cap = mux.capture(id, 20);
-        if (cap?.output) {
-          next.set(id, cap.output.split("\n").filter(Boolean).slice(-20));
+      for (const s of sessions) {
+        let raw = "";
+
+        // 1. Try output file first (reliable) — read tail only for performance
+        const outFile = outputFileMap.get(s.id);
+        if (outFile && existsSync(outFile)) {
+          try {
+            const fd = openSync(outFile, "r");
+            const stat = fstatSync(fd);
+            const TAIL_BYTES = 32_768; // 32KB tail — enough for recent output
+            const start = Math.max(0, stat.size - TAIL_BYTES);
+            const buf = Buffer.alloc(Math.min(TAIL_BYTES, stat.size));
+            readSync(fd, buf, 0, buf.length, start);
+            closeSync(fd);
+            raw = buf.toString("utf8");
+          } catch { /* ok */ }
+        }
+
+        // 2. Fall back to capture-pane
+        if (!raw) {
+          const cap = mux.capture(s.id, 80);
+          if (cap?.output) raw = cap.output;
+        }
+
+        if (raw) {
+          const rawLines = raw.split("\n").filter(Boolean);
+          const hasJson = rawLines.some(l => l.trim().startsWith("{"));
+          next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-30));
         }
       }
       setOutputs(next);
@@ -60,7 +144,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
     poll();
     const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
-  }, [selectedIdx, pinnedIds.size, sessions.length]);
+  }, [sessions.length, sessions.map(s => s.id).join()]);
 
   useInput(useCallback((input: string, key: { upArrow?: boolean; downArrow?: boolean; return?: boolean; escape?: boolean; backspace?: boolean; delete?: boolean }) => {
     if (inputMode) {
@@ -82,8 +166,8 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
       if (key.upArrow) setSelectedIdx(prev => Math.max(0, prev - 1));
       else if (key.downArrow) setSelectedIdx(prev => Math.min(sessions.length - 1, prev + 1));
       else if (input === "i" || key.return) setInputMode(true);
-      else if (input === "p" && sessions[selectedIdx]) {
-        const id = sessions[selectedIdx]!.id;
+      else if (input === "p" && sessions[Math.min(selectedIdx, sessions.length - 1)]) {
+        const id = sessions[Math.min(selectedIdx, sessions.length - 1)]!.id;
         setPinnedIds(prev => {
           const next = new Set(prev);
           if (next.has(id)) next.delete(id); else next.add(id);
@@ -103,8 +187,10 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
     );
   }
 
-  const selected = sessions[selectedIdx];
-  const pinnedSessions = sessions.filter(s => pinnedIds.has(s.id) && s.id !== selected?.id);
+  const safeIdx = Math.min(selectedIdx, sessions.length - 1);
+  const selected = sessions[safeIdx];
+  if (!selected) return null;
+  const pinnedSessions = sessions.filter(s => pinnedIds.has(s.id) && s.id !== selected.id);
 
   return (
     <Box flexDirection="row" padding={0}>
@@ -199,7 +285,7 @@ function SessionPane({ session, lines, inputMode, inputBuffer, focused }: {
               <Text>{inputBuffer}<Text color="cyan">_</Text></Text>
             </Box>
           ) : (
-            <Text dimColor>[i] type  [Enter] send  [p] pin/unpin</Text>
+            <Text dimColor>[p] pin/unpin  msg: quorum tool agent_comm</Text>
           )}
         </>
       )}

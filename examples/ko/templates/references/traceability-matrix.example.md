@@ -164,7 +164,7 @@ execution-order 의존 관계에 따라 import 체인 추적.
 
 ## 증거 제출 형식
 
-순방향 RTM이 주요 증거. watch_file에 제출:
+순방향 RTM이 주요 증거. audit_submit 도구로 제출:
 
 ```markdown
 ## [trigger_tag] [track-name] — 처리된 Req IDs

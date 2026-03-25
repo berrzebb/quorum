@@ -115,8 +115,12 @@ class LanguageRegistry {
   detectLanguages(dir) {
     const found = new Set();
     const sampledDirs = [dir];
-    const srcDir = resolve(dir, "src");
-    try { if (statSync(srcDir).isDirectory()) sampledDirs.push(srcDir); } catch { /* skip */ }
+    // Sample common project directory conventions
+    const candidates = ["src", "lib", "cli", "core", "bus", "app", "pkg", "cmd", "internal", "daemon", "providers", "server", "client", "engine"];
+    for (const name of candidates) {
+      const p = resolve(dir, name);
+      try { if (statSync(p).isDirectory()) sampledDirs.push(p); } catch { /* skip */ }
+    }
 
     for (const d of sampledDirs) {
       try {

@@ -108,7 +108,7 @@ export class ProcessMux extends EventEmitter {
         spawnSync("tmux", ["send-keys", "-t", session.name, input, "Enter"], { windowsHide: true });
         break;
       case "psmux":
-        spawnSync("psmux", ["send", session.name, input], { windowsHide: true });
+        spawnSync("psmux", ["send-keys", "-t", session.name, input, "Enter"], { windowsHide: true });
         break;
       case "raw": {
         const proc = this.processes.get(sessionId);
@@ -135,7 +135,7 @@ export class ProcessMux extends EventEmitter {
         spawnSync("tmux", ["kill-session", "-t", session.name], { windowsHide: true });
         break;
       case "psmux":
-        spawnSync("psmux", ["kill", session.name], { windowsHide: true });
+        spawnSync("psmux", ["kill-session", "-t", session.name], { windowsHide: true });
         break;
       case "raw": {
         const proc = this.processes.get(sessionId);
@@ -161,6 +161,26 @@ export class ProcessMux extends EventEmitter {
   /** List active sessions. */
   list(): MuxSession[] {
     return [...this.sessions.values()];
+  }
+
+  /**
+   * Register an external session (created by another process).
+   * Enables capture() on sessions created by other ProcessMux instances
+   * (e.g. parliament CLI → daemon TUI observability).
+   * Only meaningful for psmux/tmux backends where sessions are system-wide.
+   */
+  registerExternal(session: MuxSession): void {
+    if (!this.sessions.has(session.id)) {
+      this.sessions.set(session.id, session);
+    }
+  }
+
+  /**
+   * Remove a session from the internal tracking map.
+   * Used to clean up external sessions that are no longer alive.
+   */
+  unregister(sessionId: string): void {
+    this.sessions.delete(sessionId);
   }
 
   /**
@@ -195,7 +215,7 @@ export class ProcessMux extends EventEmitter {
         break;
       case "psmux":
         spawnSync("psmux", [
-          "split", parent.name, cmd,
+          "split-window", "-t", parent.name, "-h", "--", ...cmd.split(" "),
         ], { windowsHide: true });
         break;
       case "raw":
@@ -206,6 +226,28 @@ export class ProcessMux extends EventEmitter {
     this.sessions.set(child.id, child);
     this.emit("spawn", child);
     return child;
+  }
+
+  /**
+   * Attach to a running session (blocks until user detaches or session ends).
+   * Gives the user an interactive terminal to the mux session.
+   * Only meaningful for psmux/tmux backends.
+   * Returns true if attach succeeded, false if not supported.
+   */
+  attach(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.status !== "running") return false;
+
+    switch (this.backend) {
+      case "tmux":
+        spawnSync("tmux", ["attach-session", "-t", session.name], { stdio: "inherit", windowsHide: false });
+        return true;
+      case "psmux":
+        spawnSync("psmux", ["attach", "-t", session.name], { stdio: "inherit", windowsHide: false });
+        return true;
+      case "raw":
+        return false;  // raw backend has no attach concept
+    }
   }
 
   /** Get active session count. */
@@ -258,21 +300,32 @@ export class ProcessMux extends EventEmitter {
   // ── psmux backend (Windows) ───────────────────
 
   private spawnPsmux(session: MuxSession, opts: SpawnOptions): void {
-    const cmd = [opts.command, ...(opts.args ?? [])].join(" ");
-    const result = spawnSync("psmux", ["new", session.name, cmd], {
-      cwd: opts.cwd,
+    // psmux uses tmux-compatible CLI: new -s <name> -d [-- <cmd> [args]]
+    const psmuxArgs = ["new", "-s", session.name, "-d"];
+    if (opts.cwd) psmuxArgs.push("-c", opts.cwd);
+    // Empty command = use default shell (pwsh on Windows)
+    if (opts.command) psmuxArgs.push("--", opts.command, ...(opts.args ?? []));
+
+    const result = spawnSync("psmux", psmuxArgs, {
       env: { ...process.env, ...opts.env },
+      encoding: "utf8",
       windowsHide: true,
     });
 
     if (result.status !== 0) {
       session.status = "error";
+      if (process.env.QUORUM_DEBUG) {
+        const stderr = (result.stderr ?? "").trim();
+        console.error(`[mux] psmux new failed (status ${result.status}): ${stderr || "(no stderr)"}`);
+        console.error(`[mux] args: ${psmuxArgs.join(" ")}`);
+      }
     }
   }
 
   private capturePsmux(session: MuxSession, tailLines: number): CaptureResult {
+    // psmux capture-pane -t <session> -p -S -<lines>
     const result = spawnSync("psmux", [
-      "capture", session.name, "--tail", String(tailLines),
+      "capture-pane", "-t", session.name, "-p", "-S", `-${tailLines}`,
     ], { encoding: "utf8", windowsHide: true });
 
     const output = result.stdout ?? "";
@@ -336,7 +389,7 @@ export class ProcessMux extends EventEmitter {
 function detectBackend(): MuxBackend {
   if (platform() === "win32") {
     try {
-      const result = spawnSync("psmux", ["--version"], { encoding: "utf8", timeout: 3000, windowsHide: true });
+      const result = spawnSync("psmux", ["version"], { encoding: "utf8", timeout: 3000, windowsHide: true });
       if (result.status === 0) return "psmux";
     } catch { /* not available */ }
   } else {

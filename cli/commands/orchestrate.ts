@@ -11,7 +11,7 @@
 import { resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { type Bridge, loadBridge, findTracks, parseWorkBreakdown } from "./orchestrate/shared.js";
+import { type Bridge, loadBridge, findTracks, parseWorkBreakdown, resolveTrack, trackRef } from "./orchestrate/shared.js";
 import { interactivePlanner } from "./orchestrate/planner.js";
 import { runImplementationLoop } from "./orchestrate/runner.js";
 
@@ -58,7 +58,7 @@ async function startOrchestration(repoRoot: string, args: string[]): Promise<voi
 
   const targetTrack = args[0];
   if (targetTrack) {
-    const track = tracks.find(t => t.name === targetTrack);
+    const track = resolveTrack(targetTrack, repoRoot);
     if (!track) { console.log(`\n  Track '${targetTrack}' not found.\n`); return; }
     await orchestrateTrack(repoRoot, track);
     return;
@@ -103,9 +103,11 @@ async function orchestrateTrack(
     });
   }
 
+  const ref = trackRef(track.name, repoRoot);
+  const arg = ref ? ` ${ref}` : "";
   console.log("\n  \x1b[1mNext steps:\x1b[0m");
-  console.log(`    quorum orchestrate plan ${track.name}    Interactive planning`);
-  console.log(`    quorum orchestrate run ${track.name}     Full implementation loop\n`);
+  console.log(`    quorum orchestrate plan${arg}    Interactive planning`);
+  console.log(`    quorum orchestrate run${arg}     Full implementation loop\n`);
 
   if (bridge?.close) bridge.close();
 }

@@ -24,7 +24,7 @@ Trigger the consensus audit process manually. The audit evaluates pending eviden
 ## Setup
 
 Read config via `read_file` at `core/config.json` relative to the quorum package root:
-- `consensus.watch_file` — evidence file path
+- `audit_submit` MCP tool — evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
 - `consensus.roles` — provider-per-role mapping (advocate, devil, judge)
 
@@ -48,7 +48,7 @@ node core/audit.mjs
 | `--auto-fix` | After audit, auto-correct rejected items via CLI |
 | `--model <name>` | Override auditor model (default from config) |
 | `--reset-session` | Delete saved session state before running |
-| `--watch-file <path>` | Override watch file path (useful for worktree audits) |
+| `--evidence <markdown>` | Submit evidence directly (useful for worktree audits) |
 
 ## Verdict Flow
 

@@ -50,14 +50,12 @@ export async function run(args: string[]): Promise<void> {
 
   // ── Evidence items ──────────────────────────
   const configDir = resolve(repoRoot, ".claude", "quorum");
-  let watchFile = "docs/feedback/claude.md";
   const configPath = resolve(configDir, "config.json");
   let roles: Record<string, string> | undefined;
   let auditorModel = "codex";
   if (existsSync(configPath)) {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-      watchFile = cfg.consensus?.watch_file ?? watchFile;
       auditorModel = cfg.plugin?.auditor_model ?? auditorModel;
       if (cfg.consensus?.roles && typeof cfg.consensus.roles === "object") {
         roles = cfg.consensus.roles;
@@ -77,31 +75,43 @@ export async function run(args: string[]): Promise<void> {
     console.log(`  Auditor:     ${auditorModel}`);
   }
 
-  // Check main repo + all worktrees for evidence
+  // Evidence from SQLite EventStore (single source of truth)
+  const dbPath = resolve(repoRoot, ".claude", "quorum-events.db");
   const worktrees = getActiveWorktrees(repoRoot);
-  const evidencePaths = findAllEvidence(repoRoot, watchFile, worktrees);
-
-  if (evidencePaths.length > 0) {
-    console.log(`  Evidence:`);
-    for (const ep of evidencePaths) {
-      const content = readFileSync(ep.path, "utf8");
-      const items = parseEvidenceItems(content);
-      const location = ep.worktree ? `\x1b[2m(worktree: ${ep.worktree})\x1b[0m` : "\x1b[2m(main)\x1b[0m";
-
-      if (items.length === 0) {
-        console.log(`    ${ep.label} ${location} — no items`);
-      } else {
-        console.log(`    ${ep.label} ${location}`);
-        for (const item of items) {
-          const icon = item.status === "approved" ? "\x1b[32m✓\x1b[0m"
-            : item.status === "rejected" ? "\x1b[31m✗\x1b[0m"
-            : "\x1b[33m◐\x1b[0m";
-          console.log(`      ${icon} ${item.title}`);
-        }
+  let evidenceDisplayed = false;
+  if (existsSync(dbPath)) {
+    try {
+      const { EventStore: EvidenceStore } = await import("../../bus/store.js");
+      const eStore = new EvidenceStore({ dbPath });
+      const evidenceEvents = eStore.query({ eventType: "evidence.write" });
+      const verdictEvents = eStore.query({ eventType: "audit.verdict" });
+      const verdictMap = new Map<string, string>();
+      for (const v of verdictEvents) {
+        const id = (v.payload as any)?.itemId ?? (v.payload as any)?.entityId;
+        if (id) verdictMap.set(id, (v.payload as any)?.verdict ?? "pending");
       }
-    }
-  } else {
-    console.log(`  Evidence:    ${watchFile} \x1b[2m(not found)\x1b[0m`);
+
+      if (evidenceEvents.length > 0) {
+        console.log(`  Evidence:    \x1b[36m${evidenceEvents.length} submission(s)\x1b[0m \x1b[2m(SQLite)\x1b[0m`);
+        // Show last 5 submissions
+        const recent = evidenceEvents.slice(-5);
+        for (const ev of recent) {
+          const p = ev.payload as any;
+          const files = p?.changedFiles?.length ?? 0;
+          const ts = new Date(ev.timestamp).toLocaleString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+          const verdict = verdictMap.get(ev.sessionId ?? "") ?? "";
+          const icon = verdict === "approved" ? "\x1b[32m✓\x1b[0m"
+            : verdict === "changes_requested" ? "\x1b[31m✗\x1b[0m"
+            : "\x1b[33m◐\x1b[0m";
+          console.log(`    ${icon} ${ts} — ${files} file(s) from ${ev.source}`);
+        }
+        evidenceDisplayed = true;
+      }
+      eStore.close();
+    } catch { /* non-critical */ }
+  }
+  if (!evidenceDisplayed) {
+    console.log(`  Evidence:    \x1b[2mnone\x1b[0m`);
   }
 
   // ── Active worktrees ────────────────────────
@@ -122,9 +132,21 @@ export async function run(args: string[]): Promise<void> {
         try {
           const agent = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
           let alive = false;
-          if (agent.pid) { try { process.kill(agent.pid, 0); alive = true; } catch { /* dead */ } }
+          if (agent.pid) {
+            try { process.kill(agent.pid, 0); alive = true; } catch { /* dead */ }
+          } else if (agent.backend === "psmux" || agent.backend === "tmux") {
+            // Mux sessions: check if session still exists in backend
+            try {
+              const cmd = agent.backend === "psmux" ? "psmux" : "tmux";
+              const listArgs = ["list-sessions", "-F", "#{session_name}"];
+              const result = spawnSync(cmd, listArgs, { encoding: "utf8", timeout: 3000, windowsHide: true });
+              alive = (result.stdout ?? "").includes(agent.name);
+            } catch { /* assume dead */ }
+          }
           const icon = alive ? "\x1b[32m●\x1b[0m" : "\x1b[2m○\x1b[0m";
-          console.log(`    ${icon} ${agent.name ?? f} (PID: ${agent.pid ?? "?"}, ${alive ? "running" : "dead"})`);
+          const role = agent.role ? ` (${agent.role})` : "";
+          const be = agent.backend ? ` [${agent.backend}]` : "";
+          console.log(`    ${icon} ${agent.name ?? f}${be}${role} ${alive ? "\x1b[32mrunning\x1b[0m" : "\x1b[2mdead\x1b[0m"}`);
         } catch { /* skip */ }
       }
     }
@@ -145,7 +167,6 @@ export async function run(args: string[]): Promise<void> {
   } catch { /* not a git repo */ }
 
   // ── Event log ───────────────────────────────
-  const dbPath = resolve(repoRoot, ".claude", "quorum-events.db");
   const logPath = resolve(repoRoot, ".claude", "quorum-events.jsonl");
   if (existsSync(dbPath)) {
     console.log(`  Event store: SQLite \x1b[2m(${dbPath})\x1b[0m`);
@@ -189,58 +210,9 @@ export async function run(args: string[]): Promise<void> {
 
 // ── Helpers ───────────────────────────────────
 
-interface EvidencePath {
-  path: string;
-  label: string;
-  worktree: string | null;
-}
+// EvidencePath and EvidenceItem removed — evidence now from SQLite
 
-interface EvidenceItem {
-  title: string;
-  status: "pending" | "approved" | "rejected" | "infra_failure";
-}
-
-function findAllEvidence(repoRoot: string, watchFile: string, worktrees: Worktree[]): EvidencePath[] {
-  const results: EvidencePath[] = [];
-
-  // Main repo
-  const mainPath = resolve(repoRoot, watchFile);
-  if (existsSync(mainPath)) {
-    results.push({ path: mainPath, label: watchFile, worktree: null });
-  }
-
-  // Worktrees
-  for (const wt of worktrees) {
-    const wtPath = resolve(wt.path, watchFile);
-    if (existsSync(wtPath)) {
-      results.push({ path: wtPath, label: watchFile, worktree: wt.name });
-    }
-  }
-
-  return results;
-}
-
-function parseEvidenceItems(content: string): EvidenceItem[] {
-  const items: EvidenceItem[] = [];
-
-  for (const line of content.split(/\r?\n/)) {
-    // Match "## [TAG] Title" pattern
-    const match = line.match(/^##\s+\[([^\]]+)\]\s+(.*)/);
-    if (!match) continue;
-
-    const tag = match[1]!;
-    const title = match[2]!.trim();
-
-    let status: EvidenceItem["status"] = "pending";
-    if (tag === "APPROVED" || tag === "합의완료") status = "approved";
-    else if (tag === "CHANGES_REQUESTED" || tag === "계류") status = "rejected";
-    else if (tag === "INFRA_FAILURE") status = "infra_failure";
-
-    items.push({ title, status });
-  }
-
-  return items;
-}
+// findAllEvidence and parseEvidenceItems removed — evidence now read from SQLite EventStore
 
 interface Worktree {
   name: string;

@@ -29,7 +29,7 @@ For detailed parameters and examples for each tool, see: `skills/consensus-tools
 
 ## Deterministic Tools
 
-Full tool catalog: `agents/knowledge/tool-inventory.md` (20 tools, 5 categories). Key tools for scout:
+Full tool catalog: `agents/knowledge/tool-inventory.md` (22 tools, 5 categories). Key tools for scout:
 
 ```bash
 # Codebase structure

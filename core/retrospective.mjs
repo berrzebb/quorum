@@ -12,12 +12,12 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  HOOKS_DIR, cfg, SEC, t, findWatchFile,
+  HOOKS_DIR, cfg, SEC, t,
 } from "./context.mjs";
+import * as bridge from "./bridge.mjs";
 
 const MARKER_DIR = resolve(HOOKS_DIR, ".session-state");
 const MARKER_PATH = resolve(MARKER_DIR, "retro-marker.json");
-const claudePath = findWatchFile();
 
 /** Compute next RX-N sequence number. */
 function nextRetroId(claudeMd) {
@@ -43,12 +43,17 @@ function extractAgreedContext(claudeMd, agreedAnchor) {
 }
 
 async function main() {
-  if (!existsSync(claudePath)) {
+  // Read evidence from SQLite (single source of truth)
+  let claudeMd;
+  try {
+    const evidence = bridge.getLatestEvidence?.();
+    if (evidence?.content) claudeMd = evidence.content;
+  } catch { /* bridge non-critical */ }
+
+  if (!claudeMd) {
     console.log(t("retro.no_claude_md"));
     return;
   }
-
-  const claudeMd = readFileSync(claudePath, "utf8");
   const rxId = nextRetroId(claudeMd);
   const agreedAnchor = SEC.agreedAnchor;
   const agreedItems = extractAgreedContext(claudeMd, agreedAnchor);

@@ -38,8 +38,8 @@ Language is auto-detected from file extensions. Domain scans apply language-spec
 
 ### Step 1: Gather Context
 
-1. Read config — extract `consensus.trigger_tag`, `consensus.watch_file`
-2. Read watch file — find section with `trigger_tag`
+1. Read config — extract `consensus.trigger_tag`, `audit_submit` MCP tool for evidence
+2. Query evidence via `audit_history` — find section with `trigger_tag`
 3. Parse: Claim, Changed Files, Test Command, Test Result, Residual Risk
 4. Extract changed file list
 5. Detect project languages (auto via registry)

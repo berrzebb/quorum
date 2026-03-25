@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Headless worker for quorum — receives task + context, implements code, runs tests, submits evidence to watch file, handles audit corrections. Use when the orchestrator needs to delegate a coding task to a worker agent.
+description: Headless worker for quorum — receives task + context, implements code, runs tests, submits evidence via audit_submit tool, handles audit corrections. Use when the orchestrator needs to delegate a coding task to a worker agent.
 model: claude-sonnet-4-6
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 disallowedTools:
@@ -83,7 +83,7 @@ The orchestrator may send follow-up correction instructions via **SendMessage** 
 1. Read the rejection codes and specific file:line references
 2. Apply fixes **in the same worktree**
 3. Re-run affected tests
-4. Update evidence in watch file (**Write**, full replace) with `[trigger_tag]`
+4. Re-submit evidence via `audit_submit` tool with `[trigger_tag]`
 5. Wait for the next audit verdict
 
 Corrections are scoped — fix only what was rejected. Do NOT expand scope.

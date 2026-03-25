@@ -63,7 +63,7 @@ if (!configPath) {
       `(Project-scoped — safe across plugin updates)`,
       ``,
       `Customize for your project:`,
-      `- config.json → consensus.watch_file, trigger_tag/agree_tag/pending_tag, quality_rules`,
+      `- config.json → consensus.trigger_tag/agree_tag/pending_tag, quality_rules`,
       `- templates/references/{locale}/ → audit policies (rejection codes, test criteria, evidence format)`,
       ``,
       `Full guide: ${resolve(pluginRoot, "README.md")}`,
@@ -88,7 +88,6 @@ if (!configPath) {
 
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 const t = createT(cfg.plugin?.locale ?? "en");
-const watchFile = cfg.consensus?.watch_file ?? "docs/feedback/claude.md";
 const triggerTag = cfg.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
 const agreeTag = cfg.consensus?.agree_tag ?? "[APPROVED]";
 const pendingTag = cfg.consensus?.pending_tag ?? "[CHANGES_REQUESTED]";

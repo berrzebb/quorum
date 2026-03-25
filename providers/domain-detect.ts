@@ -248,7 +248,7 @@ export function detectDomains(
       if (hasJsx && !hasA11yContent) {
         // JSX file changed but no a11y-related content — skip
         // unless there's an explicit a11y file match
-        const hasExplicitA11y = changedFiles.some(f => /a11y|accessibility|wcag/i.test(f));
+        const hasExplicitA11y = changedFiles.some(f => /a11y|accessib|wcag/i.test(f));
         if (!hasExplicitA11y) {
           domainReasons.length = 0;
         }

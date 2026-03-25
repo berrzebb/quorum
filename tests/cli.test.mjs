@@ -108,7 +108,7 @@ describe("quorum setup", () => {
 
     // Verify created files
     assert.ok(existsSync(join(tmpDir, ".claude", "quorum", "config.json")));
-    assert.ok(existsSync(join(tmpDir, "docs", "feedback", "claude.md")));
+    // Evidence submitted via audit_submit tool — no file creation
     assert.ok(existsSync(join(tmpDir, ".mcp.json")));
   });
 

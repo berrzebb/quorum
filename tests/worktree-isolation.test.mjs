@@ -24,37 +24,37 @@ const CORE_DIR = resolve(__dirname, "..", "core");
 const ADAPTER_DIR = resolve(__dirname, "..", "adapters", "claude-code");
 
 // ── deriveAuditCwd logic (replicated from audit.mjs for unit testing) ──
-function deriveAuditCwd(watchFile, repoRoot = "/repo") {
-  if (!watchFile) return repoRoot;
-  const worktreeMatch = watchFile.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
+function deriveAuditCwd(path, repoRoot = "/repo") {
+  if (!path) return repoRoot;
+  const worktreeMatch = path.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
   if (worktreeMatch) return worktreeMatch[1];
   return repoRoot;
 }
 
 describe("deriveAuditCwd", () => {
-  it("returns REPO_ROOT when no watchFile", () => {
+  it("returns REPO_ROOT when no path", () => {
     assert.equal(deriveAuditCwd(null, "/repo"), "/repo");
     assert.equal(deriveAuditCwd(undefined, "/repo"), "/repo");
     assert.equal(deriveAuditCwd("", "/repo"), "/repo");
   });
 
-  it("returns REPO_ROOT for main repo watch_file", () => {
+  it("returns REPO_ROOT for main repo path", () => {
     assert.equal(
-      deriveAuditCwd("/repo/docs/feedback/claude.md", "/repo"),
+      deriveAuditCwd("/repo/src/index.ts", "/repo"),
       "/repo",
     );
   });
 
-  it("returns worktree root for worktree watch_file (Unix)", () => {
+  it("returns worktree root for worktree path (Unix)", () => {
     assert.equal(
-      deriveAuditCwd("/repo/.claude/worktrees/agent-abc123/docs/feedback/claude.md", "/repo"),
+      deriveAuditCwd("/repo/.claude/worktrees/agent-abc123/src/index.ts", "/repo"),
       "/repo/.claude/worktrees/agent-abc123",
     );
   });
 
-  it("returns worktree root for worktree watch_file (Windows backslashes)", () => {
+  it("returns worktree root for worktree path (Windows backslashes)", () => {
     assert.equal(
-      deriveAuditCwd("D:\\Projects\\tetris2\\.claude\\worktrees\\agent-abc123\\docs\\feedback\\claude.md", "D:\\Projects\\tetris2"),
+      deriveAuditCwd("D:\\Projects\\tetris2\\.claude\\worktrees\\agent-abc123\\src\\index.ts", "D:\\Projects\\tetris2"),
       "D:/Projects/tetris2/.claude/worktrees/agent-abc123",
     );
   });
@@ -62,14 +62,14 @@ describe("deriveAuditCwd", () => {
   it("handles nested .claude paths without false match", () => {
     // A path that contains .claude but NOT in worktrees pattern
     assert.equal(
-      deriveAuditCwd("/repo/.claude/quorum/docs/feedback/claude.md", "/repo"),
+      deriveAuditCwd("/repo/.claude/quorum/config.json", "/repo"),
       "/repo",
     );
   });
 
   it("extracts correct root from deeply nested worktree paths", () => {
     assert.equal(
-      deriveAuditCwd("/repo/.claude/worktrees/agent-xyz/sub/deep/docs/feedback/claude.md", "/repo"),
+      deriveAuditCwd("/repo/.claude/worktrees/agent-xyz/sub/deep/src/index.ts", "/repo"),
       "/repo/.claude/worktrees/agent-xyz",
     );
   });
@@ -167,18 +167,7 @@ describe("audit.mjs worktree isolation invariants", () => {
 describe("index.mjs worktree isolation invariants", () => {
   const indexSource = readFileSync(resolve(ADAPTER_DIR, "index.mjs"), "utf8");
 
-  it("worktree root derives from watchFilePath", () => {
-    assert.match(indexSource, /worktreeRoot/);
-    assert.match(indexSource, /wMatch.*\.claude.*worktrees/);
-  });
-
-  it("debounce path derives from watchPath (not REPO_ROOT)", () => {
-    assert.match(indexSource, /debounceRoot/);
-    assert.doesNotMatch(
-      indexSource.match(/audit-debounce/)?.[0] ? indexSource : "",
-      /resolve\(REPO_ROOT.*audit-debounce/,
-    );
-  });
+  // Evidence detection via audit_submit MCP tool — no file-based detection needed
 
   it("quality_rules supports preset object format", () => {
     assert.match(indexSource, /qr\.presets/);

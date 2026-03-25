@@ -53,7 +53,7 @@ bus/
 providers/
   ├→ provider.ts        ← QuorumProvider + Auditor interfaces
   ├→ consensus.ts       ← DeliberativeConsensus (Advocate/Devil/Judge + Diverge-Converge)
-  ├→ trigger.ts         ← 12-factor conditional trigger (T1/T2/T3 + domain + fitness + blast radius + velocity + stagnation)
+  ├→ trigger.ts         ← 13-factor conditional trigger (12 base + interaction multipliers; T1/T2/T3)
   ├→ ast-analyzer.ts    ← TypeScript Compiler API wrapper (sourceFile + program mode, 5 analyzers + cross-file)
   ├→ router.ts          ← TierRouter (escalation/downgrade)
   ├→ agent-loader.ts    ← 4-tier persona resolution + LRU cache
@@ -71,7 +71,7 @@ core/
   ├→ audit/             ← split audit modules (args, session, scope, pre-verify, codex-runner, solo-verdict, index)
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
-  ├→ tools/             ← 21 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, ...)
+  ├→ tools/             ← 22 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, audit_submit, ...)
   └→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
 
 languages/
@@ -131,7 +131,7 @@ adapters/codex/
 - **Bridge**: `core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe — hooks run in legacy mode if dist/ is unavailable.
 - **Consensus Gate**: evidence → trigger eval → domain detection → specialist tools → T1 skip / T2 simple / T3 deliberative → verdict → retro → commit.
 - **SQLite Unified State**: `state_transitions`, `locks`, `kv_state` tables + `events` — single source of truth. No verdict files (verdict.md/gpt.md eliminated). `audit-status.json` marker for fast-path hook detection.
-- **Domain Specialists**: Zero-cost file pattern matching → 20 deterministic tools + domain-specific LLM agents activated conditionally per domain × tier. 11 domains: perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security.
+- **Domain Specialists**: Zero-cost file pattern matching → 22 deterministic tools + domain-specific LLM agents activated conditionally per domain × tier. 11 domains: perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security.
 - **Atomic Locks**: `LockService` uses INSERT...ON CONFLICT for TOCTOU-free lock acquisition (replaces JSON lock files).
 - **Provider-per-Role**: `config.json` `consensus.roles` maps roles to providers (e.g. advocate→openai, devil→claude, judge→codex). `createConsensusAuditors()` in factory.ts.
 - **Finding-Level Bus**: `MessageBus` enables per-finding submit/ack/resolve via SQLite events. Replaces file-based IPC for reviewer communication.
@@ -174,12 +174,16 @@ adapters/codex/
 - **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
 - **Implementation Loop**: `quorum orchestrate run <track> --provider claude` — full WB execution loop. Reads WBs → dependency-aware groups → spawns agents via ProcessMux → sends implementer protocol → polls for audit verdict → correction rounds on rejection (max 3) → next WB on approval. Parliament gates checked before start. File claims prevent conflicts. Events: agent.spawn, track.progress, track.complete.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
-- **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (12 factors) for auto-escalation on future similar files.
+- **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (13 factors) for auto-escalation on future similar files.
+- **Plan Review Gate**: `reviewPlan()` validates WBs before `orchestrate run`. Action + Verify fields required — blocks execution if missing. Guards: >5 target files → split, dangling dependencies → error.
+- **Model Tier Routing**: `selectModelForSize()` in `runner.ts` — XS→haiku, S→sonnet, M→opus. WB Size parsed from heading. `--model` flag auto-appended to CLI args.
+- **Trigger Interaction Multipliers**: Factor 13 — high-risk co-occurrence (security×blast-radius ×1.3, security×cross-layer ×1.2, cross-layer×API ×1.15, rejection×stagnation ×1.25). `Math.max` prevents multiplier explosion.
+- **Evidence via SQLite**: `audit_submit` MCP tool replaces watch_file markdown. Evidence stored in EventStore, trigger evaluated inline. Hooks read from `tool_input.content`, not file. `readWatchContent()` eliminated.
 
 ## Testing
 
 ```bash
-npm test                              # all (1018 tests)
+npm test                              # all (1055 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

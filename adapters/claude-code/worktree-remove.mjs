@@ -4,7 +4,7 @@
 /**
  * WorktreeRemove hook: clean up after agent worktree is removed.
  *
- * 1. Preserve evidence (watch_file) from worktree before removal
+ * 1. Evidence preserved in SQLite (no file archival needed)
  * 2. Update handoff state — mark worktree branch as completed
  * 3. Clean up git worktree reference
  *
@@ -42,26 +42,12 @@ try {
   REPO_ROOT = process.cwd();
 }
 
-// ── 1. Preserve evidence from worktree ───────────────────────
+// ── 1. Evidence preservation removed — evidence is in SQLite EventStore ──
 try {
-  const { consensus } = await import("../../core/context.mjs");
-  const worktreeWatchFile = resolve(worktreePath, consensus.watch_file);
-
-  if (existsSync(worktreeWatchFile)) {
-    const evidence = readFileSync(worktreeWatchFile, "utf8");
-
-    // Archive to main repo's evidence history
-    const archiveDir = resolve(REPO_ROOT, ".claude", "evidence-archive");
-    mkdirSync(archiveDir, { recursive: true });
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const archivePath = resolve(archiveDir, `${worktreeName}-${timestamp}.md`);
-    writeFileSync(archivePath, evidence, "utf8");
-
-    console.error(`[worktree-remove] Preserved evidence → ${archivePath}`);
-  }
+  // No file-based evidence to preserve. SQLite events persist across worktree lifecycle.
+  console.error(`[worktree-remove] Evidence in SQLite — no file archival needed`);
 } catch (e) {
-  console.error(`[worktree-remove] Evidence preservation warning: ${e.message}`);
+  console.error(`[worktree-remove] Warning: ${e.message}`);
 }
 
 // ── 2. Read worktree metadata ────────────────────────────────

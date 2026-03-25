@@ -91,18 +91,26 @@ if (qcFailures.length === 0 && presets.length === 0) {
 }
 
 // ── No-abandon gate: evidence must exist before task completion ──
+// Check audit-status.json marker (written by bridge after every audit).
 try {
   if (quorumConfig) {
-    const watchFile = quorumConfig.consensus?.watch_file ?? "docs/feedback/claude.md";
-    const evidencePath = resolve(REPO_ROOT, watchFile);
-    if (existsSync(evidencePath)) {
-      const evidence = readFileSync(evidencePath, "utf8");
-      const triggerTag = quorumConfig.consensus?.trigger_tag ?? "[REVIEW_NEEDED]";
-      if (!evidence.includes(triggerTag) && !evidence.includes("[APPROVED]") && !evidence.includes("[INFRA_FAILURE]")) {
-        failures.push("[NO-ABANDON] Evidence file exists but contains no submission tag. Submit evidence before completing task.");
-      }
-    } else {
-      failures.push("[NO-ABANDON] Evidence file not found. Submit evidence to watch_file before completing task.");
+    const auditStatusPath = resolve(REPO_ROOT, ".claude", "audit-status.json");
+    let hasEvidence = false;
+
+    // 1. Check SQLite marker (primary)
+    if (existsSync(auditStatusPath)) {
+      try {
+        const status = JSON.parse(readFileSync(auditStatusPath, "utf8"));
+        if (status.status === "approved" || status.status === "changes_requested" || status.status === "infra_failure") {
+          hasEvidence = true;
+        }
+      } catch { /* corrupted marker — fall through */ }
+    }
+
+    // 2. No file fallback — evidence is in SQLite only
+
+    if (!hasEvidence) {
+      failures.push("[NO-ABANDON] No audit evidence found. Submit evidence and run audit before completing task.");
     }
   }
 } catch { /* config read error — skip gate */ }

@@ -4,9 +4,11 @@
  * Spawns `claude -p` with the audit prompt.
  */
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { parseAuditResponse } from "./parse.js";
+
+const isWin = process.platform === "win32";
 
 export interface ClaudeAuditorConfig {
   bin?: string;
@@ -37,6 +39,7 @@ export class ClaudeAuditor implements Auditor {
         cwd: this.cwd,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
+        shell: isWin,
       });
 
       let stdout = "";
@@ -79,12 +82,8 @@ export class ClaudeAuditor implements Auditor {
 
   async available(): Promise<boolean> {
     try {
-      const result = spawnSync(this.bin, ["--version"], {
-        encoding: "utf8",
-        timeout: 5000,
-        windowsHide: true,
-      });
-      return result.status === 0;
+      execSync(`${this.bin} --version`, { encoding: "utf8", timeout: 10000, windowsHide: true, stdio: "pipe" });
+      return true;
     } catch {
       return false;
     }

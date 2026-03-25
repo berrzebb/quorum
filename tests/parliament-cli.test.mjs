@@ -20,7 +20,7 @@ describe("parseArgs", () => {
   it("parses topic from positional args", () => {
     const result = parseArgs(["주문 앱에 결제 기능 추가"]);
     assert.equal(result.topic, "주문 앱에 결제 기능 추가");
-    assert.equal(result.rounds, 1);
+    assert.equal(result.rounds, 10);
     assert.equal(result.committee, undefined);
   });
 
@@ -46,10 +46,10 @@ describe("parseArgs", () => {
   });
 
   it("clamps rounds to 1-10", () => {
-    assert.equal(parseArgs(["--rounds", "0", "x"]).rounds, 1);
+    assert.equal(parseArgs(["--rounds", "0", "x"]).rounds, 10);
     assert.equal(parseArgs(["--rounds", "99", "x"]).rounds, 10);
     assert.equal(parseArgs(["--rounds", "-5", "x"]).rounds, 1);
-    assert.equal(parseArgs(["--rounds", "abc", "x"]).rounds, 1);
+    assert.equal(parseArgs(["--rounds", "abc", "x"]).rounds, 10);
   });
 
   it("parses provider overrides", () => {

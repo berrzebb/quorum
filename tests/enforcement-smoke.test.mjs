@@ -114,9 +114,8 @@ describe("smoke: upstream delay → downstream block", () => {
 
 describe("smoke: evidence → tech debt → work-catalog", () => {
   it("extracts residual risk from production-format evidence and appends to catalog", () => {
-    // 1. Create realistic evidence matching evidence-format.md
-    const evidenceFile = join(tmpDir, "claude.md");
-    writeFileSync(evidenceFile, `## [REVIEW_NEEDED] knowledge-retrieval-closure — K1, K4
+    // 1. Evidence content (as submitted via audit_submit tool → SQLite)
+    const evidenceContent = `## [REVIEW_NEEDED] knowledge-retrieval-closure — K1, K4
 
 ### Forward RTM Rows
 
@@ -148,11 +147,10 @@ npx tsc --noEmit
 - K1 run-task-loop branch coverage 73.4% < 75% — pre-existing gap, not introduced by this change
 - has_role=false default in build_feedback_contract may skip generation in edge cases where team membership is ambiguous
 - K4 _last_scores cache not invalidated on index rebuild — stale scores possible after hot reload
-`);
+`;
 
-    // 2. Parse residual risks
-    const evidence = readFileSync(evidenceFile, "utf8");
-    const risks = parseResidualRisk(evidence);
+    // 2. Parse residual risks directly from content
+    const risks = parseResidualRisk(evidenceContent);
     assert.equal(risks.length, 3);
     assert.ok(risks[0].includes("branch coverage"));
     assert.ok(risks[1].includes("has_role"));

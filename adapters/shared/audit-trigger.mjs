@@ -9,8 +9,7 @@
  * @param {object} params
  * @param {string} params.repoRoot — absolute path to repo root
  * @param {object} params.cfg — full config object
- * @param {string} params.content — watch file content (evidence)
- * @param {string} params.watchPath — absolute path to watch file
+ * @param {string} params.content — evidence content (from SQLite or direct submission)
  * @param {string} params.source — provider name ("codex" | "gemini")
  * @param {function} [params.log] — debug logger
  * @returns {Promise<{ triggerResult: object|null, spawnAllowed: boolean, bridge: object|null }>}
@@ -19,7 +18,7 @@
 import { parseChangedFiles, buildTriggerContext, hasPlanDocuments } from "./trigger-runner.mjs";
 import { runParliamentIfEnabled } from "./parliament-runner.mjs";
 
-export async function evaluateAuditTrigger({ repoRoot, cfg, content, watchPath, source, log = () => {} }) {
+export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log = () => {} }) {
   const consensus = cfg.consensus ?? {};
 
   // 1. Bridge init
@@ -35,7 +34,7 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, watchPath, 
 
   // 2. Pre-audit hook gate
   const preGate = await bridge.checkHookGate("audit.submit", {
-    cwd: repoRoot, metadata: { provider: source, watchFile: watchPath },
+    cwd: repoRoot, metadata: { provider: source },
   });
   if (!preGate.allowed) {
     log(`HOOK_DENY: ${preGate.reason}`);
@@ -54,7 +53,7 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, watchPath, 
       : null,
   ]);
   const blastRadius = blastResult?.ratio;
-  const priorRejections = (bridge.queryEvents?.({ eventType: "audit.verdict" }) ?? [])
+  const priorRejections = (bridge.queryEvents?.({ eventType: "audit.verdict", limit: 50, descending: true }) ?? [])
     .filter((e) => e.payload?.verdict === "changes_requested").length;
   const hasPlanDoc = hasPlanDocuments(repoRoot);
 
@@ -67,18 +66,18 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, watchPath, 
   if (triggerResult) {
     log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
     bridge.emitEvent("audit.submit", source, {
-      file: watchPath, tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
+      tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
     });
 
     // Parliament session: T3 deliberative + parliament.enabled
     if (triggerResult.mode === "deliberative") {
-      await runParliamentIfEnabled(bridge, cfg, content, watchPath, source, undefined, log);
+      await runParliamentIfEnabled(bridge, cfg, content, source, undefined, log);
     }
   }
 
   // 5. Spawn gate
   const spawnGate = await bridge.checkHookGate("audit.spawn", {
-    cwd: repoRoot, metadata: { provider: source, watchFile: watchPath },
+    cwd: repoRoot, metadata: { provider: source },
   });
   bridge.close();
 

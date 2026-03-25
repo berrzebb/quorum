@@ -36,7 +36,6 @@ Examples:
 export function parseArgs(argv) {
   const args = {
     scope: null,
-    watchFile: null,
     model: "gpt-5.4",
     sandbox: "danger-full-access",
     sessionId: null,
@@ -58,7 +57,7 @@ export function parseArgs(argv) {
       continue;
     }
     if (arg === "--watch-file") {
-      args.watchFile = argv[++i] ?? null;
+      i++; // legacy compat: skip value
       continue;
     }
     if (arg === "--model") {

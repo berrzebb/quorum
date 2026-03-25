@@ -12,14 +12,13 @@
  *
  * @param {object} bridge - core/bridge.mjs module
  * @param {object} cfg - full config object
- * @param {string} content - watch file content (evidence)
- * @param {string} watchPath - absolute path to watch file
+ * @param {string} content - evidence content (from SQLite EventStore)
  * @param {string} source - provider name ("claude-code" | "codex" | "gemini")
  * @param {string} [sessionId] - optional session ID for event metadata
  * @param {function} [log] - optional logger function
  * @returns {Promise<object|null>} parliament session result or null
  */
-export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, source, sessionId, log) {
+export async function runParliamentIfEnabled(bridge, cfg, content, source, sessionId, log) {
   if (!cfg.parliament?.enabled) return null;
 
   const consensus = cfg.consensus ?? {};
@@ -53,14 +52,14 @@ export async function runParliamentIfEnabled(bridge, cfg, content, watchPath, so
 
   try {
     const sessionResult = await bridge.runParliamentSession(
-      { prompt: content, evidence: watchPath, files: [] },
+      { prompt: content, evidence: content, files: [] },
       parliamentCfg,
     );
 
     if (sessionResult?.verdict?.finalVerdict) {
       if (log) log(`PARLIAMENT: verdict=${sessionResult.verdict.finalVerdict} converged=${sessionResult.convergence?.converged ?? false}`);
       bridge.emitEvent("audit.verdict", source, {
-        itemId: `parliament:${watchPath}`,
+        itemId: `parliament:${sessionId ?? "session"}`,
         verdict: sessionResult.verdict.finalVerdict,
         summary: sessionResult.verdict.judgeSummary,
         codes: sessionResult.verdict.opinions?.flatMap(o => o.codes) ?? [],

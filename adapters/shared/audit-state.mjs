@@ -44,20 +44,8 @@ export function readRetroMarker(adapterDir) {
   }
 }
 
-/**
- * Read watch_file content.
- *
- * @param {string} repoRoot — absolute path to repo root
- * @param {string} watchFile — relative path (e.g. "docs/feedback/claude.md")
- * @returns {string} File content or empty string
- */
-export function readWatchContent(repoRoot, watchFile) {
-  try {
-    return readFileSync(resolve(repoRoot, watchFile), "utf8");
-  } catch {
-    return "";
-  }
-}
+// readWatchContent removed — evidence is now in SQLite via audit_submit tool.
+// Legacy hooks read from tool_input.content, not from file.
 
 /**
  * Build resume actions for interrupted audit cycles.
@@ -77,22 +65,18 @@ export function buildResumeState({ repoRoot, adapterDir, cfg, handoffContent = "
   const triggerTag = c.trigger_tag ?? "[REVIEW_NEEDED]";
   const agreeTag = c.agree_tag ?? "[APPROVED]";
   const pendingTag = c.pending_tag ?? "[CHANGES_REQUESTED]";
-  const watchFile = c.watch_file ?? "docs/feedback/claude.md";
-
-  // 1. Audit status from marker
-  const watchContent = readWatchContent(repoRoot, watchFile);
+  // 1. Audit status from marker (SQLite audit-status.json)
   const auditStatus = readAuditStatus(repoRoot);
-  const hasTrigger = watchContent.includes(triggerTag);
   const isPending = auditStatus?.status === AUDIT_STATUS.CHANGES_REQUESTED;
   const isApproved = auditStatus?.status === AUDIT_STATUS.APPROVED;
 
-  if (isPending && hasTrigger) {
+  if (isPending) {
     const rejectionCodes = auditStatus.rejectionCodes ?? [];
     const codes = rejectionCodes.length > 0 ? `\n  Rejection codes: ${rejectionCodes.join(", ")}` : "";
-    resumeActions.push(t("resume.pending_corrections", { tag: pendingTag, codes, file: watchFile, triggerTag }));
-  } else if (hasTrigger && !isPending && !isApproved) {
+    resumeActions.push(t("resume.pending_corrections", { tag: pendingTag, codes, file: "audit_submit", triggerTag }));
+  } else if (auditStatus && !isPending && !isApproved) {
     resumeActions.push(t("resume.no_audit_result", { tag: triggerTag }));
-  } else if (isApproved && !hasTrigger) {
+  } else if (isApproved) {
     contextLines.push(t("resume.approved_status", { tag: agreeTag }));
   }
 
@@ -148,27 +132,23 @@ export function buildStatusSignals({ repoRoot, adapterDir, cfg }) {
   const triggerTag = c.trigger_tag ?? "[REVIEW_NEEDED]";
   const agreeTag = c.agree_tag ?? "[APPROVED]";
   const pendingTag = c.pending_tag ?? "[CHANGES_REQUESTED]";
-  const watchFile = c.watch_file ?? "docs/feedback/claude.md";
-
   // 1. Retro pending
   const retroMarker = readRetroMarker(adapterDir);
   if (retroMarker?.retro_pending) {
     signals.push(t("signal.retro_pending"));
   }
 
-  // 2. Audit status
-  const watchContent = readWatchContent(repoRoot, watchFile);
+  // 2. Audit status from marker (SQLite audit-status.json)
   const auditStatus = readAuditStatus(repoRoot);
-  const hasTrigger = watchContent.includes(triggerTag);
   const isPending = auditStatus?.status === AUDIT_STATUS.CHANGES_REQUESTED;
   const isApproved = auditStatus?.status === AUDIT_STATUS.APPROVED;
 
-  if (isPending && hasTrigger) {
+  if (isPending) {
     const codeCount = auditStatus.rejectionCodes?.length ?? 0;
     signals.push(t("signal.pending_corrections", { tag: pendingTag, count: codeCount }));
-  } else if (hasTrigger && !isPending && !isApproved) {
+  } else if (auditStatus && !isPending && !isApproved) {
     signals.push(t("signal.submitted_waiting", { tag: triggerTag }));
-  } else if (isApproved && !hasTrigger) {
+  } else if (isApproved) {
     signals.push(t("signal.approved", { tag: agreeTag }));
   }
 

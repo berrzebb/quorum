@@ -102,7 +102,7 @@ This test harness validates the consensus-loop full cycle using a 3-track TypeSc
    - CV: coverage ≥ 85% stmt, ≥ 75% branch
    - FV: file verification
 5. Updates RTM rows: open → fixed
-6. Submits evidence to docs/feedback/claude.md
+6. Submits evidence via audit_submit MCP tool
 ```
 
 ### Expected Output

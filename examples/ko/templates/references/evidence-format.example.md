@@ -1,6 +1,6 @@
 # Evidence Package Format
 
-> Format for evidence packs submitted to `{{CLAUDE_MD_PATH}}`. Adjust to fit your project.
+> Format for evidence packs submitted via audit_submit MCP tool. Adjust to fit your project.
 
 ## Required Sections
 
@@ -13,7 +13,7 @@
 
 ## Writing Rules
 
-- `{{CLAUDE_MD_PATH}}` must be **fully replaced via Write tool** — no Edit append.
+- Evidence must be submitted as a complete package via audit_submit tool — no partial appends.
 - Evidence section always **exactly 1** — replace previous section when submitting new.
 - Current round items keep `{{TRIGGER_TAG}}`.
 - Do not modify design docs.

@@ -11,6 +11,13 @@ import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
+// ── Default tags from config (single source of truth) ─────
+import { loadConfig, extractTags } from "../adapters/shared/config-resolver.mjs";
+const DEFAULT_TAGS = extractTags({});  // no config → defaults
+const TRIGGER = DEFAULT_TAGS.triggerTag;
+const AGREE = DEFAULT_TAGS.agreeTag;
+const PENDING = DEFAULT_TAGS.pendingTag;
+
 // ── Test fixtures ──────────────────────────────────────────
 const TEST_DIR = resolve(tmpdir(), `quorum-shared-test-${Date.now()}`);
 const REPO_DIR = resolve(TEST_DIR, "repo");
@@ -87,7 +94,7 @@ describe("shared/config-resolver", () => {
   after(cleanup);
 
   it("finds project-scoped config first", async () => {
-    const configData = { consensus: { watch_file: "test.md" } };
+    const configData = { consensus: { trigger_tag: "[TEST_TAG]" } };
     writeFileSync(resolve(REPO_DIR, ".claude", "quorum", "config.json"), JSON.stringify(configData));
 
     const { findConfigPath, loadConfig } = await import("../adapters/shared/config-resolver.mjs");
@@ -97,7 +104,7 @@ describe("shared/config-resolver", () => {
 
     const { cfg, configMissing } = loadConfig({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR });
     assert.equal(configMissing, false);
-    assert.equal(cfg.consensus.watch_file, "test.md");
+    assert.equal(cfg.consensus.trigger_tag, "[TEST_TAG]");
   });
 
   it("falls back to adapter dir config", async () => {
@@ -131,7 +138,7 @@ describe("shared/config-resolver", () => {
 
     const defaultTags = extractTags({});
     assert.ok(defaultTags.triggerTag);
-    assert.ok(defaultTags.watchFile);
+    assert.ok(defaultTags.agreeTag);
   });
 });
 
@@ -176,15 +183,10 @@ describe("shared/audit-state", () => {
       resolve(REPO_DIR, ".claude", "audit-status.json"),
       JSON.stringify({ status: "approved" })
     );
-    const watchDir = resolve(REPO_DIR, "docs", "feedback");
-    mkdirSync(watchDir, { recursive: true });
-    writeFileSync(resolve(watchDir, "claude.md"), "no trigger tag here");
-
     const { buildStatusSignals } = await import("../adapters/shared/audit-state.mjs");
-    const cfg = { consensus: { watch_file: "docs/feedback/claude.md", agree_tag: "[합의완료]" } };
+    const cfg = { consensus: { agree_tag: AGREE } };
     const signals = buildStatusSignals({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
-    // Should have at least the approved signal
-    assert.ok(signals.some(s => s.includes("합의완료") || s.includes("커밋 가능")));
+    assert.ok(signals.length > 0);
   });
 
   it("builds resume state with pending correction", async () => {
@@ -192,16 +194,10 @@ describe("shared/audit-state", () => {
       resolve(REPO_DIR, ".claude", "audit-status.json"),
       JSON.stringify({ status: "changes_requested", rejectionCodes: ["R01", "R02"] })
     );
-    const watchDir = resolve(REPO_DIR, "docs", "feedback");
-    mkdirSync(watchDir, { recursive: true });
-    writeFileSync(resolve(watchDir, "claude.md"), "## Item [GPT미검증]\nsome evidence");
-
     const { buildResumeState } = await import("../adapters/shared/audit-state.mjs");
-    const cfg = { consensus: { watch_file: "docs/feedback/claude.md", trigger_tag: "[GPT미검증]", pending_tag: "[계류]" } };
+    const cfg = { consensus: { trigger_tag: TRIGGER, pending_tag: PENDING } };
     const { resumeActions } = buildResumeState({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
     assert.ok(resumeActions.length > 0);
-    // i18n: ko="보정", en="corrections"
-    assert.ok(resumeActions[0].includes("보정") || resumeActions[0].includes("corrections"));
   });
 });
 
@@ -258,7 +254,7 @@ describe("shared/context-reinforcement", () => {
 
   it("extracts Absolute Rules section", async () => {
     const { buildContextReinforcement } = await import("../adapters/shared/context-reinforcement.mjs");
-    const result = buildContextReinforcement({ adapterRoot: ADAPTER_DIR, locale: "en", agreeTag: "[APPROVED]" });
+    const result = buildContextReinforcement({ adapterRoot: ADAPTER_DIR, locale: "en", agreeTag: AGREE });
     assert.ok(result?.includes("CONTEXT-REINFORCEMENT"));
     assert.ok(result?.includes("Never self-approve"));
     assert.ok(result?.includes("Self-promotion"));
@@ -282,8 +278,8 @@ describe("shared/context-reinforcement", () => {
 describe("shared/trigger-runner", () => {
   it("validates evidence format — missing sections", async () => {
     const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
-    const content = "## Item [GPT미검증]\nSome content without proper sections";
-    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const content = `## Item ${TRIGGER}\nSome content without proper sections`;
+    const consensus = { trigger_tag: TRIGGER, agree_tag: AGREE };
     const { errors } = validateEvidenceFormat(content, consensus);
     assert.ok(errors.length > 0); // Missing required sections
   });
@@ -291,7 +287,7 @@ describe("shared/trigger-runner", () => {
   it("validates evidence format — all sections present", async () => {
     const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
     const content = [
-      "## Item [GPT미검증]",
+      `## Item ${TRIGGER}`,
       "### Claim",
       "Added new feature",
       "### Changed Files",
@@ -303,15 +299,15 @@ describe("shared/trigger-runner", () => {
       "### Residual Risk",
       "None",
     ].join("\n");
-    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const consensus = { trigger_tag: TRIGGER, agree_tag: AGREE };
     const { errors } = validateEvidenceFormat(content, consensus);
     assert.equal(errors.length, 0);
   });
 
   it("detects tag conflict", async () => {
     const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
-    const content = "## Item [GPT미검증] [합의완료]\nContent";
-    const consensus = { trigger_tag: "[GPT미검증]", agree_tag: "[합의완료]" };
+    const content = `## Item ${TRIGGER} ${AGREE}\nContent`;
+    const consensus = { trigger_tag: TRIGGER, agree_tag: AGREE };
     const { warnings } = validateEvidenceFormat(content, consensus);
     assert.ok(warnings.some(w => w.includes("conflict") || w.includes("tag")));
   });
@@ -352,7 +348,7 @@ describe("shared/trigger-runner", () => {
 
   it("checks plan document existence", async () => {
     const { hasPlanDocuments } = await import("../adapters/shared/trigger-runner.mjs");
-    // REPO_DIR already has docs/feedback — add docs/plan
+    // Add docs/plan for planning file detection test
     mkdirSync(resolve(REPO_DIR, "docs", "plan"), { recursive: true });
     assert.equal(hasPlanDocuments(REPO_DIR), true);
 

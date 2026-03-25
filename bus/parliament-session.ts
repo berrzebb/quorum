@@ -199,7 +199,6 @@ export async function runParliamentSession(
       store.setKV("parliament.cps.latest", {
         ...cps,
         agendaId: config.agendaId,
-        generatedAt: cps.generatedAt,
       });
     } catch (err) {
       errors.push({ phase: "cps", message: (err as Error).message });
@@ -241,9 +240,11 @@ export async function runParliamentSession(
   // Phase 6: Confluence verification
   let confluence: ConfluenceResult | null = null;
   try {
+    // Confluence checks law↔code alignment on IMPLEMENTATION, not deliberation.
+    // Parliament deliberation verdicts are about topic maturity, not code compliance.
+    // Only pass auditVerdict if external confluenceInput explicitly provides one.
     const input: ConfluenceInput = {
       ...(config.confluenceInput ?? {}),
-      auditVerdict: verdict?.finalVerdict,
       cps: cps ?? undefined,
     };
     confluence = verifyConfluence(input);

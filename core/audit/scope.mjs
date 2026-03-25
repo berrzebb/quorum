@@ -29,7 +29,7 @@ export function detectScope(markdown) {
     return fallback.map((line) => line.replace(/^- /, "")).join("\n");
   }
 
-  return t("audit.scope.fallback", { file: cfg.consensus.watch_file });
+  return t("audit.scope.fallback", { file: "evidence (SQLite)" });
 }
 
 export function readSectionLines(markdown, heading) {

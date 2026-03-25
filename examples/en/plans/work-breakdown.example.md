@@ -20,7 +20,7 @@
 ## CL-1 Core Consensus Loop
 
 - Goal:
-  - watch_file edit + trigger_tag → audit_script → agree_tag detection
+  - audit_submit tool call + trigger_tag → audit_script → agree_tag detection
 - Prerequisite:
   - none
 - First touch files:
@@ -31,7 +31,7 @@
 ## CL-2 Auto-Sync on Pending Response
 
 - Goal:
-  - any file edit → check if respond file is newer than watch file → run respond_script
+  - any file edit → check if respond file is newer than evidence → run respond_script
 - Prerequisite:
   - CL-1
 - First touch files:

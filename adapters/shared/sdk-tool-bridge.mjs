@@ -64,6 +64,7 @@ export async function createSdkToolServer(name, tools) {
  * @returns {Record<string, unknown>} Zod shape object
  */
 export function jsonSchemaToZodShape(schema, z) {
+  if (!z) return null;
   const shape = {};
   const props = schema?.properties || {};
   const requiredSet = new Set(Array.isArray(schema?.required) ? schema.required : []);
@@ -83,6 +84,7 @@ export function jsonSchemaToZodShape(schema, z) {
  * @returns {unknown} Zod type
  */
 export function jsonPropToZod(prop, z) {
+  if (!z) return null;
   let base;
   switch (prop?.type) {
     case "string":

@@ -65,7 +65,7 @@ quorum tool a11y_scan --path src/
 
 ### Pre-Submission Self-Check
 
-Before writing evidence to `watch_file`, run these verification tools to catch issues early:
+Before submitting evidence via `audit_submit` tool, run these verification tools to catch issues early:
 
 ```bash
 # 1. Type-safety and pattern violations

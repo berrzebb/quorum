@@ -10,7 +10,7 @@
  *   CODEX_MODEL / OMX_DEFAULT_FRONTIER_MODEL / OMX_DEFAULT_STANDARD_MODEL
  */
 
-import { existsSync, readFileSync, statSync, watchFile, unwatchFile, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, statSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { QuorumBus } from "../../bus/bus.js";
@@ -43,7 +43,6 @@ export class CodexProvider implements QuorumProvider {
     this.bus = bus;
     this.config = config;
 
-    const watchPath = resolve(config.repoRoot, config.watchFile);
     const stateDir = resolve(config.repoRoot, ".codex");
 
     // Ensure state directory exists
@@ -51,8 +50,7 @@ export class CodexProvider implements QuorumProvider {
       mkdirSync(stateDir, { recursive: true });
     }
 
-    // Watch evidence file for trigger tags
-    this.watchEvidence(watchPath);
+    // Evidence comes from SQLite EventStore (no file watching needed)
 
     // Poll .codex/ state for agent activity
     this.pollAgentState(stateDir);
@@ -69,10 +67,7 @@ export class CodexProvider implements QuorumProvider {
     }
     this.intervals = [];
 
-    if (this.config) {
-      const watchPath = resolve(this.config.repoRoot, this.config.watchFile);
-      unwatchFile(watchPath);
-    }
+    // watchEvidence removed — evidence via audit_submit tool now
 
     this.bus = null;
     this.config = null;
@@ -110,37 +105,6 @@ export class CodexProvider implements QuorumProvider {
   }
 
   // ── Internal watchers ─────────────────────────
-
-  private watchEvidence(watchPath: string): void {
-    if (!existsSync(watchPath)) return;
-
-    let lastMtime = statSync(watchPath).mtimeMs;
-
-    watchFile(watchPath, { interval: 2000 }, (curr) => {
-      if (curr.mtimeMs <= lastMtime || !this.bus) return;
-      lastMtime = curr.mtimeMs;
-
-      const content = readFileSync(watchPath, "utf8");
-
-      // Detect trigger tags
-      if (content.includes("[REVIEW_NEEDED]")) {
-        this.pendingAuditCount++;
-        this.bus.emit(createEvent("audit.submit", "codex", {
-          file: watchPath,
-        }));
-        this.lastEventTime = Date.now();
-      }
-
-      // Detect approval (from another auditor writing to the file)
-      if (content.includes("[APPROVED]")) {
-        this.bus.emit(createEvent("evidence.sync", "codex", {
-          file: watchPath,
-          hasApproval: true,
-        }));
-        this.lastEventTime = Date.now();
-      }
-    });
-  }
 
   private pollAgentState(stateDir: string): void {
     const agentLog = resolve(stateDir, "agents.jsonl");

@@ -87,7 +87,7 @@ Write Handoff -> next task -> loop
 ## Result Verification
 
 When worker completes:
-1. Read worker's **worktree** watch_file (not main repo)
+1. Check worker's evidence via `audit_submit` tool (not main repo)
 2. Query verdict: `quorum tool audit_history --summary --json`
 3. `[agree_tag]` -> proceed to Retro & Merge (read `references/lifecycle.md`)
 4. `[pending_tag]` -> Correction Cycle (read `references/correction.md`)

@@ -16,7 +16,7 @@ quorum audit {{ arguments }}
 ## Setup
 
 Read config at `{ADAPTER_ROOT}/core/config.json`:
-- `consensus.watch_file` — evidence file path
+- `audit_submit` MCP tool — evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
 - `consensus.roles` — provider-per-role mapping (advocate, devil, judge)
 
@@ -29,7 +29,7 @@ Read config at `{ADAPTER_ROOT}/core/config.json`:
 | `--auto-fix` | After audit, auto-correct rejected items |
 | `--model <name>` | Override auditor model (default from config) |
 | `--reset-session` | Delete saved session state before running |
-| `--watch-file <path>` | Override watch file path (useful for worktree audits) |
+| `--evidence <markdown>` | Submit evidence directly (useful for worktree audits) |
 
 ## Verdict Flow
 

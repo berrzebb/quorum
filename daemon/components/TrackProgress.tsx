@@ -1,27 +1,19 @@
 /**
- * Track Progress — work breakdown execution status with gate enforcement visibility.
+ * Track Progress — work breakdown execution status.
+ *
+ * Uses TrackInfo[] from StateReader (SQLite polling) instead of bus EventEmitter
+ * so that external CLI events are visible.
  */
 
 import React from "react";
 import { Box, Text } from "ink";
-import type { QuorumEvent } from "../../bus/events.js";
+import type { TrackInfo } from "../state-reader.js";
 
 interface TrackProgressProps {
-  events: QuorumEvent[];
+  tracks: TrackInfo[];
 }
 
-interface Track {
-  id: string;
-  total: number;
-  completed: number;
-  pending: number;
-  blocked: number;
-  lastUpdate: number;
-}
-
-export function TrackProgress({ events }: TrackProgressProps) {
-  const tracks = deriveTracks(events);
-
+export function TrackProgress({ tracks }: TrackProgressProps) {
   return (
     <Box flexDirection="column" borderStyle="single" paddingX={1} width={35}>
       <Text bold>Tracks</Text>
@@ -36,9 +28,9 @@ export function TrackProgress({ events }: TrackProgressProps) {
           const filled = Math.round((pct / 100) * barWidth);
 
           return (
-            <Box key={track.id} flexDirection="column">
+            <Box key={track.trackId} flexDirection="column">
               <Box gap={1}>
-                <Text bold>{track.id}</Text>
+                <Text bold>{track.trackId}</Text>
                 <Text dimColor>{pct}%</Text>
                 {track.blocked > 0 && (
                   <Text color="red">[{track.blocked} blocked]</Text>
@@ -55,27 +47,4 @@ export function TrackProgress({ events }: TrackProgressProps) {
       )}
     </Box>
   );
-}
-
-function deriveTracks(events: QuorumEvent[]): Track[] {
-  const tracks = new Map<string, Track>();
-
-  for (const event of events) {
-    const trackId = event.trackId ?? (event.payload.trackId as string | undefined);
-    if (!trackId) continue;
-
-    if (event.type === "track.create" || event.type === "track.progress") {
-      const payload = event.payload;
-      tracks.set(trackId, {
-        id: trackId,
-        total: (payload.total as number) ?? 0,
-        completed: (payload.completed as number) ?? 0,
-        pending: (payload.pending as number) ?? 0,
-        blocked: (payload.blocked as number) ?? 0,
-        lastUpdate: event.timestamp,
-      });
-    }
-  }
-
-  return [...tracks.values()].sort((a, b) => b.lastUpdate - a.lastUpdate);
 }

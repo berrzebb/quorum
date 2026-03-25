@@ -55,8 +55,6 @@ export interface ProviderStatus {
 export interface ProviderConfig {
   /** Working directory for this provider. */
   repoRoot: string;
-  /** Watch file path (relative to repoRoot). */
-  watchFile: string;
   /** Trigger tag to detect evidence submissions (e.g. "[REVIEW_NEEDED]"). */
   triggerTag?: string;
   /** Auditor to use for this provider. */

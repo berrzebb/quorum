@@ -32,7 +32,7 @@ In headless mode, do NOT ask "should I fix this?" — output the report and exit
 | 7 | Frontend (FV) | Page loads, DOM elements, console errors, build | `a11y_scan`, `doc_coverage` |
 | 8 | Coverage (CV) | stmt >= 85%, branch >= 75% per changed file | `coverage_map` |
 
-### Full Tool Inventory (20 tools)
+### Full Tool Inventory (22 tools)
 
 | Group | Tools |
 |-------|-------|
@@ -65,8 +65,8 @@ Language is auto-detected from file extensions. Domain scans apply language-spec
 
 ### Step 1: Gather Context
 
-1. Read config via `read_file` at `core/config.json` — extract `consensus.trigger_tag`, `consensus.watch_file`
-2. Read watch file — find section with `trigger_tag`
+1. Read config via `read_file` at `core/config.json` — extract `consensus.trigger_tag`, `audit_submit` MCP tool for evidence
+2. Query evidence via `audit_history` — find section with `trigger_tag`
 3. Parse: Claim, Changed Files, Test Command, Test Result, Residual Risk
 4. Extract changed file list
 5. Detect project languages (auto via registry)

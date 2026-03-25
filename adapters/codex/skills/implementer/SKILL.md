@@ -63,7 +63,7 @@ Before writing evidence, verify all 5:
 
 ## Evidence Submission
 
-Write evidence to `consensus.watch_file` (from config) with a single atomic `write_file`. Include ALL sections:
+Submit evidence via `audit_submit` tool (or `quorum tool audit_submit --evidence "<markdown>"`). Include ALL sections:
 
 - Forward RTM Rows (if provided by orchestrator)
 - Claim — what you did and why

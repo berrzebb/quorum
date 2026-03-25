@@ -109,13 +109,7 @@ try {
     }
   }
 
-  // Create watch_file directory in worktree
-  const { consensus } = await import("../../core/context.mjs");
-  const watchDir = dirname(resolve(worktreeDir, consensus.watch_file));
-  if (!existsSync(watchDir)) {
-    mkdirSync(watchDir, { recursive: true });
-    console.error(`[worktree-create] Created watch_file dir: ${watchDir}`);
-  }
+  // Evidence is in SQLite EventStore — no per-worktree file directories needed
 
   // Generate .claude/settings.json with agent permissions
   // Headless agents need tool permissions without prompts.

@@ -26,7 +26,7 @@ node ${CLAUDE_PLUGIN_ROOT}/core/audit.mjs {{ arguments }}
 ## Setup
 
 Read config with `Read` at `${CLAUDE_PLUGIN_ROOT}/core/config.json`:
-- `consensus.watch_file` — evidence file path
+- `audit_submit` MCP tool — evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
 - `consensus.roles` — provider-per-role mapping (advocate, devil, judge)
 
@@ -39,7 +39,7 @@ Read config with `Read` at `${CLAUDE_PLUGIN_ROOT}/core/config.json`:
 | `--auto-fix` | After audit, auto-correct rejected items via Claude CLI |
 | `--model <name>` | Override auditor model (default from config) |
 | `--reset-session` | Delete saved session state before running |
-| `--watch-file <path>` | Override watch file path (useful for worktree audits) |
+| `--evidence <markdown>` | Submit evidence directly (useful for worktree audits) |
 
 ## Verdict Flow
 

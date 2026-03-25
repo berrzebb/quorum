@@ -24,7 +24,7 @@ Read and follow: `agents/knowledge/scout-protocol.md`
 
 ## Tool-First Principle
 
-Use deterministic tools before LLM reasoning. Facts first, inference second. See `agents/knowledge/tool-inventory.md` for the full catalog (20 tools).
+Use deterministic tools before LLM reasoning. Facts first, inference second. See `agents/knowledge/tool-inventory.md` for the full catalog (22 tools).
 
 Key tools: `code_map`, `dependency_graph`, `blast_radius`, `coverage_map`, `audit_scan`, `rtm_parse`, `rtm_merge`.
 

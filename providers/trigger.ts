@@ -61,14 +61,15 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
   let score = 0;
 
   // 1. File count (0-0.3)
-  if (ctx.changedFiles <= 2) {
+  const fileCount = typeof ctx.changedFiles === "number" ? ctx.changedFiles : 0;
+  if (fileCount <= 2) {
     score += 0.1;
-  } else if (ctx.changedFiles <= 8) {
+  } else if (fileCount <= 8) {
     score += 0.25;
-    reasons.push(`${ctx.changedFiles} files changed`);
+    reasons.push(`${fileCount} files changed`);
   } else {
     score += 0.3;
-    reasons.push(`${ctx.changedFiles} files changed (large scope)`);
+    reasons.push(`${fileCount} files changed (large scope)`);
   }
 
   // 2. Security sensitivity (0-0.25)
@@ -166,6 +167,46 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
     const stagnationContribution = Math.min(0.15, ctx.stagnationHistory * 0.05);
     score += stagnationContribution;
     reasons.push(`${ctx.stagnationHistory} past stagnation events on similar files`);
+  }
+
+  // 13. High-risk factor interactions — multiplicative escalation
+  // When multiple high-risk signals co-occur, the combined risk is greater than the sum.
+  const interactions: Array<{ factors: boolean[]; multiplier: number; label: string }> = [
+    {
+      // Security + wide blast radius = potential supply-chain-level risk
+      factors: [ctx.securitySensitive, (ctx.blastRadius ?? 0) > 0.2],
+      multiplier: 1.3,
+      label: "security × blast-radius",
+    },
+    {
+      // Security + cross-layer = attack surface spanning layers
+      factors: [ctx.securitySensitive, ctx.crossLayerChange],
+      multiplier: 1.2,
+      label: "security × cross-layer",
+    },
+    {
+      // Cross-layer + API change = contract breakage risk
+      factors: [ctx.crossLayerChange, ctx.apiSurfaceChanged],
+      multiplier: 1.15,
+      label: "cross-layer × API-surface",
+    },
+    {
+      // Prior rejections + stagnation = systemic problem
+      factors: [ctx.priorRejections >= 2, (ctx.stagnationHistory ?? 0) > 0],
+      multiplier: 1.25,
+      label: "repeated-rejection × stagnation",
+    },
+  ];
+
+  let appliedMultiplier = 1.0;
+  for (const { factors, multiplier, label } of interactions) {
+    if (factors.every(Boolean)) {
+      appliedMultiplier = Math.max(appliedMultiplier, multiplier);
+      reasons.push(`${label} interaction (×${multiplier})`);
+    }
+  }
+  if (appliedMultiplier > 1.0) {
+    score *= appliedMultiplier;
   }
 
   // Clamp

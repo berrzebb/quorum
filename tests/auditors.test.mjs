@@ -128,8 +128,8 @@ describe("auditor availability", () => {
     assert.equal(await auditor.available(), false);
   });
 
-  it("GeminiAuditor.available() returns false without API key", async () => {
-    const auditor = new GeminiAuditor({ apiKey: "" });
+  it("GeminiAuditor.available() returns false with invalid binary", async () => {
+    const auditor = new GeminiAuditor({ bin: "nonexistent-gemini-binary-xyz" });
     assert.equal(await auditor.available(), false);
   });
 });
@@ -157,8 +157,8 @@ describe("auditor error handling", () => {
     assert.ok(result.codes.includes("auditor-error"));
   });
 
-  it("Gemini returns infra_failure without key", async () => {
-    const auditor = new GeminiAuditor({ apiKey: "" });
+  it("Gemini returns infra_failure with invalid binary", async () => {
+    const auditor = new GeminiAuditor({ bin: "nonexistent-gemini-binary-xyz" });
     const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
     assert.equal(result.verdict, "infra_failure");
     assert.ok(result.codes.includes("auditor-error"));

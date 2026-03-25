@@ -20,6 +20,13 @@ import { Header } from "./components/Header.js";
 import { FitnessPanel } from "./components/FitnessPanel.js";
 import { ParliamentPanel } from "./components/ParliamentPanel.js";
 import { AgentChatPanel } from "./components/AgentChatPanel.js";
+import { AgentQueryPanel } from "./components/AgentQueryPanel.js";
+
+/** Quick fingerprint to detect state changes without deep comparison. */
+function stateFingerprint(s: FullState): string {
+  const lastEvent = s.recentEvents[s.recentEvents.length - 1]?.timestamp ?? 0;
+  return `${lastEvent}:${s.tracks.length}:${s.parliament.liveSessions.length}:${s.parliament.sessionCount}:${s.agentQueries.length}:${s.locks.length}:${s.findingStats.total}:${s.fitness.current ?? 0}`;
+}
 
 interface AppProps {
   bus: QuorumBus;
@@ -41,15 +48,49 @@ export function App({ bus, stateReader, mux }: AppProps) {
   }, [bus]);
 
   // SQLite state polling (1s interval, <1ms per read)
+  // Only trigger re-render when data fingerprint changes to avoid TUI flicker
   const [fullState, setFullState] = useState<FullState | null>(null);
   useEffect(() => {
     if (!stateReader) return;
-    const poll = setInterval(() => {
-      try { setFullState(stateReader.readAll()); } catch { /* non-critical */ }
-    }, 1000);
-    try { setFullState(stateReader.readAll()); } catch { /* initial read */ }
+    const update = () => {
+      try {
+        const next = stateReader.readAll(50);
+        setFullState(prev => {
+          if (!prev) return next;
+          if (stateFingerprint(prev) === stateFingerprint(next)) return prev;
+          return next;
+        });
+      } catch { /* non-critical */ }
+    };
+    update();
+    const poll = setInterval(update, 1000);
     return () => clearInterval(poll);
   }, [stateReader]);
+
+  // Sync external parliament mux sessions into daemon's mux for capture
+  useEffect(() => {
+    if (!mux || !fullState?.parliament.liveSessions) return;
+    const live = fullState.parliament.liveSessions;
+    const liveIds = new Set(live.map(s => s.id));
+
+    // Register new external sessions
+    for (const ls of live) {
+      mux.registerExternal({
+        id: ls.id,
+        name: ls.name,
+        backend: ls.backend as import("../bus/mux.js").MuxBackend,
+        startedAt: ls.startedAt,
+        status: "running",
+      });
+    }
+
+    // Unregister sessions that disappeared (CLI finished)
+    for (const s of mux.list()) {
+      if (s.name.startsWith("quorum-") && !liveIds.has(s.id)) {
+        mux.unregister(s.id);
+      }
+    }
+  }, [fullState?.parliament.liveSessions, mux]);
 
   useInput((input, key) => {
     if (input === "q" || (key.ctrl && input === "c")) exit();
@@ -96,7 +137,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
 
           {/* Row 2: agents + fitness + locks + specialists */}
           <Box gap={2}>
-            <AgentPanel events={events} />
+            <AgentPanel events={fullState?.recentEvents ?? events} />
             {fullState && <FitnessPanel fitness={fullState.fitness} />}
             {fullState && fullState.locks.length > 0 && (
               <Box flexDirection="column" borderStyle="single" paddingX={1} width={30}>
@@ -136,10 +177,13 @@ export function App({ bus, stateReader, mux }: AppProps) {
             )}
           </Box>
 
-          {/* Row 2.5: parliament */}
-          {fullState && fullState.parliament.sessionCount > 0 && (
-            <ParliamentPanel parliament={fullState.parliament} />
-          )}
+          {/* Row 2.5: parliament + agent queries */}
+          <Box gap={2}>
+            {fullState && fullState.parliament.sessionCount > 0 && (
+              <ParliamentPanel parliament={fullState.parliament} />
+            )}
+            {fullState && <AgentQueryPanel queries={fullState.agentQueries} />}
+          </Box>
 
           {/* Row 3: finding stats + open findings + review progress */}
           {fullState && fullState.findingStats.total > 0 && (
@@ -154,7 +198,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
 
           {/* Row 4: tracks + audit stream */}
           <Box gap={2}>
-            <TrackProgress events={events} />
+            <TrackProgress tracks={fullState?.tracks ?? []} />
             <AuditStream events={events} />
           </Box>
         </Box>

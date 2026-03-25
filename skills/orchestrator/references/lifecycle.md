@@ -32,7 +32,7 @@ Every spawned agent must be tracked through its full lifecycle. **No agent may b
 | # | Stage | Handoff Status | Verification |
 |---|-------|---------------|-------------|
 | 1 | Spawned | `in-progress` | `agent_id` + `worktree_path` recorded |
-| 2 | Evidence submitted | `auditing` | Worker's watch_file contains `[trigger_tag]` |
+| 2 | Evidence submitted | `auditing` | Worker called `audit_submit` tool with `[trigger_tag]` |
 | 3 | Audit complete | → `correcting` or → `done` | Respond file has verdict |
 | 4 | Corrections (if rejected) | `correcting` | SendMessage sent to existing `agent_id` |
 | 5 | Consensus reached | `done` (pending merge) | `[agree_tag]` in respond file |

@@ -52,7 +52,7 @@ import {
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
 
-const SERVER_INFO = { name: "quorum", version: "0.2.0" };
+const SERVER_INFO = { name: "quorum", version: "0.4.5" };
 
 const TOOLS = [
   {
@@ -317,6 +317,40 @@ const TOOLS = [
       required: ["target"],
     },
   },
+  // ── Agent communication ───────────
+  {
+    name: "agent_comm",
+    description: "Inter-agent communication: post queries, read responses, poll for incoming queries, list active agents",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["post", "respond", "poll", "responses", "roster"], description: "post=send query, respond=answer, poll=check inbox, responses=get answers, roster=list agents" },
+        agent_id: { type: "string", description: "Your agent ID (e.g. impl-INT-2)" },
+        to_agent: { type: "string", description: "(post) Target agent, omit for broadcast" },
+        question: { type: "string", description: "(post) Question text" },
+        query_id: { type: "string", description: "(respond/responses) Query ID" },
+        answer: { type: "string", description: "(respond) Answer text" },
+        confidence: { type: "number", description: "(respond) Confidence 0.0-1.0" },
+        context: { type: "object", description: "(post) Additional context" },
+        track_id: { type: "string", description: "(roster) Track name" },
+      },
+      required: ["action", "agent_id"],
+    },
+  },
+  // ── Evidence submission ──
+  {
+    name: "audit_submit",
+    description: "Submit evidence for audit review. Stores evidence in SQLite, evaluates trigger, and runs audit if threshold is met.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        evidence: { type: "string", description: "Full evidence text (markdown with ### Claim, ### Changed Files, ### Test Command, ### Test Result sections)" },
+        changed_files: { type: "array", items: { type: "string" }, description: "List of changed file paths" },
+        source: { type: "string", description: "Provider name (default: claude-code)" },
+      },
+      required: ["evidence"],
+    },
+  },
 ];
 
 // ═══ Request handler ════════════════════════════════════════════════════
@@ -433,6 +467,24 @@ async function handleRequest(req) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }
         return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
+      }
+
+      if (name === "agent_comm") {
+        const { toolAgentComm } = await import("./tool-core.mjs");
+        const result = await toolAgentComm(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: result.summary ? `${result.text}\n\n(${result.summary})` : result.text }] };
+      }
+
+      if (name === "audit_submit") {
+        const { toolAuditSubmit } = await import("./tool-core.mjs");
+        const result = await toolAuditSubmit(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: result.text }] };
       }
 
       // ── Specialist domain tools (unified handler pattern) ──

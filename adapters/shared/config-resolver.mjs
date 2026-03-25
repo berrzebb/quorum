@@ -63,7 +63,6 @@ export function loadConfig({ repoRoot, adapterDir }) {
   const DEFAULT_CONFIG = {
     plugin: { locale: "en", hooks_enabled: {} },
     consensus: {
-      watch_file: "docs/feedback/claude.md",
       trigger_tag: "[REVIEW_NEEDED]",
       agree_tag: "[APPROVED]",
       pending_tag: "[CHANGES_REQUESTED]",
@@ -87,12 +86,11 @@ export function loadConfig({ repoRoot, adapterDir }) {
  * Extract consensus tags from config with defaults.
  *
  * @param {object} cfg — parsed config.json
- * @returns {{ watchFile: string, triggerTag: string, agreeTag: string, pendingTag: string }}
+ * @returns {{ triggerTag: string, agreeTag: string, pendingTag: string }}
  */
 export function extractTags(cfg) {
   const c = cfg.consensus ?? {};
   return {
-    watchFile: c.watch_file ?? "docs/feedback/claude.md",
     triggerTag: c.trigger_tag ?? "[REVIEW_NEEDED]",
     agreeTag: c.agree_tag ?? "[APPROVED]",
     pendingTag: c.pending_tag ?? "[CHANGES_REQUESTED]",

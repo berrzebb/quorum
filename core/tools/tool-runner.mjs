@@ -40,6 +40,9 @@ import {
   toolObservabilityCheck,
   toolDocCoverage,
   toolAiGuide,
+  toolBlueprintLint,
+  toolAgentComm,
+  toolAuditSubmit,
   TOOL_NAMES,
 } from "./tool-core.mjs";
 
@@ -98,6 +101,9 @@ const DISPATCH = {
   observability_check: (p) => toolObservabilityCheck(p),
   doc_coverage:        (p) => toolDocCoverage(p),
   ai_guide:            (p) => toolAiGuide(p),
+  blueprint_lint:      (p) => toolBlueprintLint(p),
+  agent_comm:          async (p) => toolAgentComm(p),
+  audit_submit:        async (p) => toolAuditSubmit(p),
 };
 
 // ═══ Help text ══════════════════════════════════════════════════════════

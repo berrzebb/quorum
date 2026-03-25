@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import * as bridge from "../bridge.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus, safeLocale,
-  t, findWatchFile, resolvePluginPath,
+  t, resolvePluginPath, escapeRe, pendingInner, agreeInner,
 } from "../context.mjs";
 
 import { parseArgs } from "./args.mjs";
@@ -20,15 +20,13 @@ import { spawnResolvedAsync } from "../cli-runner.mjs";
 
 const promptTemplatePath = resolvePluginPath(plugin.audit_prompt);
 
-// Lazy-initialized in main() — avoid dirname(null) crash at module load time.
-let claudePath = null;
-
 const planningDirs = (consensus.planning_dirs ?? []).map((d) => resolve(REPO_ROOT, d));
 const promotionDocPaths = planningDirs.map((d) => resolve(d, "feedback-promotion.md"));
 
-export function initPaths(overrideWatchFile) {
-  claudePath = overrideWatchFile && existsSync(overrideWatchFile) ? overrideWatchFile : findWatchFile();
-}
+// Verdict tag matchers — dynamic patterns compiled once (config-derived)
+const PENDING_RE = new RegExp(`\\[(?:pending|PENDING|CHANGES_REQUESTED|${escapeRe(pendingInner)})\\]`, "gi");
+const APPROVED_RE = new RegExp(`\\[(?:approved|APPROVED|${escapeRe(agreeInner)})\\]`, "gi");
+const INFRA_FAILURE_RE = /\[INFRA_FAILURE\]/i;
 
 /** Write audit-status.json marker for fast-path hook detection (no bridge needed). */
 function writeAuditStatus(statusDir, status, pendingCount, rejectionCodes, track) {
@@ -47,9 +45,7 @@ function writeAuditStatus(statusDir, status, pendingCount, rejectionCodes, track
 function parseVerdictText(text) {
   if (!text) return { status: "unknown", pendingCount: 0, rejectionCodes: [] };
 
-  const hasPending = /\[pending\]|\[계류\]|\[PENDING\]|\[CHANGES_REQUESTED\]/i.test(text);
-  const hasApproved = /\[approved\]|\[합의완료\]|\[APPROVED\]/i.test(text);
-  const hasInfraFailure = /\[INFRA_FAILURE\]/i.test(text);
+  const hasInfraFailure = INFRA_FAILURE_RE.test(text);
 
   const codes = [];
   for (const line of text.split(/\r?\n/)) {
@@ -57,13 +53,13 @@ function parseVerdictText(text) {
     if (m) codes.push(`${m[1]} [${m[2]}]`);
   }
 
-  // Count pending items
-  const pendingMatches = text.match(/\[pending\]|\[계류\]/gi);
+  const pendingMatches = text.match(PENDING_RE);
   const pendingCount = pendingMatches ? pendingMatches.length : 0;
 
   if (hasInfraFailure) return { status: "infra_failure", pendingCount: 0, rejectionCodes: codes };
-  if (hasPending) return { status: "changes_requested", pendingCount: Math.max(1, pendingCount), rejectionCodes: codes };
-  if (hasApproved) return { status: "approved", pendingCount: 0, rejectionCodes: codes };
+  if (pendingCount > 0) return { status: "changes_requested", pendingCount, rejectionCodes: codes };
+  APPROVED_RE.lastIndex = 0; // .test() with /g advances lastIndex — must reset
+  if (APPROVED_RE.test(text)) return { status: "approved", pendingCount: 0, rejectionCodes: codes };
   return { status: "unknown", pendingCount: 0, rejectionCodes: codes };
 }
 
@@ -73,17 +69,10 @@ export function runRespond(args) {
   }
 
   const respondArgs = [resolve(HOOKS_DIR, "respond.mjs")];
-  if (args.watchFile) {
-    respondArgs.push("--watch-file", args.watchFile);
-  }
   if (args.autoFix) {
     respondArgs.push("--auto-fix");
   }
-  if (!args.pickNext) {
-    respondArgs.push("--no-sync-next");
-  }
-
-  const respondCwd = args.watchFile ? deriveAuditCwd(args.watchFile) : REPO_ROOT;
+  const respondCwd = REPO_ROOT;
   const result = spawnSync(process.execPath, respondArgs, {
     cwd: respondCwd,
     stdio: "inherit",
@@ -101,11 +90,10 @@ export function runRespond(args) {
   }
 }
 
-/** Derive worktree root from watch_file path. If watch_file is inside a worktree, return that root. */
-export function deriveAuditCwd(watchFile) {
-  if (!watchFile) return REPO_ROOT;
-  // Pattern: .../.claude/worktrees/<agent>/docs/feedback/claude.md
-  const worktreeMatch = watchFile.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
+/** Derive worktree root from a path. If path is inside a worktree, return that root. */
+export function deriveAuditCwd(path) {
+  if (!path) return REPO_ROOT;
+  const worktreeMatch = path.replace(/\\/g, "/").match(/(.+\/.claude\/worktrees\/[^/]+)\//);
   if (worktreeMatch) return worktreeMatch[1];
   return REPO_ROOT;
 }
@@ -118,7 +106,6 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
     .split("{{PRE_VERIFIED}}").join(preVerified)
     .split("{{DIFF_CMD}}").join(diffScope ?? "")
     .split("{{PROMOTION_SECTION}}").join(promotionSection)
-    .split("{{CLAUDE_MD_PATH}}").join(claudePath)
     .split("{{TRIGGER_TAG}}").join(cfg.consensus.trigger_tag)
     .split("{{AGREE_TAG}}").join(cfg.consensus.agree_tag)
     .split("{{PENDING_TAG}}").join(cfg.consensus.pending_tag)
@@ -132,10 +119,8 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  initPaths(args.watchFile);
-
-  // Resolve audit CWD: if watch_file is in a worktree, Codex must run there
-  const auditCwd = deriveAuditCwd(args.watchFile);
+  // Audit CWD — always REPO_ROOT (worktree context comes from ProcessMux, not file paths)
+  const auditCwd = REPO_ROOT;
   const statusDir = resolve(auditCwd, ".claude");
   const auditStatusPath = resolve(statusDir, "audit-status.json");
   // Session files go to the worktree too (prevents cross-worktree state corruption)
@@ -145,20 +130,17 @@ async function main() {
     deleteSavedSessionId();
   }
 
-  // Read evidence from SQLite (single source of truth), fallback to file
+  // Read evidence from SQLite (single source of truth)
   let claudeMd;
   try {
     const evidence = bridge.getLatestEvidence();
     if (evidence?.content) {
       claudeMd = evidence.content;
     }
-  } catch { /* bridge non-critical — fallback to file */ }
+  } catch { /* bridge non-critical */ }
 
   if (!claudeMd) {
-    if (!claudePath || !existsSync(claudePath)) {
-      throw new Error(`Missing watch file: ${claudePath ?? consensus.watch_file}`);
-    }
-    claudeMd = readFileSync(claudePath, "utf8");
+    throw new Error("No evidence found in EventStore. Submit evidence via audit_submit tool first.");
   }
 
   // Pre-check: eslint scope consistency before audit
@@ -189,13 +171,12 @@ async function main() {
   if (auditMode === "solo") {
     console.log("[audit] Solo mode \u2014 generating verdict from pre-verification only");
     const verdictText = generateSoloVerdict(preVerified);
-    const isApproved = verdictText.includes("[APPROVED]");
     const parsed = parseVerdictText(verdictText);
     // Record verdict to SQLite (single source of truth)
     try {
       bridge.recordTransition(
         "gate", "audit",
-        "pending", isApproved ? "approved" : "changes_requested",
+        "pending", parsed.status === "approved" ? "approved" : "changes_requested",
         "system",
         { mode: "solo", preVerified: true, verdictText },
       );
@@ -214,7 +195,7 @@ async function main() {
     // Keep the audit protocol header + truncated evidence
     const header = prompt.slice(0, 20_000);
     const tail = prompt.slice(-10_000);
-    prompt = header + "\n\n\u26A0\uFE0F TRUNCATED: evidence was too large. Review the watch_file directly for full content.\n\n" + tail;
+    prompt = header + "\n\n\u26A0\uFE0F TRUNCATED: evidence was too large. Review evidence via EventStore for full content.\n\n" + tail;
   }
 
   const codexBin = resolveCodexBin();
@@ -252,17 +233,17 @@ async function main() {
 
   const { threadId, exitCode, verdictText } = await streamCodexOutput(child, args.json);
 
+  let parsed;
   if (exitCode !== 0) {
     // Auto mode: fall back to solo verdict instead of infra_failure
     if (auditMode === "auto") {
       console.error("[audit] External auditor failed (exit " + exitCode + ") \u2014 falling back to solo mode");
       const fallbackText = generateSoloVerdict(preVerified);
-      const isApproved = fallbackText.includes("[APPROVED]");
-      const parsed = parseVerdictText(fallbackText);
+      parsed = parseVerdictText(fallbackText);
       try {
         bridge.recordTransition(
           "gate", "audit",
-          "pending", isApproved ? "approved" : "changes_requested",
+          "pending", parsed.status === "approved" ? "approved" : "changes_requested",
           "system",
           { mode: "auto-fallback-solo", exitCode, verdictText: fallbackText },
         );
@@ -285,7 +266,7 @@ async function main() {
     console.error(`[audit] Codex exited with code ${exitCode} \u2014 recorded infra_failure to SQLite`);
   } else {
     // Parse verdict from captured response text
-    const parsed = parseVerdictText(verdictText);
+    parsed = parseVerdictText(verdictText);
     try {
       bridge.recordTransition(
         "gate", "audit",
@@ -298,9 +279,11 @@ async function main() {
     console.log(`[audit] Verdict recorded to SQLite: ${parsed.status} (pending: ${parsed.pendingCount})`);
   }
 
-  // Session management based on parsed verdict
-  const parsed = parseVerdictText(verdictText);
-  if (parsed.pendingCount === 0 && threadId) {
+  // Session management — infra_failure preserves session for retry
+  if (exitCode !== 0 && threadId) {
+    writeSavedSession(threadId);
+    console.log(t("audit.session.saved", { id: threadId }));
+  } else if (parsed?.pendingCount === 0 && threadId) {
     deleteSavedSessionId();
     console.log(t("audit.session.reset", { tag: cfg.consensus.pending_tag }));
   } else if (threadId) {

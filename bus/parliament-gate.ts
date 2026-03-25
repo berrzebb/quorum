@@ -57,12 +57,12 @@ export function checkAmendmentGate(store: EventStore): GateResult {
  */
 export function checkVerdictGate(store: EventStore): GateResult {
   try {
-    const allVerdicts = store.query({ eventType: "audit.verdict" });
+    const allVerdicts = store.query({ eventType: "audit.verdict", limit: 100, descending: true });
     // Filter out parliament deliberation verdicts — they are topic discussions, not code audits
     const verdicts = allVerdicts.filter(e => e.payload.mode !== "parliament");
     if (verdicts.length === 0) return { allowed: true }; // No audits yet
 
-    const latest = verdicts[verdicts.length - 1]!; // ASC order → last = newest
+    const latest = verdicts[0]!;
     const verdict = latest.payload.verdict as string;
 
     if (verdict !== AUDIT_VERDICT.APPROVED) {
@@ -85,9 +85,9 @@ export function checkVerdictGate(store: EventStore): GateResult {
  */
 export function checkConfluenceGate(store: EventStore): GateResult {
   try {
-    const sessions = store.query({ eventType: "parliament.session.digest", limit: 5 });
-    // Find latest session with confluence result
-    for (let i = sessions.length - 1; i >= 0; i--) {
+    const sessions = store.query({ eventType: "parliament.session.digest", limit: 5, descending: true });
+    // Find latest session with confluence result (DESC → newest first)
+    for (let i = 0; i < sessions.length; i++) {
       const p = sessions[i]!.payload;
       if (p.confluencePassed !== undefined) {
         if (p.confluencePassed === false) {

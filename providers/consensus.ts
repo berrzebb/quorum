@@ -50,6 +50,8 @@ export interface ConsensusVerdict {
   registers?: ConvergenceRegisters;
   /** 5-classification results (diverge-converge only). */
   classifications?: ClassificationResult[];
+  /** Per-reviewer divergence items (diverge-converge only). */
+  divergenceItems?: { reviewerA: DivergenceItem[]; reviewerB: DivergenceItem[] };
 }
 
 export interface ConvergenceRegisters {
@@ -174,18 +176,22 @@ function buildDivergePrompt(request: AuditRequest, role: "advocate" | "devil", t
     ? `\n### Implementer Testimony\n${testimony}\n`
     : "";
 
+  const reviewerLabel = role === "advocate" ? "A" : "B";
+
   return {
     ...request,
     prompt: `${request.prompt}
 ${testimonySection}
-## Your Role: ${role.toUpperCase()} (Diverge Phase — Free Speech)
+## Diverge Phase — Reviewer ${reviewerLabel}
 
-Speak freely. You are NOT limited to your role's traditional focus.
-- If you see risks, say so — even as the advocate.
-- If you see strengths, acknowledge them — even as the devil's advocate.
-- Comment on anything: design, naming, architecture, missing tests, security, performance.
+Provide your COMPLETE analysis covering ALL aspects:
+- **Strengths**: what works well, sound decisions, good patterns
+- **Weaknesses**: risks, gaps, missing requirements, edge cases
+- **Questions**: unstated assumptions, ambiguities to resolve
+- **Alternatives**: other approaches, trade-offs to consider
 
-The goal is COMPLETE information, not role-adherence.
+Do NOT filter by perspective. A thorough review includes both positives and negatives.
+The goal is COMPLETE information — cover everything you observe.
 
 Respond with JSON:
 {
@@ -207,8 +213,8 @@ function buildConvergeJudgePrompt(
   advocateItems: DivergenceItem[],
   devilItems: DivergenceItem[],
 ): AuditRequest {
-  const allItems = [...advocateItems.map(i => `[Advocate] ${i.type}: ${i.description}`),
-                    ...devilItems.map(i => `[Devil] ${i.type}: ${i.description}`)].join("\n");
+  const allItems = [...advocateItems.map(i => `[Reviewer A] ${i.type}: ${i.description}`),
+                    ...devilItems.map(i => `[Reviewer B] ${i.type}: ${i.description}`)].join("\n");
   return {
     ...request,
     prompt: `${request.prompt}
@@ -239,11 +245,11 @@ For each substantive observation, classify as:
 
 ### Reviewer Opinions
 
-**Advocate** (confidence: ${advocateOpinion.confidence}):
+**Reviewer A** (confidence: ${advocateOpinion.confidence}):
 Verdict: ${advocateOpinion.verdict}
 ${advocateOpinion.reasoning}
 
-**Devil's Advocate** (confidence: ${devilOpinion.confidence}):
+**Reviewer B** (confidence: ${devilOpinion.confidence}):
 Verdict: ${devilOpinion.verdict}
 ${devilOpinion.reasoning}
 
@@ -268,7 +274,7 @@ ${allItems}
   };
 }
 
-interface DivergenceItem {
+export interface DivergenceItem {
   description: string;
   type: "strength" | "risk" | "gap" | "suggestion";
 }
@@ -330,8 +336,6 @@ function parseConvergeVerdict(raw: string): {
     };
   }
 }
-
-// ── JSON extraction ──────────────────────────
 
 // ── Parsers ───────────────────────────────────
 
@@ -512,6 +516,10 @@ export class DeliberativeConsensus {
       duration: Date.now() - start,
       registers: convergeVerdict.registers,
       classifications: convergeVerdict.classifications,
+      divergenceItems: {
+        reviewerA: advocateResult.items,
+        reviewerB: devilResult.items,
+      },
     };
   }
 

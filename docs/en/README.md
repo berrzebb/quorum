@@ -192,7 +192,7 @@ Shared business logic across adapters. Only I/O differs per runtime:
 |-------|------|----------|
 | **I/O** | stdin/stdout parsing, protocol | `adapters/{adapter}/` |
 | **Business Logic** | trigger, evidence, hooks, NDJSON | `adapters/shared/` (17+ modules) |
-| **Core** | audit, 21 MCP tools, EventStore | `core/` |
+| **Core** | audit, 22 MCP tools, EventStore | `core/` |
 
 New adapter = ~280 lines of I/O wrappers (Codex adapter).
 
@@ -243,7 +243,7 @@ command/http handlers, env interpolation (`$VAR`), deny-first-break, async fire-
 ```jsonc
 {
   "consensus": {
-    "watch_file": "docs/feedback/claude.md",
+    // evidence submitted via audit_submit MCP tool
     "trigger_tag": "[REVIEW_NEEDED]",
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]"

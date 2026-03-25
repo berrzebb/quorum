@@ -130,7 +130,10 @@ function detectSpinning(
   summaries: { verdict: string; codes: string; summary: string }[],
   threshold: number,
 ): DetectedPattern | null {
-  const hashes = summaries.map((s) => hash(`${s.verdict}|${s.codes}`));
+  // Filter out approved verdicts — repeated approval is not stagnation
+  const rejections = summaries.filter((s) => s.verdict !== "approved");
+  if (rejections.length < threshold) return null;
+  const hashes = rejections.map((s) => hash(`${s.verdict}|${s.codes}`));
   let maxRun = 1;
   let currentRun = 1;
 

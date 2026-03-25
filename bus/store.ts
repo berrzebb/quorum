@@ -57,6 +57,8 @@ export interface QueryFilter {
   until?: number;
   limit?: number;
   offset?: number;
+  /** When true, results are ordered newest-first (DESC). Default is oldest-first (ASC). */
+  descending?: boolean;
 }
 
 export class EventStore {
@@ -285,13 +287,15 @@ export class EventStore {
     const hasLimit = filter.limit != null;
     const hasOffset = hasLimit && filter.offset != null;
     const suffix = hasLimit ? ` LIMIT ?${hasOffset ? " OFFSET ?" : ""}` : "";
+    const desc = filter.descending ?? false;
+    const order = desc ? "DESC" : "ASC";
 
-    const stmtKey = `q:${cacheKey}:${hasLimit}:${hasOffset}`;
+    const stmtKey = `q:${cacheKey}:${hasLimit}:${hasOffset}:${desc}`;
     let stmt = this.queryCache.get(stmtKey);
     if (!stmt) {
       stmt = this.db.prepare(`
         SELECT * FROM events ${where}
-        ORDER BY timestamp ASC, id ASC${suffix}
+        ORDER BY timestamp ${order}, id ${order}${suffix}
       `);
       this.queryCache.set(stmtKey, stmt);
     }

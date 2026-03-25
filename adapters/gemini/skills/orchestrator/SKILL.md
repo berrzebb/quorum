@@ -45,7 +45,7 @@ Read the corresponding reference when entering each phase:
 ## Setup
 
 Read config: `.quorum/config.json`
-- `consensus.watch_file` — evidence file path
+- `audit_submit` MCP tool — evidence submission
 - `consensus.planning_dirs` — design document directories
 - `plugin.handoff_file` — session handoff path (default: `.claude/session-handoff.md`)
 
@@ -115,7 +115,7 @@ Write Handoff -> next task -> loop
 ## Result Verification
 
 When worker completes:
-1. Read worker's **worktree** watch_file (not main repo)
+1. Check worker's evidence via `audit_submit` tool (not main repo)
 2. Query verdict from SQLite: `quorum tool audit_history --summary --json`
 3. `[agree_tag]` -> proceed to Retro & Merge (read `skills/orchestrator/references/lifecycle.md`)
 4. `[pending_tag]` -> Correction Cycle (read `skills/orchestrator/references/correction.md`)

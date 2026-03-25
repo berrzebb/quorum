@@ -1,6 +1,6 @@
 # Tool Inventory
 
-20 deterministic analysis tools available via CLI. All tools run the same logic regardless of adapter — only the invocation method differs.
+22 deterministic analysis tools available via CLI. All tools run the same logic regardless of adapter — only the invocation method differs.
 
 ## Invocation
 

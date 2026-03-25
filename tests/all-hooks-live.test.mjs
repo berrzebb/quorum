@@ -188,13 +188,26 @@ describe("Claude Code hooks — live execution (22)", () => {
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
 
-  it("TaskCompleted → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "task-completed.mjs"), {
-      ...BASE_INPUT, hook_event_name: "TaskCompleted",
-      task_id: "task-001",
-      task_subject: "Test task",
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
+  it("TaskCompleted → exit 0 (with audit-status marker)", async () => {
+    // task-completed requires audit-status.json to confirm evidence exists
+    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const statusDir = resolve(CWD, ".claude");
+    const statusPath = resolve(statusDir, "audit-status.json");
+    const hadStatus = existsSync(statusPath);
+    if (!hadStatus) {
+      mkdirSync(statusDir, { recursive: true });
+      writeFileSync(statusPath, JSON.stringify({ status: "approved" }));
+    }
+    try {
+      const r = await runHook(resolve(ROOT, "task-completed.mjs"), {
+        ...BASE_INPUT, hook_event_name: "TaskCompleted",
+        task_id: "task-001",
+        task_subject: "Test task",
+      });
+      assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
+    } finally {
+      if (!hadStatus) try { rmSync(statusPath); } catch {}
+    }
   });
 
   it("PermissionRequest → exit 0, valid JSON or empty", async () => {

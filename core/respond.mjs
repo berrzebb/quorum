@@ -23,21 +23,18 @@ import { resolveBinary, spawnResolved } from "./cli-runner.mjs";
 import * as bridge from "./bridge.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus, safeLocale, t,
-  findWatchFile,
 } from "./context.mjs";
 
 // ── Args ──────────────────────────────────────
 
 function parseArgs(argv) {
-  const args = { autoFix: false, dryRun: false, watchFile: null };
+  const args = { autoFix: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--auto-fix") args.autoFix = true;
     else if (arg === "--dry-run") args.dryRun = true;
-    else if (arg === "--watch-file") args.watchFile = argv[++i] ?? null;
-    else if (arg === "--no-sync-next") { /* compat: ignore legacy flag */ }
     else if (arg === "-h" || arg === "--help") {
-      console.log("Usage: node respond.mjs [--auto-fix] [--dry-run] [--watch-file <path>]");
+      console.log("Usage: node respond.mjs [--auto-fix] [--dry-run]");
       process.exit(0);
     }
   }
@@ -92,7 +89,6 @@ function runAutoFix(codes) {
   }
 
   const template = readFileSync(fixPromptPath, "utf8");
-  const claudePath = findWatchFile();
 
   // Read latest verdict text from SQLite for auto-fix context
   let verdictText = "";
@@ -107,8 +103,6 @@ function runAutoFix(codes) {
     .replace(/\{\{RESET_CRITERIA\}\}/g, codes.join(", "))
     .replace(/\{\{NEXT_TASKS\}\}/g, "")
     .replace(/\{\{VERDICT_TEXT\}\}/g, verdictText)
-    .replace(/\{\{WATCH_FILE\}\}/g, claudePath ?? "")
-    .replace(/\{\{CLAUDE_MD_PATH\}\}/g, claudePath ?? "")
     .replace(/\{\{TRIGGER_TAG\}\}/g, consensus.trigger_tag)
     .replace(/\{\{AGREE_TAG\}\}/g, consensus.agree_tag)
     .replace(/\{\{PENDING_TAG\}\}/g, consensus.pending_tag)

@@ -48,7 +48,6 @@ describe("bridge init", () => {
 describe("bridge emitEvent", () => {
   it("emits events to SQLite store", () => {
     const id = bridge.emitEvent("audit.submit", "claude-code", {
-      file: "docs/feedback/claude.md",
       tier: "T2",
     });
     assert.ok(id);

@@ -54,7 +54,7 @@ Score → tier: < 0.3 = T1 skip, 0.3–0.7 = T2 simple, > 0.7 = T3 deliberative.
 
 ## Evidence Package Format
 
-Write to the watch file using **Write (full replacement)**:
+Submit evidence via `audit_submit` tool:
 
 ```markdown
 ## [trigger_tag] Task Title

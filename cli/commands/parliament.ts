@@ -16,13 +16,14 @@
 import { resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { EventStore } from "../../bus/store.js";
-import { AUDIT_VERDICT, AMENDMENT_STATUS } from "../../bus/events.js";
+import { AUDIT_VERDICT, AMENDMENT_STATUS, createEvent } from "../../bus/events.js";
 import { createConsensusAuditors, checkAvailability } from "../../providers/auditors/factory.js";
 import { createMuxConsensusAuditors } from "../../providers/auditors/mux.js";
 import { ProcessMux } from "../../bus/mux.js";
-import { routeToCommittee, type StandingCommittee, STANDING_COMMITTEES } from "../../bus/meeting-log.js";
+import { routeToCommittee, type StandingCommittee, STANDING_COMMITTEES, getMeetingLogs, generateCPS, type CPS } from "../../bus/meeting-log.js";
 import { runParliamentSession, type SessionResult, type SessionConfig } from "../../bus/parliament-session.js";
 import type { AuditRequest, Auditor } from "../../providers/provider.js";
+import { interactivePlanner } from "./orchestrate/planner.js";
 
 // ── Arg parsing ─────────────────────────────
 
@@ -39,10 +40,11 @@ interface ParliamentArgs {
   history?: boolean;
   detail?: string;
   mux?: boolean;
+  noPlan?: boolean;
 }
 
 export function parseArgs(args: string[]): ParliamentArgs {
-  const result: ParliamentArgs = { topic: "", rounds: 1 };
+  const result: ParliamentArgs = { topic: "", rounds: 10 };
   const positional: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -54,7 +56,7 @@ export function parseArgs(args: string[]): ParliamentArgs {
         break;
       case "--rounds":
       case "-r":
-        result.rounds = Math.max(1, Math.min(10, parseInt(args[++i] ?? "1", 10) || 1));
+        result.rounds = Math.max(1, Math.min(10, parseInt(args[++i] ?? "10", 10) || 10));
         break;
       case "--advocate":
         result.advocate = args[++i];
@@ -84,6 +86,9 @@ export function parseArgs(args: string[]): ParliamentArgs {
         break;
       case "--mux":
         result.mux = true;
+        break;
+      case "--no-plan":
+        result.noPlan = true;
         break;
       default:
         if (!arg.startsWith("-")) positional.push(arg);
@@ -156,18 +161,33 @@ function printPhaseResult(result: SessionResult, round: number): void {
     const verdictColor = v.finalVerdict === AUDIT_VERDICT.APPROVED ? C.green : v.finalVerdict === AUDIT_VERDICT.CHANGES_REQUESTED ? C.yellow : C.red;
     console.log(`${C.bold}Verdict:${C.reset} ${verdictColor}${v.finalVerdict}${C.reset} (mode: ${v.mode})`);
 
-    // Opinions
+    // Opinions (full deliberation, not truncated)
     if (v.opinions.length > 0) {
-      console.log(`\n${C.dim}── Opinions ──${C.reset}`);
-      for (const op of v.opinions) {
-        const opColor = op.role === "advocate" ? C.green : C.red;
-        console.log(`  ${opColor}${op.role}${C.reset}: ${op.verdict} (confidence: ${op.confidence.toFixed(2)})`);
+      const labels = ["Reviewer A", "Reviewer B"];
+      const colors = [C.cyan, C.magenta];
+
+      for (let i = 0; i < v.opinions.length; i++) {
+        const op = v.opinions[i]!;
+        const label = labels[i] ?? op.role;
+        const color = colors[i] ?? C.reset;
+
+        console.log(`\n${color}${C.bold}── ${label} ──${C.reset}  ${op.verdict} (confidence: ${op.confidence.toFixed(2)})`);
+
         if (op.reasoning) {
-          const short = op.reasoning.length > 200 ? op.reasoning.slice(0, 200) + "..." : op.reasoning;
-          console.log(`    ${C.dim}${short}${C.reset}`);
+          console.log(`${op.reasoning}`);
         }
+
+        // Divergence items per reviewer
+        const items = i === 0 ? v.divergenceItems?.reviewerA : v.divergenceItems?.reviewerB;
+        if (items && items.length > 0) {
+          const typeIcon: Record<string, string> = { strength: `${C.green}+`, risk: `${C.red}!`, gap: `${C.yellow}?`, suggestion: `${C.blue}>` };
+          for (const item of items) {
+            console.log(`  ${typeIcon[item.type] ?? " "}${C.reset} ${item.description}`);
+          }
+        }
+
         if (op.codes.length > 0) {
-          console.log(`    ${C.dim}codes: ${op.codes.join(", ")}${C.reset}`);
+          console.log(`  ${C.dim}codes: ${op.codes.join(", ")}${C.reset}`);
         }
       }
     }
@@ -283,16 +303,30 @@ export async function run(args: string[]): Promise<void> {
   const roles = resolveRoles(parsed, cfg);
 
   // Auto-route topic to committee (or use override)
-  const committees = parsed.committee
-    ? [parsed.committee]
-    : routeToCommittee(parsed.topic);
-  const committee = committees[0]!;
+  // May be overridden by checkpoint below for --resume
+  let committee = parsed.committee
+    ? parsed.committee
+    : routeToCommittee(parsed.topic)[0]!;
 
   // Initialize EventStore
   const dbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
   const store = new EventStore({ dbPath });
 
   let mux: ProcessMux | null = null;
+  let interrupted = false;
+
+  // Graceful Ctrl+C — clean up mux sessions + store
+  const onInterrupt = () => {
+    if (interrupted) process.exit(1);  // second Ctrl+C = force kill
+    interrupted = true;
+    console.log(`\n${C.yellow}Interrupted. Cleaning up...${C.reset}`);
+    if (mux) { try { mux.cleanup(); } catch {} }
+    store.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", onInterrupt);
+  process.on("SIGTERM", onInterrupt);
+
   try {
     // Create auditors — MuxAuditor if --mux, standalone otherwise
     const cwd = process.cwd();
@@ -336,8 +370,9 @@ export async function run(args: string[]): Promise<void> {
           console.log(`${C.green}Session already converged.${C.reset}`);
           return;
         }
-        // Restore topic from checkpoint if not provided
+        // Restore topic + committee from checkpoint if not provided
         if (!parsed.topic) parsed.topic = checkpoint.topic;
+        if (!parsed.committee && checkpoint.committee) committee = checkpoint.committee as StandingCommittee;
       } else {
         console.error(`${C.red}No checkpoint found for session: ${parsed.resume}${C.reset}`);
         store.close();
@@ -350,13 +385,15 @@ export async function run(args: string[]): Promise<void> {
       console.log(`${C.dim}Session ID: ${sessionId} (use --resume to continue)${C.reset}\n`);
     }
 
-    // Run N rounds
+    // Run rounds until convergence or max reached
+    let previousResult: SessionResult | null = null;
+
     for (let round = startRound; round <= parsed.rounds; round++) {
       printHeader(parsed.topic, committee, roles, round, parsed.rounds);
 
       const request: AuditRequest = {
         evidence: parsed.topic,
-        prompt: buildDeliberationPrompt(parsed.topic, committee, round),
+        prompt: buildDeliberationPrompt(parsed.topic, committee, round, previousResult),
         files: [],
         sessionId,
       };
@@ -370,10 +407,11 @@ export async function run(args: string[]): Promise<void> {
         confluenceInput: {},
       };
 
-      console.log(`${C.dim}Running deliberation...${C.reset}\n`);
+      console.log(`${C.dim}Running deliberation (round ${round}/${parsed.rounds})...${C.reset}\n`);
 
       const result = await runParliamentSession(store, request, sessionConfig);
       printPhaseResult(result, round);
+      previousResult = result;
 
       // Checkpoint after each round
       const converged = result.convergence?.converged ?? false;
@@ -387,20 +425,80 @@ export async function run(args: string[]): Promise<void> {
         timestamp: Date.now(),
       } satisfies SessionCheckpoint);
 
-      // If converged and CPS generated, persist to file + stop
+      // If converged and CPS generated, persist to file + auto-plan
       if (converged && result.cps) {
         writeCPSFile(result.cps, committee);
         if (round < parsed.rounds) {
           console.log(`\n${C.green}${C.bold}Converged at round ${round}/${parsed.rounds} — stopping early.${C.reset}`);
         }
+
+        // Auto-launch planner (parliament → CPS → plan is the natural flow)
+        if (!parsed.noPlan) {
+          console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
+          console.log(`${C.dim}CPS generated. Launching planner for "${parsed.topic}"...${C.reset}\n`);
+          const planArgs = [parsed.topic, "--auto"];
+          if (parsed.mux) planArgs.push("--mux");
+          await interactivePlanner(cwd, planArgs);
+        }
         break;
       }
+
+      if (interrupted) break;
 
       if (round < parsed.rounds) {
         console.log(`\n${C.dim}${"═".repeat(60)}${C.reset}\n`);
       }
     }
+
+    // Best-effort CPS: max rounds reached without convergence
+    // Pipeline must not break — generate CPS from accumulated analysis
+    const lastConverged = previousResult?.convergence?.converged ?? false;
+    if (!interrupted && !lastConverged && previousResult) {
+      console.log(`\n${C.yellow}${C.bold}Max rounds (${parsed.rounds}) reached without full convergence.${C.reset}`);
+      console.log(`${C.dim}Generating best-effort CPS from accumulated analysis...${C.reset}\n`);
+
+      try {
+        const agendaLogs = getMeetingLogs(store, committee);
+        if (agendaLogs.length > 0) {
+          const bestEffortCps = generateCPS(agendaLogs);
+
+          // Persist as event + KV (same path as converged CPS)
+          store.append(createEvent("parliament.cps.generated", "generic", {
+            context: bestEffortCps.context,
+            problem: bestEffortCps.problem,
+            solution: bestEffortCps.solution,
+            sourceLogIds: bestEffortCps.sourceLogIds,
+            gapCount: bestEffortCps.gaps.length,
+            buildCount: bestEffortCps.builds.length,
+            agendaId: committee,
+            bestEffort: true,
+          }));
+          store.setKV("parliament.cps.latest", {
+            ...bestEffortCps,
+            agendaId: committee,
+            bestEffort: true,
+          });
+
+          writeCPSFile(bestEffortCps, committee);
+
+          // Auto-launch planner
+          if (!parsed.noPlan) {
+            console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
+            console.log(`${C.dim}Best-effort CPS ready. Launching planner for "${parsed.topic}"...${C.reset}\n`);
+            const planArgs = [parsed.topic, "--auto"];
+            if (parsed.mux) planArgs.push("--mux");
+            await interactivePlanner(cwd, planArgs);
+          }
+        } else {
+          console.log(`${C.red}No meeting logs found — cannot generate CPS.${C.reset}`);
+        }
+      } catch (err) {
+        console.error(`${C.red}Failed to generate best-effort CPS: ${(err as Error).message}${C.reset}`);
+      }
+    }
   } finally {
+    process.removeListener("SIGINT", onInterrupt);
+    process.removeListener("SIGTERM", onInterrupt);
     if (mux) {
       try { await mux.cleanup(); } catch { /* ok */ }
     }
@@ -410,9 +508,33 @@ export async function run(args: string[]): Promise<void> {
 
 // ── Prompt builder ──────────────────────────
 
-function buildDeliberationPrompt(topic: string, committee: string, round: number): string {
+function buildDeliberationPrompt(topic: string, committee: string, round: number, previousResult?: SessionResult | null): string {
   const committeeInfo = STANDING_COMMITTEES[committee as StandingCommittee];
   const items = committeeInfo ? committeeInfo.items.join(", ") : "general";
+
+  // Chain previous round's output as context for this round
+  let previousContext = "";
+  if (previousResult?.verdict) {
+    const v = previousResult.verdict;
+    previousContext = `\n## Previous Round Findings\n`;
+    if (v.registers) {
+      const r = v.registers;
+      if (r.statusChanges.length > 0) previousContext += `- **Status**: ${r.statusChanges.join("; ")}\n`;
+      if (r.decisions.length > 0) previousContext += `- **Decisions**: ${r.decisions.join("; ")}\n`;
+      if (r.requirementChanges.length > 0) previousContext += `- **Requirements**: ${r.requirementChanges.join("; ")}\n`;
+      if (r.risks.length > 0) previousContext += `- **Risks**: ${r.risks.join("; ")}\n`;
+    }
+    if (v.classifications && v.classifications.length > 0) {
+      previousContext += `\n### Classifications from previous round\n`;
+      for (const c of v.classifications) {
+        previousContext += `- [${c.classification.toUpperCase()}] ${c.item} → ${c.action}\n`;
+      }
+    }
+    if (v.judgeSummary) {
+      previousContext += `\n### Judge synthesis\n${v.judgeSummary}\n`;
+    }
+    previousContext += `\nBuild on these findings. Refine, challenge, or extend — do NOT simply repeat them.\n`;
+  }
 
   return `# Parliamentary Deliberation
 
@@ -424,9 +546,9 @@ ${committeeInfo?.name ?? committee} — covers: ${items}
 
 ## Round
 ${round}
-
+${previousContext}
 ## Instructions
-Analyze the given topic from your perspective. This is a parliamentary deliberation — speak freely about all aspects.
+Analyze the given topic thoroughly. This is a parliamentary deliberation — speak freely about all aspects.
 
 Consider:
 - Feasibility and technical merit
@@ -548,7 +670,7 @@ ${C.bold}Usage:${C.reset}
 ${C.bold}Options:${C.reset}
   --committee, -c <name>   Standing committee (auto-detected from topic)
                            Committees: ${Object.keys(STANDING_COMMITTEES).join(", ")}
-  --rounds, -r <n>         Number of deliberation rounds (default: 1, max: 10)
+  --rounds, -r <n>         Max deliberation rounds (default: 10, stops early on convergence)
   --advocate <spec>        Advocate provider (default: from config or claude)
   --devil <spec>           Devil's advocate provider (default: from config or claude)
   --judge <spec>           Judge provider (default: from config or claude)

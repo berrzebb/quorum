@@ -64,7 +64,7 @@ export function buildFirstRunMessage(result, readmePath) {
       `(Project-scoped — safe across plugin updates)`,
       ``,
       `Customize for your project:`,
-      `- config.json → consensus.watch_file, trigger_tag/agree_tag/pending_tag, quality_rules`,
+      `- config.json → consensus.trigger_tag/agree_tag/pending_tag, quality_rules`,
       `- templates/references/{locale}/ → audit policies (rejection codes, test criteria, evidence format)`,
       ``,
       `Full guide: ${readmePath}`,

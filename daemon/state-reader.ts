@@ -146,9 +146,11 @@ export interface ParliamentCommitteeStatus {
 
 export interface ParliamentLiveSession {
   id: string;
+  name: string;
   role: string;
   backend: string;
   startedAt: number;
+  outputFile?: string;
 }
 
 export interface ParliamentInfo {
@@ -166,6 +168,15 @@ export interface ParliamentInfo {
   liveSessions: ParliamentLiveSession[];
 }
 
+export interface AgentQueryInfo {
+  queryId: string;
+  fromAgent: string;
+  toAgent?: string;
+  question: string;
+  responseCount: number;
+  timestamp: number;
+}
+
 export interface FullState {
   gates: GateInfo[];
   items: ItemStateInfo[];
@@ -179,6 +190,7 @@ export interface FullState {
   recentEvents: QuorumEvent[];
   fitness: FitnessInfo;
   parliament: ParliamentInfo;
+  agentQueries: AgentQueryInfo[];
 }
 
 // ── StateReader ──────────────────────────────
@@ -236,6 +248,7 @@ export class StateReader {
       recentEvents: this.recentEvents(eventLimit),
       fitness: this.fitnessInfo(),
       parliament: this.parliamentInfo(),
+      agentQueries: this.agentQueries(),
     };
   }
 
@@ -446,11 +459,21 @@ export class StateReader {
     }
   }
 
+  /** Fetch finding events with time-bounded ack/resolve scoped to detect window. */
+  private _fetchFindingEvents() {
+    const detectEvents = this.store.query({ eventType: "finding.detect", limit: 500, descending: true });
+    if (detectEvents.length === 0) {
+      return { detectEvents, ackEvents: [] as ReturnType<typeof this.store.query>, resolveEvents: [] as ReturnType<typeof this.store.query> };
+    }
+    const since = detectEvents[detectEvents.length - 1]!.timestamp;
+    const ackEvents = this.store.query({ eventType: "finding.ack", since });
+    const resolveEvents = this.store.query({ eventType: "finding.resolve", since });
+    return { detectEvents, ackEvents, resolveEvents };
+  }
+
   /** Fallback when MessageBus is not injected. */
   private _openFindingsFallback(): FindingInfo[] {
-    const detectEvents = this.store.query({ eventType: "finding.detect" });
-    const ackEvents = this.store.query({ eventType: "finding.ack" });
-    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+    const { detectEvents, ackEvents, resolveEvents } = this._fetchFindingEvents();
 
     const closedIds = new Set<string>();
     for (const e of ackEvents) {
@@ -497,9 +520,7 @@ export class StateReader {
   }
 
   private _findingStatsFallback(): FindingStats {
-    const detectEvents = this.store.query({ eventType: "finding.detect" });
-    const ackEvents = this.store.query({ eventType: "finding.ack" });
-    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+    const { detectEvents, ackEvents, resolveEvents } = this._fetchFindingEvents();
 
     const findingState = new Map<string, string>();
     let total = 0;
@@ -617,9 +638,7 @@ export class StateReader {
 
   /** Fallback when MessageBus is not injected. */
   private _findingThreadsFallback(): FileThread[] {
-    const detectEvents = this.store.query({ eventType: "finding.detect" });
-    const ackEvents = this.store.query({ eventType: "finding.ack" });
-    const resolveEvents = this.store.query({ eventType: "finding.resolve" });
+    const { detectEvents, ackEvents, resolveEvents } = this._fetchFindingEvents();
 
     const allFindings: Array<Finding & { timestamp: number }> = [];
     for (const evt of detectEvents) {
@@ -710,7 +729,7 @@ export class StateReader {
       const history = (this.store.getKV("fitness.history") as number[]) ?? [];
 
       // Latest gate decision from events
-      const gateEvents = this.store.query({ eventType: "fitness.gate", limit: 1 });
+      const gateEvents = this.store.query({ eventType: "fitness.gate", limit: 1, descending: true });
       let gate: FitnessInfo["gate"] = null;
       if (gateEvents.length > 0) {
         const p = gateEvents[0].payload;
@@ -722,7 +741,7 @@ export class StateReader {
       }
 
       // Latest trend from events
-      const trendEvents = this.store.query({ eventType: "fitness.trend", limit: 1 });
+      const trendEvents = this.store.query({ eventType: "fitness.trend", limit: 1, descending: true });
       let trend: FitnessInfo["trend"] = null;
       if (trendEvents.length > 0) {
         const p = trendEvents[0].payload;
@@ -733,7 +752,7 @@ export class StateReader {
       }
 
       // Latest computed score from events
-      const computeEvents = this.store.query({ eventType: "fitness.compute", limit: 1 });
+      const computeEvents = this.store.query({ eventType: "fitness.compute", limit: 1, descending: true });
       let current: number | null = null;
       let components: FitnessInfo["components"] = null;
       if (computeEvents.length > 0) {
@@ -807,20 +826,20 @@ export class StateReader {
 
     try {
       // Session count + last verdict
-      const sessions = this.store.query({ eventType: "parliament.session.digest" as EventType, limit: 100 });
+      const sessions = this.store.query({ eventType: "parliament.session.digest" as EventType, limit: 100, descending: true });
       empty.sessionCount = sessions.length;
 
       if (sessions.length > 0) {
-        const last = sessions[sessions.length - 1]!;
+        const last = sessions[0]!;
         empty.lastVerdict = (last.payload.verdictResult as string) ?? null;
       }
 
       // Convergence per committee
-      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as EventType, limit: 50 });
+      const convergenceEvents = this.store.query({ eventType: "parliament.convergence" as EventType, limit: 50, descending: true });
       const latestByCommittee = new Map<string, typeof convergenceEvents[0]>();
       for (const e of convergenceEvents) {
         const agenda = (e.payload.agendaId as string) ?? "";
-        latestByCommittee.set(agenda, e);  // ASC order → last write = latest
+        if (!latestByCommittee.has(agenda)) latestByCommittee.set(agenda, e); // DESC order → first seen = latest
       }
       empty.committees = COMMITTEE_IDS.map(c => {
         const e = latestByCommittee.get(c);
@@ -838,9 +857,9 @@ export class StateReader {
       empty.pendingAmendments = getPendingAmendmentCount(this.store);
 
       // Conformance — read from normalform events (digest doesn't carry conformance)
-      const nfEvents = this.store.query({ eventType: "parliament.session.normalform" as EventType, limit: 10 });
+      const nfEvents = this.store.query({ eventType: "parliament.session.normalform" as EventType, limit: 1, descending: true });
       if (nfEvents.length > 0) {
-        const lastNf = nfEvents[nfEvents.length - 1]!;
+        const lastNf = nfEvents[0]!;
         const allConverged = lastNf.payload.allConverged as boolean | undefined;
         empty.conformance = allConverged === true ? 1.0 : allConverged === false ? 0.0 : null;
       }
@@ -851,6 +870,34 @@ export class StateReader {
       return empty;
     } catch {
       return empty;
+    }
+  }
+
+  /**
+   * Agent queries — recent inter-agent communication.
+   */
+  agentQueries(): AgentQueryInfo[] {
+    try {
+      const queryEvents = this.store.query({ eventType: "agent.query" as EventType, limit: 20, descending: true });
+      const responseEvents = this.store.query({ eventType: "agent.response" as EventType, limit: 50, descending: true });
+
+      // Count responses per queryId
+      const responseCounts = new Map<string, number>();
+      for (const e of responseEvents) {
+        const qid = e.payload.queryId as string;
+        if (qid) responseCounts.set(qid, (responseCounts.get(qid) ?? 0) + 1);
+      }
+
+      return queryEvents.map(e => ({
+        queryId: (e.payload.queryId as string) ?? "",
+        fromAgent: (e.payload.fromAgent as string) ?? "unknown",
+        toAgent: (e.payload.toAgent as string) ?? undefined,
+        question: (e.payload.question as string) ?? "",
+        responseCount: responseCounts.get(e.payload.queryId as string) ?? 0,
+        timestamp: e.timestamp,
+      }));
+    } catch {
+      return [];
     }
   }
 
@@ -875,12 +922,14 @@ export class StateReader {
       for (const f of files) {
         try {
           const data = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
-          if (data.type === "parliament" && data.status === "running") {
+          if ((data.type === "parliament" || data.type === "planner" || data.type === "orchestrate") && data.status === "running") {
             sessions.push({
               id: data.id,
+              name: data.name ?? data.id,
               role: data.role ?? "unknown",
               backend: data.backend ?? "raw",
               startedAt: data.startedAt ?? 0,
+              ...(data.outputFile ? { outputFile: data.outputFile } : {}),
             });
           }
         } catch { /* skip corrupt files */ }

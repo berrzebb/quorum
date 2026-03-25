@@ -209,7 +209,7 @@ When the planner adds new work packages:
 
 ## Evidence Submission
 
-The Forward RTM is the primary evidence. Submit to watch_file:
+The Forward RTM is the primary evidence. Submit via audit_submit tool:
 
 ```markdown
 ## [trigger_tag] [track-name] — Req IDs addressed

@@ -22,5 +22,5 @@
 ## Evidence Submission
 
 - Detailed format → `references/{{LOCALE}}/evidence-format.md`
-- Replace `{{CLAUDE_MD_PATH}}` entirely via Write tool
+- Submit complete evidence package via `audit_submit` tool
 - Do not modify design docs

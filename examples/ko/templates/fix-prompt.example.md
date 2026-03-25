@@ -25,5 +25,5 @@ Reference documents (read these for detailed rules):
 Tasks:
 1. Review the correction requests above.
 2. Fix the code following the rules in the reference documents. Only make minimal adjustments to preserve original intent when instructions directly conflict. Do not perform broad rewrites.
-3. Update {{CLAUDE_MD_PATH}} (keep {{TRIGGER_TAG}}). Use the fixed output/update format: `Correction targets` → `Rejection codes` → `Completion criteria reset` → `Next tasks`. Include all four section titles and fields — do not omit, add, or reorder. Prioritize already-listed issues, and only concretize vague terms/thresholds/criteria with specific numbers/conditions/verdict criteria. Keep other wording as-is. If no listed issues exist, concretize at most 1 item following the above principle.
+3. Re-submit evidence via audit_submit tool (keep {{TRIGGER_TAG}}). Use the fixed output/update format: `Correction targets` → `Rejection codes` → `Completion criteria reset` → `Next tasks`. Include all four section titles and fields — do not omit, add, or reorder. Prioritize already-listed issues, and only concretize vague terms/thresholds/criteria with specific numbers/conditions/verdict criteria. Keep other wording as-is. If no listed issues exist, concretize at most 1 item following the above principle.
 4. Do NOT modify design documents (`{{DESIGN_DOCS_DIR}}`).

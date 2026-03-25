@@ -121,7 +121,7 @@ export class CodexCliAdapter {
   #lastText = "";
 
   buildArgs(options = {}) {
-    const args = ["--dangerously-bypass-approvals-and-sandbox"];
+    const args = ["--dangerously-skip-permissions"];
     if (options.model) args.push("--model", options.model);
     if (options.systemPrompt) {
       const parts = [options.systemPrompt];

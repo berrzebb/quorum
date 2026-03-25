@@ -10,7 +10,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { readJsonlFile } from "../context.mjs";
 import { resolve, relative, extname, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { runFvmValidation } from "./fvm-validator.mjs";
 import { generateFvm } from "./fvm-generator.mjs";
@@ -413,9 +413,14 @@ function loadCoverageSummary(coverageDir) {
 
 export function toolCoverageMap(params) {
   const { path: targetPath, coverage_dir: covDir = "coverage" } = params;
-  const cwd = process.cwd();
-  const coverageMap = loadCoverageSummary(resolve(cwd, covDir));
-  if (!coverageMap) return { error: `No coverage data at ${resolve(cwd, covDir, "coverage-summary.json")}. Run: npm run test:coverage` };
+  // Use targetPath as project root if it's a directory, else cwd
+  let projectRoot = process.cwd();
+  if (targetPath) {
+    const p = resolve(targetPath);
+    try { if (statSync(p).isDirectory()) projectRoot = p; } catch { /* use cwd */ }
+  }
+  const coverageMap = loadCoverageSummary(resolve(projectRoot, covDir));
+  if (!coverageMap) return { error: `No coverage data at ${resolve(projectRoot, covDir, "coverage-summary.json")}. Run: npm run test:coverage` };
 
   const filter = targetPath ? targetPath.replace(/\\/g, "/") : null;
   const rows = [];
@@ -424,7 +429,7 @@ export function toolCoverageMap(params) {
 
   let count = 0;
   for (const [filePath, data] of [...coverageMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const rel = relative(cwd, filePath).replace(/\\/g, "/");
+    const rel = relative(projectRoot, filePath).replace(/\\/g, "/");
     if (filter && !rel.includes(filter) && !filePath.includes(filter)) continue;
     rows.push(`| ${rel} | ${data.statements}% | ${data.branches}% | ${data.functions}% | ${data.lines}% |`);
     count++;
@@ -483,6 +488,17 @@ function resolveImportPath(fromFile, specifier, extensions) {
   if (specifier.startsWith(".")) {
     const base = resolve(dirname(fromFile), specifier);
     if (existsSync(base) && statSync(base).isFile()) return base;
+    // TypeScript: import "./foo.js" → actual file is foo.ts
+    const jsToSource = [
+      [".js", ".ts"], [".js", ".tsx"],
+      [".mjs", ".mts"], [".jsx", ".tsx"],
+    ];
+    for (const [from, to] of jsToSource) {
+      if (base.endsWith(from)) {
+        const swapped = base.slice(0, -from.length) + to;
+        if (existsSync(swapped)) return swapped;
+      }
+    }
     for (const ext of extensions) {
       const withExt = base + ext;
       if (existsSync(withExt)) return withExt;
@@ -492,6 +508,34 @@ function resolveImportPath(fromFile, specifier, extensions) {
       if (existsSync(index)) return index;
     }
   }
+
+  // Python-style dotted module imports: "engine.board" → engine/board.py
+  if (/^[a-zA-Z_]\w*(\.\w+)*$/.test(specifier) && extensions.some(e => e === ".py")) {
+    const parts = specifier.split(".");
+    const fromDir = dirname(fromFile);
+    // Walk up to find the package root (dir containing __init__.py or matching first part)
+    let searchDirs = [fromDir];
+    // Also try project root (parent dirs until no __init__.py)
+    let d = fromDir;
+    while (d !== dirname(d)) {
+      const parent = dirname(d);
+      if (existsSync(resolve(parent, parts[0])) || existsSync(resolve(parent, parts[0] + ".py"))) {
+        searchDirs.push(parent);
+        break;
+      }
+      d = parent;
+    }
+    for (const root of searchDirs) {
+      const modulePath = resolve(root, ...parts);
+      // Try as file: engine/board.py
+      const asFile = modulePath + ".py";
+      if (existsSync(asFile)) return asFile;
+      // Try as package: engine/board/__init__.py
+      const asPackage = resolve(modulePath, "__init__.py");
+      if (existsSync(asPackage)) return asPackage;
+    }
+  }
+
   return null;
 }
 
@@ -2340,4 +2384,145 @@ export const TOOL_NAMES = [
   "blueprint_lint",
   // Synthesis tools
   "ai_guide",
+  // Agent communication
+  "agent_comm",
 ];
+
+// ═══ Tool: agent_comm ═══════════════════════════════════════════════════════
+
+// Lazy bridge import for agent communication
+let _commBridge = null;
+async function _getCommBridge() {
+  if (_commBridge) return _commBridge;
+  try {
+    _commBridge = await import("../bridge.mjs");
+    if (!_commBridge._store) await _commBridge.init(process.cwd());
+    return _commBridge;
+  } catch { return null; }
+}
+
+export async function toolAgentComm(params) {
+  const { action, agent_id, to_agent, question, query_id, answer, confidence, context, track_id } = params;
+
+  if (!action) return { error: "action is required: post, respond, poll, responses, roster" };
+  if (!agent_id) return { error: "agent_id is required" };
+
+  const bridge = await _getCommBridge();
+  if (!bridge) return { error: "Bridge unavailable — agent_comm requires initialized event store" };
+
+  switch (action) {
+    case "post": {
+      if (!question) return { error: "question is required for post action" };
+      const qid = bridge.postAgentQuery(agent_id, question, to_agent || undefined, context);
+      if (!qid) return { error: "Failed to post query" };
+      return { text: `Query posted: ${qid}${to_agent ? ` → ${to_agent}` : " (broadcast)"}`, json: { queryId: qid } };
+    }
+    case "respond": {
+      if (!query_id || !answer) return { error: "query_id and answer are required for respond action" };
+      bridge.respondToAgentQuery(query_id, agent_id, answer, confidence);
+      return { text: `Response posted to ${query_id}`, json: { queryId: query_id, status: "responded" } };
+    }
+    case "poll": {
+      const queries = bridge.pollAgentQueries(agent_id, 0);
+      if (queries.length === 0) return { text: "No pending queries.", json: { queries: [] } };
+      const lines = queries.map(q => `[${q.queryId}] from ${q.fromAgent}: ${q.question}`);
+      return { text: lines.join("\n"), json: { queries }, summary: `${queries.length} pending query(ies)` };
+    }
+    case "responses": {
+      if (!query_id) return { error: "query_id is required for responses action" };
+      const responses = bridge.getQueryResponses(query_id);
+      if (responses.length === 0) return { text: `No responses yet for ${query_id}`, json: { responses: [] } };
+      const lines = responses.map(r => `[${r.fromAgent}] (confidence: ${r.confidence ?? "N/A"}): ${r.answer}`);
+      return { text: lines.join("\n"), json: { responses }, summary: `${responses.length} response(s)` };
+    }
+    case "roster": {
+      const roster = bridge.getAgentRoster(track_id);
+      if (!roster) return { text: "No active agent roster.", json: { agents: [] } };
+      return { text: JSON.stringify(roster, null, 2), json: roster };
+    }
+    default:
+      return { error: `Unknown action: ${action}. Use: post, respond, poll, responses, roster` };
+  }
+}
+
+// ═══ Tool: audit_submit ═══════════════════════════════════════════════
+
+/**
+ * Submit evidence for audit — stores in SQLite and evaluates trigger.
+ * Stores evidence in SQLite EventStore, evaluates trigger, runs audit if needed.
+ */
+export async function toolAuditSubmit(params) {
+  const { evidence, changed_files, source = "claude-code" } = params;
+  if (!evidence) return { error: "evidence is required (markdown text with ### Claim, ### Changed Files, etc.)" };
+
+  const repoRoot = process.cwd();
+  const bridgePath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "bridge.mjs");
+
+  let bridge;
+  try {
+    bridge = await import(pathToFileURL(bridgePath).href);
+    await bridge.init(repoRoot);
+  } catch (err) {
+    return { error: `Bridge init failed: ${err.message}` };
+  }
+
+  // Extract changed files from evidence if not provided
+  const changedFiles = changed_files ?? [];
+  if (changedFiles.length === 0) {
+    const section = evidence.match(/###\s*Changed Files[\s\S]*?(?=###|$)/i);
+    if (section) {
+      const filePattern = /^[\s-]*`([^`]+)`/gm;
+      let m;
+      while ((m = filePattern.exec(section[0])) !== null) changedFiles.push(m[1]);
+    }
+  }
+
+  // Store evidence in SQLite
+  bridge.emitEvent("evidence.write", source, {
+    content: evidence,
+    changedFiles,
+    triggerTag: "[REVIEW_NEEDED]",
+  });
+  bridge.setState("evidence:latest", {
+    content: evidence,
+    changedFiles,
+    timestamp: Date.now(),
+  });
+
+  // Evaluate trigger via bridge public API
+  const ctx = {
+    changedFiles: changedFiles.length,
+    securitySensitive: changedFiles.some(f => /auth|secret|key|cred|token|password/i.test(f)),
+    priorRejections: 0,
+    apiSurfaceChanged: false,
+    crossLayerChange: false,
+    isRevert: false,
+  };
+  const trigger = bridge.evaluateTrigger(ctx);
+  if (!trigger) {
+    return { text: "Evidence stored in SQLite. Trigger evaluation unavailable." };
+  }
+
+  bridge.emitEvent("audit.submit", source, {
+    tier: trigger.tier,
+    score: trigger.score,
+    mode: trigger.mode,
+    changedFiles,
+  });
+
+  if (trigger.mode === "skip") {
+    return { text: `Evidence stored. ${trigger.tier} skip (score: ${trigger.score.toFixed(2)}) — audit not needed.` };
+  }
+
+  // Trigger audit
+  const auditScript = resolve(dirname(fileURLToPath(import.meta.url)), "..", "audit", "index.mjs");
+  if (existsSync(auditScript)) {
+    const { spawnSync } = await import("node:child_process");
+    const result = spawnSync(process.execPath, [auditScript], {
+      stdio: "inherit", cwd: repoRoot, windowsHide: true,
+    });
+    return { text: `Evidence stored. ${trigger.tier} ${trigger.mode} (score: ${trigger.score.toFixed(2)}). Audit ${result.status === 0 ? "completed" : "failed"}.` };
+  }
+
+  return { text: `Evidence stored. ${trigger.tier} ${trigger.mode} (score: ${trigger.score.toFixed(2)}). Audit module not found.` };
+}

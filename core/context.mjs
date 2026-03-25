@@ -104,7 +104,6 @@ export const configMissing = _configPath === null;
 const DEFAULT_CONFIG = {
   plugin: { locale: "en", hooks_enabled: {} },
   consensus: {
-    watch_file: "docs/feedback/claude.md",
     trigger_tag: "[REVIEW_NEEDED]",
     agree_tag: "[APPROVED]",
     pending_tag: "[CHANGES_REQUESTED]",
@@ -209,32 +208,7 @@ export const STATUS_TAG_RE_GLOBAL = new RegExp(
 );
 const TAG_INNER_RE_G = new RegExp(tagAlts, "g");
 
-// ── Path resolution (memoized) ────────────────────────────
-let _watchPath = undefined;
-
-function probeFile(subPath, name) {
-  const dirs = [resolve(HOOKS_DIR, subPath), resolve(REPO_ROOT, subPath)];
-  for (const dir of dirs) {
-    for (const v of [name, name.toUpperCase(), name.toLowerCase()]) {
-      const p = resolve(dir, v);
-      if (existsSync(p)) return p;
-    }
-  }
-  return null;
-}
-
-export function findWatchFile() {
-  if (_watchPath !== undefined && _watchPath !== null) return _watchPath;
-  const name    = consensus.watch_file.split("/").pop();
-  const subPath = consensus.watch_file.split("/").slice(0, -1).join("/");
-  _watchPath = probeFile(subPath, name);
-  return _watchPath;
-}
-
-/** Reset memoization cache — for testing. */
-function resetPathCache() {
-  _watchPath = undefined;
-}
+// ── Path resolution removed — evidence via SQLite EventStore ──
 
 // ── i18n (cached) ─────────────────────────────────────────
 const localeCache = new Map();

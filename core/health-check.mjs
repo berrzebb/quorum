@@ -158,15 +158,7 @@ function checkConfig(repoRoot, issues) {
       }
     }
 
-    // Check watch file
-    const watchFile = cfg.consensus?.watch_file;
-    if (watchFile && !existsSync(resolve(repoRoot, watchFile))) {
-      issues.push({
-        severity: "info",
-        category: "config",
-        message: `Watch file "${watchFile}" not found — will be created on first evidence submission`,
-      });
-    }
+    // Watch file check removed — evidence is in SQLite via audit_submit tool
   } catch {
     issues.push({
       severity: "critical",
