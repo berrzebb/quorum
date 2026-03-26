@@ -37,12 +37,12 @@ code edit → PostToolUse hook
     │       ├─ self-correct: mild drop → warn and continue
     │       └─ proceed: stable/improved → continue
     │
-    ├─ [5] Trigger evaluation (12-factor scoring, incl. fitness + blast radius + velocity + stagnation)
+    ├─ [5] Trigger evaluation (13-factor scoring, incl. fitness + blast radius + velocity + stagnation)
     │       ├─ T1 skip (micro change, no audit)
     │       ├─ T2 simple (single auditor)
     │       └─ T3 deliberative (Advocate + Devil's Advocate → Judge)
     │
-    ├─ [6] Stagnation check (5 patterns, incl. fitness-plateau)
+    ├─ [6] Stagnation check (7 patterns, incl. fitness-plateau, expansion, consensus-divergence)
     │       → escalation if stuck
     │
     ├─ [7] Audit spawn (background)
@@ -107,7 +107,23 @@ quorum parliament --resume <id>                   # continue deliberation
 | 1 (parallel) | Advocate + Devil's Advocate | Independent analysis (free speech) |
 | 2 (sequential) | Judge | Converge into 4 MECE registers + 5-classification |
 
-Parliament mode adds: meeting log accumulation → convergence detection → CPS generation → auto-amendment proposal.
+Parliament mode adds: meeting log accumulation → 3-path convergence detection → CPS generation → auto-amendment proposal.
+
+### Convergence Detection
+
+Three independent paths (any triggers convergence):
+
+| Path | Condition | Best For |
+|------|-----------|----------|
+| **exact** | Classification distribution identical (delta=0) | Mature projects with "strength" anchors |
+| **no-new-items** | Item set is subset of previous round | Greenfield projects (all gap/build) |
+| **relaxed** | Delta ≤ 30% of total items (min 3) | LLM non-determinism tolerance |
+
+`filterNoiseLogs()` skips parse-fallback rounds (>50% item count drop) that pollute delta.
+
+### RTM Auto-Generation
+
+`orchestrate run` generates a skeletal RTM (Requirements Traceability Matrix) from work breakdowns before spawning any implementation agents. Scout protocol requires RTM pre-implementation for traceability.
 
 ---
 
@@ -127,7 +143,7 @@ Auto-detects domains from file patterns, conditionally activates domain-specific
 | concurrency | — | concurrency-verifier |
 | documentation | `doc_coverage` | doc-steward |
 
-**21 deterministic tools** (incl. `blueprint_lint`) — see [TOOLS.md](TOOLS.md) for details.
+**22 deterministic tools** (incl. `blueprint_lint`, `audit_submit`, `agent_comm`) — see [TOOLS.md](TOOLS.md) for details.
 
 ### TUI Dashboard
 

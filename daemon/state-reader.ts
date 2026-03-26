@@ -140,8 +140,11 @@ export interface ParliamentCommitteeStatus {
   committee: string;
   converged: boolean;
   stableRounds: number;
+  noNewItemsRounds: number;
+  relaxedRounds: number;
   threshold: number;
   score: number;
+  convergencePath: "exact" | "no-new-items" | "relaxed" | null;
 }
 
 export interface ParliamentLiveSession {
@@ -817,7 +820,7 @@ export class StateReader {
    * Parliament state: committee convergence, last verdict, pending amendments, conformance.
    */
   parliamentInfo(): ParliamentInfo {
-    const defaultCommittee = (c: string) => ({ committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 });
+    const defaultCommittee = (c: string): ParliamentCommitteeStatus => ({ committee: c, converged: false, stableRounds: 0, noNewItemsRounds: 0, relaxedRounds: 0, threshold: 2, score: 0, convergencePath: null });
     const empty: ParliamentInfo = {
       committees: COMMITTEE_IDS.map(defaultCommittee),
       lastVerdict: null, pendingAmendments: 0, conformance: null, sessionCount: 0,
@@ -843,13 +846,16 @@ export class StateReader {
       }
       empty.committees = COMMITTEE_IDS.map(c => {
         const e = latestByCommittee.get(c);
-        if (!e) return { committee: c, converged: false, stableRounds: 0, threshold: 2, score: 0 };
+        if (!e) return defaultCommittee(c);
         return {
           committee: c,
           converged: (e.payload.converged as boolean) ?? false,
           stableRounds: (e.payload.stableRounds as number) ?? 0,
+          noNewItemsRounds: (e.payload.noNewItemsRounds as number) ?? 0,
+          relaxedRounds: (e.payload.relaxedRounds as number) ?? 0,
           threshold: (e.payload.threshold as number) ?? 2,
           score: (e.payload.convergenceScore as number) ?? 0,
+          convergencePath: (e.payload.convergencePath as "exact" | "no-new-items" | "relaxed" | null) ?? null,
         };
       });
 

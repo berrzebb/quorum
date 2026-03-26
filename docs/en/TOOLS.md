@@ -442,3 +442,40 @@ quorum tool blueprint_lint --design_dir docs/design --path src/
 ### Why
 
 Blueprint naming conventions are **law** in the parliamentary protocol. Without enforcement, `impl(A) ≠ impl(B)` — different implementers choose different names for the same concept. The linter ensures any deviation is caught before audit.
+
+---
+
+## audit_submit
+
+Submit evidence to SQLite EventStore. Replaces file-based watch_file flow.
+
+```bash
+quorum tool audit_submit --content "## [REVIEW_NEEDED] Auth module\n### Claim\nImplemented JWT auth..."
+```
+
+| Option | Description |
+|--------|-------------|
+| `--content` | Evidence markdown content (inline) |
+
+Evidence is stored as an event, trigger evaluation runs inline. Hooks read from `tool_input.content`.
+
+---
+
+## agent_comm
+
+Inter-agent communication for parallel implementation. Finding-level SQLite messaging.
+
+```bash
+quorum tool agent_comm --action post --agent_id impl-OIN-1 --to_agent impl-OIN-2 --question "Schema ready?"
+quorum tool agent_comm --action poll --agent_id impl-OIN-1
+quorum tool agent_comm --action respond --agent_id impl-OIN-1 --query_id <id> --answer "Yes, committed."
+```
+
+| Option | Description |
+|--------|-------------|
+| `--action` | `post`, `poll`, `respond`, `responses` |
+| `--agent_id` | Sender agent identifier |
+| `--to_agent` | Target agent (for `post`) |
+| `--question` | Query text (for `post`) |
+| `--query_id` | Query ID (for `respond`/`responses`) |
+| `--answer` | Response text (for `respond`) |

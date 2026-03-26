@@ -85,8 +85,21 @@ export async function run(args: string[]): Promise<void> {
   const filtered = category ? checks.filter((c) => c.label === category) : checks;
 
   if (filtered.length === 0 && category) {
+    const builtins = ["SCOPE", "CC", "SEC", "SECURITY", "LEAK", "SECRETS", "DEP", "UW", "UNWIRED", "TEMPLATE", "TPL", "RC", "RUNTIME"];
+    // Known preset-based categories (come from quality_rules)
+    const presetCategories = ["CQ", "T", "TEST", "LINT", "BUILD"];
+    const allPresetLabels = checks.map((c) => c.label).filter(Boolean);
+    if (builtins.includes(category)) {
+      // Should not reach here — builtins are handled above. Defensive.
+      return;
+    }
+    if (presetCategories.includes(category) || allPresetLabels.some(l => l.toUpperCase() === category)) {
+      console.log(`  No quality_rules presets matched for category "${category}".`);
+      console.log(`  Ensure your project has a matching detect file (e.g., tsconfig.json, Cargo.toml).\n`);
+      return;
+    }
     console.log(`  Unknown category: ${category}`);
-    console.log(`  Available: ${checks.map((c) => c.label).join(", ")}, SCOPE\n`);
+    console.log(`  Available: ${[...allPresetLabels, "SCOPE", "SEC", "LEAK", "DEP", "UW"].join(", ")}\n`);
     return;
   }
 

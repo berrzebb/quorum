@@ -72,10 +72,10 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
             {committees.map((c) => (
               <Box key={c.committee}>
                 <Text>{padRight(shortName(c.committee), 14)}</Text>
-                <Text color={c.converged ? "green" : c.stableRounds > 0 ? "yellow" : "gray"}>
+                <Text color={c.converged ? "green" : (c.stableRounds > 0 || c.noNewItemsRounds > 0 || c.relaxedRounds > 0) ? "yellow" : "gray"}>
                   {c.converged ? "✓" : "○"}
                 </Text>
-                <Text dimColor> {c.stableRounds}/{c.threshold}</Text>
+                <Text dimColor> e:{c.stableRounds} n:{c.noNewItemsRounds} r:{c.relaxedRounds}/{c.threshold}{c.convergencePath ? ` [${c.convergencePath}]` : ""}</Text>
                 {c.score > 0 && (
                   <Text dimColor> ({c.score.toFixed(2)})</Text>
                 )}

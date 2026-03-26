@@ -15,7 +15,7 @@
 ## Full Cycle
 
 ```
-planner → orchestrator → scout → distribute
+planner → RTM generation → orchestrator → scout → distribute
     ↓
 ┌─── Track A (worktree) ──────┐  ┌─── Track B (worktree) ──────┐
 │  implementer: code + test    │  │  implementer: code + test    │
@@ -35,7 +35,7 @@ Merge → squash → single commit → next track
 
 ## Trigger Evaluation
 
-Before each audit, a 12-factor score determines the consensus mode:
+Before each audit, a 13-factor score (12 base + interaction multipliers) determines the consensus mode:
 
 | Factor | Weight | Description |
 |--------|--------|-------------|
@@ -129,13 +129,16 @@ Use deterministic tools before LLM reasoning:
 | `blast_radius` | Transitive impact of changed files (BFS on reverse imports) |
 | `act_analyze` | PDCA Act analysis (improvement items) |
 | `ai_guide` | AI agent guide queries |
+| `audit_submit` | Submit evidence to SQLite EventStore (replaces watch_file) |
+| `agent_comm` | Inter-agent communication (post/poll/respond queries) |
+| `blueprint_lint` | Naming convention check from Design Phase Blueprint |
 
 ## Parliament Protocol
 
 When `parliament.enabled` in config or `quorum parliament` CLI is used:
 
 1. **Diverge-Converge**: 3 roles speak freely (no role constraints), Judge converges into 4 MECE registers + 5-classification (gap/strength/out/buy/build)
-2. **Meeting Log**: N sessions accumulate → convergence detected → CPS (Context-Problem-Solution) generated
+2. **Meeting Log**: N sessions accumulate → 3-path convergence (exact/no-new-items/relaxed) → CPS (Context-Problem-Solution) generated
 3. **Amendments**: gap classifications auto-propose amendments; majority voting with implementer testimony (no vote)
 4. **Enforcement Gates**: 5 gates block work when protocol conditions are violated (amendment/verdict/confluence/design/regression)
 5. **Blueprint Lint**: `quorum tool blueprint_lint` checks naming conventions from Design Phase Blueprint against source code

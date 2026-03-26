@@ -37,12 +37,12 @@
     │       ├─ self-correct: 점수 소폭 하락 → 경고 후 진행
     │       └─ proceed: 점수 유지/개선 → 감사 진행
     │
-    ├─ [5] 트리거 평가 (12팩터 점수, 피트니스 + blast radius + velocity + stagnation 포함)
+    ├─ [5] 트리거 평가 (13팩터 점수, 피트니스 + blast radius + velocity + stagnation + 상호작용 승수 포함)
     │       ├─ T1 스킵 (마이크로 변경)
     │       ├─ T2 단일 감사
     │       └─ T3 숙의 합의 (옹호 + 악마의 변호인 → 판사)
     │
-    ├─ [6] 정체 감지 (5패턴, fitness-plateau 포함)
+    ├─ [6] 정체 감지 (7패턴, fitness-plateau, expansion, consensus-divergence 포함)
     │       → 에스컬레이션
     │
     ├─ [7] 감사 실행 (백그라운드)
@@ -127,6 +127,24 @@ quorum migrate --dry-run  # 변경 없이 미리보기
 
 악마의 변호인 핵심 질문: **근본 원인을 해결했는가, 증상만 치료했는가?**
 
+의회 모드 추가: 미팅 로그 축적 → 3-경로 수렴 감지 → CPS 생성 → 자동 개정안 제안.
+
+### 수렴 감지
+
+세 가지 독립 경로 (어느 하나만 충족되면 수렴):
+
+| 경로 | 조건 | 적합 대상 |
+|------|------|-----------|
+| **exact** | 분류 분포 동일 (delta=0) | 성숙 프로젝트 ("strength" 앵커 존재) |
+| **no-new-items** | 항목 집합이 이전 라운드의 부분집합 | 그린필드 프로젝트 (전부 gap/build) |
+| **relaxed** | Delta ≤ 전체 항목의 30% (최소 3) | LLM 비결정성 허용 |
+
+`filterNoiseLogs()`가 parse-fallback 라운드(항목 수 50% 이상 감소)를 제외하여 delta 오염 방지.
+
+### RTM 자동 생성
+
+`orchestrate run`이 구현 에이전트 spawn 전에 Work Breakdown에서 skeletal RTM(요구사항 추적 매트릭스)을 자동 생성. Scout 프로토콜: 추적성 매트릭스가 구현 전에 존재해야 함.
+
 ---
 
 ## 도메인 스페셜리스트
@@ -145,7 +163,7 @@ quorum migrate --dry-run  # 변경 없이 미리보기
 | concurrency | — | concurrency-verifier |
 | documentation | `doc_coverage` | doc-steward |
 
-**21개 결정론적 도구** (`blueprint_lint` 포함) — 상세 문서는 [TOOLS.md](TOOLS.md) 참조.
+**22개 결정론적 도구** (`blueprint_lint`, `audit_submit`, `agent_comm` 포함) — 상세 문서는 [TOOLS.md](TOOLS.md) 참조.
 
 ### TUI 대시보드
 

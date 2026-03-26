@@ -432,3 +432,40 @@ quorum tool blueprint_lint --design_dir docs/design --path src/
 ### 필요성
 
 Blueprint 네이밍 규칙은 의회 프로토콜에서 **법률**. 강제 없으면 `impl(A) ≠ impl(B)` — 다른 구현자가 같은 개념에 다른 이름을 선택. 린터가 감사 전 이탈을 감지.
+
+---
+
+## audit_submit
+
+증거를 SQLite EventStore에 제출. 파일 기반 watch_file 흐름 대체.
+
+```bash
+quorum tool audit_submit --content "## [REVIEW_NEEDED] 인증 모듈\n### Claim\nJWT 인증 구현..."
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--content` | 증거 마크다운 내용 (인라인) |
+
+증거가 이벤트로 저장되고, 트리거 평가가 인라인으로 실행됨. 훅이 `tool_input.content`에서 읽음.
+
+---
+
+## agent_comm
+
+병렬 구현을 위한 에이전트 간 통신. Finding 레벨 SQLite 메시징.
+
+```bash
+quorum tool agent_comm --action post --agent_id impl-OIN-1 --to_agent impl-OIN-2 --question "스키마 준비됐나요?"
+quorum tool agent_comm --action poll --agent_id impl-OIN-1
+quorum tool agent_comm --action respond --agent_id impl-OIN-1 --query_id <id> --answer "네, 커밋했습니다."
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--action` | `post`, `poll`, `respond`, `responses` |
+| `--agent_id` | 발신 에이전트 식별자 |
+| `--to_agent` | 대상 에이전트 (`post`용) |
+| `--question` | 질문 텍스트 (`post`용) |
+| `--query_id` | 쿼리 ID (`respond`/`responses`용) |
+| `--answer` | 응답 텍스트 (`respond`용) |

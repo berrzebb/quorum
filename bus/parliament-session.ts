@@ -172,8 +172,11 @@ export async function runParliamentSession(
       agendaId: config.agendaId,
       converged: convergence.converged,
       stableRounds: convergence.stableRounds,
+      noNewItemsRounds: convergence.noNewItemsRounds,
+      relaxedRounds: convergence.relaxedRounds,
       threshold: convergence.threshold,
       lastDelta: convergence.lastDelta,
+      convergencePath: convergence.convergencePath,
       convergenceScore: meetingLog?.convergenceScore ?? 0,
     }));
   } catch (err) {
