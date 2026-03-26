@@ -228,7 +228,8 @@ function printPhaseResult(result: SessionResult, round: number): void {
   if (result.convergence) {
     const conv = result.convergence;
     const convIcon = conv.converged ? `${C.green}✓ CONVERGED${C.reset}` : `${C.yellow}○ pending${C.reset}`;
-    console.log(`\n${C.bold}Convergence:${C.reset} ${convIcon} (stable: ${conv.stableRounds}/${conv.threshold}, delta: ${conv.lastDelta})`);
+    const pathInfo = conv.convergencePath ? ` [${conv.convergencePath}]` : "";
+    console.log(`\n${C.bold}Convergence:${C.reset} ${convIcon} (exact: ${conv.stableRounds}, items: ${conv.noNewItemsRounds}, relaxed: ${conv.relaxedRounds} /${conv.threshold}, delta: ${conv.lastDelta})${pathInfo}`);
   }
 
   // CPS
@@ -434,6 +435,11 @@ export async function run(args: string[]): Promise<void> {
 
         // Auto-launch planner (parliament → CPS → plan is the natural flow)
         if (!parsed.noPlan) {
+          // Release parliament mux sessions BEFORE planner creates its own
+          if (mux) {
+            try { await mux.cleanup(); } catch { /* ok */ }
+            mux = null as unknown as typeof mux;
+          }
           console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
           console.log(`${C.dim}CPS generated. Launching planner for "${parsed.topic}"...${C.reset}\n`);
           const planArgs = [parsed.topic, "--auto"];
@@ -483,6 +489,11 @@ export async function run(args: string[]): Promise<void> {
 
           // Auto-launch planner
           if (!parsed.noPlan) {
+            // Release parliament mux sessions BEFORE planner creates its own
+            if (mux) {
+              try { await mux.cleanup(); } catch { /* ok */ }
+              mux = null as unknown as typeof mux;
+            }
             console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
             console.log(`${C.dim}Best-effort CPS ready. Launching planner for "${parsed.topic}"...${C.reset}\n`);
             const planArgs = [parsed.topic, "--auto"];
@@ -534,6 +545,7 @@ function buildDeliberationPrompt(topic: string, committee: string, round: number
       previousContext += `\n### Judge synthesis\n${v.judgeSummary}\n`;
     }
     previousContext += `\nBuild on these findings. Refine, challenge, or extend — do NOT simply repeat them.\n`;
+    previousContext += `IMPORTANT: Do NOT introduce new items. Work with the existing set of items from previous rounds. Refine their classifications, sharpen their actions, or merge redundant items — but do not expand the item set.\n`;
   }
 
   return `# Parliamentary Deliberation
@@ -675,6 +687,11 @@ ${C.bold}Options:${C.reset}
   --devil <spec>           Devil's advocate provider (default: from config or claude)
   --judge <spec>           Judge provider (default: from config or claude)
   --testimony, -t <text>   Implementer testimony (context only, no vote)
+  --mux                    Use ProcessMux (tmux/psmux) for LLM sessions (visible in daemon TUI)
+  --force                  Bypass parliament enforcement gates
+  --resume <id>            Resume a previous session
+  --history                Show parliament session history
+  --detail <id>            Show detail for a specific session
 
 ${C.bold}Provider specs:${C.reset}
   codex, claude, openai, gemini

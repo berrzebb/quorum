@@ -13,6 +13,17 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DIST, findTracks, resolveTrack, trackRef } from "./shared.js";
 
+/** Sanitize a track name for use as a directory name (ASCII, no spaces). */
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")   // remove non-word chars (includes Korean)
+    .replace(/[\s_]+/g, "-")    // spaces/underscores → hyphens
+    .replace(/-+/g, "-")        // collapse multiple hyphens
+    .replace(/^-|-$/g, "")      // trim leading/trailing hyphens
+    || "track";                  // fallback if everything was stripped
+}
+
 export async function interactivePlanner(repoRoot: string, args: string[]): Promise<void> {
   const providerIdx = args.indexOf("--provider");
   const provider = providerIdx >= 0 ? args[providerIdx + 1] ?? "claude" : "claude";
@@ -57,13 +68,14 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
   }
 
   const planDir = resolve(repoRoot, "docs", "plan");
-  const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
-  const systemPrompt = buildSystemPrompt(trackName, cpsContent, protocol, planDir, prefix);
+  const trackSlug = slugify(trackName);
+  const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3) || "TK";
+  const systemPrompt = buildSystemPrompt(trackName, cpsContent, protocol, planDir, prefix, trackSlug);
   const socraticPrompt = `Plan track "${trackName}". ${cpsContent ? "CPS is available — use it." : "No CPS — start with Socratic questions to clarify requirements."}`;
   const autoPrompt = `Plan track "${trackName}" using the CPS provided. Generate ALL documents now without asking questions:
-1. Write PRD to ${planDir}/${trackName}/PRD.md
-2. Write Design (spec, blueprint with naming conventions, domain model) to ${planDir}/${trackName}/design/
-3. Write Work Breakdown to ${planDir}/${trackName}/work-breakdown.md with IDs ${prefix}-1, ${prefix}-2, ...
+1. Write PRD to ${planDir}/${trackSlug}/PRD.md
+2. Write Design (spec, blueprint with naming conventions, domain model) to ${planDir}/${trackSlug}/design/
+3. Write Work Breakdown to ${planDir}/${trackSlug}/work-breakdown.md with IDs ${prefix}-1, ${prefix}-2, ...
 
 Use CPS.Context for PRD§1, CPS.Problem for PRD§2, CPS.Solution for PRD§4. Make reasonable decisions where CPS has gaps. Be concrete, not abstract.`;
 
@@ -143,17 +155,24 @@ async function runWithMux(repoRoot: string, provider: string, cliArgs: string[],
   console.log(`  \x1b[2mMux: ${backend} (visible in daemon [3] Agent Chat)\x1b[0m\n`);
 
   const sessionName = `quorum-plan-${Date.now()}`;
-  const session = await mux.spawn({
-    name: sessionName,
-    command: provider,
-    args: cliArgs,
-    cwd: repoRoot,
-    env: { FEEDBACK_LOOP_ACTIVE: "1" },
-  });
+  let session;
+  try {
+    session = await mux.spawn({
+      name: sessionName,
+      command: provider,
+      args: cliArgs,
+      cwd: repoRoot,
+      env: { FEEDBACK_LOOP_ACTIVE: "1" },
+    });
+  } catch (err) {
+    console.log(`  \x1b[31mMux spawn error: ${(err as Error).message}. Falling back to direct mode.\x1b[0m\n`);
+    try { await mux.cleanup(); } catch { /* ok */ }
+    return runDirect(repoRoot, provider, cliArgs);
+  }
 
   if (session.status === "error") {
-    console.log("  \x1b[31mFailed to create mux session.\x1b[0m\n");
-    await mux.cleanup();
+    console.log("  \x1b[31mFailed to create mux session. Falling back to direct mode.\x1b[0m\n");
+    try { await mux.cleanup(); } catch { /* ok */ }
     return runDirect(repoRoot, provider, cliArgs);
   }
 
@@ -244,13 +263,14 @@ export async function autoGenerateWBs(repoRoot: string, trackName: string, provi
   }
 }
 
-function buildSystemPrompt(trackName: string, cps: string, protocol: string, planDir: string, prefix: string): string {
+function buildSystemPrompt(trackName: string, cps: string, protocol: string, planDir: string, prefix: string, trackSlug?: string): string {
+  const dirName = trackSlug ?? trackName;
   const cpsSection = cps
     ? `## Parliament CPS (Phase 0)\n${cps}\nMap: Context→PRD§1, Problem→PRD§2, Solution→PRD§4.`
     : "## No CPS — Socratic mode. Ask: What problem? Who benefits? Done criteria? Out of scope? Constraints?";
 
   return `# Planner: ${trackName}
-Output to: ${planDir}/${trackName}/
+Output to: ${planDir}/${dirName}/
 
 ${cpsSection}
 
@@ -258,9 +278,9 @@ ${cpsSection}
 If ambiguity cannot be resolved: tell user to run quorum parliament "<topic>".
 
 ## Output
-1. PRD (${planDir}/${trackName}/PRD.md)
-2. Design: Spec, Blueprint (Naming Conventions!), Domain Model, Architecture (${planDir}/${trackName}/design/)
-3. Work Breakdown (${planDir}/${trackName}/work-breakdown.md) — IDs: ${prefix}-1, ${prefix}-2, ...
+1. PRD (${planDir}/${dirName}/PRD.md)
+2. Design: Spec, Blueprint (Naming Conventions!), Domain Model, Architecture (${planDir}/${dirName}/design/)
+3. Work Breakdown (${planDir}/${dirName}/work-breakdown.md) — IDs: ${prefix}-1, ${prefix}-2, ...
 
 ## Work Breakdown Schema
 

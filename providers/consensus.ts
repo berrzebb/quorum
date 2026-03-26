@@ -294,9 +294,21 @@ function parseDivergeOpinion(raw: string, role: "advocate" | "devil"): { opinion
       },
       items: Array.isArray(parsed.items) ? parsed.items : [],
     };
-  } catch {
+  } catch (err) {
+    if (process.env.QUORUM_DEBUG) {
+      console.error(`[consensus] Failed to parse ${role} diverge: ${(err as Error).message}\n  raw[0:200]: ${raw?.slice(0, 200)}`);
+    }
+    // Text fallback: extract verdict from raw text (same as parseAuditResponse)
+    const lower = (raw ?? "").toLowerCase();
+    const approved = lower.includes("approved") && !lower.includes("not approved") && !lower.includes("changes_requested");
     return {
-      opinion: { role, verdict: "changes_requested", reasoning: `Failed to parse ${role} diverge response`, codes: ["parse-error"], confidence: 0 },
+      opinion: {
+        role,
+        verdict: approved ? "approved" : "changes_requested",
+        reasoning: raw?.slice(0, 500) ?? `Failed to parse ${role} diverge response`,
+        codes: ["parse-fallback"],
+        confidence: 0.3,
+      },
       items: [],
     };
   }
@@ -353,14 +365,17 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
     };
   } catch (err) {
     if (process.env.QUORUM_DEBUG) {
-      console.error(`[consensus] Failed to parse ${role} opinion: ${(err as Error).message}`);
+      console.error(`[consensus] Failed to parse ${role} opinion: ${(err as Error).message}\n  raw[0:200]: ${raw?.slice(0, 200)}`);
     }
+    // Text fallback: extract verdict from raw text
+    const lower = (raw ?? "").toLowerCase();
+    const approved = lower.includes("approved") && !lower.includes("not approved") && !lower.includes("changes_requested");
     return {
       role,
-      verdict: "changes_requested",
-      reasoning: `Failed to parse ${role} response`,
-      codes: ["parse-error"],
-      confidence: 0,
+      verdict: approved ? "approved" : "changes_requested",
+      reasoning: raw?.slice(0, 500) ?? `Failed to parse ${role} response`,
+      codes: ["parse-fallback"],
+      confidence: 0.3,
     };
   }
 }
@@ -377,9 +392,16 @@ function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_reques
     };
   } catch (err) {
     if (process.env.QUORUM_DEBUG) {
-      console.error(`[consensus] Failed to parse judge verdict: ${(err as Error).message}`);
+      console.error(`[consensus] Failed to parse judge verdict: ${(err as Error).message}\n  raw[0:200]: ${raw?.slice(0, 200)}`);
     }
-    return { verdict: "changes_requested", summary: "Failed to parse judge response", codes: ["parse-error"] };
+    // Text fallback: extract verdict from raw text
+    const lower = (raw ?? "").toLowerCase();
+    const approved = lower.includes("approved") && !lower.includes("not approved") && !lower.includes("changes_requested");
+    return {
+      verdict: approved ? "approved" : "changes_requested",
+      summary: raw?.slice(0, 500) ?? "Failed to parse judge response",
+      codes: ["parse-fallback"],
+    };
   }
 }
 

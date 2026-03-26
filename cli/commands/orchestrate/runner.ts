@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { dirname } from "node:path";
 import { type Bridge, type WorkItem, type WBSize, DIST, loadBridge, findTracks, parseWorkBreakdown, resolveTrack, reviewPlan } from "./shared.js";
 import { autoGenerateWBs } from "./planner.js";
 import { autoRetro, autoMerge } from "./lifecycle.js";
@@ -78,6 +79,21 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     return;
   }
   console.log(`  \x1b[32m✓ Plan review passed\x1b[0m (${workItems.length} items)\n`);
+
+  // ── RTM Checkpoint ─────────────────────────────
+  // Generate skeletal RTM from WBs before implementation.
+  // Scout protocol requires RTM to exist before execution for traceability.
+  const rtmDir = dirname(track.path);
+  const rtmPath = resolve(rtmDir, "rtm.md");
+  if (!existsSync(rtmPath)) {
+    console.log("  \x1b[36mGenerating RTM from work breakdown...\x1b[0m");
+    const rtmContent = generateSkeletalRTM(workItems, track.name);
+    if (!existsSync(rtmDir)) mkdirSync(rtmDir, { recursive: true });
+    writeFileSync(rtmPath, rtmContent, "utf8");
+    console.log(`  \x1b[32m✓ RTM generated\x1b[0m (${rtmPath})\n`);
+  } else {
+    console.log(`  \x1b[32m✓ RTM exists\x1b[0m (${rtmPath})\n`);
+  }
 
   const bridge = await loadBridge(repoRoot);
 
@@ -392,4 +408,57 @@ Implement this work breakdown item. Follow the implementer protocol.
 After implementation, submit evidence with [REVIEW_NEEDED] tag.
 
 ${protocol}`;
+}
+
+// ── RTM Generation ──────────────────────────────
+
+/**
+ * Generate a skeletal RTM (Requirements Traceability Matrix) from WBs.
+ * Pre-implementation: all rows are "pending". Post-implementation: Scout
+ * updates status via forward/backward scan with code_map + dependency_graph.
+ *
+ * This ensures every WB has a traceable verification checklist BEFORE
+ * any agent starts implementing.
+ */
+function generateSkeletalRTM(items: WorkItem[], trackName: string): string {
+  const rows = items.map(item => {
+    const files = item.targetFiles.length > 0 ? item.targetFiles.join(", ") : "TBD";
+    const verify = item.verify ?? "not specified";
+    const done = item.done ?? "not specified";
+    return `| ${item.id} | ${item.title ?? item.id} | ${files} | ${verify} | ${done} | pending |`;
+  });
+
+  return `# RTM — ${trackName}
+
+> Requirements Traceability Matrix (auto-generated from work breakdown)
+> Status: pre-implementation. Run Scout after implementation to update.
+
+## Forward Trace (Requirement → Code → Test)
+
+| Req ID | Description | Target Files | Verify Command | Done Criteria | Status |
+|--------|-------------|--------------|----------------|---------------|--------|
+${rows.join("\n")}
+
+## Backward Trace (Test → Requirement)
+
+> Populated by Scout after implementation (code_map + dependency_graph scan).
+
+| Test File | Covers Req | Import Chain | Status |
+|-----------|------------|--------------|--------|
+| _(run Scout to populate)_ | | | |
+
+## Bidirectional Summary
+
+- **Total requirements**: ${items.length}
+- **Covered**: 0
+- **Gaps**: ${items.length} (all pending — pre-implementation)
+- **Orphan tests**: 0
+
+## Gap Report
+
+All ${items.length} requirements are pending implementation.
+Priority order based on dependencies:
+${items.filter(i => !i.dependsOn || i.dependsOn.length === 0).map(i => `- **${i.id}**: no dependencies (can start immediately)`).join("\n")}
+${items.filter(i => i.dependsOn && i.dependsOn.length > 0).map(i => `- **${i.id}**: depends on ${i.dependsOn!.join(", ")}`).join("\n")}
+`;
 }

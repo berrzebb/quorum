@@ -2170,7 +2170,7 @@ function _genAlts(concept, name) {
 // ═══ Tool: ai_guide ══════════════════════════════════════════════════════
 
 export function toolAiGuide(params) {
-  const { target } = params;
+  const target = params.target ?? params.path;
   if (!target) return { error: "target is required" };
 
   const targetDir = resolve(target);

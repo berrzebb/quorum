@@ -90,9 +90,9 @@ describe("DeliberativeConsensus", () => {
       files: [],
     });
 
-    // Parse-error opinions should default to changes_requested
-    assert.equal(result.opinions[0].codes[0], "parse-error");
-    assert.equal(result.opinions[1].codes[0], "parse-error");
+    // Parse-fallback opinions should default to changes_requested with text fallback
+    assert.equal(result.opinions[0].codes[0], "parse-fallback");
+    assert.equal(result.opinions[1].codes[0], "parse-fallback");
   });
 
   it("runSimple() uses single auditor without deliberation", async () => {

@@ -47,10 +47,16 @@ export interface ConvergenceStatus {
   converged: boolean;
   /** Number of consecutive sessions with stable classifications. */
   stableRounds: number;
+  /** Number of consecutive sessions with no new items discovered. */
+  noNewItemsRounds: number;
+  /** Number of consecutive sessions with delta within proportional tolerance. */
+  relaxedRounds: number;
   /** Required stable rounds for convergence (default: 2). */
   threshold: number;
   /** Delta between last two sessions (0 = identical). */
   lastDelta: number;
+  /** Which convergence path triggered. */
+  convergencePath: "exact" | "no-new-items" | "relaxed" | null;
 }
 
 export interface CPS {
@@ -157,6 +163,7 @@ export function storeMeetingLog(store: EventStore, log: MeetingLog): void {
     registers: log.registers,
     classificationDetails: log.classifications,
     convergenceScore: log.convergenceScore,
+    logTimestamp: log.timestamp,
   });
   store.append(event);
 }
@@ -174,7 +181,7 @@ export function getMeetingLogs(store: EventStore, agendaId?: string): MeetingLog
     logs.push({
       id: (e.payload.meetingLogId as string) ?? e.payload.snapshotId as string ?? randomUUID(),
       sessionType: e.payload.sessionType as "morning" | "afternoon",
-      timestamp: e.timestamp,
+      timestamp: (e.payload.logTimestamp as number) ?? e.timestamp,
       agendaId: (e.payload.agendaId as string) ?? "default",
       registers: (e.payload.registers as MeetingLog["registers"]) ?? { statusChanges: [], decisions: [], requirementChanges: [], risks: [] },
       classifications: (e.payload.classificationDetails as ClassifiedItem[]) ?? [],
@@ -197,13 +204,18 @@ export function checkConvergence(
   prefetchedLogs?: MeetingLog[],
 ): ConvergenceStatus {
   const threshold = config?.convergenceThreshold ?? DEFAULT_CONVERGENCE_THRESHOLD;
-  const logs = prefetchedLogs ?? getMeetingLogs(store, agendaId);
+  const rawLogs = prefetchedLogs ?? getMeetingLogs(store, agendaId);
+
+  // Filter out noise logs caused by parse-fallback:
+  // - Fewer than 3 classifications (likely incomplete parse)
+  // - Item count dropped >50% from previous log (parse failure lost items)
+  const logs = filterNoiseLogs(rawLogs);
 
   if (logs.length < 2) {
-    return { converged: false, stableRounds: 0, threshold, lastDelta: 1 };
+    return { converged: false, stableRounds: 0, noNewItemsRounds: 0, relaxedRounds: 0, threshold, lastDelta: 1, convergencePath: null };
   }
 
-  // Compare consecutive logs' classification distributions
+  // ── Path 1: Exact classification distribution match ──
   let stableRounds = 0;
   let lastDelta = 1;
 
@@ -220,15 +232,66 @@ export function checkConvergence(
     }
   }
 
+  // ── Path 2: No-new-items (greenfield convergence) ──
+  // If the item set in round N is a subset of round N-1 (no new discoveries),
+  // the deliberation has stabilized even if classifications shift.
+  let noNewItemsRounds = 0;
+
+  for (let i = logs.length - 1; i > 0; i--) {
+    const currItems = new Set(logs[i]!.classifications.map(c => normalizeItemKey(c.item)));
+    const prevItems = new Set(logs[i - 1]!.classifications.map(c => normalizeItemKey(c.item)));
+    const newItems = [...currItems].filter(item => !prevItems.has(item));
+
+    if (newItems.length === 0 && currItems.size > 0) {
+      noNewItemsRounds++;
+    } else {
+      break;
+    }
+  }
+
+  // ── Path 3: Relaxed delta (proportional tolerance) ──
+  // LLM non-determinism causes item count fluctuations even when semantically stable.
+  // Allow delta within 30% of total item count (min 3) to count as stable.
+  // Calibrated from dogfooding: 20+ items × 30% = 6, covers typical LLM rephrasing noise.
+  let relaxedRounds = 0;
+
+  for (let i = logs.length - 1; i > 0; i--) {
+    const curr = countClassifications(logs[i]!.classifications);
+    const prev = countClassifications(logs[i - 1]!.classifications);
+    const delta = classificationDelta(curr, prev);
+    const totalItems = Math.max(
+      logs[i]!.classifications.length,
+      logs[i - 1]!.classifications.length,
+      1,
+    );
+    const tolerance = Math.max(3, Math.floor(totalItems * 0.3));
+
+    if (delta <= tolerance && logs[i]!.classifications.length > 0) {
+      relaxedRounds++;
+    } else {
+      break;
+    }
+  }
+
   // Empty classifications (e.g. from parse failures) must NOT count as converged.
   // Require at least one classification item in the latest log.
   const latestHasContent = logs[logs.length - 1]!.classifications.length > 0;
 
+  const exactConverged = stableRounds >= threshold && latestHasContent;
+  const noNewItemsConverged = noNewItemsRounds >= threshold && latestHasContent;
+  const relaxedConverged = relaxedRounds >= threshold && latestHasContent;
+  const converged = exactConverged || noNewItemsConverged || relaxedConverged;
+
   return {
-    converged: stableRounds >= threshold && latestHasContent,
+    converged,
     stableRounds,
+    noNewItemsRounds,
+    relaxedRounds,
     threshold,
     lastDelta,
+    convergencePath: converged
+      ? (exactConverged ? "exact" : noNewItemsConverged ? "no-new-items" : "relaxed")
+      : null,
   };
 }
 
@@ -272,6 +335,25 @@ export function generateCPS(logs: MeetingLog[]): CPS {
 
 // ── Helpers ──────────────────────────────────
 
+/**
+ * Remove noise logs caused by parse-fallback (mux NDJSON parsing failures).
+ * A log is noise only if its item count dropped significantly from the previous good log,
+ * indicating a parse failure lost classifications. Small but consistent logs are kept.
+ */
+function filterNoiseLogs(logs: MeetingLog[]): MeetingLog[] {
+  if (logs.length <= 1) return logs;
+  const filtered: MeetingLog[] = [logs[0]!];
+  for (let i = 1; i < logs.length; i++) {
+    const curr = logs[i]!;
+    const prev = filtered[filtered.length - 1]!;
+    // Skip only if BOTH conditions met: significant drop AND previous had substantial content
+    // This preserves small-but-consistent logs (e.g., 2 items throughout)
+    if (prev.classifications.length >= 5 && curr.classifications.length < prev.classifications.length * 0.5) continue;
+    filtered.push(curr);
+  }
+  return filtered;
+}
+
 function countClassifications(items: ClassifiedItem[]): Record<MeetingClassification, number> {
   const counts: Record<MeetingClassification, number> = { gap: 0, strength: 0, out: 0, buy: 0, build: 0 };
   for (const item of items) {
@@ -289,6 +371,19 @@ function classificationDelta(
     delta += Math.abs(a[key] - b[key]);
   }
   return delta;
+}
+
+/**
+ * Normalize an item name for set comparison across rounds.
+ * LLMs may rephrase the same concept differently — normalize to lowercase,
+ * collapse whitespace, strip articles/punctuation for fuzzy matching.
+ */
+function normalizeItemKey(item: string): string {
+  return item
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")  // strip punctuation (Unicode-safe)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function computeConvergenceScore(items: ClassifiedItem[]): number {

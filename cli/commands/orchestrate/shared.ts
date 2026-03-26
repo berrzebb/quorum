@@ -19,6 +19,8 @@ export type WBSize = "XS" | "S" | "M";
 
 export interface WorkItem {
   id: string;
+  /** Human-readable title from WB heading */
+  title?: string;
   targetFiles: string[];
   dependsOn?: string[];
   /** WB complexity: XS (~15-50 lines), S (~60-150), M (~180-250) */
@@ -31,6 +33,8 @@ export interface WorkItem {
   verify?: string;
   /** Scope boundaries — what NOT to do */
   constraints?: string;
+  /** Done criteria */
+  done?: string;
 }
 
 export interface TrackInfo {
@@ -213,8 +217,17 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
     const constraintsMatch = body.match(/\*\*Constraints?\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|$)/i);
     const constraints = constraintsMatch?.[1]?.trim() || undefined;
 
+    // Done: completion criteria
+    const doneMatch = body.match(/\*\*Done\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|$)/i);
+    const done = doneMatch?.[1]?.trim() || undefined;
+
+    // Title: extract from heading (e.g., "### OIN-1: Project Scaffolding (Size: S)")
+    const titleMatch = body.match(/^#{2,3}\s+[A-Z][A-Z0-9]*-\d+[:\s]+(.+?)(?:\s*\((?:Size:)?\s*(?:XS|S|M)\))?$/m);
+    const title = titleMatch?.[1]?.trim() || undefined;
+
     items.push({
       id: section.id,
+      title,
       targetFiles,
       dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
       size,
@@ -222,6 +235,7 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
       contextBudget,
       verify,
       constraints,
+      done,
     });
   }
 
