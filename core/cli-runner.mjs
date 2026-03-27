@@ -141,7 +141,8 @@ export function spawnResolvedAsync(binary, args, options = {}) {
   if (process.platform === "win32") {
     if (/\.(cmd|bat)$/i.test(binary)) {
       const line = [binary, ...args].map(quoteForCmd).join(" ");
-      return spawn(line, [], { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
+      // DEP0190: pass command as single string (no args array) when using shell
+      return spawn(line, { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
     }
 
     if (/\.ps1$/i.test(binary)) {

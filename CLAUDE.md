@@ -172,10 +172,14 @@ adapters/codex/
 - **MuxAuditor**: `providers/auditors/mux.ts` — Auditor implementation backed by ProcessMux (tmux/psmux). `--mux` flag in parliament CLI spawns LLM sessions as mux panes. Sessions saved to `.claude/agents/` (daemon-discoverable). `createMuxConsensusAuditors()` creates 3 mux-backed auditors sharing one ProcessMux instance. Daemon TUI shows live sessions (role, backend, age).
 - **Parliament Session Observability**: Daemon `ParliamentPanel` shows: live mux sessions (LIVE section with role/backend/age), committee convergence, pending amendments, Normal Form conformance, session count.
 - **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
-- **Implementation Loop**: `quorum orchestrate run <track> --provider claude` — full WB execution loop. Reads WBs → dependency-aware groups → spawns agents via ProcessMux → sends implementer protocol → polls for audit verdict → correction rounds on rejection (max 3) → next WB on approval. Parliament gates checked before start. File claims prevent conflicts. Events: agent.spawn, track.progress, track.complete.
+- **Wave Execution**: `quorum orchestrate run <track> --provider claude [--concurrency N] [--resume]` — Wave-based implementation loop. `computeWaves()` groups WBs by Phase gates (topological sort on `dependsOn`). Each Wave runs up to N agents in parallel (default 3), then a single Wave-level audit. On audit failure, Fixer agent applies targeted fixes, then re-audit (max 3 rounds). `--resume` loads `.claude/quorum/wave-state-{track}.json` to skip completed waves and retry failed items. Events: agent.spawn, track.progress, track.complete.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (13 factors) for auto-escalation on future similar files.
-- **Plan Review Gate**: `reviewPlan()` validates WBs before `orchestrate run`. Action + Verify fields required — blocks execution if missing. Guards: >5 target files → split, dangling dependencies → error.
+- **Plan Review Gate**: `reviewPlan()` validates WBs before `orchestrate run`. Action + Verify fields required — blocks execution if missing. Guards: >5 target files → split. GATE-N references resolved to Phase parent index (valid if index < parent count). Unknown external deps are warnings, not errors.
+- **Wave Grouping**: `computeWaves()` in `shared.ts` — Phase parents define gate boundaries (Phase N must complete before Phase N+1). Within a phase, `dependsOn` topological sort creates sub-waves. Items at the same depth run in parallel. `--concurrency` caps simultaneous agents.
+- **Fixer Role**: `runFixer()` in `runner.ts` — spawned when Wave audit fails. Receives specific audit findings + affected files. Applies targeted fixes without rewriting (different from Implementer). Single-turn `claude -p` with `--dangerously-skip-permissions`.
+- **Wave State Persistence**: `wave-state-{track}.json` saved after each Wave. Contains `completedIds`, `failedIds`, `lastCompletedWave`. `--resume` flag loads state, skips completed waves, retries failed items. Survives process crashes and computer restarts.
+- **Design Auto-Fix**: `autoFixDesignDiagrams()` in `planner.ts` — spawns fresh `claude -p` per attempt (not mux multi-turn). Includes exact file paths in prompt. Infinite retry loop for mermaid diagram generation.
 - **Model Tier Routing**: `selectModelForSize()` in `runner.ts` — XS→haiku, S→sonnet, M→opus. WB Size parsed from heading. `--model` flag auto-appended to CLI args.
 - **Trigger Interaction Multipliers**: Factor 13 — high-risk co-occurrence (security×blast-radius ×1.3, security×cross-layer ×1.2, cross-layer×API ×1.15, rejection×stagnation ×1.25). `Math.max` prevents multiplier explosion.
 - **Evidence via SQLite**: `audit_submit` MCP tool replaces watch_file markdown. Evidence stored in EventStore, trigger evaluated inline. Hooks read from `tool_input.content`, not file. `readWatchContent()` eliminated.
@@ -183,7 +187,7 @@ adapters/codex/
 ## Testing
 
 ```bash
-npm test                              # all (1055 tests)
+npm test                              # all (1077 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

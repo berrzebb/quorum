@@ -61,6 +61,9 @@ function sourceColor(source: string): string {
     case "codex": return "green";
     case "cursor": return "magenta";
     case "gemini": return "yellow";
+    case "ollama": return "blue";
+    case "vllm": return "blueBright";
+    case "openai": return "greenBright";
     default: return "white";
   }
 }

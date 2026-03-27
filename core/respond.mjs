@@ -17,7 +17,7 @@
  */
 
 import { resolve } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolveBinary, spawnResolved } from "./cli-runner.mjs";
 import * as bridge from "./bridge.mjs";
@@ -195,13 +195,24 @@ async function handleTechDebt(track) {
 
     const planDirs = (consensus.planning_dirs ?? []).map(d => resolve(REPO_ROOT, d.replace(/^\/+/, "")));
     for (const dir of planDirs) {
-      const catalogPath = resolve(dir, "work-catalog.md");
-      if (existsSync(catalogPath)) {
-        const appended = appendTechDebt(catalogPath, risks, track);
-        if (appended > 0) {
-          console.log(`[respond] Auto-registered ${appended} tech debt item(s) → ${catalogPath}`);
+      // Search both project-level and track-level work-catalog.md
+      const candidates = [resolve(dir, "work-catalog.md")];
+      try {
+        for (const sub of readdirSync(dir, { withFileTypes: true })) {
+          if (sub.isDirectory()) {
+            const p = resolve(dir, sub.name, "work-catalog.md");
+            if (existsSync(p)) candidates.push(p);
+          }
         }
-        break;
+      } catch { /* dir may not exist */ }
+      for (const catalogPath of candidates) {
+        if (existsSync(catalogPath)) {
+          const appended = appendTechDebt(catalogPath, risks, track);
+          if (appended > 0) {
+            console.log(`[respond] Auto-registered ${appended} tech debt item(s) → ${catalogPath}`);
+          }
+          break;
+        }
       }
     }
   } catch { /* non-critical */ }

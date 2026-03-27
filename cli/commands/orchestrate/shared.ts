@@ -35,6 +35,12 @@ export interface WorkItem {
   constraints?: string;
   /** Done criteria */
   done?: string;
+  /** Parent feature ID (null for top-level parents) */
+  parentId?: string;
+  /** Whether this is a parent (feature) or child (task) item */
+  isParent?: boolean;
+  /** Integration target — what this parent's scenario test verifies */
+  integrationTarget?: string;
 }
 
 export interface TrackInfo {
@@ -85,7 +91,7 @@ function scanDir(dir: string, tracks: TrackInfo[]): void {
       } else if (entry.name.includes("work-breakdown") && entry.name.endsWith(".md")) {
         const content = readFileSync(fullPath, "utf8");
         const bracketItems = content.match(/^###?\s+\[/gm) ?? [];
-        const idItems = content.match(/^#{2,3}\s+[A-Z][A-Z0-9]*-\d+/gm) ?? [];
+        const idItems = content.match(/^#{2,3}\s+[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+/gm) ?? [];
         tracks.push({
           name: basename(resolve(fullPath, "..")),
           path: fullPath,
@@ -150,28 +156,94 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
   }
 
   const items: WorkItem[] = [];
-  const sectionRegex = /^#{2,3}\s+(?:\[)?([A-Z][A-Z0-9]*-\d+)\]?[:\s]\s*/gm;
-  const sections: { id: string; start: number }[] = [];
 
-  let match: RegExpExecArray | null;
-  while ((match = sectionRegex.exec(content)) !== null) {
-    sections.push({ id: match[1]!, start: match.index });
+  // Detect hierarchy: h2 = parent (feature/phase/step), h3 = child (task)
+  // Supports two parent formats:
+  //   1. ID-based:    ## WEB-1: Feature Title
+  //   2. Phase-based: ## Phase 1: Multi-Clip Scheduling  /  ## Step 2: Effects
+  // If no h2 parents exist, treat all as flat children (backwards compatible)
+  // ID pattern: WEB-1, DAW-P2-01, FEAT-3A, PROJECT-TRACK-42
+  // Must start with uppercase letter, contain at least one hyphen, end with digits (optional letter suffix)
+  const ID_PATTERN = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?/;
+  const PARENT_LABEL_PATTERN = /(?:Phase|Step|단계)\s*\d+[A-Za-z]?/;
+
+  // Check for h2 parents — Phase/Step labels take precedence over ID headings
+  // If both Phase labels AND ID headings exist at h2, Phase labels are parents.
+  const h2PhaseRegex = /^##\s+(?:Phase|Step|단계)\s*\d+[A-Za-z]?[:\s]/gm;
+  const hasPhaseParents = h2PhaseRegex.test(content);
+  h2PhaseRegex.lastIndex = 0;
+
+  // ID-based parents only if no Phase labels exist (backwards compat: h2=parent, h3=child)
+  const h2IdRegex = /^##\s+(?:\[)?([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?)\]?[:\s]/gm;
+  const h3IdRegex = /^###\s+(?:\[)?([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?)\]?[:\s]/gm;
+  const hasIdParents = !hasPhaseParents && h2IdRegex.test(content) && h3IdRegex.test(content);
+  h2IdRegex.lastIndex = 0;
+  h3IdRegex.lastIndex = 0;
+  const hasParents = hasPhaseParents || hasIdParents;
+
+  // Build section map with heading level awareness
+  const sections: { id: string; start: number; level: number; title?: string }[] = [];
+
+  if (hasParents) {
+    // Two-pass classification to avoid lazy-quantifier issues:
+    // Pass 1: Find Phase/Step parents (greedy match on known labels)
+    // Pass 2: Find ID-based children
+    let match: RegExpExecArray | null;
+
+    // Pass 1: Parents — "## Phase 0:", "## Step 2A:", "## 단계 3:"
+    const parentRegex = /^#{2,3}\s+((?:Phase|Step|단계)\s*\d+[A-Za-z]?)\s*:\s*(.*)/gm;
+    while ((match = parentRegex.exec(content)) !== null) {
+      const id = match[1]!.replace(/\s+/g, "-");
+      sections.push({ id, start: match.index, level: 2, title: match[2]?.trim() });
+    }
+
+    // Pass 2: Children — "## DAW-P2-01:", "### WEB-1:", "## PAY-1 Title"
+    const childRegex = /^#{2,3}\s+(?:\[)?([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?)\]?\s*[:\s]\s*(.*)/gm;
+    while ((match = childRegex.exec(content)) !== null) {
+      sections.push({ id: match[1]!, start: match.index, level: 3, title: match[2]?.trim() });
+    }
+
+    // Sort by position in document
+    sections.sort((a, b) => a.start - b.start);
+  } else {
+    // Flat: all h2/h3 with IDs are children
+    const flatRegex = /^#{2,3}\s+(?:\[)?([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?)\]?\s*[:\s]\s*(.*)/gm;
+    let match: RegExpExecArray | null;
+    while ((match = flatRegex.exec(content)) !== null) {
+      sections.push({ id: match[1]!, start: match.index, level: 3, title: match[2]?.trim() });
+    }
   }
+
+  // Track current parent for child assignment
+  let currentParentId: string | undefined;
 
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i]!;
     const end = i + 1 < sections.length ? sections[i + 1]!.start : content.length;
     const body = content.slice(section.start, end);
 
+    const isParent = hasParents && section.level === 2;
+
+    // Update current parent tracking
+    if (isParent) {
+      currentParentId = section.id;
+    } else if (hasParents && section.level === 2) {
+      currentParentId = undefined;
+    }
+
+    // Integration target (parent-only field)
+    const integrationMatch = body.match(/\*\*(?:Integration[_ ]target|통합[_ ]대상)\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|$)/i);
+    const integrationTarget = isParent ? (integrationMatch?.[1]?.trim() || undefined) : undefined;
+
     // Size: XS, S, or M (from heading or Size field)
     const sizeFromHeading = body.match(/\((?:Size:\s*)?(XS|S|M)\)/i);
     const sizeFromField = body.match(/\*\*Size\*\*:\s*(XS|S|M)/i);
     const size = (sizeFromHeading?.[1] ?? sizeFromField?.[1])?.toUpperCase() as WBSize | undefined;
 
-    const depsMatch = body.match(/(?:Prerequisite|depends_on|선행.?작업|블로커)[:\s]+(.+)/i);
+    const depsMatch = body.match(/\*{0,2}(?:Prerequisite|depends_on|선행.?작업|블로커)\*{0,2}\s*:\s*(.+)/i);
     const dependsOn: string[] = [];
     if (depsMatch) {
-      const depIds = depsMatch[1]!.match(/[A-Z][A-Z0-9]*-\d+/g);
+      const depIds = depsMatch[1]!.match(/[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?/g);
       if (depIds) dependsOn.push(...depIds);
     }
 
@@ -222,7 +294,7 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
     const done = doneMatch?.[1]?.trim() || undefined;
 
     // Title: extract from heading (e.g., "### OIN-1: Project Scaffolding (Size: S)")
-    const titleMatch = body.match(/^#{2,3}\s+[A-Z][A-Z0-9]*-\d+[:\s]+(.+?)(?:\s*\((?:Size:)?\s*(?:XS|S|M)\))?$/m);
+    const titleMatch = body.match(/^#{2,3}\s+[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?[:\s]+(.+?)(?:\s*\((?:Size:)?\s*(?:XS|S|M)\))?$/m);
     const title = titleMatch?.[1]?.trim() || undefined;
 
     items.push({
@@ -236,6 +308,8 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
       verify,
       constraints,
       done,
+      ...(isParent ? { isParent: true, integrationTarget } : {}),
+      ...(hasParents && !isParent && currentParentId ? { parentId: currentParentId } : {}),
     });
   }
 
@@ -263,8 +337,26 @@ export function reviewPlan(items: WorkItem[]): PlanReviewResult {
     return { passed: false, warnings, errors };
   }
 
+  // Separate parents and children for hierarchy validation
+  const parents = items.filter(i => i.isParent);
+  const children = items.filter(i => !i.isParent);
+  const hasHierarchy = parents.length > 0;
+
   for (const item of items) {
     const prefix = `[${item.id}]`;
+
+    // Parent-specific validation
+    if (item.isParent) {
+      // Parents should NOT have targetFiles (feature-level, not code-level)
+      if (item.targetFiles.length > 0) {
+        warnings.push(`${prefix} Parent has target files — parents are feature-level, not code-level`);
+      }
+
+      // Parents don't need Action/Verify (children have them)
+      continue;
+    }
+
+    // Child-specific validation (and flat items)
 
     // Required: target files
     if (item.targetFiles.length === 0) {
@@ -299,15 +391,173 @@ export function reviewPlan(items: WorkItem[]): PlanReviewResult {
     }
   }
 
+  // Hierarchy validation
+  if (hasHierarchy) {
+    const childrenByParent = new Map<string, WorkItem[]>();
+    for (const child of children) {
+      if (child.parentId) {
+        const list = childrenByParent.get(child.parentId) ?? [];
+        list.push(child);
+        childrenByParent.set(child.parentId, list);
+      }
+    }
+
+    for (const parent of parents) {
+      const kids = childrenByParent.get(parent.id) ?? [];
+      if (kids.length === 0) {
+        errors.push(`[${parent.id}] Parent has no children — each parent must have at least one child`);
+      } else {
+        // Check if last child has integration/verification in title
+        const lastChild = kids[kids.length - 1]!;
+        const integrationKeywords = /integrat|verif|검증|통합/i;
+        if (!integrationKeywords.test(lastChild.title ?? "") && !integrationKeywords.test(lastChild.id)) {
+          warnings.push(`[${parent.id}] Last child ${lastChild.id} does not appear to be integration/verification`);
+        }
+      }
+    }
+  }
+
   // Cross-item: check for dependency on non-existent items
+  // GATE-N references are resolved to Phase parent IDs (Phase gates enforce sequential execution)
   const ids = new Set(items.map(i => i.id));
+  const parentIds = new Set(items.filter(i => i.isParent).map(i => i.id));
+  const parentList = items.filter(i => i.isParent);
+
   for (const item of items) {
     for (const dep of item.dependsOn ?? []) {
-      if (!ids.has(dep)) {
-        errors.push(`[${item.id}] depends on ${dep} which does not exist`);
+      if (ids.has(dep)) continue; // Direct WB reference — valid
+
+      // GATE-N → resolve to Phase parent at index N
+      const gateMatch = dep.match(/^GATE-(\d+)$/);
+      if (gateMatch) {
+        const gateIdx = parseInt(gateMatch[1]!, 10);
+        if (gateIdx < parentList.length) continue; // Valid gate reference
+        errors.push(`[${item.id}] depends on ${dep} — gate index ${gateIdx} exceeds ${parentList.length} phases`);
+      } else {
+        // Unknown external reference — flag but don't block
+        warnings.push(`[${item.id}] depends on ${dep} (unresolved external reference)`);
       }
     }
   }
 
   return { passed: errors.length === 0, warnings, errors };
+}
+
+// ── Wave-based Execution Grouping ─────────────────────
+// Waves group WBs by dependency depth within phase boundaries.
+// Phase parents create gate boundaries: Phase N must complete before Phase N+1 starts.
+// Within a phase, topological sort by dependsOn creates sub-waves.
+// Items in the same wave can run in parallel (up to concurrency limit).
+
+export interface Wave {
+  /** Wave index (0-based, global across all phases) */
+  index: number;
+  /** Phase parent ID (e.g., "Phase-0") or null for orphans */
+  phaseId: string | null;
+  /** Items in this wave — can run in parallel */
+  items: WorkItem[];
+}
+
+/**
+ * Compute execution waves from work items.
+ * Uses phase hierarchy + dependsOn for topological ordering.
+ */
+export function computeWaves(items: WorkItem[]): Wave[] {
+  const parents = items.filter(i => i.isParent);
+  const children = items.filter(i => !i.isParent);
+  const waves: Wave[] = [];
+  let waveIdx = 0;
+
+  if (parents.length === 0) {
+    // No hierarchy — pure topological sort
+    for (const group of topologicalWaves(children)) {
+      waves.push({ index: waveIdx++, phaseId: null, items: group });
+    }
+    return waves;
+  }
+
+  // Group children by parent
+  const childrenByParent = new Map<string, WorkItem[]>();
+  const orphans: WorkItem[] = [];
+  for (const c of children) {
+    if (c.parentId) {
+      const list = childrenByParent.get(c.parentId) ?? [];
+      list.push(c);
+      childrenByParent.set(c.parentId, list);
+    } else {
+      orphans.push(c);
+    }
+  }
+
+  // Process phases in order — each phase is a gate boundary
+  for (const parent of parents) {
+    const kids = childrenByParent.get(parent.id) ?? [];
+    if (kids.length === 0) continue;
+
+    const phaseWaves = topologicalWaves(kids);
+    for (const group of phaseWaves) {
+      waves.push({ index: waveIdx++, phaseId: parent.id, items: group });
+    }
+  }
+
+  // Orphans (no parent) go last
+  if (orphans.length > 0) {
+    waves.push({ index: waveIdx++, phaseId: null, items: orphans });
+  }
+
+  return waves;
+}
+
+/** Topological sort by dependsOn depth. Items at the same depth form a wave. */
+function topologicalWaves(items: WorkItem[]): WorkItem[][] {
+  const ids = new Set(items.map(i => i.id));
+  const waves: WorkItem[][] = [];
+  const placed = new Set<string>();
+
+  while (placed.size < items.length) {
+    const wave: WorkItem[] = [];
+    for (const item of items) {
+      if (placed.has(item.id)) continue;
+      // Ready if all deps are placed or not in this group (external dep = already done)
+      const ready = (item.dependsOn ?? []).every(dep => placed.has(dep) || !ids.has(dep));
+      if (ready) wave.push(item);
+    }
+    if (wave.length === 0) {
+      // Circular or unresolved deps — force remaining into one wave
+      waves.push(items.filter(i => !placed.has(i.id)));
+      break;
+    }
+    for (const item of wave) placed.add(item.id);
+    waves.push(wave);
+  }
+
+  return waves;
+}
+
+// ── Design Document Verification ──────────────────────
+
+const DESIGN_DIAGRAM_REQUIREMENTS: Record<string, { patterns: RegExp[]; label: string }> = {
+  "spec.md":         { patterns: [/sequenceDiagram/], label: "sequenceDiagram" },
+  "blueprint.md":    { patterns: [/flowchart|classDiagram|graph /], label: "flowchart or classDiagram" },
+  "domain-model.md": { patterns: [/erDiagram|stateDiagram/], label: "erDiagram or stateDiagram" },
+};
+
+/**
+ * Verify design directory contains mandatory mermaid diagrams.
+ * Returns list of violations (empty = all pass).
+ */
+export function verifyDesignDiagrams(designDir: string): string[] {
+  const violations: string[] = [];
+  if (!existsSync(designDir)) return violations;
+
+  for (const [file, req] of Object.entries(DESIGN_DIAGRAM_REQUIREMENTS)) {
+    const filePath = resolve(designDir, file);
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, "utf8");
+    const hasDiagram = req.patterns.some(p => p.test(content));
+    if (!hasDiagram) {
+      violations.push(`design/${file}: missing ${req.label}`);
+    }
+  }
+  return violations;
 }

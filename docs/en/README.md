@@ -65,7 +65,8 @@ quorum daemon                         # TUI dashboard
 quorum status                         # gate status (incl. parliament)
 quorum parliament "topic"             # parliamentary deliberation → CPS
 quorum orchestrate plan <track>       # interactive planner (Socratic + CPS)
-quorum orchestrate run <track>        # full implementation loop (auto)
+quorum orchestrate run <track>        # Wave-based execution (auto)
+quorum orchestrate run <track> --resume  # resume from checkpoint
 quorum plan                           # list work breakdowns
 quorum ask codex "..."                # direct provider query
 quorum tool code_map                  # run MCP tool
@@ -120,6 +121,18 @@ Three independent paths (any triggers convergence):
 | **relaxed** | Delta ≤ 30% of total items (min 3) | LLM non-determinism tolerance |
 
 `filterNoiseLogs()` skips parse-fallback rounds (>50% item count drop) that pollute delta.
+
+### Wave-based Execution
+
+`orchestrate run` executes work breakdowns in **Waves**:
+
+1. Phase parents define gate boundaries (Phase N must complete before Phase N+1)
+2. Within a phase, `dependsOn` topological sort creates sub-waves
+3. Items in the same wave run in parallel (`--concurrency N`, default 3)
+4. After wave completion → single audit → on failure, **Fixer** agent applies targeted fixes → re-audit
+5. `--resume` loads saved state, skips completed waves, retries failed items (survives crashes/restarts)
+
+Three agent roles: **Implementer** (builds from WB spec), **Auditor** (reviews wave changes), **Fixer** (targeted bug fixes from audit findings).
 
 ### RTM Auto-Generation
 
@@ -208,7 +221,7 @@ Shared business logic across adapters. Only I/O differs per runtime:
 |-------|------|----------|
 | **I/O** | stdin/stdout parsing, protocol | `adapters/{adapter}/` |
 | **Business Logic** | trigger, evidence, hooks, NDJSON | `adapters/shared/` (17+ modules) |
-| **Core** | audit, 22 MCP tools, EventStore | `core/` |
+| **Core** | audit, 23 MCP tools, EventStore | `core/` |
 
 New adapter = ~280 lines of I/O wrappers (Codex adapter).
 

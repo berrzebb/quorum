@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DIST, findTracks, resolveTrack, trackRef } from "./shared.js";
+import { DIST, findTracks, resolveTrack, trackRef, verifyDesignDiagrams } from "./shared.js";
 
 /** Sanitize a track name for use as a directory name (ASCII, no spaces). */
 function slugify(name: string): string {
@@ -36,7 +36,7 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
   const trackName = trackInput ?? (findTracks(repoRoot).length === 1 ? findTracks(repoRoot)[0]!.name : undefined);
 
   if (!trackName) {
-    console.log("  Usage: quorum orchestrate plan <track|index> [--provider claude|codex|gemini] [--mux]\n");
+    console.log("  Usage: quorum orchestrate plan <track|index> [--provider claude|codex|gemini|ollama|vllm] [--mux]\n");
     const tracks = findTracks(repoRoot);
     if (tracks.length > 0) {
       console.log("  Available tracks:");
@@ -72,12 +72,48 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
   const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3) || "TK";
   const systemPrompt = buildSystemPrompt(trackName, cpsContent, protocol, planDir, prefix, trackSlug);
   const socraticPrompt = `Plan track "${trackName}". ${cpsContent ? "CPS is available — use it." : "No CPS — start with Socratic questions to clarify requirements."}`;
-  const autoPrompt = `Plan track "${trackName}" using the CPS provided. Generate ALL documents now without asking questions:
-1. Write PRD to ${planDir}/${trackSlug}/PRD.md
-2. Write Design (spec, blueprint with naming conventions, domain model) to ${planDir}/${trackSlug}/design/
-3. Write Work Breakdown to ${planDir}/${trackSlug}/work-breakdown.md with IDs ${prefix}-1, ${prefix}-2, ...
+  const autoPrompt = `Plan track "${trackName}" using the CPS provided. Generate ALL documents now without asking questions.
 
-Use CPS.Context for PRD§1, CPS.Problem for PRD§2, CPS.Solution for PRD§4. Make reasonable decisions where CPS has gaps. Be concrete, not abstract.`;
+Each document MUST be a separate file with a SINGLE responsibility. Do NOT merge.
+
+## Document Responsibilities (non-overlapping)
+
+1. **PRD** → ${planDir}/${trackSlug}/PRD.md
+   WHAT and WHY. Problem statement, goals, non-goals, success criteria, risks, stakeholders.
+   NO technical details. NO schemas. NO file paths.
+
+2. **Spec** → ${planDir}/${trackSlug}/design/spec.md
+   HOW (interfaces). API endpoints, request/response schemas, DB DDL (CREATE TABLE statements),
+   environment variables, error codes. The contract between modules.
+   NO directory layout. NO naming rules. NO entity relationships prose.
+
+3. **Blueprint** → ${planDir}/${trackSlug}/design/blueprint.md
+   HOW (structure). Directory tree, file naming conventions (= law), module boundaries,
+   import rules, code style rules (3-file rule, etc.), dependency graph.
+   NO DDL. NO API schemas. NO entity definitions.
+
+4. **Domain Model** → ${planDir}/${trackSlug}/design/domain-model.md
+   WHAT (entities). ER diagram, entity definitions, value objects, enums, aggregate boundaries,
+   state machines, lifecycle diagrams, business rules/invariants.
+   NO DDL syntax. NO file paths. NO API endpoints. (Spec translates these into DDL/API.)
+
+5. **Execution Order** → ${planDir}/${trackSlug}/execution-order.md
+   WHEN. Phase dependency graph (Phase 0→1→2), parallelizable groups,
+   critical path, milestone gates. References WB IDs but NO task details.
+
+6. **Test Strategy** → ${planDir}/${trackSlug}/test-strategy.md
+   HOW TO VERIFY. Test types (unit/integration/e2e), fixture plan per source type,
+   coverage targets, test tooling, CI pipeline. NO implementation steps.
+
+7. **Work Breakdown** → ${planDir}/${trackSlug}/work-breakdown.md
+   HOW TO BUILD (tasks). ${prefix}-1, ${prefix}-2, ... Each with Action/Verify/Done/Constraints.
+   Implementation-level detail for sub-agents. References Spec/Blueprint/DomainModel by section.
+
+8. **Work Catalog** → ${planDir}/${trackSlug}/work-catalog.md
+   STATUS DASHBOARD. Summary table of all WBs: ID, title, size, phase, status, dependencies.
+   One-row-per-task overview. NO implementation details (those live in WB).
+
+Make reasonable decisions where CPS has gaps. Be concrete, not abstract.`;
 
   // Auto mode: CPS-driven non-interactive generation (no Socratic needed)
   const autoMode = useAuto || (!useMux && cpsContent && !process.stdin.isTTY);
@@ -103,7 +139,7 @@ Use CPS.Context for PRD§1, CPS.Problem for PRD§2, CPS.Solution for PRD§4. Mak
   if (useMux) {
     // Mux mode runs unattended — bypass approval prompts
     if (provider === "claude") cliArgs.push("--dangerously-skip-permissions");
-    await runWithMux(repoRoot, provider, cliArgs, trackName);
+    await runWithMux(repoRoot, provider, cliArgs, trackName, !!autoMode);
   } else {
     await runDirect(repoRoot, provider, cliArgs);
   }
@@ -133,7 +169,7 @@ async function runDirect(repoRoot: string, provider: string, cliArgs: string[]):
 
 // ── Mux mode (daemon observable) ────────────
 
-async function runWithMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string): Promise<void> {
+async function runWithMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string, autoMode = false): Promise<void> {
   const toURL = (p: string) => pathToFileURL(p).href;
   let ProcessMux: typeof import("../../../bus/mux.js").ProcessMux;
   try {
@@ -193,10 +229,22 @@ async function runWithMux(repoRoot: string, provider: string, cliArgs: string[],
   const stateFile = resolve(agentsDir, `${session.id}.json`);
   writeFileSync(stateFile, JSON.stringify(agentState, null, 2), "utf8");
 
-  // Attach — user interacts directly, daemon observes simultaneously
-  mux.attach(session.id);
+  if (autoMode) {
+    // Auto mode: poll capture for completion instead of attaching (avoids os error 6 / raw-mode on non-TTY)
+    const timeout = 180_000;
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      await new Promise(r => setTimeout(r, 5000));
+      const cap = mux.capture(session.id, 200);
+      if (!cap) continue;
+      if (cap.output.includes('"type":"result"') || cap.output.includes('"stop_reason"') || cap.output.includes('"type":"turn.completed"')) break;
+    }
+  } else {
+    // Interactive: attach — user interacts directly, daemon observes simultaneously
+    mux.attach(session.id);
+  }
 
-  // Cleanup after user exits/detaches
+  // Cleanup after completion or user exits/detaches
   try { rmSync(stateFile, { force: true }); } catch { /* ok */ }
   try { await mux.kill(session.id); } catch { /* ok */ }
   await mux.cleanup();
@@ -221,45 +269,143 @@ export async function autoGenerateWBs(repoRoot: string, trackName: string, provi
   const skillPath = resolve(repoRoot, "skills", "planner", "SKILL.md");
   if (existsSync(skillPath)) protocol = readFileSync(skillPath, "utf8");
 
-  const toURL = (p: string) => pathToFileURL(p).href;
-  let ProcessMux;
-  try {
-    const muxMod = await import(toURL(resolve(DIST, "bus", "mux.js")));
-    ProcessMux = muxMod.ProcessMux;
-  } catch { return false; }
+  const { spawnSync } = await import("node:child_process");
+  const quorumRoot = resolve(DIST, "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  const bin = resolveBinary(provider);
 
-  const mux = new ProcessMux();
   const planningDir = resolve(repoRoot, "docs", "plan");
   const prefix = trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3);
 
-  try {
-    const session = await mux.spawn({
-      name: `quorum-planner-${Date.now()}`,
-      command: provider,
-      args: provider === "codex" ? ["exec", "--json", "-"] : ["-p", "--output-format", "stream-json"],
-      cwd: repoRoot,
-      env: { FEEDBACK_LOOP_ACTIVE: "1" },
-    });
+  const d = planningDir;
+  const t = trackName;
+  const prompt = [
+    "# Auto-Planning from Parliament CPS",
+    "",
+    latestCps,
+    "",
+    `Track: ${t}`,
+    "",
+    `8 SEPARATE files (single responsibility each):`,
+    `1. ${d}/${t}/PRD.md — WHAT/WHY`,
+    `2. ${d}/${t}/design/spec.md — interfaces: API, DDL, env vars`,
+    `3. ${d}/${t}/design/blueprint.md — structure: dirs, naming law`,
+    `4. ${d}/${t}/design/domain-model.md — entities: ER, state machines`,
+    `5. ${d}/${t}/execution-order.md — WHEN: phase graph`,
+    `6. ${d}/${t}/test-strategy.md — HOW TO VERIFY`,
+    `7. ${d}/${t}/work-breakdown.md (IDs: ${prefix}-1, ${prefix}-2, ...)`,
+    `8. ${d}/${t}/work-catalog.md — STATUS table`,
+    "",
+    "MANDATORY Mermaid Diagrams:",
+    "- spec.md → sequenceDiagram",
+    "- blueprint.md → flowchart or classDiagram",
+    "- domain-model.md → erDiagram + stateDiagram-v2",
+    "",
+    protocol,
+  ].join("\n");
 
-    const prompt = `# Auto-Planning from Parliament CPS\n\n${latestCps}\n\nTrack: ${trackName}\nWrite WBs to: ${planningDir}/${trackName}/work-breakdown.md\nIDs: ${prefix}-1, ${prefix}-2, ...\n\n${protocol}`;
-    mux.send(session.id, prompt);
+  // Phase 1: Generate all 8 documents (single-turn spawnSync)
+  console.log(`  \x1b[36mGenerating 8 documents...\x1b[0m`);
+  spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: { ...process.env },
+    timeout: 300_000,
+  });
 
-    const timeout = 180_000;
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-      await new Promise(r => setTimeout(r, 5000));
-      const cap = mux.capture(session.id, 200);
-      if (!cap) continue;
-      if (cap.output.includes('"type":"result"') || cap.output.includes('"stop_reason"') || cap.output.includes('"type":"turn.completed"')) break;
+  const generated = findTracks(repoRoot).some(tr => tr.name === trackName);
+  if (!generated) return false;
+
+  // Phase 2: Verify + auto-fix design diagrams (infinite retry)
+  const designPath = resolve(planningDir, trackName, "design");
+  const violations = verifyDesignDiagrams(designPath);
+
+  if (violations.length > 0) {
+    console.log(`  \x1b[33mDesign diagrams missing after generation, auto-fixing...\x1b[0m`);
+    return autoFixDesignDiagrams(repoRoot, designPath, violations, provider);
+  }
+
+  console.log(`  \x1b[32m✓ All documents generated with diagrams\x1b[0m`);
+  return true;
+}
+
+/**
+ * Auto-fix design documents that are missing mandatory mermaid diagrams.
+ * Each attempt spawns a FRESH `claude -p` process (single-turn, exits after response).
+ * Prompt includes exact file paths so Claude knows where to edit.
+ * AI에게 포기란 없다.
+ */
+export async function autoFixDesignDiagrams(repoRoot: string, designDir: string, violations: string[], provider: string): Promise<boolean> {
+  const { spawnSync } = await import("node:child_process");
+  const quorumRoot = resolve(DIST, "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  const bin = resolveBinary(provider);
+
+  // Compute relative paths from repoRoot for the prompt
+  const relDesignDir = designDir.replace(repoRoot, "").replace(/^[\\/]+/, "").replace(/\\/g, "/");
+
+  let attempt = 0;
+
+  while (true) {
+    attempt++;
+
+    const currentViolations = verifyDesignDiagrams(designDir);
+    if (currentViolations.length === 0) {
+      console.log(`  \x1b[32m✓ Design docs verified\x1b[0m (attempt ${attempt})`);
+      return true;
     }
 
-    await mux.kill(session.id);
-    await mux.cleanup();
+    // Build file-specific instructions with EXACT paths
+    const tasks: string[] = [];
+    for (const v of currentViolations) {
+      const fileMatch = v.match(/design\/(\S+\.md)/);
+      if (!fileMatch) continue;
+      const file = fileMatch[1]!;
+      const fullRelPath = `${relDesignDir}/${file}`;
 
-    return findTracks(repoRoot).some(t => t.name === trackName);
-  } catch {
-    await mux.cleanup();
-    return false;
+      if (file === "spec.md") {
+        tasks.push(`1. Read "${fullRelPath}", then Edit it to ADD a mermaid sequenceDiagram block showing the main API/component interaction flow. Use participant names from the document.`);
+      } else if (file === "blueprint.md") {
+        tasks.push(`2. Read "${fullRelPath}", then Edit it to ADD a mermaid flowchart TD or classDiagram block showing module dependencies. Use module/directory names from the document.`);
+      } else if (file === "domain-model.md") {
+        tasks.push(`3. Read "${fullRelPath}", then Edit it to ADD both: (a) a mermaid erDiagram block with entity relationships, and (b) a mermaid stateDiagram-v2 block with state transitions. Use entity names from the document.`);
+      }
+    }
+
+    const urgency = attempt >= 3
+      ? `URGENT (attempt ${attempt}): Previous ${attempt - 1} attempts failed to add diagrams. Follow instructions EXACTLY.`
+      : "Add missing mermaid diagrams to design documents.";
+
+    const prompt = [
+      urgency,
+      "",
+      "Tasks (do ALL of them):",
+      ...tasks,
+      "",
+      "Rules:",
+      "- Do NOT rewrite or delete existing content",
+      "- Each diagram must be in a ```mermaid code block",
+      "- Use actual names from the document, not generic placeholders",
+    ].join("\n");
+
+    console.log(`  \x1b[36m↻ Design fix attempt ${attempt}...\x1b[0m`);
+
+    spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: { ...process.env },
+      timeout: 180_000,
+    });
+
+    // Verify after this attempt
+    const remaining = verifyDesignDiagrams(designDir);
+    if (remaining.length === 0) {
+      console.log(`  \x1b[32m✓ Design docs auto-fixed\x1b[0m (attempt ${attempt})`);
+      return true;
+    }
+
+    console.log(`  \x1b[33m↻ Design fix incomplete (attempt ${attempt})\x1b[0m`);
+    for (const v of remaining) console.log(`    ✗ ${v}`);
   }
 }
 
@@ -277,10 +423,41 @@ ${cpsSection}
 ## Parliament Feedback
 If ambiguity cannot be resolved: tell user to run quorum parliament "<topic>".
 
-## Output
-1. PRD (${planDir}/${dirName}/PRD.md)
-2. Design: Spec, Blueprint (Naming Conventions!), Domain Model, Architecture (${planDir}/${dirName}/design/)
-3. Work Breakdown (${planDir}/${dirName}/work-breakdown.md) — IDs: ${prefix}-1, ${prefix}-2, ...
+## Output — 8 files, SINGLE responsibility each. NEVER merge.
+1. PRD — ${planDir}/${dirName}/PRD.md — WHAT/WHY (no tech details)
+2. Spec — ${planDir}/${dirName}/design/spec.md — interfaces: API, DDL, env vars, error codes
+3. Blueprint — ${planDir}/${dirName}/design/blueprint.md — structure: dirs, naming law, imports
+4. Domain Model — ${planDir}/${dirName}/design/domain-model.md — entities: ER, state machines, invariants
+5. Execution Order — ${planDir}/${dirName}/execution-order.md — WHEN: phase graph, critical path
+6. Test Strategy — ${planDir}/${dirName}/test-strategy.md — HOW TO VERIFY: types, fixtures, coverage
+7. Work Breakdown — ${planDir}/${dirName}/work-breakdown.md — HOW TO BUILD: ${prefix}-1, ${prefix}-2, ...
+8. Work Catalog — ${planDir}/${dirName}/work-catalog.md — STATUS: summary table of all WBs
+
+## MANDATORY Mermaid Diagrams
+
+Design docs MUST include mermaid diagrams or the orchestrator will BLOCK execution:
+
+- **spec.md**: At least one \`\`\`mermaid\\nsequenceDiagram\`\`\` showing API call flow
+- **blueprint.md**: At least one \`\`\`mermaid\\nflowchart\`\`\` or \`\`\`mermaid\\nclassDiagram\`\`\` for module dependencies
+- **domain-model.md**: At least one \`\`\`mermaid\\nerDiagram\`\`\` AND one \`\`\`mermaid\\nstateDiagram-v2\`\`\`
+
+Generate diagrams inline using actual entity/module names from the design.
+
+## Work Breakdown Hierarchy
+
+Use Phase/Step headings (h2) as parents, WB items (h2 with ID) as children:
+
+\`\`\`markdown
+## Phase 0: Prerequisites
+
+## ${prefix}-1: First Task (Size: XS)
+...
+
+## Phase 1: Core Implementation
+
+## ${prefix}-2: Second Task (Size: S)
+...
+\`\`\`
 
 ## Work Breakdown Schema
 

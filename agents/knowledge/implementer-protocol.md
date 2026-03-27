@@ -106,19 +106,71 @@ Two-phase timeout: soft (2 min, 4 polls × 30s) → hard (3 min, 6 polls × 30s)
 
 **Allowed exits**: ✅ Normal (all met) | 🔴 Infra failure | 🛑 Cancelled
 
-## Correction Round Flow
+### Completion Report (MANDATORY on exit)
+
+On every exit, output a structured report:
+
+```
+=== WB Complete: {WB-ID} ===
+Task: {task description}
+Iterations: {correction round count}
+Changes:
+  - {file}: {change summary}
+Verification:
+  - Build: PASS/FAIL
+  - Tests: PASS/FAIL ({passed}/{total})
+  - Lint: PASS/FAIL
+  - Oracle: {verdict} ({rejection codes if any})
+```
+
+This report is parsed by the orchestrator for progress tracking.
+
+## Correction Round Flow (WORK → DECLARE → VERIFY Loop)
+
+The implementer operates in a self-correcting loop until the Oracle (auditor) passes:
+
+```
+LOOP:
+  1. Analyze: what failed? what changed since last attempt? what approach hasn't been tried?
+  2. Work: fix issues with a DIFFERENT approach if previous attempt failed
+  3. Verify locally: build + test + lint must ALL pass
+  4. Declare: submit evidence via audit_submit
+  5. Oracle verifies: wait for audit verdict
+     - [agree_tag] → exit loop (success)
+     - [pending_tag] → go to step 1 with new rejection context
+     - infra_failure → git stash, exit
+```
+
+### Correction Rules
 
 When audit returns `[pending_tag]`:
 
-1. **Read rejection** — query audit history from SQLite: `quorum tool audit_history --summary --json`. Extract rejection codes and correction instructions.
-2. **Fix each issue** — address every rejection code. Do NOT ignore low-severity findings.
+1. **Read rejection** — query audit history: `quorum tool audit_history --summary --json`. Extract rejection codes and correction instructions.
+2. **Measure progress** — each correction round MUST produce measurable change. Compare git diff before/after. If diff is empty or identical to previous round, you are stagnating.
+3. **Fix each issue** — address every rejection code. Do NOT ignore low-severity findings.
    - `test-gap` → add tests covering the claimed changes
    - `claim-drift` → update evidence claim to match actual diff
    - `scope-mismatch` → update Changed Files section
    - `quality-violation` → fix lint/type errors
-3. **Re-verify** — run the same checks from Step 3 (Verify) above
-4. **Re-submit evidence** — `quorum tool audit_submit`
-5. **Wait for re-audit** — same polling as Step 6
+   - `contract-drift` → fix type signatures to match contract in types/ directory
+4. **Re-verify** — run the same checks from Step 3 (Verify) above
+5. **Re-submit evidence** — `quorum tool audit_submit`
+6. **Wait for re-audit** — same polling as Step 6
+
+### Stagnation Detection
+
+If the **same rejection code appears 3 consecutive times**:
+- STOP using the current approach
+- Read the rejection detail carefully — the issue is structural, not incremental
+- Try a fundamentally different solution (different algorithm, different data structure, different API)
+- If genuinely stuck, include `[STAGNATION]` in evidence claim — the orchestrator will escalate
+
+### Forbidden Shortcuts
+
+- Do NOT delete tests to make them "pass" — test count must not decrease
+- Do NOT use `as any`, `@ts-ignore`, `@ts-expect-error` to suppress type errors
+- Do NOT weaken type signatures to avoid contract drift (fix the implementation, not the contract)
+- Do NOT copy the same evidence text between correction rounds without actual code changes
 
 Do NOT spawn a new agent for corrections — the orchestrator sends corrections via message to the existing agent.
 
@@ -156,8 +208,13 @@ When working in parallel with other agents, use `agent_comm` for coordination:
 
 ## Anti-Patterns
 - Do NOT commit before [agree_tag]
-- Do NOT exit without submitting evidence
+- Do NOT exit without submitting evidence — the orchestrator will force re-entry
 - Do NOT exit with [pending_tag] active without fixing
 - Do NOT exit after [agree_tag] without WIP commit
 - Do NOT use `git add .` — add specific files only
 - Do NOT look for verdict.md or gpt.md — verdicts are in SQLite only
+- Do NOT delete or skip tests to make them "pass" — test count must not decrease
+- Do NOT use `as any`, `@ts-ignore`, `@ts-expect-error` to suppress type errors
+- Do NOT weaken contract types to avoid drift — fix the implementation
+- Do NOT repeat the same failing approach 3+ times — switch strategy
+- Do NOT output completion report without Oracle (auditor) PASS verdict

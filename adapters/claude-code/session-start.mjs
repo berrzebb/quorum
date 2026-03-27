@@ -17,15 +17,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolveRepoRoot({ adapterDir: __dirname });
 
 const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? __dirname;
-const configPath = (() => {
-  const pr = process.env.CLAUDE_PLUGIN_ROOT;
-  if (pr) {
-    const p = resolve(pr, "config.json");
-    if (existsSync(p)) return p;
-  }
-  const local = resolve(__dirname, "config.json");
-  return existsSync(local) ? local : null;
-})();
+
+// Use shared config resolver — checks project dir first, then env vars, then adapter dir.
+import { findConfigPath } from "../../adapters/shared/config-resolver.mjs";
+const configPath = findConfigPath({ repoRoot: REPO_ROOT, adapterDir: __dirname });
 
 // ── config.json not found → auto-copy to project dir + prompt to customize ──
 if (!configPath) {
@@ -38,7 +33,8 @@ if (!configPath) {
   const autoCopied = [];
 
   // config.json → project directory (survives plugin updates)
-  if (existsSync(exampleConfig)) {
+  // Only copy if config.json does NOT already exist — never overwrite user customizations.
+  if (!existsSync(configDest) && existsSync(exampleConfig)) {
     try {
       mkdirSync(projectConfigDir, { recursive: true });
       cpSync(exampleConfig, configDest);

@@ -258,8 +258,16 @@ export class GeminiCliAdapter {
 
 // ─── Factory ────────────────────────────────────────────────────
 
+/** Providers that use HTTP API instead of CLI spawn. */
+const API_ONLY_PROVIDERS = new Set(["ollama", "vllm", "openai", "anthropic"]);
+
 /**
  * Create a CLI adapter by provider name.
+ *
+ * For CLI-based providers (claude, codex, gemini) returns a CliAdapter.
+ * For API-based providers (ollama, vllm, openai, anthropic) throws with
+ * guidance — use createApiAdapterFromSpec() from api-adapter.mjs instead.
+ *
  * @param {"claude"|"codex"|"gemini"} provider
  * @returns {ClaudeCliAdapter|CodexCliAdapter|GeminiCliAdapter}
  */
@@ -268,8 +276,23 @@ export function createCliAdapter(provider) {
     case "claude": return new ClaudeCliAdapter();
     case "codex": return new CodexCliAdapter();
     case "gemini": return new GeminiCliAdapter();
-    default: throw new Error(`Unknown CLI adapter: ${provider}`);
+    default:
+      if (API_ONLY_PROVIDERS.has(provider)) {
+        throw new Error(
+          `"${provider}" is an API provider — use createApiAdapterFromSpec("${provider}") from api-adapter.mjs instead of createCliAdapter().`,
+        );
+      }
+      throw new Error(`Unknown CLI adapter: ${provider}. Available CLI: claude, codex, gemini. API: ollama, vllm, openai, anthropic.`);
   }
+}
+
+/**
+ * Check if a provider uses API instead of CLI.
+ * @param {string} provider
+ * @returns {boolean}
+ */
+export function isApiProvider(provider) {
+  return API_ONLY_PROVIDERS.has(provider);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────

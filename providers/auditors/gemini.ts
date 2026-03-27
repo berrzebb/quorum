@@ -36,14 +36,12 @@ export class GeminiAuditor implements Auditor {
     const prompt = formatPrompt(request);
 
     return new Promise<AuditResult>((resolve) => {
-      // Gemini CLI: pipe prompt via stdin + -p flag (no value = read from stdin)
-      // Long prompts as -p arg fail due to shell escaping and arg length limits
-      const child = spawn(this.bin, ["-m", this.model], {
-        cwd: this.cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-        shell: isWin,
-      });
+      // Gemini CLI: pipe prompt via stdin + -m flag
+      // DEP0190: shell + args array triggers deprecation. Join into single string on Windows.
+      const args = ["-m", this.model];
+      const child = isWin
+        ? spawn(`${this.bin} ${args.join(" ")}`, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: true })
+        : spawn(this.bin, args, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 
       child.stdin.write(prompt);
       child.stdin.end();

@@ -24,7 +24,10 @@ export type ASTFindingCategory =
   | "import-cycle"
   | "duplicate-logic"
   | "missing-null-check"
-  | "context-false-positive";
+  | "context-false-positive"
+  | "contract-redeclaration"
+  | "contract-signature-mismatch"
+  | "contract-missing-member";
 
 export interface ASTFinding {
   file: string;
@@ -94,9 +97,25 @@ export interface ImportCycle {
   files: string[];
 }
 
+export interface ContractDrift {
+  /** Contract file where the type is defined. */
+  contractFile: string;
+  /** Name of the contract type/interface. */
+  contractName: string;
+  /** Kind: 'redeclaration' | 'signature-mismatch' | 'missing-member' */
+  kind: "redeclaration" | "signature-mismatch" | "missing-member";
+  /** File where the violation occurs. */
+  violationFile: string;
+  violationLine: number;
+  /** Details: e.g. "load() returns Promise<AssetId> but contract says Promise<AssetInfo>" */
+  detail: string;
+  severity: "critical" | "high";
+}
+
 export interface ProgramAnalysisResult {
   unusedExports: UnusedExport[];
   importCycles: ImportCycle[];
+  contractDrifts: ContractDrift[];
   fileCount: number;
   duration: number;
 }
@@ -521,13 +540,185 @@ export class ASTAnalyzer {
   }
 
   /**
-   * Run full program analysis: unused exports + import cycles.
+   * Detect contract drift: type/interface declarations in contract directories
+   * vs their re-declarations or mismatched implementations elsewhere.
+   *
+   * Contract directories: paths containing /types/, /contracts/, /interfaces/
+   * or explicitly provided via contractDirs option.
+   *
+   * Detects:
+   * 1. Re-declaration — same interface/type name exported from non-contract file
+   * 2. Signature mismatch — implementing class has different method signature
+   * 3. Missing member — implementing class lacks a contract-required member
+   */
+  detectContractDrift(contractDirs?: string[]): ContractDrift[] {
+    if (!this.program || !this.checker) return [];
+
+    const drifts: ContractDrift[] = [];
+    const contractPatterns = contractDirs ?? ["/types/", "/contracts/", "/interfaces/"];
+
+    const sourceFiles = this.program.getSourceFiles().filter(
+      (sf) => !sf.isDeclarationFile && !sf.fileName.includes("node_modules"),
+    );
+
+    const isContractFile = (fileName: string): boolean => {
+      const normalized = fileName.replace(/\\/g, "/");
+      return contractPatterns.some(p => normalized.includes(p));
+    };
+
+    // Phase 1: Collect all exported types/interfaces from contract files
+    const contractSymbols = new Map<string, { file: string; node: ts.Node; symbol: ts.Symbol; line: number }>();
+
+    for (const sf of sourceFiles) {
+      if (!isContractFile(sf.fileName)) continue;
+      const normalized = sf.fileName.replace(/\\/g, "/");
+
+      ts.forEachChild(sf, (node) => {
+        if (!hasExportModifier(node)) return;
+        if (!ts.isInterfaceDeclaration(node) && !ts.isTypeAliasDeclaration(node)) return;
+
+        const name = node.name.text;
+        const symbol = this.checker!.getSymbolAtLocation(node.name);
+        if (!symbol) return;
+
+        const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+        contractSymbols.set(name, { file: normalized, node, symbol, line: line + 1 });
+      });
+    }
+
+    if (contractSymbols.size === 0) return drifts;
+
+    // Phase 2: Scan non-contract files for re-declarations and implementation mismatches
+    for (const sf of sourceFiles) {
+      const normalized = sf.fileName.replace(/\\/g, "/");
+      if (isContractFile(normalized)) continue;
+      // Skip barrel/index files
+      if (normalized.endsWith("/index.ts") || normalized.endsWith("/index.tsx")) continue;
+
+      ts.forEachChild(sf, (node) => {
+        // 2a. Re-declaration detection: same name exported from non-contract file
+        if (hasExportModifier(node) && (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))) {
+          const name = node.name.text;
+          const contract = contractSymbols.get(name);
+          if (contract) {
+            const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+            drifts.push({
+              contractFile: contract.file,
+              contractName: name,
+              kind: "redeclaration",
+              violationFile: normalized,
+              violationLine: line + 1,
+              detail: `"${name}" re-declared in non-contract file. Single source must be ${contract.file}:${contract.line}`,
+              severity: "critical",
+            });
+          }
+        }
+
+        // 2b. Implementation mismatch: class implements ContractInterface
+        if (ts.isClassDeclaration(node) && node.heritageClauses) {
+          for (const clause of node.heritageClauses) {
+            if (clause.token !== ts.SyntaxKind.ImplementsKeyword) continue;
+
+            for (const expr of clause.types) {
+              const implName = expr.expression.getText(sf);
+              const contract = contractSymbols.get(implName);
+              if (!contract || !ts.isInterfaceDeclaration(contract.node)) continue;
+
+              // Compare members
+              this.compareMembers(
+                contract.node as ts.InterfaceDeclaration,
+                contract.file,
+                node,
+                normalized,
+                sf,
+                drifts,
+              );
+            }
+          }
+        }
+      });
+    }
+
+    return drifts;
+  }
+
+  /**
+   * Compare interface members against class implementation.
+   */
+  private compareMembers(
+    iface: ts.InterfaceDeclaration,
+    contractFile: string,
+    impl: ts.ClassDeclaration,
+    implFile: string,
+    sf: ts.SourceFile,
+    drifts: ContractDrift[],
+  ): void {
+    if (!this.checker) return;
+    const contractName = iface.name.text;
+
+    // Collect interface method/property signatures
+    const contractMembers = new Map<string, string>();
+    for (const member of iface.members) {
+      if (!ts.isMethodSignature(member) && !ts.isPropertySignature(member)) continue;
+      const name = member.name && ts.isIdentifier(member.name) ? member.name.text : null;
+      if (!name) continue;
+
+      const memberType = this.checker.getTypeAtLocation(member);
+      contractMembers.set(name, this.checker.typeToString(memberType));
+    }
+
+    // Collect class members
+    const implMembers = new Map<string, { type: string; line: number }>();
+    for (const member of impl.members) {
+      if (!ts.isMethodDeclaration(member) && !ts.isPropertyDeclaration(member)) continue;
+      const name = member.name && ts.isIdentifier(member.name) ? member.name.text : null;
+      if (!name) continue;
+
+      const memberType = this.checker.getTypeAtLocation(member);
+      const { line } = sf.getLineAndCharacterOfPosition(member.getStart());
+      implMembers.set(name, { type: this.checker.typeToString(memberType), line: line + 1 });
+    }
+
+    // Check: missing members
+    for (const [name, contractType] of contractMembers) {
+      const implMember = implMembers.get(name);
+      if (!implMember) {
+        const { line } = sf.getLineAndCharacterOfPosition(impl.getStart());
+        drifts.push({
+          contractFile,
+          contractName,
+          kind: "missing-member",
+          violationFile: implFile,
+          violationLine: line + 1,
+          detail: `"${name}" (${contractType}) required by ${contractName} but missing in implementation`,
+          severity: "high",
+        });
+        continue;
+      }
+
+      // Check: signature mismatch
+      if (implMember.type !== contractType) {
+        drifts.push({
+          contractFile,
+          contractName,
+          kind: "signature-mismatch",
+          violationFile: implFile,
+          violationLine: implMember.line,
+          detail: `${name}(): contract says "${contractType}" but implementation has "${implMember.type}"`,
+          severity: "critical",
+        });
+      }
+    }
+  }
+
+  /**
+   * Run full program analysis: unused exports + import cycles + contract drift.
    */
   analyzeProgram(tsconfigPath?: string): ProgramAnalysisResult {
     const start = Date.now();
     const initialized = this.initProgram(tsconfigPath);
     if (!initialized) {
-      return { unusedExports: [], importCycles: [], fileCount: 0, duration: Date.now() - start };
+      return { unusedExports: [], importCycles: [], contractDrifts: [], fileCount: 0, duration: Date.now() - start };
     }
     const sourceFiles = this.program!.getSourceFiles().filter(
       (sf) => !sf.isDeclarationFile && !sf.fileName.includes("node_modules"),
@@ -535,6 +726,7 @@ export class ASTAnalyzer {
     return {
       unusedExports: this.detectUnusedExports(),
       importCycles: this.detectImportCycles(),
+      contractDrifts: this.detectContractDrift(),
       fileCount: sourceFiles.length,
       duration: Date.now() - start,
     };

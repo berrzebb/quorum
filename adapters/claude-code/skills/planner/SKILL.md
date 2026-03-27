@@ -52,6 +52,23 @@ Config: `.quorum/config.json` — `consensus.planning_dirs`, `plugin.locale`.
 
 Read the reference guide before writing any document. References at: `skills/planner/references/`.
 
+### Deliverable Skills
+
+When generating planning documents, use these skills for rich output:
+
+| Skill | When to Use |
+|-------|-------------|
+| `/quorum:mermaid` | Architecture diagrams, sequence flows, ER schemas, state machines, timelines in any document |
+| `/quorum:report` | Project completion reports with metrics, diagrams, and wireframes |
+| `/pdf` | Final PRD/report export to PDF |
+| `/ppt` | Presentation decks for stakeholder review |
+
+**Mandatory visuals:**
+- Every PRD must include at least one architecture diagram (mermaid flowchart or architecture-beta)
+- Every Track README must include a dependency diagram
+- **UI tracks must include SVG wireframes** for key screens — no UI work starts without wireframes
+- Use `skills/mermaid/references/` for syntax
+
 ## Execution Context
 
 **Interactive**: ask questions, present drafts, wait for approval. **Headless**: extract intent, auto-approve DRM, generate all, report. Note missing info as `[ASSUMPTION]`.

@@ -88,22 +88,22 @@ Known unresolved items or "None".
 
 ## Planner Documents
 
-The planner skill produces 10 document types. Each has a fixed location and a reference guide.
+The planner generates 8 documents per track. Each is a **separate file** with a **single responsibility** — never merged.
 
-| Document | Level | Location | Purpose |
-|----------|-------|----------|---------|
-| **PRD** | Project | `{planning_dir}/PRD.md` | Product requirements — problem, goals, features, acceptance criteria |
-| **Execution Order** | Project | `{planning_dir}/execution-order.md` | Track dependency graph — which tracks to execute first |
-| **Work Catalog** | Project | `{planning_dir}/work-catalog.md` | All tasks across all tracks with status and priority |
-| **ADR** | Project | `{planning_dir}/adr/ADR-{NNN}.md` | Architecture Decision Records — why, not just what |
-| **Track README** | Track | `{planning_dir}/{track}/README.md` | Track scope, goals, success criteria, constraints |
-| **Work Breakdown** | Track | `{planning_dir}/{track}/work-breakdown.md` | Task decomposition — `### [task-id]` blocks with depends_on/blocks |
-| **API Contract** | Track | `{planning_dir}/{track}/api-contract.md` | Endpoint specs, request/response schemas, auth requirements |
-| **Test Strategy** | Track | `{planning_dir}/{track}/test-strategy.md` | Test plan — unit/integration/e2e scope, coverage targets |
-| **UI Spec** | Track | `{planning_dir}/{track}/ui-spec.md` | Component hierarchy, states (loading/error/empty/success), interactions |
-| **Data Model** | Track | `{planning_dir}/{track}/data-model.md` | Entity relationships, schemas, migrations, indexes |
+| # | Document | Responsibility | Boundary (does NOT contain) |
+|---|----------|---------------|----------------------------|
+| 1 | **PRD** | WHAT/WHY — problem, goals, non-goals, risks | No tech details, no schemas, no file paths |
+| 2 | **Spec** | Interfaces — API endpoints, DDL, env vars, error codes | No directory layout, no naming rules, no ER prose |
+| 3 | **Blueprint** | Structure — directory tree, naming conventions (= law), imports | No DDL, no API schemas, no entity definitions |
+| 4 | **Domain Model** | Entities — ER diagram, state machines, invariants, lifecycles | No DDL syntax, no file paths, no API endpoints |
+| 5 | **Execution Order** | WHEN — phase dependency graph, critical path, milestones | References WB IDs only, no task details |
+| 6 | **Test Strategy** | HOW TO VERIFY — test types, fixtures, coverage targets | No implementation steps |
+| 7 | **Work Breakdown** | HOW TO BUILD — per-task Action/Verify/Done for sub-agents | References Spec/Blueprint/DomainModel by section |
+| 8 | **Work Catalog** | STATUS — summary table: ID, title, size, phase, status, deps | No implementation details (those live in WB) |
 
-Reference guides for each document type are at `${CLAUDE_PLUGIN_ROOT}/skills/planner/references/`.
+**Separation principle**: Spec translates Domain Model into DDL/API. Blueprint translates Domain Model into directory structure. Neither duplicates the other.
+
+Reference guides: `${CLAUDE_PLUGIN_ROOT}/skills/planner/references/`.
 
 ## Deterministic Tools (MCP)
 

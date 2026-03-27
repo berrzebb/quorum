@@ -13,6 +13,9 @@ const { ClaudeAuditor } = await import("../dist/providers/auditors/claude.js");
 const { OpenAIAuditor } = await import("../dist/providers/auditors/openai.js");
 const { GeminiAuditor } = await import("../dist/providers/auditors/gemini.js");
 const { CodexAuditor } = await import("../dist/providers/codex/auditor.js");
+const { OpenAICompatibleAuditor } = await import("../dist/providers/auditors/openai-compatible.js");
+const { OllamaAuditor } = await import("../dist/providers/auditors/ollama.js");
+const { VllmAuditor } = await import("../dist/providers/auditors/vllm.js");
 
 // ═══ 1. parseSpec ═════════════════════════════════════════════════════
 
@@ -69,6 +72,20 @@ describe("createAuditor", () => {
   it("creates GeminiAuditor from 'google' alias", () => {
     const auditor = createAuditor("google");
     assert.ok(auditor);
+  });
+
+  it("creates OllamaAuditor from 'ollama'", () => {
+    const auditor = createAuditor("ollama:qwen3:8b");
+    assert.ok(auditor);
+    assert.ok(auditor.audit);
+    assert.ok(auditor.available);
+  });
+
+  it("creates VllmAuditor from 'vllm'", () => {
+    const auditor = createAuditor("vllm:meta-llama/Llama-3.1-8B");
+    assert.ok(auditor);
+    assert.ok(auditor.audit);
+    assert.ok(auditor.available);
   });
 
   it("throws for unknown provider", () => {
@@ -137,13 +154,15 @@ describe("auditor availability", () => {
 // ═══ 5. listAuditorProviders ══════════════════════════════════════════
 
 describe("listAuditorProviders", () => {
-  it("lists all 4 providers", () => {
+  it("lists all 6 providers", () => {
     const providers = listAuditorProviders();
     assert.ok(providers.includes("codex"));
     assert.ok(providers.includes("claude"));
     assert.ok(providers.includes("openai"));
     assert.ok(providers.includes("gemini"));
-    assert.equal(providers.length, 4);
+    assert.ok(providers.includes("ollama"));
+    assert.ok(providers.includes("vllm"));
+    assert.equal(providers.length, 6);
   });
 });
 
@@ -162,5 +181,144 @@ describe("auditor error handling", () => {
     const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
     assert.equal(result.verdict, "infra_failure");
     assert.ok(result.codes.includes("auditor-error"));
+  });
+
+  it("Ollama returns infra_failure when server unreachable", async () => {
+    const auditor = new OllamaAuditor({
+      baseUrl: "http://127.0.0.1:19999/v1", // unlikely port
+      model: "test",
+      timeout: 2000,
+    });
+    const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
+    assert.equal(result.verdict, "infra_failure");
+    assert.ok(result.codes.includes("auditor-error"));
+  });
+
+  it("vLLM returns infra_failure when server unreachable", async () => {
+    const auditor = new VllmAuditor({
+      baseUrl: "http://127.0.0.1:19998/v1",
+      model: "test",
+      timeout: 2000,
+    });
+    const result = await auditor.audit({ evidence: "test", prompt: "review", files: [] });
+    assert.equal(result.verdict, "infra_failure");
+    assert.ok(result.codes.includes("auditor-error"));
+  });
+});
+
+// ═══ 7. OpenAI-Compatible base class ═════════════════════════════════
+
+describe("OpenAICompatibleAuditor", () => {
+  it("constructs with default config", () => {
+    const auditor = new OpenAICompatibleAuditor();
+    assert.ok(auditor);
+    assert.ok(auditor.audit);
+    assert.ok(auditor.available);
+  });
+
+  it("respects custom config", () => {
+    const auditor = new OpenAICompatibleAuditor({
+      apiKey: "test-key",
+      model: "custom-model",
+      baseUrl: "http://custom:9999/v1",
+      timeout: 60000,
+      maxToolRounds: 3,
+      enableTools: false,
+    });
+    assert.ok(auditor);
+  });
+
+  it("returns infra_failure when server unreachable", async () => {
+    const auditor = new OpenAICompatibleAuditor({
+      baseUrl: "http://127.0.0.1:19997/v1",
+      timeout: 2000,
+    });
+    const result = await auditor.audit({ evidence: "test", prompt: "review", files: ["a.ts"] });
+    assert.equal(result.verdict, "infra_failure");
+    assert.ok(result.codes.includes("auditor-error"));
+    assert.ok(result.duration > 0);
+  });
+
+  it("available() returns false when server unreachable", async () => {
+    const auditor = new OpenAICompatibleAuditor({
+      baseUrl: "http://127.0.0.1:19996/v1",
+    });
+    assert.equal(await auditor.available(), false);
+  });
+
+  it("supports custom toolExecutor", async () => {
+    let toolCalled = false;
+    const executor = async (name, args) => {
+      toolCalled = true;
+      return `result from ${name}`;
+    };
+    const auditor = new OpenAICompatibleAuditor({
+      baseUrl: "http://127.0.0.1:19995/v1",
+      toolExecutor: executor,
+      timeout: 2000,
+    });
+    // Audit will fail (no server), but executor should be configured
+    assert.ok(auditor);
+  });
+});
+
+// ═══ 8. Ollama/vLLM specific config ═════════════════════════════════
+
+describe("OllamaAuditor config", () => {
+  it("uses default Ollama baseUrl", () => {
+    const auditor = new OllamaAuditor();
+    assert.ok(auditor);
+    // Verify it's an instance of OpenAICompatibleAuditor
+    assert.ok(auditor instanceof OpenAICompatibleAuditor);
+  });
+
+  it("available() returns false when Ollama not running", async () => {
+    const auditor = new OllamaAuditor({
+      baseUrl: "http://127.0.0.1:19994/v1",
+    });
+    assert.equal(await auditor.available(), false);
+  });
+});
+
+describe("VllmAuditor config", () => {
+  it("uses default vLLM baseUrl", () => {
+    const auditor = new VllmAuditor();
+    assert.ok(auditor);
+    assert.ok(auditor instanceof OpenAICompatibleAuditor);
+  });
+
+  it("available() returns false when vLLM not running", async () => {
+    const auditor = new VllmAuditor({
+      baseUrl: "http://127.0.0.1:19993/v1",
+    });
+    assert.equal(await auditor.available(), false);
+  });
+});
+
+// ═══ 9. Consensus with local providers ═══════════════════════════════
+
+describe("consensus with ollama/vllm", () => {
+  it("creates 3-role consensus with mixed local providers", () => {
+    const auditors = createConsensusAuditors({
+      advocate: "ollama:qwen3:8b",
+      devil: "vllm:meta-llama/Llama-3.1-8B",
+      judge: "claude",
+    });
+    assert.ok(auditors.advocate);
+    assert.ok(auditors.devil);
+    assert.ok(auditors.judge);
+    assert.ok(auditors.advocate instanceof OpenAICompatibleAuditor);
+    assert.ok(auditors.devil instanceof OpenAICompatibleAuditor);
+  });
+
+  it("creates all-ollama consensus", () => {
+    const auditors = createConsensusAuditors({
+      advocate: "ollama:qwen3:8b",
+      devil: "ollama:llama3.1",
+      judge: "ollama:mistral",
+    });
+    assert.ok(auditors.advocate);
+    assert.ok(auditors.devil);
+    assert.ok(auditors.judge);
   });
 });

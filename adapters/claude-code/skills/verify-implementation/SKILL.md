@@ -44,6 +44,9 @@ For detailed parameters and examples for each tool, see: `skills/consensus-tools
 | 6 | i18n (I) | Locale keys in ALL locale files, no hardcoded strings | `i18n_validate` |
 | 7 | Frontend (FV) | Page loads, DOM elements, console errors, build | `a11y_scan`, `doc_coverage` |
 | 8 | Coverage (CV) | stmt >= 85%, branch >= 75% per changed file | `coverage_map` |
+| 9 | Contract Drift (CD) | Type/interface re-declarations, signature mismatches, missing members | `contract_drift` |
+
+**CD is mandatory and blocking** — any `critical` contract drift finding rejects the submission. No exceptions.
 
 ### Full Tool Inventory (22 tools)
 

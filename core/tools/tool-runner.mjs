@@ -43,6 +43,7 @@ import {
   toolBlueprintLint,
   toolAgentComm,
   toolAuditSubmit,
+  toolActAnalyze,
   TOOL_NAMES,
 } from "./tool-core.mjs";
 
@@ -104,6 +105,7 @@ const DISPATCH = {
   blueprint_lint:      (p) => toolBlueprintLint(p),
   agent_comm:          async (p) => toolAgentComm(p),
   audit_submit:        async (p) => toolAuditSubmit(p),
+  act_analyze:         (p) => toolActAnalyze(p),
 };
 
 // ═══ Help text ══════════════════════════════════════════════════════════
@@ -171,6 +173,9 @@ Tools:
 
   ai_guide          Project onboarding guide (synthesizes code_map + dependency_graph + doc_coverage)
                     --target <dir>
+
+  act_analyze       PDCA Act phase — analyze audit history + FVM results → improvement items
+                    [--audit_history_path <jsonl>] [--fvm_results_path <md>] [--track <name>]
 
 Options:
   --help            Show this help message

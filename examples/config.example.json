@@ -28,6 +28,12 @@
     "trigger_tag": "[REVIEW_NEEDED]",
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]",
+    "roles": {
+      "_readme": "Provider:model per consensus role. Available: codex, claude, openai, gemini, ollama, vllm.",
+      "advocate": "claude",
+      "devil": "claude",
+      "judge": "claude"
+    },
     "planning_files": [],
     "planning_dirs": [
       "docs/design"
@@ -77,5 +83,19 @@
       "label": "clippy",
       "command": "cargo clippy --quiet -- -D warnings"
     }
-  ]
+  ],
+
+  "parliament": {
+    "_readme": "Parliamentary deliberation settings. Overrides consensus.roles for parliament sessions.",
+    "convergenceThreshold": 2,
+    "eligibleVoters": 3,
+    "maxRounds": 10,
+    "maxAutoAmendments": 5,
+    "roles": {
+      "_readme": "Override consensus.roles for parliament. CLI flags take priority over this section.",
+      "advocate": "claude",
+      "devil": "claude",
+      "judge": "claude"
+    }
+  }
 }

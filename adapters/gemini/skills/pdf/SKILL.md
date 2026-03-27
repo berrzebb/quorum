@@ -1,0 +1,22 @@
+---
+name: quorum-pdf
+description: "Process PDF files — read, create, merge, split, rotate, watermark, extract text/tables/images, fill forms, encrypt/decrypt, and OCR scanned PDFs. Use this skill whenever a .pdf file is involved as input or output, or when the user mentions PDF processing. Triggers on 'PDF', '.pdf', 'merge PDF', 'split PDF', 'extract text', 'fill form', 'create PDF', 'PDF 생성', 'PDF 합치기', 'PDF 나누기', 'PDF 양식', '텍스트 추출'."
+argument-hint: "<operation: read|create|merge|split|form|ocr>"
+model: gemini-2.5-pro
+allowed-tools: read_file, write_file, run_shell_command
+---
+
+# PDF Processing (Gemini)
+
+## Tool Mapping
+
+| Operation | Tool |
+|-----------|------|
+| Read file | `read_file` |
+| Write file | `write_file` |
+| Run Python | `run_shell_command` |
+
+## Start
+
+Read and follow the canonical skill at `skills/pdf/SKILL.md`.
+Scripts are at `skills/pdf/scripts/`.

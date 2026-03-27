@@ -290,8 +290,8 @@ interface SessionCheckpoint {
 export async function run(args: string[]): Promise<void> {
   const parsed = parseArgs(args);
 
-  // Handle --history (no topic required)
-  if (parsed.history) {
+  // Handle --history or --detail (no topic required)
+  if (parsed.history || parsed.detail) {
     return showHistory(parsed.detail);
   }
 
@@ -694,8 +694,8 @@ ${C.bold}Options:${C.reset}
   --detail <id>            Show detail for a specific session
 
 ${C.bold}Provider specs:${C.reset}
-  codex, claude, openai, gemini
-  claude:claude-opus-4-6, openai:gpt-4o   (with model override)
+  codex, claude, openai, gemini, ollama, vllm
+  claude:claude-opus-4-6, openai:gpt-4o, ollama:qwen3:8b   (with model override)
 
 ${C.bold}Examples:${C.reset}
   quorum parliament "add payment feature"

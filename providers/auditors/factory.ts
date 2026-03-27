@@ -12,9 +12,11 @@ import { CodexAuditor } from "../codex/auditor.js";
 import { ClaudeAuditor } from "./claude.js";
 import { OpenAIAuditor } from "./openai.js";
 import { GeminiAuditor } from "./gemini.js";
+import { OllamaAuditor } from "./ollama.js";
+import { VllmAuditor } from "./vllm.js";
 
 export interface AuditorSpec {
-  /** Provider name: "codex", "claude", "openai", "gemini" */
+  /** Provider name: "codex", "claude", "openai", "gemini", "ollama", "vllm" */
   provider: string;
   /** Model override (optional, provider default if omitted) */
   model?: string;
@@ -52,8 +54,14 @@ export function createAuditor(spec: string, cwd?: string): Auditor {
     case "google":
       return new GeminiAuditor({ model });
 
+    case "ollama":
+      return new OllamaAuditor({ model });
+
+    case "vllm":
+      return new VllmAuditor({ model });
+
     default:
-      throw new Error(`Unknown auditor provider: ${provider}. Available: codex, claude, openai, gemini`);
+      throw new Error(`Unknown auditor provider: ${provider}. Available: codex, claude, openai, gemini, ollama, vllm`);
   }
 }
 
@@ -82,7 +90,7 @@ export function createConsensusAuditors(
  * List all available auditor providers.
  */
 export function listAuditorProviders(): string[] {
-  return ["codex", "claude", "openai", "gemini"];
+  return ["codex", "claude", "openai", "gemini", "ollama", "vllm"];
 }
 
 /**

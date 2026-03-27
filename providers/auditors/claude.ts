@@ -35,12 +35,11 @@ export class ClaudeAuditor implements Auditor {
     const prompt = formatPrompt(request);
 
     return new Promise<AuditResult>((resolve) => {
-      const child = spawn(this.bin, ["-p", "--model", this.model], {
-        cwd: this.cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-        shell: isWin,
-      });
+      const args = ["-p", "--model", this.model];
+      // DEP0190: shell + args array triggers deprecation. Join into single string on Windows.
+      const child = isWin
+        ? spawn(`${this.bin} ${args.join(" ")}`, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: true })
+        : spawn(this.bin, args, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 
       let stdout = "";
       let stderr = "";

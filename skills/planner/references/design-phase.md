@@ -15,11 +15,24 @@ After PRD confirmation and before Work Breakdown generation, produce 4 design ar
 
 `{planning_dir}/{track-name}/design/` — one directory per track.
 
+## Diagram Requirements
+
+Every design artifact **must** include at least one mermaid diagram of the appropriate type. Read `skills/mermaid/references/{type}.md` for syntax before generating.
+
+| Artifact | Required Diagram | Mermaid Type | Reference |
+|----------|-----------------|-------------|-----------|
+| Spec | API call flow per FR | `sequence` | sequence.md |
+| Blueprint | Module dependency graph | `flowchart` or `classDiagram` | flowchart.md, class.md |
+| Domain Model | Entity relationships + State machines | `erDiagram` + `stateDiagram-v2` | er.md, state.md |
+| Architecture | System topology | `architecture-beta` or `flowchart` | architecture.md |
+
+Diagrams are not decorative — they are **verifiable contracts**. An implementer reads the sequence diagram to know exact call order; the ER diagram to know exact cardinality.
+
 ## 4 Artifacts
 
 ### 1. Spec (Technical Specification)
 
-Translates FR/NFR acceptance criteria into technical terms.
+Translates FR/NFR acceptance criteria into technical terms. **Must include sequence diagrams for API flows.**
 
 ```markdown
 # Technical Spec: {Track Name}
@@ -30,16 +43,40 @@ Translates FR/NFR acceptance criteria into technical terms.
 - **Validation**: event.type must be valid EventType, payload JSON-serializable
 - **Error responses**: throws on closed store, fail-open on WAL contention
 - **Performance**: p95 < 5ms per append (WAL mode)
+
+### Call Flow
+
+```mermaid
+sequenceDiagram
+  participant Hook as PostToolUse
+  participant Bridge as bridge.mjs
+  participant Store as EventStore
+  Hook ->>+ Bridge: evaluateTrigger(ctx)
+  Bridge ->>+ Store: append(event)
+  Store -->>- Bridge: void
+  Bridge -->>- Hook: ConsensusMode
+```
 ```
 
-Each FR maps to a concrete input/output/validation/error specification.
+Each FR maps to a concrete input/output/validation/error specification. Each FR with inter-component interaction **must** have a sequence diagram showing the call flow.
 
 ### 2. Blueprint (Module & Interface Design)
 
-Defines modules, their interfaces, and contracts between them.
+Defines modules, their interfaces, and contracts between them. **Must include class/dependency diagram.**
 
 ```markdown
 # Blueprint: {Track Name}
+
+## Module Dependency Diagram
+
+```mermaid
+flowchart TD
+  PS[ParliamentSession] --> ES[EventStore]
+  PS --> CS[Consensus]
+  PS --> ML[MeetingLog]
+  ML --> ES
+  BP[BlueprintParser] --> FS[Filesystem]
+```
 
 ## Module Map
 | Module | Responsibility | Exposes | Consumes |
@@ -49,6 +86,16 @@ Defines modules, their interfaces, and contracts between them.
 | BlueprintParser | Naming rule extraction | extractNamingRules(), parseBlueprints() | Filesystem |
 
 ## Interface Contracts
+
+```mermaid
+classDiagram
+  class Auditor {
+    <<interface>>
+    +audit(request: AuditRequest) Promise~AuditResult~
+    +available() Promise~boolean~
+  }
+```
+
 | Interface | Method | Signature | Notes |
 |-----------|--------|-----------|-------|
 | Auditor | audit | (request: AuditRequest) => Promise<AuditResult> | Throws on timeout |
@@ -67,10 +114,20 @@ Defines modules, their interfaces, and contracts between them.
 
 ### 3. Domain Model
 
-Defines core domain objects and their relationships.
+Defines core domain objects and their relationships. **Must include ER diagram + state machine diagrams.**
 
 ```markdown
 # Domain Model: {Track Name}
+
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+  QuorumEvent ||--|{ EventStore : "stored in"
+  Amendment ||--o{ Vote : "has"
+  MeetingLog ||--|{ Classification : "contains"
+  ParliamentSession ||--o{ MeetingLog : "produces"
+```
 
 ## Entities
 | Entity | Key Fields | Relationships |
@@ -86,6 +143,18 @@ Defines core domain objects and their relationships.
 | CPS | context, problem, solution, gaps[], builds[] | ParliamentSession, Planner |
 
 ## State Machines
+
+```mermaid
+stateDiagram-v2
+  [*] --> proposed
+  proposed --> approved : majority vote
+  proposed --> rejected : majority vote
+  proposed --> deferred : tabled
+  approved --> [*]
+  rejected --> [*]
+  deferred --> proposed : re-open
+```
+
 | Entity | States | Transitions |
 |--------|--------|------------|
 | Amendment | proposed → approved/rejected/deferred | Only forward; resolved is terminal |
@@ -94,13 +163,31 @@ Defines core domain objects and their relationships.
 
 ### 4. Architecture
 
-Defines system topology and data flow.
+Defines system topology and data flow. **Must include mermaid diagrams.**
 
 ```markdown
 # Architecture: {Track Name}
 
 ## System Diagram
-[3-Layer Adapter: I/O (adapter) → Business (shared) → Core+Bus (bridge)]
+
+Use `/quorum:mermaid` to generate. Read `skills/mermaid/references/architecture.md` for syntax.
+
+```mermaid
+architecture-beta
+  group frontend(cloud)[Frontend]
+  group backend(server)[Backend]
+  group data(database)[Data]
+  ...
+```
+
+For logic flows, use `flowchart`. For state machines, use `stateDiagram-v2`.
+
+## UI Wireframes
+
+**When the track includes UI work, wireframes are mandatory.**
+Generate SVG wireframes and save to `{planning_dir}/{track}/wireframes/`.
+See `skills/planner/references/ui-spec.md` for SVG template and rules.
+No implementation WB may start without a corresponding wireframe.
 
 ## Data Flow
 | Flow | Source → Target | Protocol | Data |

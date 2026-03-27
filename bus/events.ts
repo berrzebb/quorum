@@ -17,7 +17,7 @@ export interface QuorumEvent {
   payload: Record<string, unknown>;
 }
 
-export type ProviderKind = "claude-code" | "codex" | "cursor" | "gemini" | "generic";
+export type ProviderKind = "claude-code" | "codex" | "cursor" | "gemini" | "ollama" | "vllm" | "openai" | "generic";
 
 export type EventType =
   // Lifecycle
@@ -47,6 +47,7 @@ export type EventType =
   | "track.progress"
   | "track.complete"
   | "track.blocked"
+  | "track.parent.ready"
   // Evidence
   | "evidence.write"
   | "evidence.sync"

@@ -10,3 +10,6 @@ retrospect-workspace/
 .claude/quorum-events.db-shm
 .claude/agents/
 .claude/parliament/
+.claude/worktrees/
+.claude/quorum/
+docs/plan

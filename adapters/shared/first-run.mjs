@@ -25,7 +25,8 @@ export function firstRunSetup({ adapterRoot, projectConfigDir }) {
   const copied = [];
 
   // config.json → project directory (survives plugin updates)
-  if (existsSync(exampleConfig)) {
+  // Only copy if config.json does NOT already exist — never overwrite user customizations.
+  if (!existsSync(configDest) && existsSync(exampleConfig)) {
     try {
       mkdirSync(projectConfigDir, { recursive: true });
       cpSync(exampleConfig, configDest);

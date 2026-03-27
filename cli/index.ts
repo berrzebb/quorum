@@ -47,7 +47,7 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "→ orchestrate plan (deprecated: use orchestrate plan <track>)",
     handler: () => {
       console.log("\x1b[33mDeprecated:\x1b[0m interview is now 'quorum orchestrate plan <track>'\n");
-      console.log("  quorum orchestrate plan <track> [--provider claude|codex|gemini]\n");
+      console.log("  quorum orchestrate plan <track> [--provider claude|codex|gemini|ollama|vllm]\n");
       console.log("Features: LLM-powered Socratic questioning, any language,");
       console.log("CPS auto-intake from parliament, parliament feedback loop.\n");
       return Promise.resolve();

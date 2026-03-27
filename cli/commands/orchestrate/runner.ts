@@ -9,15 +9,50 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { dirname } from "node:path";
-import { type Bridge, type WorkItem, type WBSize, DIST, loadBridge, findTracks, parseWorkBreakdown, resolveTrack, reviewPlan } from "./shared.js";
-import { autoGenerateWBs } from "./planner.js";
+import { type Bridge, type WorkItem, type Wave, type WBSize, DIST, loadBridge, findTracks, parseWorkBreakdown, resolveTrack, reviewPlan, verifyDesignDiagrams, computeWaves } from "./shared.js";
+import { autoGenerateWBs, autoFixDesignDiagrams } from "./planner.js";
 import { autoRetro, autoMerge } from "./lifecycle.js";
+
+// ── Wave State Persistence ────────────────────
+interface WaveState {
+  trackName: string;
+  completedIds: string[];
+  failedIds: string[];
+  /** Wave index that was last fully completed (audit passed) */
+  lastCompletedWave: number;
+  updatedAt: string;
+}
+
+function waveStatePath(repoRoot: string, trackName: string): string {
+  return resolve(repoRoot, ".claude", "quorum", `wave-state-${trackName}.json`);
+}
+
+function saveWaveState(repoRoot: string, state: WaveState): void {
+  const dir = resolve(repoRoot, ".claude", "quorum");
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  state.updatedAt = new Date().toISOString();
+  writeFileSync(waveStatePath(repoRoot, state.trackName), JSON.stringify(state, null, 2), "utf8");
+}
+
+function loadWaveState(repoRoot: string, trackName: string): WaveState | null {
+  const p = waveStatePath(repoRoot, trackName);
+  if (!existsSync(p)) return null;
+  try {
+    const data = JSON.parse(readFileSync(p, "utf8"));
+    if (data.trackName !== trackName) return null;
+    return data as WaveState;
+  } catch { return null; }
+}
 
 export async function runImplementationLoop(repoRoot: string, args: string[]): Promise<void> {
   const providerIdx = args.indexOf("--provider");
   const provider = providerIdx >= 0 ? args[providerIdx + 1] ?? "claude" : "claude";
+  const concurrencyIdx = args.indexOf("--concurrency");
+  const maxConcurrency = concurrencyIdx >= 0 ? parseInt(args[concurrencyIdx + 1] ?? "3", 10) || 3 : 3;
+  const resumeMode = args.includes("--resume");
   const providerValue = providerIdx >= 0 ? args[providerIdx + 1] : undefined;
-  const trackInput = args.find(a => !a.startsWith("--") && a !== providerValue);
+  const concurrencyValue = concurrencyIdx >= 0 ? args[concurrencyIdx + 1] : undefined;
+  const trackInput = args.find(a => !a.startsWith("--") && a !== providerValue && a !== concurrencyValue);
   const maxRetries = 3;
 
   const resolved = resolveTrack(trackInput, repoRoot);
@@ -26,7 +61,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     if (tracks.length === 0) {
       console.log("  No tracks found. Run 'quorum orchestrate plan <name>' first.\n");
     } else {
-      console.log("  Usage: quorum orchestrate run [track] [--provider claude|codex|gemini]");
+      console.log("  Usage: quorum orchestrate run [track] [--provider claude|codex|gemini|ollama|vllm]");
       console.log("  Available tracks:");
       for (let i = 0; i < tracks.length; i++) {
         console.log(`    ${i + 1}. ${tracks[i]!.name} (${tracks[i]!.items} items)`);
@@ -39,8 +74,11 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   const trackName = resolved.name;
 
   console.log(`\n\x1b[36mquorum orchestrate run\x1b[0m — implementation loop\n`);
-  console.log(`  Track:    ${trackName}`);
-  console.log(`  Provider: ${provider}\n`);
+  console.log(`  Track:       ${trackName}`);
+  console.log(`  Provider:    ${provider}`);
+  console.log(`  Concurrency: ${maxConcurrency}`);
+  if (resumeMode) console.log(`  Mode:        \x1b[33mresume\x1b[0m`);
+  console.log();
 
   let tracks = findTracks(repoRoot);
   let track: typeof tracks[0] | undefined = resolved;
@@ -60,14 +98,24 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     }
   }
 
-  const workItems = parseWorkBreakdown(track.path);
-  if (workItems.length === 0) {
+  const allItems = parseWorkBreakdown(track.path);
+  if (allItems.length === 0) {
     console.log("  \x1b[33mNo parseable work items.\x1b[0m\n");
     return;
   }
 
+  // Separate parents from executable children
+  // Parents are feature-level groupings — only children are executable
+  const parentItems = allItems.filter(i => i.isParent);
+  const workItems = allItems.filter(i => !i.isParent);
+  const hasHierarchy = parentItems.length > 0;
+
+  if (hasHierarchy) {
+    console.log(`  \x1b[36mHierarchy:\x1b[0m ${parentItems.length} parent(s), ${workItems.length} child task(s)\n`);
+  }
+
   // ── Plan Review Gate ──────────────────────────
-  const review = reviewPlan(workItems);
+  const review = reviewPlan(allItems);
   if (review.warnings.length > 0) {
     console.log("  \x1b[33mPlan warnings:\x1b[0m");
     for (const w of review.warnings) console.log(`    ⚠ ${w}`);
@@ -78,7 +126,30 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     console.log("\n  Fix the work breakdown and re-run. WBs need Action + Verify fields.\n");
     return;
   }
-  console.log(`  \x1b[32m✓ Plan review passed\x1b[0m (${workItems.length} items)\n`);
+  console.log(`  \x1b[32m✓ Plan review passed\x1b[0m (${workItems.length} executable items)\n`);
+
+  // ── Design Document Gate ───────────────────────
+  const designDir = resolve(dirname(track.path), "design");
+  let designViolations = verifyDesignDiagrams(designDir);
+  if (designViolations.length > 0) {
+    console.log("  \x1b[33mDesign gate — missing diagrams, auto-fixing...\x1b[0m");
+    for (const v of designViolations) console.log(`    ✗ ${v}`);
+
+    const fixed = await autoFixDesignDiagrams(repoRoot, designDir, designViolations, provider);
+    if (!fixed) {
+      console.log("\n  \x1b[31mDesign auto-fix failed.\x1b[0m Run /quorum:mermaid manually.\n");
+      return;
+    }
+
+    // Re-verify after auto-fix
+    designViolations = verifyDesignDiagrams(designDir);
+    if (designViolations.length > 0) {
+      console.log("  \x1b[31mDesign gate still FAILED after auto-fix:\x1b[0m");
+      for (const v of designViolations) console.log(`    ✗ ${v}`);
+      return;
+    }
+  }
+  if (existsSync(designDir)) console.log("  \x1b[32m✓ Design docs verified\x1b[0m\n");
 
   // ── RTM Checkpoint ─────────────────────────────
   // Generate skeletal RTM from WBs before implementation.
@@ -107,16 +178,77 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     }
   }
 
-  // Execution groups (dependency-aware)
-  let groups: Array<{ items: WorkItem[] }> = [];
-  if (bridge?.selectExecutionMode) {
-    const sel = bridge.selectExecutionMode(workItems);
-    if (sel?.plan?.groups) {
-      groups = sel.plan.groups.map((g: { items: WorkItem[] }) => ({ items: g.items }));
-      console.log(`  Mode: ${sel.mode}, ${groups.length} group(s)\n`);
+  // Contract file auto-protection: claim types/ directories so parallel agents can't modify
+  if (bridge?.claimFiles) {
+    const contractGlobs = ["**/types/**/*.ts", "**/contracts/**/*.ts", "**/interfaces/**/*.ts"];
+    try {
+      const { globSync } = await import("node:fs");
+      // Use simple walk to find contract files
+      const contractFiles: string[] = [];
+      const walkForContracts = (dir: string, depth = 0): void => {
+        if (depth > 5) return;
+        try {
+          const entries = readdirSync(dir, { withFileTypes: true });
+          for (const e of entries) {
+            if (e.name === "node_modules" || e.name === ".git" || e.name === "dist") continue;
+            const full = resolve(dir, e.name);
+            if (e.isDirectory()) {
+              if (e.name === "types" || e.name === "contracts" || e.name === "interfaces") {
+                // Claim entire directory's .ts files
+                const tsFiles = walkTsFiles(full);
+                contractFiles.push(...tsFiles);
+              } else {
+                walkForContracts(full, depth + 1);
+              }
+            }
+          }
+        } catch { /* permission error */ }
+      };
+      const walkTsFiles = (dir: string): string[] => {
+        const results: string[] = [];
+        try {
+          const entries = readdirSync(dir, { withFileTypes: true });
+          for (const e of entries) {
+            const full = resolve(dir, e.name);
+            if (e.isDirectory()) results.push(...walkTsFiles(full));
+            else if (e.name.endsWith(".ts") || e.name.endsWith(".tsx")) results.push(full);
+          }
+        } catch { /* ok */ }
+        return results;
+      };
+      walkForContracts(repoRoot);
+
+      if (contractFiles.length > 0) {
+        const conflicts = bridge.claimFiles("contract-guardian", contractFiles, undefined, 3600_000);
+        if (conflicts.length > 0) {
+          console.log(`  \x1b[33m⚠ ${conflicts.length} contract file(s) held by other agents\x1b[0m`);
+        } else {
+          console.log(`  \x1b[36m🔒 ${contractFiles.length} contract file(s) protected\x1b[0m`);
+        }
+      }
+    } catch { /* fail-open: contract protection is best-effort */ }
+  }
+
+  // Wave-based execution grouping (dependency-aware topological sort)
+  const waves = computeWaves(allItems);
+  console.log(`  Waves: ${waves.length} (Phase gates → topological depth)\n`);
+
+  // ── Resume state ─────────────────────────────
+  let resumeState: WaveState | null = null;
+  let skipUntilWave = -1;
+  if (resumeMode) {
+    resumeState = loadWaveState(repoRoot, trackName);
+    if (resumeState) {
+      skipUntilWave = resumeState.lastCompletedWave;
+      console.log(`  \x1b[33m↻ Resuming from Wave ${skipUntilWave + 2}\x1b[0m (${resumeState.completedIds.length} completed, ${resumeState.failedIds.length} failed)`);
+      if (resumeState.failedIds.length > 0) {
+        console.log(`    Failed items to retry: ${resumeState.failedIds.join(", ")}`);
+      }
+      console.log();
+    } else {
+      console.log("  \x1b[33mNo saved state — starting from Wave 1\x1b[0m\n");
     }
   }
-  if (groups.length === 0) groups = workItems.map(i => ({ items: [i] }));
 
   // Init ProcessMux
   const toURL = (p: string) => pathToFileURL(p).href;
@@ -133,16 +265,64 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   console.log(`  Mux: ${mux.getBackend()}\n${"═".repeat(60)}\n`);
 
   let completedWBs = 0;
+  let failedWBs = 0;
+  let unverifiedWBs = 0;
   const totalWBs = workItems.length;
 
-  for (let gi = 0; gi < groups.length; gi++) {
-    const group = groups[gi]!;
-    console.log(`  \x1b[1mGroup ${gi + 1}/${groups.length}\x1b[0m (${group.items.length} items)\n`);
+  // Track completed item IDs (for intra-group dependency resolution + parent tracking)
+  const completedIds = new Set<string>();
+
+  // Restore completed IDs from resume state
+  if (resumeState) {
+    for (const id of resumeState.completedIds) {
+      completedIds.add(id);
+      completedWBs++;
+    }
+    // Failed items are NOT added to completedIds — they will be retried
+  }
+
+  // Parent status tracking: parentId → { total children, completed child IDs }
+  const parentChildStatus = new Map<string, { total: number; completed: Set<string> }>();
+  if (hasHierarchy) {
+    for (const parent of parentItems) {
+      const children = workItems.filter(c => c.parentId === parent.id);
+      parentChildStatus.set(parent.id, { total: children.length, completed: new Set() });
+    }
+  }
+
+  for (let gi = 0; gi < waves.length; gi++) {
+    const wave = waves[gi]!;
+
+    // ── Resume: skip completed waves ──────────
+    if (resumeMode && gi <= skipUntilWave) {
+      // Check if ALL items in this wave are already completed
+      const allDone = wave.items.every(i => completedIds.has(i.id));
+      if (allDone) {
+        console.log(`  \x1b[2mWave ${wave.index + 1}/${waves.length} — skipped (completed)\x1b[0m`);
+        // Update parent tracking for skipped waves
+        for (const item of wave.items) {
+          if (hasHierarchy && item.parentId) {
+            const ps = parentChildStatus.get(item.parentId);
+            if (ps) ps.completed.add(item.id);
+          }
+        }
+        continue;
+      }
+      // Wave has failed items — filter to only re-run those
+      const failedInWave = wave.items.filter(i => !completedIds.has(i.id));
+      if (failedInWave.length < wave.items.length) {
+        console.log(`  \x1b[33mWave ${wave.index + 1}/${waves.length} — partial retry (${failedInWave.length} failed)\x1b[0m`);
+        wave.items = failedInWave;
+      }
+    }
+
+    const phaseLabel = wave.phaseId ? ` \x1b[2m(${wave.phaseId})\x1b[0m` : "";
+    console.log(`  \x1b[1mWave ${wave.index + 1}/${waves.length}\x1b[0m (${wave.items.length} items)${phaseLabel}\n`);
 
     const active: Array<{ item: WorkItem; sessionId: string; retries: number; outputFile?: string }> = [];
 
-    // Build and store agent roster for this group
-    const roster = group.items.map(item => ({
+    // Build and store agent roster for this wave
+    const roster = wave.items.map(item => ({
       agentId: `impl-${item.id}`,
       wbId: item.id,
       targetFiles: item.targetFiles,
@@ -159,7 +339,22 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     const tmpDir = resolve(repoRoot, ".claude", "agents", "tmp");
     if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 
-    for (const item of group.items) {
+    // ── Intra-wave dependency sequencing ─────────
+    // Items whose dependsOn references items in the SAME wave must wait.
+    // Only spawn items whose intra-wave deps are already completed.
+    const groupIds = new Set(wave.items.map(i => i.id));
+    const spawned = new Set<string>();
+
+    /** Check if an item's intra-group dependencies are all resolved */
+    const canSpawn = (item: WorkItem): boolean => {
+      for (const dep of item.dependsOn ?? []) {
+        if (groupIds.has(dep) && !completedIds.has(dep)) return false;
+      }
+      return true;
+    };
+
+    /** Spawn a single item into a mux session */
+    const spawnItem = async (item: WorkItem): Promise<void> => {
       if (bridge?.claimFiles && item.targetFiles.length > 0) {
         bridge.claimFiles(`impl-${item.id}`, item.targetFiles, undefined, 1800_000);
       }
@@ -171,10 +366,8 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         const scriptFile = resolve(tmpDir, `${sessionName}${isWin ? ".cmd" : ".sh"}`);
         const prompt = buildImplementerPrompt(item, trackName, repoRoot, roster);
 
-        // Write prompt to file for reliable stdin piping
         writeFileSync(promptFile, prompt, "utf8");
 
-        // Model tier routing: XS→haiku, S→sonnet, M→opus
         const tier = selectModelForSize(provider, item.size);
         const modelFlag = tier.model ? ` --model ${tier.model}` : "";
         const cliFlags = tier.provider === "codex"
@@ -189,18 +382,17 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
           writeFileSync(scriptFile, `#!/bin/sh\ncat "${escapedPrompt}" | ${tier.provider} ${cliFlags} > "${escapedOutput}" 2>&1\n`, { mode: 0o755 });
         }
 
-        // Spawn default shell in mux, then execute script
         const session = await mux.spawn({
           name: sessionName,
           cwd: repoRoot,
           env: { FEEDBACK_LOOP_ACTIVE: "1" },
         });
 
-        // Small delay for shell to initialize
         await new Promise(r => setTimeout(r, 1000));
         mux.send(session.id, isWin ? `& "${scriptFile}"` : `"${scriptFile}"`);
 
         active.push({ item, sessionId: session.id, retries: 0, outputFile });
+        spawned.add(item.id);
         saveAgentState(repoRoot, session.id, session.name, mux.getBackend(), item.id, trackName, outputFile);
         console.log(`    \x1b[32m+\x1b[0m ${item.id} spawned`);
 
@@ -212,7 +404,21 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         }
       } catch (err) {
         console.log(`    \x1b[31m!\x1b[0m ${item.id} failed: ${(err as Error).message}`);
+        spawned.add(item.id); // mark as spawned to avoid infinite retry
       }
+    };
+
+    // Initial spawn: only items whose intra-wave deps are met AND under concurrency limit
+    for (const item of wave.items) {
+      if (active.length >= maxConcurrency) break;
+      if (canSpawn(item)) {
+        await spawnItem(item);
+      }
+    }
+
+    const blocked = wave.items.filter(i => !spawned.has(i.id));
+    if (blocked.length > 0) {
+      console.log(`    \x1b[2m${blocked.length} item(s) waiting on intra-group dependencies\x1b[0m`);
     }
 
     // Poll loop
@@ -220,7 +426,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     const TIMEOUT = 600_000;
     const start = Date.now();
 
-    while (active.length > 0 && Date.now() - start < TIMEOUT) {
+    while ((active.length > 0 || spawned.size < wave.items.length) && Date.now() - start < TIMEOUT) {
       await new Promise(r => setTimeout(r, POLL));
 
       for (let si = active.length - 1; si >= 0; si--) {
@@ -244,57 +450,137 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
 
         if (!done) continue;
 
-        // Agent completed — check for audit verdict (may not exist if hooks didn't trigger)
-        const verdicts = bridge?.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
-        const wbVerdicts = verdicts.filter((v: { timestamp?: number }) => {
-          const ts = v.timestamp ?? 0;
-          return ts > ((s as any).startedAt || 0);
-        });
-        const latest = wbVerdicts.length > 0 ? wbVerdicts[wbVerdicts.length - 1] : null;
-        const verdict = latest?.payload?.verdict as string | undefined;
+        // Agent session completed — mark done (audit happens at Wave level, not per-agent)
+        console.log(`    \x1b[32m✓\x1b[0m ${s.item.id} done`);
+        completedWBs++;
+        completedIds.add(s.item.id);
+        active.splice(si, 1);
+        removeAgentState(repoRoot, s.sessionId);
+        try { await mux.kill(s.sessionId); } catch { /* ok */ }
 
-        if (verdict === "changes_requested" && s.retries < maxRetries) {
-          s.retries++;
-          console.log(`    \x1b[33m↻\x1b[0m ${s.item.id} correction ${s.retries}/${maxRetries}`);
-          mux.send(s.sessionId, "Your submission was rejected. Check: quorum tool audit_history --summary --json\nFix issues and resubmit evidence with [REVIEW_NEEDED].");
-        } else {
-          // Agent done: approved, no verdict (hooks didn't fire), or max retries
-          const label = verdict === "approved" ? "approved" : verdict === "changes_requested" ? `rejected (${s.retries}/${maxRetries})` : "done";
-          const color = verdict === "changes_requested" ? "\x1b[33m" : "\x1b[32m";
-          console.log(`    ${color}✓\x1b[0m ${s.item.id} ${label}`);
-          completedWBs++;
-          active.splice(si, 1);
-          removeAgentState(repoRoot, s.sessionId);
-          try { await mux.kill(s.sessionId); } catch { /* ok */ }
-          if (bridge?.emitEvent) {
-            bridge.emitEvent("track.progress", "generic", {
-              trackId: trackName, completed: completedWBs, pending: active.length, total: totalWBs, blocked: 0,
-            });
+        // Parent status tracking
+        if (hasHierarchy && s.item.parentId) {
+          const parentStatus = parentChildStatus.get(s.item.parentId);
+          if (parentStatus) {
+            parentStatus.completed.add(s.item.id);
+            if (parentStatus.completed.size === parentStatus.total) {
+              console.log(`    \x1b[36m◆\x1b[0m ${s.item.parentId} complete (${parentStatus.total}/${parentStatus.total})`);
+            }
           }
+        }
+
+        if (bridge?.emitEvent) {
+          bridge.emitEvent("track.progress", "generic", {
+            trackId: trackName, completed: completedWBs, pending: active.length, total: totalWBs,
+            blocked: 0, failed: failedWBs,
+          });
+        }
+      }
+
+      // Spawn newly unblocked items (intra-wave deps resolved, under concurrency limit)
+      for (const item of wave.items) {
+        if (active.length >= maxConcurrency) break;
+        if (!spawned.has(item.id) && canSpawn(item)) {
+          await spawnItem(item);
         }
       }
 
       const pct = totalWBs > 0 ? Math.round((completedWBs / totalWBs) * 100) : 0;
       const sec = Math.round((Date.now() - start) / 1000);
-      process.stdout.write(`\r    [${completedWBs}/${totalWBs}] ${pct}% ${sec}s ${active.length} active    `);
+      const waitingCount = wave.items.filter(i => !spawned.has(i.id)).length;
+      const waitingSuffix = waitingCount > 0 ? ` ${waitingCount} blocked` : "";
+      process.stdout.write(`\r    [${completedWBs}/${totalWBs}] ${pct}% ${sec}s ${active.length} active${waitingSuffix}    `);
     }
 
     console.log();
 
+    // Timeout cleanup: active items that didn't finish
+    const timedOutIds: string[] = [];
     for (const s of active) {
+      failedWBs++;
+      timedOutIds.push(s.item.id);
+      console.log(`    \x1b[31m✗\x1b[0m ${s.item.id} timed out`);
       removeAgentState(repoRoot, s.sessionId);
       try { await mux.kill(s.sessionId); } catch { /* ok */ }
     }
-    for (const item of group.items) {
+    for (const item of wave.items) {
       if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
     }
+
+    // ── Wave-level Audit ─────────────────────────
+    // All agents done → single audit for the wave's changes.
+    // If audit fails → fixer agents target specific issues.
+    const waveCompletedIds = wave.items.filter(i => completedIds.has(i.id));
+    if (waveCompletedIds.length > 0) {
+      const waveFiles = waveCompletedIds.flatMap(i => i.targetFiles);
+      console.log(`\n  \x1b[36m◈ Wave ${wave.index + 1} audit\x1b[0m — ${waveCompletedIds.length} items, ${waveFiles.length} files`);
+
+      let auditPassed = false;
+      let fixAttempt = 0;
+
+      while (!auditPassed) {
+        fixAttempt++;
+
+        // Run wave-level audit via CLI
+        const auditResult = await runWaveAudit(repoRoot, waveFiles, waveCompletedIds, provider);
+
+        if (auditResult.passed) {
+          console.log(`  \x1b[32m✓ Wave ${wave.index + 1} audit passed\x1b[0m${fixAttempt > 1 ? ` (after ${fixAttempt - 1} fix round(s))` : ""}`);
+          auditPassed = true;
+        } else {
+          console.log(`  \x1b[33m↻ Wave ${wave.index + 1} audit failed — spawning fixer (attempt ${fixAttempt})\x1b[0m`);
+          for (const f of auditResult.findings) console.log(`    ✗ ${f}`);
+
+          if (fixAttempt > maxRetries) {
+            console.log(`  \x1b[31m✗ Wave ${wave.index + 1} audit failed after ${maxRetries} fix attempts\x1b[0m`);
+            failedWBs += waveCompletedIds.length;
+            break;
+          }
+
+          // Spawn fixer agent
+          await runFixer(repoRoot, auditResult.findings, waveFiles, provider, mux);
+        }
+      }
+    }
+
+    // ── Save wave state for resume ──────────────
+    saveWaveState(repoRoot, {
+      trackName,
+      completedIds: [...completedIds],
+      failedIds: timedOutIds,
+      lastCompletedWave: gi,
+      updatedAt: "",
+    });
   }
+
+  // Release contract guardian claims
+  if (bridge?.releaseFiles) bridge.releaseFiles("contract-guardian");
 
   // Summary
   console.log(`\n${"═".repeat(60)}\n`);
-  console.log(`  \x1b[1mResult:\x1b[0m ${completedWBs}/${totalWBs} WBs completed`);
+  console.log(`  \x1b[1mResult:\x1b[0m ${completedWBs}/${totalWBs} WBs approved`);
+  if (failedWBs > 0) {
+    console.log(`  \x1b[31m✗ ${failedWBs} item(s) FAILED — no evidence or rejected after max retries\x1b[0m`);
+  }
+  if (unverifiedWBs > 0) {
+    console.log(`  \x1b[33m⧖ ${unverifiedWBs} item(s) awaiting audit verdict — run 'quorum audit'\x1b[0m`);
+  }
 
-  if (completedWBs === totalWBs) {
+  // Parent readiness summary
+  if (hasHierarchy) {
+    const readyParents = [...parentChildStatus.entries()].filter(([, s]) => s.completed.size === s.total);
+    const pendingParents = [...parentChildStatus.entries()].filter(([, s]) => s.completed.size < s.total);
+    if (readyParents.length > 0) {
+      console.log(`  \x1b[36mParents ready:\x1b[0m ${readyParents.map(([id]) => id).join(", ")}`);
+    }
+    if (pendingParents.length > 0) {
+      for (const [id, status] of pendingParents) {
+        console.log(`  \x1b[33mParent ${id}:\x1b[0m ${status.completed.size}/${status.total} children done`);
+      }
+    }
+  }
+
+  if (completedWBs === totalWBs && failedWBs === 0 && unverifiedWBs === 0) {
     console.log("  \x1b[32m✓ Track complete!\x1b[0m\n");
     if (bridge?.emitEvent) {
       bridge.emitEvent("track.complete", "generic", { trackId: trackName, total: totalWBs });
@@ -303,7 +589,13 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     await autoRetro(repoRoot);
     await autoMerge(repoRoot, bridge);
   } else {
-    console.log(`  \x1b[33m${totalWBs - completedWBs} incomplete. Run again or check progress.\x1b[0m\n`);
+    const remaining = totalWBs - completedWBs;
+    if (failedWBs > 0) {
+      console.log(`  \x1b[31m${failedWBs} FAILED — agents exited without meeting completion criteria.\x1b[0m`);
+      console.log(`  \x1b[31mTrack BLOCKED until failed items are re-run.\x1b[0m\n`);
+    } else {
+      console.log(`  \x1b[33m${remaining} incomplete. Run again or check progress.\x1b[0m\n`);
+    }
   }
 
   await mux.cleanup();
@@ -405,9 +697,131 @@ ${verifySection}
 ${commSection}
 ## Instructions
 Implement this work breakdown item. Follow the implementer protocol.
-After implementation, submit evidence with [REVIEW_NEEDED] tag.
+When done, run the verify command to confirm your work is correct.
 
 ${protocol}`;
+}
+
+// ── Wave-level Audit ────────────────────────────
+
+interface WaveAuditResult {
+  passed: boolean;
+  findings: string[];
+}
+
+/**
+ * Run a single audit for all changes in a wave.
+ * Uses `claude -p` with auditor instructions to review the wave's files.
+ */
+async function runWaveAudit(
+  repoRoot: string, files: string[], items: WorkItem[], provider: string,
+): Promise<WaveAuditResult> {
+  const { spawnSync } = await import("node:child_process");
+  const quorumRoot = resolve(DIST, "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  const bin = resolveBinary(provider);
+
+  const fileList = [...new Set(files)].slice(0, 20).map(f => `- ${f}`).join("\n");
+  const itemList = items.map(i => `- ${i.id}: ${i.title ?? "(no title)"}`).join("\n");
+
+  const prompt = [
+    "# Wave Audit — Review Implementation Changes",
+    "",
+    `## Items completed in this wave:`,
+    itemList,
+    "",
+    `## Files to review:`,
+    fileList,
+    "",
+    "## Instructions:",
+    "1. Read each file listed above",
+    "2. Check: does the code compile? Are types correct? Are there obvious bugs?",
+    "3. Run the verify commands from the work breakdown if available",
+    "4. Output a JSON verdict at the END of your response in this exact format:",
+    '```json',
+    '{"passed": true|false, "findings": ["issue 1", "issue 2"]}',
+    '```',
+    "",
+    "If all items are correctly implemented with no compilation errors, output passed: true.",
+    "If there are issues, list specific findings with file paths.",
+  ].join("\n");
+
+  const result = spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
+    cwd: repoRoot,
+    stdio: ["pipe", "pipe", "inherit"],
+    env: { ...process.env },
+    timeout: 180_000,
+    encoding: "utf8",
+  });
+
+  const output = (result.stdout ?? "") as string;
+
+  // Parse verdict from output
+  const jsonMatch = output.match(/```json\s*\n({[\s\S]*?})\s*\n```/);
+  if (jsonMatch) {
+    try {
+      const verdict = JSON.parse(jsonMatch[1]!);
+      return {
+        passed: !!verdict.passed,
+        findings: Array.isArray(verdict.findings) ? verdict.findings : [],
+      };
+    } catch { /* fall through */ }
+  }
+
+  // If no structured verdict, check for pass/fail keywords
+  const lowerOutput = output.toLowerCase();
+  if (lowerOutput.includes('"passed": true') || lowerOutput.includes("all items are correctly")) {
+    return { passed: true, findings: [] };
+  }
+
+  return { passed: false, findings: ["Audit returned unstructured output — manual review needed"] };
+}
+
+// ── Fixer Agent ─────────────────────────────────
+
+/**
+ * Spawn a fixer agent to address specific audit findings.
+ * Fixer reads existing code + audit findings → applies targeted fixes.
+ * Different from implementer: no fresh implementation, just bug fixing.
+ */
+async function runFixer(
+  repoRoot: string, findings: string[], files: string[], provider: string, mux: any,
+): Promise<void> {
+  const { spawnSync } = await import("node:child_process");
+  const quorumRoot = resolve(DIST, "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  const bin = resolveBinary(provider);
+
+  const fileList = [...new Set(files)].slice(0, 15).map(f => `- ${f}`).join("\n");
+  const findingList = findings.map(f => `- ${f}`).join("\n");
+
+  const prompt = [
+    "# Fixer — Address Audit Findings",
+    "",
+    "## Audit Findings (fix ALL of these):",
+    findingList,
+    "",
+    "## Affected Files:",
+    fileList,
+    "",
+    "## Instructions:",
+    "1. Read each affected file",
+    "2. Fix the specific issues listed in the findings",
+    "3. Run compilation check (tsc --noEmit or equivalent)",
+    "4. Do NOT rewrite or restructure — only fix the identified issues",
+    "5. Run any available tests to verify your fixes",
+  ].join("\n");
+
+  console.log(`    \x1b[36m🔧 Fixer agent started\x1b[0m`);
+
+  spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: { ...process.env },
+    timeout: 180_000,
+  });
+
+  console.log(`    \x1b[36m🔧 Fixer agent done\x1b[0m`);
 }
 
 // ── RTM Generation ──────────────────────────────

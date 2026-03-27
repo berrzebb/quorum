@@ -109,7 +109,7 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
     .split("{{TRIGGER_TAG}}").join(cfg.consensus.trigger_tag)
     .split("{{AGREE_TAG}}").join(cfg.consensus.agree_tag)
     .split("{{PENDING_TAG}}").join(cfg.consensus.pending_tag)
-    .split("{{DESIGN_DOCS_DIR}}").join(cfg.consensus.design_docs_dir ?? "docs/ko/design/**")
+    .split("{{DESIGN_DOCS_DIR}}").join(cfg.consensus.design_docs_dir ?? "docs/plan/*/design/**")
     .split("{{LOCALE}}").join(safeLocale)
     .split("{{REFERENCES_DIR}}").join(
       resolve(HOOKS_DIR, "templates", "references", safeLocale).replace(/\\/g, "/"),

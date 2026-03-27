@@ -78,7 +78,19 @@ function removeAgentState(cwd: string, sessionId: string): void {
 
 // ── CLI argument builders ───────────────────
 
+/** Providers that require CLI spawn (have a native CLI tool). */
+const CLI_PROVIDERS = new Set(["claude", "codex", "gemini"]);
+
+/** Providers that use HTTP API (no CLI binary). */
+const API_PROVIDERS = new Set(["ollama", "vllm", "openai", "anthropic"]);
+
 export function buildArgs(provider: string, model?: string): string[] {
+  if (API_PROVIDERS.has(provider)) {
+    throw new Error(
+      `MuxAuditor does not support API provider "${provider}". ` +
+      `Use the auditor directly (e.g. createAuditor("${provider}")) or MuxAdapter.spawn() which auto-routes API providers.`,
+    );
+  }
   switch (provider) {
     case "claude":
       return ["-p", "--output-format", "stream-json", "--dangerously-skip-permissions", ...(model ? ["--model", model] : [])];
@@ -289,6 +301,10 @@ function infraFailure(message: string, start: number): AuditResult {
 }
 
 export function isComplete(raw: string, provider: string): boolean {
+  // API providers don't use MuxAuditor (they use MuxAdapter API sessions).
+  // Guard here in case someone passes one by mistake.
+  if (API_PROVIDERS.has(provider)) return true;
+
   // Terminal wraps long JSON lines and capture-pane pads with spaces.
   // trimEnd each line before joining to avoid broken tokens.
   const flat = raw.split(/\r?\n/).map(l => l.trimEnd()).join("");

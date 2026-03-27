@@ -112,22 +112,22 @@ npx tsc --noEmit
 
 ## 플래너 문서 체계
 
-플래너 스킬은 10종의 설계 문서를 생성한다. 각 문서는 고정된 위치와 참조 가이드가 있다.
+플래너는 트랙당 8개 문서를 생성한다. 각 문서는 **별도 파일**, **단일 책임** — 절대 합치지 않는다.
 
-| 문서 | 수준 | 위치 | 용도 |
-|------|------|------|------|
-| **PRD** | 프로젝트 | `{planning_dir}/PRD.md` | 제품 요구사항 — 문제, 목표, 기능, 수락 기준 |
-| **실행 순서** | 프로젝트 | `{planning_dir}/execution-order.md` | 트랙 의존성 그래프 — 어떤 트랙을 먼저 실행할지 |
-| **작업 카탈로그** | 프로젝트 | `{planning_dir}/work-catalog.md` | 전 트랙의 모든 작업과 상태, 우선순위 |
-| **ADR** | 프로젝트 | `{planning_dir}/adr/ADR-{NNN}.md` | 아키텍처 결정 기록 — "왜"를 기록 |
-| **트랙 README** | 트랙 | `{planning_dir}/{track}/README.md` | 트랙 범위, 목표, 성공 기준, 제약 조건 |
-| **작업 분해** | 트랙 | `{planning_dir}/{track}/work-breakdown.md` | 작업 분해 — `### [task-id]` 블록, depends_on/blocks |
-| **API 계약** | 트랙 | `{planning_dir}/{track}/api-contract.md` | 엔드포인트 명세, 요청/응답 스키마, 인증 |
-| **테스트 전략** | 트랙 | `{planning_dir}/{track}/test-strategy.md` | 테스트 계획 — 유닛/통합/E2E 범위, 커버리지 목표 |
-| **UI 명세** | 트랙 | `{planning_dir}/{track}/ui-spec.md` | 컴포넌트 계층, 상태 (로딩/에러/빈/성공), 인터랙션 |
-| **데이터 모델** | 트랙 | `{planning_dir}/{track}/data-model.md` | 엔티티 관계, 스키마, 마이그레이션, 인덱스 |
+| # | 문서 | 책임 | 경계 (포함하지 않는 것) |
+|---|------|------|------------------------|
+| 1 | **PRD** | WHAT/WHY — 문제, 목표, 비목표, 리스크 | 기술 상세, 스키마, 파일 경로 없음 |
+| 2 | **Spec** | 인터페이스 — API 엔드포인트, DDL, 환경변수, 에러 코드 | 디렉토리 구조, 네이밍 규칙, ER 산문 없음 |
+| 3 | **Blueprint** | 구조 — 디렉토리 트리, 네이밍 규칙 (= 법률), import 규칙 | DDL, API 스키마, 엔티티 정의 없음 |
+| 4 | **Domain Model** | 엔티티 — ER 다이어그램, 상태 머신, 불변식, 수명주기 | DDL 구문, 파일 경로, API 엔드포인트 없음 |
+| 5 | **실행 순서** | WHEN — 단계 의존성 그래프, 크리티컬 패스, 마일스톤 | WB ID만 참조, 태스크 상세 없음 |
+| 6 | **테스트 전략** | HOW TO VERIFY — 테스트 유형, fixture, 커버리지 목표 | 구현 단계 없음 |
+| 7 | **작업 분해** | HOW TO BUILD — 태스크별 Action/Verify/Done | Spec/Blueprint/DomainModel을 섹션 참조 |
+| 8 | **작업 카탈로그** | STATUS — 요약 테이블: ID, 제목, 크기, 단계, 상태, 의존성 | 구현 상세 없음 (WB에 있음) |
 
-각 문서의 참조 가이드: `${CLAUDE_PLUGIN_ROOT}/skills/planner/references/`
+**분리 원칙**: Spec은 Domain Model을 DDL/API로 변환. Blueprint는 Domain Model을 디렉토리 구조로 변환. 서로 중복하지 않는다.
+
+참조 가이드: `${CLAUDE_PLUGIN_ROOT}/skills/planner/references/`
 
 ## 결정론적 도구 (MCP)
 

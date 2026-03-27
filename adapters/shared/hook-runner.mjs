@@ -74,7 +74,8 @@ export function parseHookJson(text) {
 export function runCommandHook(command, input, cwd, timeout_ms) {
   const resolved = interpolateEnv(command);
   return new Promise((resolve) => {
-    const child = spawn(resolved, [], {
+    // DEP0190: pass command as single string (no args array) when using shell
+    const child = spawn(resolved, {
       shell: true,
       cwd,
       timeout: timeout_ms,

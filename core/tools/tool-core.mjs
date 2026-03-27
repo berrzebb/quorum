@@ -49,6 +49,54 @@ function _gatherDomainPatterns(domain, legacyPatterns) {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// ═══ Path Traversal Guard ═══════════════════════════════════════════════
+//
+// All MCP tool inputs that accept file paths MUST pass through safePath().
+// Prevents directory traversal attacks (e.g. "../../../etc/passwd").
+// Allowed: paths within cwd, absolute paths within cwd, relative paths that resolve within cwd.
+
+const _cwd = process.cwd();
+
+/**
+ * Validate and resolve a user-supplied path, preventing traversal attacks.
+ * Returns the resolved absolute path, or throws if traversal detected.
+ *
+ * Rules:
+ * - Relative paths must resolve within cwd (no ../../../etc/passwd)
+ * - Absolute paths are allowed if they exist (tools need to scan tmpdir in tests)
+ * - Paths containing ".." that escape cwd are blocked
+ *
+ * @param {string} userPath — raw path from MCP tool input
+ * @param {string} [base] — base directory (default: process.cwd())
+ * @returns {string} safe absolute path
+ */
+function safePath(userPath, base) {
+  if (!userPath || typeof userPath !== "string") return base || _cwd;
+  const root = base || _cwd;
+  const resolved = resolve(root, userPath);
+  const normalizedRoot = resolve(root);
+
+  // Block relative traversal outside project root
+  if (userPath.includes("..") && !resolved.startsWith(normalizedRoot)) {
+    throw new Error(`Path traversal blocked: "${userPath}" escapes project root via ".."`);
+  }
+  return resolved;
+}
+
+/**
+ * Wrapper that returns error object instead of throwing (for tool functions).
+ * @param {string} userPath
+ * @param {string} [base]
+ * @returns {{ path: string } | { error: string }}
+ */
+function safePathOrError(userPath, base) {
+  try {
+    return { path: safePath(userPath, base) };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
 // ═══ Cache ══════════════════════════════════════════════════════════════
 
 const CACHE = new Map();
@@ -207,7 +255,10 @@ export function walkDir(dir, extensions, maxDepth, depth = 0) {
 export function runPatternScan(opts) {
   const { targetPath, extensions, patterns, toolName, heading, passMsg, failNoun, maxDepth = 5, postProcess, astRefine } = opts;
   const cwd = process.cwd();
-  const target = resolve(targetPath || cwd);
+  // Path traversal guard — block inputs that escape project root
+  const pathCheck = safePathOrError(targetPath, cwd);
+  if (pathCheck.error) return { error: pathCheck.error };
+  const target = pathCheck.path;
   const stat_ = statSync(target, { throwIfNoEntry: false });
   if (!stat_) return { error: `Not found: ${target}` };
 
@@ -329,7 +380,9 @@ export function toolCodeMap(params) {
   const { path: targetPath, filter, depth = 5 } = params;
   if (!targetPath) return { error: "path is required" };
 
-  const target = resolve(targetPath);
+  const pathCheck = safePathOrError(targetPath);
+  if (pathCheck.error) return pathCheck;
+  const target = pathCheck.path;
   const stat = statSync(target, { throwIfNoEntry: false });
   if (!stat) return { error: `Not found: ${target}` };
 
@@ -374,6 +427,7 @@ export function toolCodeMap(params) {
 
 export function toolAuditScan(params) {
   const { pattern = "all", path: targetPath } = params;
+  if (targetPath) { const c = safePathOrError(targetPath); if (c.error) return c; }
   const scriptPath = resolve(__dirname, "audit-scan.mjs");
   if (!existsSync(scriptPath)) return { error: "audit-scan.mjs not found" };
 
@@ -413,6 +467,7 @@ function loadCoverageSummary(coverageDir) {
 
 export function toolCoverageMap(params) {
   const { path: targetPath, coverage_dir: covDir = "coverage" } = params;
+  if (targetPath) { const c = safePathOrError(targetPath); if (c.error) return c; }
   // Use targetPath as project root if it's a directory, else cwd
   let projectRoot = process.cwd();
   if (targetPath) {
@@ -729,8 +784,10 @@ export function toolDependencyGraph(params) {
   const { path: targetPath, depth = 5, extensions } = params;
   if (!targetPath) return { error: "path is required" };
 
+  const pathCheck = safePathOrError(targetPath);
+  if (pathCheck.error) return pathCheck;
   const cacheKey = getCacheKey(targetPath, "depgraph", depth);
-  const target = resolve(targetPath);
+  const target = pathCheck.path;
   const latestMtime = getLatestMtime(target);
   const cached = CACHE.get(cacheKey);
   if (cached && cached.mtime >= latestMtime) {
@@ -823,7 +880,9 @@ export function toolBlastRadius(params) {
   }
 
   const cwd = process.cwd();
-  const root = repoPath ? resolve(repoPath) : cwd;
+  const rootCheck = safePathOrError(repoPath, cwd);
+  if (rootCheck.error) return rootCheck;
+  const root = rootCheck.path;
 
   const cacheKey = `blast|${root}|${changed_files.sort().join(",")}|${max_depth}`;
   const latestMtime = getLatestMtime(root);
@@ -902,7 +961,10 @@ export function toolRtmMerge(params) {
     return { error: "updates array is required (paths to worktree RTM files)" };
   }
 
-  const basePath = resolve(base);
+  const baseCheck = safePathOrError(base);
+  if (baseCheck.error) return baseCheck;
+  for (const u of updates) { const c = safePathOrError(u); if (c.error) return c; }
+  const basePath = baseCheck.path;
   if (!existsSync(basePath)) return { error: `Base RTM not found: ${base}` };
   const baseContent = readFileSync(basePath, "utf8");
   const baseRows = parseRtmTable(baseContent);
@@ -1018,7 +1080,9 @@ export function toolRtmParse(params) {
   const { path: targetPath, matrix = "forward", req_id, status: statusFilter } = params;
   if (!targetPath) return { error: "path is required" };
 
-  const fullPath = resolve(targetPath);
+  const pathCheck = safePathOrError(targetPath);
+  if (pathCheck.error) return pathCheck;
+  const fullPath = pathCheck.path;
   if (!existsSync(fullPath)) return { error: `Not found: ${targetPath}` };
 
   const content = readFileSync(fullPath, "utf8");
@@ -1120,6 +1184,7 @@ export function toolRtmParse(params) {
 
 export function toolAuditHistory(params) {
   const { path: historyPath, track, code, since, summary = false } = params;
+  if (historyPath) { const c = safePathOrError(historyPath); if (c.error) return c; }
 
   const defaultPath = resolve(process.cwd(), ".claude", "audit-history.jsonl");
   const fullPath = historyPath ? resolve(historyPath) : defaultPath;
@@ -1429,7 +1494,7 @@ export function toolActAnalyze(params) {
       out.push(`| ${item.id} | ${item.type} | ${item.priority} | ${item.source} | ${item.description} | ${item.target_file} |`);
     }
     out.push("");
-    out.push("**Action**: Append approved items to `work-catalog.md` under a new `## Act Improvements` section.");
+    out.push("**Action**: Append approved items to the track's `work-catalog.md` under a new `## Act Improvements` section.");
   } else {
     out.push("### No Improvement Items\n");
     out.push("All metrics within thresholds. No structural improvements needed this cycle.");
@@ -2167,13 +2232,113 @@ function _genAlts(concept, name) {
 }
 
 
+// ═══ Tool: contract_drift ═════════════════════════════════════════════════
+
+/**
+ * Detect contract drift: type/interface re-declarations, signature mismatches,
+ * and missing members between contract directories and implementations.
+ *
+ * Uses AST program mode (TypeScript Compiler API) for cross-file analysis.
+ * Contract directories: paths containing /types/, /contracts/, /interfaces/
+ * (or custom via contract_dirs parameter).
+ */
+export async function toolContractDrift(params) {
+  const cwd = process.cwd();
+  if (params.path) { const c = safePathOrError(params.path); if (c.error) return c; }
+  const targetPath = params.path ? resolve(params.path) : cwd;
+
+  // Find tsconfig.json
+  let tsconfigPath = params.tsconfig;
+  if (!tsconfigPath) {
+    const candidates = [
+      resolve(targetPath, "tsconfig.json"),
+      resolve(cwd, "tsconfig.json"),
+    ];
+    tsconfigPath = candidates.find(c => existsSync(c));
+  }
+
+  if (!tsconfigPath || !existsSync(tsconfigPath)) {
+    return { error: "tsconfig.json not found. contract_drift requires TypeScript program mode." };
+  }
+
+  // Load AST analyzer (program mode)
+  let ASTAnalyzer;
+  try {
+    const astPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "dist", "providers", "ast-analyzer.js");
+    const mod = await import(astPath);
+    ASTAnalyzer = mod.ASTAnalyzer;
+  } catch {
+    try {
+      // Fallback: try direct import
+      const mod = await import("../../dist/providers/ast-analyzer.js");
+      ASTAnalyzer = mod.ASTAnalyzer;
+    } catch {
+      return { error: "AST analyzer unavailable. Run: npm run build" };
+    }
+  }
+
+  const analyzer = new ASTAnalyzer({ mode: "program" });
+  if (!analyzer.initProgram(tsconfigPath)) {
+    return { error: `Failed to initialize TypeScript program from ${tsconfigPath}` };
+  }
+
+  const contractDirs = params.contract_dirs
+    ? params.contract_dirs.split(",").map(d => d.trim())
+    : undefined;
+
+  const drifts = analyzer.detectContractDrift(contractDirs);
+
+  if (drifts.length === 0) {
+    return {
+      text: "## Contract Drift\n\n**0 issues** — all implementations match their contract definitions.",
+      summary: "contract_drift: 0 issues (clean)",
+      json: { total: 0, findings: [] },
+    };
+  }
+
+  // Format findings table
+  const criticalCount = drifts.filter(d => d.severity === "critical").length;
+  const highCount = drifts.filter(d => d.severity === "high").length;
+
+  const rows = drifts.map(d => {
+    const relContract = relative(cwd, d.contractFile);
+    const relViolation = relative(cwd, d.violationFile);
+    return `| \`${d.contractName}\` | ${d.kind} | ${relViolation}:${d.violationLine} | ${d.severity} | ${d.detail} |`;
+  });
+
+  const text = [
+    "## Contract Drift",
+    "",
+    `**${drifts.length} issue(s)** found — ${criticalCount} critical, ${highCount} high`,
+    "",
+    "| Contract | Kind | Violation | Severity | Detail |",
+    "|----------|------|-----------|----------|--------|",
+    ...rows,
+    "",
+    "### Resolution",
+    "",
+    "- **redeclaration**: Delete the duplicate and import from the contract file instead",
+    "- **signature-mismatch**: Update implementation to match the contract signature",
+    "- **missing-member**: Implement the missing member as defined in the contract",
+  ].join("\n");
+
+  return {
+    text,
+    summary: `contract_drift: ${drifts.length} issue(s) (${criticalCount} critical)`,
+    json: { total: drifts.length, critical: criticalCount, high: highCount, findings: drifts },
+  };
+}
+
+
 // ═══ Tool: ai_guide ══════════════════════════════════════════════════════
 
 export function toolAiGuide(params) {
   const target = params.target ?? params.path;
   if (!target) return { error: "target is required" };
 
-  const targetDir = resolve(target);
+  const pathCheck = safePathOrError(target);
+  if (pathCheck.error) return pathCheck;
+  const targetDir = pathCheck.path;
   const stat_ = statSync(targetDir, { throwIfNoEntry: false });
   if (!stat_ || !stat_.isDirectory()) {
     // Graceful fallback for non-existent or non-directory paths

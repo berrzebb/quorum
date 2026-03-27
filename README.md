@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 22 MCP tools, 9 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 23 MCP tools, 14 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -76,7 +76,7 @@ codex -c features.codex_hooks=true
 
 This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
 
-This registers 11 hooks, 8 skills, 4 commands, and 22 MCP tools. Same audit engine as Claude Code.
+This registers 11 hooks, 14 skills, 4 commands, and 23 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -146,7 +146,7 @@ you write code
     → regex scan + AST refine   # hybrid: false positive removal
     → fitness score computed    # 7-component quality metric
     → fitness gate              # auto-reject / self-correct / proceed
-    → trigger eval (12 factors)# skip, simple, or deliberative
+    → trigger eval (13 factors)# skip, simple, or deliberative
     → auditor runs              # background, debounced
     → verdict syncs             # tag promotion/demotion
     → session-gate              # blocks until retro complete
@@ -162,8 +162,8 @@ quorum/
 ├── cli/              ← unified entry point (works without any plugin)
 ├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
 ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
-├── providers/        ← consensus protocol + trigger (12-factor) + router + domain specialists + AST analyzer
-├── core/             ← audit protocol (7 modules), templates, 22 MCP tools
+├── providers/        ← consensus protocol + trigger (13-factor) + router + domain specialists + AST analyzer
+├── core/             ← audit protocol (7 modules), templates, 23 MCP tools
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
 └── adapters/
@@ -184,8 +184,19 @@ Legislative deliberation framework for structured consensus:
 ```
 quorum parliament "topic"             → CPS (Context-Problem-Solution)
 quorum orchestrate plan <track>       → interactive planner (Socratic + CPS)
-quorum orchestrate run <track>        → full implementation loop (auto)
+quorum orchestrate run <track>        → Wave-based execution (auto)
+quorum orchestrate run <track> --resume  → resume from last checkpoint
 ```
+
+### Wave-based Execution
+
+`orchestrate run`은 작업을 **Wave** 단위로 실행합니다:
+
+1. Phase 게이트가 경계를 정의 (Phase N 완료 후 Phase N+1 시작)
+2. Phase 내부는 `dependsOn` 기반 위상 정렬로 sub-wave 생성
+3. Wave 내 항목은 `--concurrency N` (기본 3) 만큼 병렬 실행
+4. Wave 완료 → **단일 감사** → 실패 시 **Fixer** 에이전트가 타겟 수정 → 재감사
+5. `--resume` 플래그로 중단된 지점부터 재개 (컴퓨터 종료에도 생존)
 
 ### Enforcement Gates
 
@@ -340,13 +351,15 @@ All outputs are normalized to `AgentOutputMessage` (assistant_chunk, tool_use, t
 
 ### Stagnation Detection
 
-If the audit loop cycles without progress, 5 patterns are detected:
+If the audit loop cycles without progress, 7 patterns are detected:
 
 - **Spinning**: same verdict 3+ times
 - **Oscillation**: approve → reject → approve → reject
 - **No drift**: identical rejection codes repeating
 - **Diminishing returns**: improvement rate declining
 - **Fitness plateau**: fitness score slope ≈ 0 over last N evaluations
+- **Expansion**: scope creep — more files touched each round
+- **Consensus divergence**: advocate/devil opinions drifting apart
 
 ### Blast Radius Analysis (v0.4.0)
 

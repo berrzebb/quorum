@@ -35,11 +35,13 @@ interface Props {
  * Extracts assistant text from content_block_delta / result events.
  */
 function parseStreamJson(rawLines: string[]): string[] {
-  const textParts: string[] = [];
+  const messageParts: string[] = [];
+  let lastRole: "assistant" | "user" | null = null;
 
   // capture-pane pads lines with spaces — trimEnd before joining to fix wrapped JSON
   const joined = rawLines.map(l => l.trimEnd()).join("");
-  const entries = joined.split(/(?=\{"type":)/);
+  // Split on both {"type": and {"role": to catch user message objects
+  const entries = joined.split(/(?=\{"(?:type|role)":)/);
 
   for (const entry of entries) {
     const trimmed = entry.trim();
@@ -47,31 +49,52 @@ function parseStreamJson(rawLines: string[]): string[] {
     try {
       const obj = JSON.parse(trimmed);
 
-      // Claude stream-json: content_block_delta with text
+      // User message: {"type":"message","role":"user",...} or {"role":"user","content":...}
+      if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {
+        if (lastRole !== "user") {
+          messageParts.push("\n───");
+        }
+        lastRole = "user";
+        const content = typeof obj.content === "string"
+          ? obj.content
+          : Array.isArray(obj.content)
+            ? obj.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text : "").join("")
+            : "";
+        if (content) {
+          messageParts.push(`[USER] ${content}`);
+        }
+        continue;
+      }
+
+      // Claude stream-json: content_block_delta with text (assistant)
       if (obj.type === "content_block_delta" && obj.delta?.text) {
-        textParts.push(obj.delta.text);
+        if (lastRole !== "assistant") {
+          messageParts.push("\n───");
+          lastRole = "assistant";
+        }
+        messageParts.push(obj.delta.text);
         continue;
       }
 
-      // Claude stream-json: result with final text
+      // Claude stream-json: result with final text (assistant)
       if (obj.type === "result" && obj.result) {
-        textParts.push(obj.result);
+        if (lastRole !== "assistant") {
+          messageParts.push("\n───");
+          lastRole = "assistant";
+        }
+        messageParts.push(obj.result);
         continue;
       }
 
-      // Tool use
-      if (obj.type === "content_block_start" && obj.content_block?.type === "tool_use") {
-        textParts.push(`[tool: ${obj.content_block.name}]`);
-        continue;
-      }
+      // Skip tool_use, tool_result, and other NDJSON noise
     } catch { /* not JSON, show raw */ }
   }
 
-  if (textParts.length === 0) return rawLines;  // fallback: show raw
+  if (messageParts.length === 0) return rawLines;  // fallback: show raw
 
   // Join text parts and re-split into display lines
-  const fullText = textParts.join("");
-  return fullText.split("\n").filter(Boolean).slice(-30);
+  const fullText = messageParts.join("");
+  return fullText.split("\n").filter(Boolean).slice(-40);
 }
 
 export function AgentChatPanel({ mux, liveSessions }: Props) {
@@ -135,7 +158,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
         if (raw) {
           const rawLines = raw.split("\n").filter(Boolean);
           const hasJson = rawLines.some(l => l.trim().startsWith("{"));
-          next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-30));
+          next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-40));
         }
       }
       setOutputs(next);

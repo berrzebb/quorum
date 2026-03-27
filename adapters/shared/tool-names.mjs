@@ -37,6 +37,18 @@ export const TOOL_MAP = {
     agent: "create_agent",
     todoWrite: "todo",
   },
+  // OpenAI-compatible API providers use MCP tool names directly.
+  // quorum acts as the host runtime — no IDE tool translation needed.
+  "openai-api": {
+    bash: "bash",
+    read: "read",
+    write: "write",
+    edit: "edit",
+    glob: "glob",
+    grep: "grep",
+    agent: "agent",
+    todoWrite: "todo_write",
+  },
 };
 
 /**

@@ -305,6 +305,18 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "contract_drift",
+    description: "Detect contract drift between type definitions and implementations. Finds re-declarations, signature mismatches, and missing members. Uses TypeScript program mode for cross-file analysis. Contract directories default to paths containing /types/, /contracts/, /interfaces/.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Project root (default: cwd)" },
+        tsconfig: { type: "string", description: "Path to tsconfig.json (default: auto-detect)" },
+        contract_dirs: { type: "string", description: "Comma-separated contract directory patterns (default: /types/,/contracts/,/interfaces/)" },
+      },
+    },
+  },
   // ── Synthesis tools ──────────────────
   {
     name: "ai_guide",
@@ -485,6 +497,15 @@ async function handleRequest(req) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }
         return { content: [{ type: "text", text: result.text }] };
+      }
+
+      if (name === "contract_drift") {
+        const { toolContractDrift } = await import("./tool-core.mjs");
+        const result = await toolContractDrift(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
       }
 
       // ── Specialist domain tools (unified handler pattern) ──

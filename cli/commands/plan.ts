@@ -12,6 +12,10 @@ interface TaskItem {
   id: string;
   title: string;
   status: "verified" | "wip" | "open" | "blocked" | "unknown";
+  /** Parent feature ID (null for top-level parents) */
+  parentId?: string;
+  /** Whether this is a parent (feature) item */
+  isParent?: boolean;
 }
 
 interface Track {
@@ -79,23 +83,60 @@ function listPlans(repoRoot: string): void {
   let totalWip = 0;
 
   for (const track of unique) {
-    const verified = track.items.filter((i) => i.status === "verified").length;
-    const wip = track.items.filter((i) => i.status === "wip").length;
-    const open = track.items.length - verified - wip;
-    totalItems += track.items.length;
+    // Count only children (or all items if flat) for progress
+    const countable = track.items.filter((i) => !i.isParent);
+    const verified = countable.filter((i) => i.status === "verified").length;
+    const wip = countable.filter((i) => i.status === "wip").length;
+    totalItems += countable.length;
     totalVerified += verified;
     totalWip += wip;
 
-    const pct = track.items.length > 0 ? Math.round((verified / track.items.length) * 100) : 0;
+    const pct = countable.length > 0 ? Math.round((verified / countable.length) * 100) : 0;
     const barWidth = 15;
     const filled = Math.round((pct / 100) * barWidth);
     const bar = `\x1b[32m${"█".repeat(filled)}\x1b[0m\x1b[2m${"░".repeat(barWidth - filled)}\x1b[0m`;
 
-    console.log(`  \x1b[1m${track.name}\x1b[0m ${bar} ${pct}% \x1b[2m(${verified}/${track.items.length} verified, ${wip} wip)\x1b[0m`);
+    console.log(`  \x1b[1m${track.name}\x1b[0m ${bar} ${pct}% \x1b[2m(${verified}/${countable.length} verified, ${wip} wip)\x1b[0m`);
 
-    for (const item of track.items) {
-      const icon = statusIcon(item.status);
-      console.log(`    ${icon} ${item.id} ${item.title}`);
+    const hasHierarchy = track.items.some((i) => i.isParent);
+
+    if (hasHierarchy) {
+      // Group children by parent
+      const parents = track.items.filter((i) => i.isParent);
+      const childrenByParent = new Map<string, TaskItem[]>();
+      const orphans: TaskItem[] = [];
+      for (const item of track.items) {
+        if (item.isParent) continue;
+        if (item.parentId) {
+          const list = childrenByParent.get(item.parentId) ?? [];
+          list.push(item);
+          childrenByParent.set(item.parentId, list);
+        } else {
+          orphans.push(item);
+        }
+      }
+
+      for (const parent of parents) {
+        const kids = childrenByParent.get(parent.id) ?? [];
+        const kidsVerified = kids.filter((k) => k.status === "verified").length;
+        console.log(`    \x1b[1m${parent.id}: ${parent.title}\x1b[0m [${kidsVerified}/${kids.length}]`);
+        for (const child of kids) {
+          const icon = statusIcon(child.status);
+          console.log(`      ${icon} ${child.id} ${child.title}`);
+        }
+      }
+
+      // Show orphan items (children without a parent) at top level
+      for (const item of orphans) {
+        const icon = statusIcon(item.status);
+        console.log(`    ${icon} ${item.id} ${item.title}`);
+      }
+    } else {
+      // Flat display (backwards compatible)
+      for (const item of track.items) {
+        const icon = statusIcon(item.status);
+        console.log(`    ${icon} ${item.id} ${item.title}`);
+      }
     }
     console.log();
   }
@@ -225,6 +266,8 @@ function resolveStatus(cell: string): TaskItem["status"] {
 }
 
 // ── Work breakdown scanner ────────────────────
+// Mirrors orchestrate/shared.ts parseWorkBreakdown() logic for hierarchy detection.
+// Supports: Phase/Step parents, multi-segment IDs (DAW-P2-01), bracket format ([ID]).
 
 function scanForBreakdowns(dir: string, tracks: Track[]): void {
   try {
@@ -237,15 +280,59 @@ function scanForBreakdowns(dir: string, tracks: Track[]): void {
         const content = readFileSync(fullPath, "utf8");
         const items: TaskItem[] = [];
 
-        for (const line of content.split(/\r?\n/)) {
-          const bracketMatch = line.match(/^###?\s+\[([^\]]+)\]\s*(.*)/);
-          if (bracketMatch) {
-            items.push({ id: bracketMatch[1]!, title: bracketMatch[2]!.trim(), status: "open" });
-            continue;
+        // ID pattern: WEB-1, DAW-P2-01, FEAT-3A, PROJECT-TRACK-42
+        const ID_RE = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?/;
+
+        // Detect Phase/Step parents (takes precedence over ID-based parents)
+        const hasPhaseParents = /^##\s+(?:Phase|Step|단계)\s*\d+[A-Za-z]?[:\s]/m.test(content);
+
+        // ID-based parents: h2=parent, h3=child (no Phase labels present)
+        const hasIdParents = !hasPhaseParents
+          && new RegExp(`^##\\s+(?:\\[)?${ID_RE.source}\\]?[:\\s]`, "m").test(content)
+          && new RegExp(`^###\\s+(?:\\[)?${ID_RE.source}\\]?[:\\s]`, "m").test(content);
+
+        const hasParents = hasPhaseParents || hasIdParents;
+
+        // Build entries from two-pass regex (same as shared.ts)
+        type Entry = { id: string; title: string; pos: number; isParent: boolean };
+        const entries2: Entry[] = [];
+
+        if (hasParents) {
+          // Pass 1: Phase/Step parents — "## Phase 0: Prerequisites"
+          const parentRe = /^#{2,3}\s+((?:Phase|Step|단계)\s*\d+[A-Za-z]?)\s*:\s*(.*)/gm;
+          let m: RegExpExecArray | null;
+          while ((m = parentRe.exec(content)) !== null) {
+            entries2.push({ id: m[1]!.replace(/\s+/g, "-"), title: m[2]!.trim(), pos: m.index, isParent: true });
           }
-          const idMatch = line.match(/^#{2,3}\s+([A-Z]{2,}-\d+[A-Za-z]?)[:\s]\s*(.*)/);
-          if (idMatch) {
-            items.push({ id: idMatch[1]!, title: idMatch[2]!.trim(), status: "open" });
+
+          // Pass 2: ID children — "## DAW-P2-01: Title" or "### [WEB-1] Title"
+          const childRe = new RegExp(`^#{2,3}\\s+(?:\\[)?(${ID_RE.source})\\]?\\s*[:\\s]\\s*(.*)`, "gm");
+          while ((m = childRe.exec(content)) !== null) {
+            entries2.push({ id: m[1]!, title: m[2]!.trim(), pos: m.index, isParent: false });
+          }
+
+          entries2.sort((a, b) => a.pos - b.pos);
+        } else {
+          // Flat: all h2/h3 with IDs are children
+          const flatRe = new RegExp(`^#{2,3}\\s+(?:\\[)?(${ID_RE.source})\\]?\\s*[:\\s]\\s*(.*)`, "gm");
+          let m: RegExpExecArray | null;
+          while ((m = flatRe.exec(content)) !== null) {
+            entries2.push({ id: m[1]!, title: m[2]!.trim(), pos: m.index, isParent: false });
+          }
+        }
+
+        // Convert entries to TaskItems with parent tracking
+        let currentParentId: string | undefined;
+        for (const e of entries2) {
+          const cleanTitle = e.title.replace(/\s*\((?:Size:)?\s*(?:XS|S|M)\)\s*$/, "").trim();
+          if (e.isParent) {
+            currentParentId = e.id;
+            items.push({ id: e.id, title: cleanTitle, status: "open", isParent: true });
+          } else {
+            items.push({
+              id: e.id, title: cleanTitle, status: "open",
+              ...(hasParents && currentParentId ? { parentId: currentParentId } : {}),
+            });
           }
         }
 
