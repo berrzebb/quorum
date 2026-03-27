@@ -319,6 +319,9 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     const phaseLabel = wave.phaseId ? ` \x1b[2m(${wave.phaseId})\x1b[0m` : "";
     console.log(`  \x1b[1mWave ${wave.index + 1}/${waves.length}\x1b[0m (${wave.items.length} items)${phaseLabel}\n`);
 
+    // Snapshot before wave: stash current state for regression comparison
+    const waveSnapshotRef = captureSnapshot(repoRoot);
+
     const active: Array<{ item: WorkItem; sessionId: string; retries: number; outputFile?: string }> = [];
 
     // Build and store agent roster for this wave
@@ -507,10 +510,19 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
     }
 
-    // ── Wave-level Audit ─────────────────────────
-    // All agents done → single audit for the wave's changes.
-    // If audit fails → fixer agents target specific issues.
+    // ── Regression Gate (mechanical, pre-audit) ───
+    // Detect file overwrites: if an existing tracked file has deletions >> insertions,
+    // the agent used Write instead of Edit — this destroys prior work.
     const waveCompletedIds = wave.items.filter(i => completedIds.has(i.id));
+    const regressions = detectRegressions(repoRoot, waveCompletedIds.flatMap(i => i.targetFiles), waveSnapshotRef);
+    if (regressions.length > 0) {
+      console.log(`\n  \x1b[31m◈ Wave ${wave.index + 1} REGRESSION detected\x1b[0m`);
+      for (const r of regressions) console.log(`    ✗ ${r}`);
+      // Fixer must restore — pass regressions as findings
+      await runFixer(repoRoot, regressions, regressions.map(r => r.split(":")[0]!.trim()), provider, mux);
+    }
+
+    // ── Wave-level Audit ─────────────────────────
     if (waveCompletedIds.length > 0) {
       const waveFiles = waveCompletedIds.flatMap(i => i.targetFiles);
       console.log(`\n  \x1b[36m◈ Wave ${wave.index + 1} audit\x1b[0m — ${waveCompletedIds.length} items, ${waveFiles.length} files`);
@@ -697,6 +709,13 @@ ${verifySection}
 ${commSection}
 ## Instructions
 Implement this work breakdown item. Follow the implementer protocol.
+
+**CRITICAL — Regression Prevention:**
+- If a target file already exists, READ it first, then EDIT (not Write/overwrite)
+- Preserve all existing code — add your changes alongside, do not replace
+- After changes, run existing tests to confirm no regression
+- If \`git diff --stat\` shows more deletions than insertions on an existing file, STOP and redo with Edit
+
 When done, run the verify command to confirm your work is correct.
 
 ${protocol}`;
@@ -737,13 +756,14 @@ async function runWaveAudit(
     "1. Read each file listed above",
     "2. Check: does the code compile? Are types correct? Are there obvious bugs?",
     "3. Run the verify commands from the work breakdown if available",
-    "4. Output a JSON verdict at the END of your response in this exact format:",
+    "4. Run existing tests — if any fail, flag as finding",
+    "5. Output a JSON verdict at the END of your response in this exact format:",
     '```json',
     '{"passed": true|false, "findings": ["issue 1", "issue 2"]}',
     '```',
     "",
-    "If all items are correctly implemented with no compilation errors, output passed: true.",
-    "If there are issues, list specific findings with file paths.",
+    "If all items are correctly implemented with no regressions, output passed: true.",
+    "If there are issues (bugs, type errors, regressions), list specific findings with file paths.",
   ].join("\n");
 
   const result = spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
@@ -822,6 +842,79 @@ async function runFixer(
   });
 
   console.log(`    \x1b[36m🔧 Fixer agent done\x1b[0m`);
+}
+
+// ── Regression Detection (mechanical) ───────────
+
+/**
+ * Capture a snapshot reference point before a wave starts.
+ * Uses `git stash create` to get a tree-ish without modifying working tree.
+ * Falls back to HEAD if nothing to snapshot.
+ */
+function captureSnapshot(repoRoot: string): string {
+  const { execFileSync } = require("node:child_process");
+  try {
+    // stash create makes a commit object without actually stashing
+    const ref = execFileSync("git", ["stash", "create"], {
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    }).trim();
+    return ref || "HEAD";
+  } catch { return "HEAD"; }
+}
+
+/**
+ * Detect file overwrites by comparing current state against snapshot.
+ * Overwrite = more than 50% of the original file's lines were deleted.
+ * This catches "Write instead of Edit" where agents replace entire file content.
+ */
+function detectRegressions(repoRoot: string, targetFiles: string[], snapshotRef = "HEAD"): string[] {
+  const { execFileSync } = require("node:child_process");
+  const regressions: string[] = [];
+
+  for (const file of [...new Set(targetFiles)]) {
+    try {
+      // Get numstat: additions \t deletions \t file
+      const stat = execFileSync("git", ["diff", "--numstat", snapshotRef, "--", file], {
+        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      }).trim();
+      if (!stat) continue;
+
+      const parts = stat.split("\t");
+      const additions = parseInt(parts[0] ?? "0", 10);
+      const deletions = parseInt(parts[1] ?? "0", 10);
+
+      // Skip new files or trivial changes
+      if (deletions < 10) continue;
+
+      // Calculate original line count: current = original + additions - deletions
+      // → original = current - additions + deletions
+      let currentLines = 0;
+      try {
+        const wc = execFileSync("git", ["ls-files", "--", file], {
+          cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+        }).trim();
+        if (!wc) continue; // untracked, skip
+        const content = readFileSync(resolve(repoRoot, file), "utf8");
+        currentLines = content.split("\n").length;
+      } catch { continue; }
+
+      const originalLines = currentLines - additions + deletions;
+      if (originalLines <= 0) continue; // new file
+
+      const deleteRatio = deletions / originalLines;
+
+      // Overwrite: >50% of original lines deleted — file was replaced, not edited
+      if (deleteRatio > 0.5) {
+        const pct = Math.round(deleteRatio * 100);
+        regressions.push(`${file}: ${pct}% of original overwritten (+${additions} -${deletions}, was ${originalLines} lines) — agent used Write instead of Edit`);
+      }
+    } catch { /* untracked file, skip */ }
+  }
+
+  return regressions;
 }
 
 // ── RTM Generation ──────────────────────────────

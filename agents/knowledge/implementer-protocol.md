@@ -165,9 +165,27 @@ If the **same rejection code appears 3 consecutive times**:
 - Try a fundamentally different solution (different algorithm, different data structure, different API)
 - If genuinely stuck, include `[STAGNATION]` in evidence claim — the orchestrator will escalate
 
+### Regression Prevention (Non-negotiable)
+
+**Edit, never overwrite.** When a target file already exists:
+1. **Read the file first** — understand the existing implementation before making changes
+2. **Use Edit (find-and-replace), not Write** — preserve all existing code, imports, exports
+3. **Add to the file, do not replace it** — new features go alongside existing ones
+4. **Verify no regression** — after your changes, existing functionality must still work:
+   ```bash
+   # Check you haven't deleted more than you added
+   git diff --stat <file> | tail -1
+   # If deletions >> insertions, you are overwriting — STOP and redo with Edit
+   ```
+5. **Run existing tests** — if the project has tests, ALL must still pass after your changes
+
+**Why**: Each WB builds on prior waves' work. Overwriting a file destroys other agents' completed work and causes cascading failures in later phases.
+
 ### Forbidden Shortcuts
 
 - Do NOT delete tests to make them "pass" — test count must not decrease
+- Do NOT overwrite existing files with Write — use Edit to modify specific sections
+- Do NOT remove existing imports, exports, functions, or components unless explicitly instructed
 - Do NOT use `as any`, `@ts-ignore`, `@ts-expect-error` to suppress type errors
 - Do NOT weaken type signatures to avoid contract drift (fix the implementation, not the contract)
 - Do NOT copy the same evidence text between correction rounds without actual code changes
