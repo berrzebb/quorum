@@ -1,6 +1,6 @@
 # Tool Inventory
 
-22 deterministic analysis tools available via CLI. All tools run the same logic regardless of adapter — only the invocation method differs.
+24 deterministic analysis tools available via CLI. All tools run the same logic regardless of adapter — only the invocation method differs.
 
 ## Invocation
 
@@ -55,6 +55,13 @@ Language-aware scans using `languages/{lang}/spec.{domain}.mjs` fragments. Auto-
 |------|---------|
 | `audit_history` | Query verdict history from SQLite. `--summary` for aggregate stats, `--json` for structured output |
 | `ai_guide` | Synthesize code_map + dependency_graph + doc_coverage into onboarding guide |
+
+### Skill & Track Management (2)
+
+| Tool | Purpose |
+|------|---------|
+| `skill_sync` | Detect/fix mismatches between canonical skills and adapter wrappers. `--mode fix` auto-generates missing wrappers |
+| `track_archive` | Archive completed track artifacts (PRD, DRM, WB, RTM, design, wave state) to `.claude/quorum/archive/` |
 
 ## Detailed References
 

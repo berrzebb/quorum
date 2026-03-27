@@ -48,6 +48,8 @@ import {
   toolDocCoverage,
   toolBlueprintLint,
   toolAiGuide,
+  toolSkillSync,
+  toolTrackArchive,
 } from "./tool-core.mjs";
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
@@ -349,6 +351,32 @@ const TOOLS = [
       required: ["action", "agent_id"],
     },
   },
+  // ── Skill sync ──
+  {
+    name: "skill_sync",
+    description: "Detect and fix mismatches between canonical skills (skills/) and adapter wrappers (adapters/*/skills/). Reports missing wrappers, outdated descriptions, and sync status. Use mode='fix' to auto-generate missing wrappers and update descriptions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["check", "fix"], description: "check (default): report only. fix: create missing wrappers and update outdated descriptions." },
+        path: { type: "string", description: "Repository root (default: cwd)" },
+      },
+    },
+  },
+  // ── Track archive ──
+  {
+    name: "track_archive",
+    description: "Archive completed track planning artifacts (PRD, DRM, WB, RTM, design docs, wave state, handoff) to .claude/quorum/archive/{date}/{track}/. Writes a manifest.json summary. Use after track completion and retrospective.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        track:   { type: "string", description: "Track name to archive" },
+        path:    { type: "string", description: "Repository root (default: cwd)" },
+        dry_run: { type: "boolean", description: "If true, report what would be archived without moving files (default: false)" },
+      },
+      required: ["track"],
+    },
+  },
   // ── Evidence submission ──
   {
     name: "audit_submit",
@@ -475,6 +503,22 @@ async function handleRequest(req) {
 
       if (name === "ai_guide") {
         const result = toolAiGuide(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
+      }
+
+      if (name === "skill_sync") {
+        const result = toolSkillSync(args || {});
+        if (result.error) {
+          return { content: [{ type: "text", text: result.error }], isError: true };
+        }
+        return { content: [{ type: "text", text: `${result.text}\n\n(${result.summary})` }] };
+      }
+
+      if (name === "track_archive") {
+        const result = toolTrackArchive(args || {});
         if (result.error) {
           return { content: [{ type: "text", text: result.error }], isError: true };
         }
