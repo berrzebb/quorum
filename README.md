@@ -467,7 +467,7 @@ quorum verify DEP          # dependency vulnerabilities (npm audit)
 quorum verify SCOPE        # diff vs evidence match
 ```
 
-Full reference: [docs/en/TOOLS.md](docs/en/TOOLS.md) | [docs/ko/TOOLS.md](docs/ko/TOOLS.md)
+Full reference: [docs/TOOLS.md](docs/TOOLS.md) | [docs/ko-KR/TOOLS.md](docs/ko-KR/TOOLS.md)
 
 ## Tests
 

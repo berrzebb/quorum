@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import * as bridge from "../bridge.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus, safeLocale,
-  t, resolvePluginPath, escapeRe, pendingInner, agreeInner,
+  t, resolvePluginPath, resolveReferencesDir, escapeRe, pendingInner, agreeInner,
 } from "../context.mjs";
 
 import { parseArgs } from "./args.mjs";
@@ -98,10 +98,11 @@ export function deriveAuditCwd(path) {
   return REPO_ROOT;
 }
 
-function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
+function buildPrompt(scopeText, promotionHint, preVerified, diffScope, contextAnchor) {
   const template = readFileSync(promptTemplatePath, "utf8");
   const promotionSection = buildPromotionSection(promotionHint);
   return template
+    .split("{{CONTEXT_ANCHOR}}").join(contextAnchor ?? "")
     .split("{{SCOPE}}").join(scopeText)
     .split("{{PRE_VERIFIED}}").join(preVerified)
     .split("{{DIFF_CMD}}").join(diffScope ?? "")
@@ -112,7 +113,7 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope) {
     .split("{{DESIGN_DOCS_DIR}}").join(cfg.consensus.design_docs_dir ?? "docs/plan/*/design/**")
     .split("{{LOCALE}}").join(safeLocale)
     .split("{{REFERENCES_DIR}}").join(
-      resolve(HOOKS_DIR, "templates", "references", safeLocale).replace(/\\/g, "/"),
+      resolveReferencesDir(safeLocale).replace(/\\/g, "/"),
     );
 }
 

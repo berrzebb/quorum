@@ -26,7 +26,7 @@
     "agree_tag": "[APPROVED]",
     "pending_tag": "[CHANGES_REQUESTED]",
     "planning_dirs": [
-      "docs/ko/design/improved"
+      "docs/design/improved"
     ],
     "sections": {
       "audit_scope":         "Audit Scope",

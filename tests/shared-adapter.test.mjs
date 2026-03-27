@@ -27,7 +27,7 @@ function setup() {
   mkdirSync(resolve(REPO_DIR, ".claude", "quorum"), { recursive: true });
   mkdirSync(resolve(REPO_DIR, ".git"), { recursive: true });
   mkdirSync(resolve(ADAPTER_DIR, ".session-state"), { recursive: true });
-  mkdirSync(resolve(ADAPTER_DIR, "docs", "en"), { recursive: true });
+  mkdirSync(resolve(ADAPTER_DIR, "docs"), { recursive: true });
   mkdirSync(resolve(ADAPTER_DIR, "examples"), { recursive: true });
 }
 
@@ -248,7 +248,7 @@ describe("shared/context-reinforcement", () => {
       "## Other Section",
       "some content",
     ].join("\n");
-    writeFileSync(resolve(ADAPTER_DIR, "docs", "en", "AI-GUIDE.md"), guideContent);
+    writeFileSync(resolve(ADAPTER_DIR, "docs", "AGENTS.md"), guideContent);
   });
   after(cleanup);
 
@@ -266,11 +266,11 @@ describe("shared/context-reinforcement", () => {
     assert.equal(result, null);
   });
 
-  it("falls back to alternative locale", async () => {
+  it("falls back to English root when locale not found", async () => {
     const { findGuidePath } = await import("../adapters/shared/context-reinforcement.mjs");
-    // "ko" doesn't exist, should fallback to "en"
+    // "ko" → docs/ko-KR/ doesn't exist, should fallback to docs/AGENTS.md (English root)
     const path = findGuidePath(ADAPTER_DIR, "ko");
-    assert.ok(path?.includes("en"));
+    assert.ok(path?.includes("AGENTS.md"));
   });
 });
 

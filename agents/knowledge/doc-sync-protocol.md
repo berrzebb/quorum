@@ -6,7 +6,7 @@ Extract facts from code and fix numeric/structural mismatches across 3 documenta
 
 | Layer | Scope | Reference |
 |-------|-------|-----------|
-| **L1** | Public docs (README, AI-GUIDE, TOOLS — EN/KO) | `references/l1-public-docs.md` |
+| **L1** | Public docs (README, AGENTS, TOOLS — EN/KO) | `references/l1-public-docs.md` |
 | **L2** | RTM (Requirements Traceability Matrix) | `references/l2-rtm.md` |
 | **L3** | Design docs (PRD, WB, Work Catalog) | `references/l3-design-docs.md` |
 
@@ -94,7 +94,7 @@ The fragment-based language registry (`languages/{lang}/spec.{domain}.mjs`) affe
 - Language count: number of `languages/*/spec.mjs` directories
 - Fragment count per language: `spec.*.mjs` files in each directory
 - Quality domain count: unique domains across all languages
-- These numbers appear in README, AI-GUIDE, and CLAUDE.md
+- These numbers appear in README, AGENTS, and CLAUDE.md
 
 ## Constraints
 

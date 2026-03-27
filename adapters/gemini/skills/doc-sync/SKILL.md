@@ -1,6 +1,6 @@
 ---
 name: quorum:doc-sync
-description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AI-GUIDE, TOOLS — EN/KO), L2 RTM, L3 design docs. Use before squash commit, after version bump, or when doc numbers look wrong. Triggers on 'sync docs', 'fix docs', 'doc mismatch', 'update documentation numbers', '문서 동기화'."
+description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AGENTS, TOOLS — EN/KO), L2 RTM, L3 design docs. Use before squash commit, after version bump, or when doc numbers look wrong. Triggers on 'sync docs', 'fix docs', 'doc mismatch', 'update documentation numbers', '문서 동기화'."
 model: gemini-2.5-flash
 allowed-tools: read_file, write_file, edit_file, shell, glob, grep
 ---
@@ -19,12 +19,12 @@ Read the full protocol before starting: `agents/knowledge/doc-sync-protocol.md`
 |------|----------|-----------|
 | `README.md` | EN | Version, test count, hook count, tool count, event count |
 | `README.ko.md` | KO | Same facts, Korean |
-| `docs/en/README.md` | EN | Module map, architecture overview |
-| `docs/ko/README.md` | KO | Same, Korean |
-| `docs/en/AI-GUIDE.md` | EN | Workflow description, tool references |
-| `docs/ko/AI-GUIDE.md` | KO | Same, Korean |
-| `docs/en/TOOLS.md` | EN | Tool catalog with parameters |
-| `docs/ko/TOOLS.md` | KO | Same, Korean |
+| `docs/README.md` | EN | Module map, architecture overview |
+| `docs/ko-KR/README.md` | KO | Same, Korean |
+| `docs/AGENTS.md` | EN | Workflow description, tool references |
+| `docs/ko-KR/AGENTS.md` | KO | Same, Korean |
+| `docs/TOOLS.md` | EN | Tool catalog with parameters |
+| `docs/ko-KR/TOOLS.md` | KO | Same, Korean |
 
 ## Execution
 

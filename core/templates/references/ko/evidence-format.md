@@ -11,6 +11,10 @@
 5. **Test Result** — Terminal output copy-paste (no estimates/rounding, must include lint pass/fail)
 6. **Residual Risk** — 이 트랙의 **모든** 미처리 RTM 행과 사유. 현재 제출에 포함되지 않은 행도 반드시 기재. 감사자는 이를 통해 갭이 인지되었는지 확인. 형식: `Req ID: 상태 (partial-impl/partial-wiring/missing) — 사유`
 
+## 선택 섹션
+
+7. **Blast Radius** — 변경 파일에 대한 `blast_radius` 도구 출력. 공유 모듈을 변경하거나 전이 의존 비율이 10%를 초과할 때 포함. 형식: `파일 → N 직접, M 전이 (비율%)`
+
 ## Writing Rules
 
 - Evidence must be submitted as a **complete package** via `audit_submit` tool — no partial appends.

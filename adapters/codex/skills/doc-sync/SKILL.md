@@ -30,12 +30,12 @@ Read the full protocol before starting: `agents/knowledge/doc-sync-protocol.md`
 |------|----------|-----------|
 | `README.md` | EN | Version, test count, hook count, tool count, event count |
 | `README.ko.md` | KO | Same facts, Korean |
-| `docs/en/README.md` | EN | Module map, architecture overview |
-| `docs/ko/README.md` | KO | Same, Korean |
-| `docs/en/AI-GUIDE.md` | EN | Workflow description, tool references |
-| `docs/ko/AI-GUIDE.md` | KO | Same, Korean |
-| `docs/en/TOOLS.md` | EN | Tool catalog with parameters |
-| `docs/ko/TOOLS.md` | KO | Same, Korean |
+| `docs/README.md` | EN | Module map, architecture overview |
+| `docs/ko-KR/README.md` | KO | Same, Korean |
+| `docs/AGENTS.md` | EN | Workflow description, tool references |
+| `docs/ko-KR/AGENTS.md` | KO | Same, Korean |
+| `docs/TOOLS.md` | EN | Tool catalog with parameters |
+| `docs/ko-KR/TOOLS.md` | KO | Same, Korean |
 
 ## Execution
 

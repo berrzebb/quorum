@@ -11,6 +11,10 @@
 5. **Test Result** — Terminal output copy-paste (no estimates/rounding, must include lint pass/fail)
 6. **Residual Risk** — **ALL** unaddressed RTM rows for this track with reason. This includes rows NOT in the current submission. The auditor uses this to verify that gaps are acknowledged, not silently dropped. Format: `Req ID: status (partial-impl/partial-wiring/missing) — reason`
 
+## Optional Sections
+
+7. **Blast Radius** — Output of `blast_radius` tool for changed files. Include when the change touches shared modules or has transitive dependents ratio > 10%. Format: `file → N direct, M transitive (ratio%)`
+
 ## Writing Rules
 
 - Evidence must be submitted as a **complete package** via `audit_submit` tool — no partial appends.

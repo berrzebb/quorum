@@ -57,12 +57,12 @@ for lang in languages/*/; do echo "$(basename $lang): $(ls $lang/spec.*.mjs 2>/d
 |------|---------------|
 | `README.md` | Version, hook counts, tool count, test count, module count, adapter table |
 | `README.ko.md` | Same facts, Korean version — numbers must match EN |
-| `docs/en/README.md` | Module map, hook counts, tool count, adapter table |
-| `docs/ko/README.md` | Same, Korean |
-| `docs/en/AI-GUIDE.md` | Trigger factors, tool table, stagnation patterns, language count |
-| `docs/ko/AI-GUIDE.md` | Same, Korean |
-| `docs/en/TOOLS.md` | One `##` section per MCP tool |
-| `docs/ko/TOOLS.md` | Same sections, Korean |
+| `docs/README.md` | Module map, hook counts, tool count, adapter table |
+| `docs/ko-KR/README.md` | Same, Korean |
+| `docs/AGENTS.md` | Trigger factors, tool table, stagnation patterns, language count |
+| `docs/ko-KR/AGENTS.md` | Same, Korean |
+| `docs/TOOLS.md` | One `##` section per MCP tool |
+| `docs/ko-KR/TOOLS.md` | Same sections, Korean |
 
 ## Matching Rules
 

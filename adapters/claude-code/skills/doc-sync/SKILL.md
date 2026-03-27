@@ -1,6 +1,6 @@
 ---
 name: quorum:doc-sync
-description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AI-GUIDE, TOOLS — EN/KO), L2 RTM, L3 design docs. Use before squash commit, after version bump, or when doc numbers look wrong. Triggers on 'sync docs', 'fix docs', 'doc mismatch', 'update documentation numbers'."
+description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AGENTS, TOOLS — EN/KO), L2 RTM, L3 design docs. Use before squash commit, after version bump, or when doc numbers look wrong. Triggers on 'sync docs', 'fix docs', 'doc mismatch', 'update documentation numbers'."
 model: claude-sonnet-4-6
 allowed-tools: Read, Grep, Glob, Bash(node *), Bash(npm test*), Bash(ls *), Bash(wc *), Bash(git diff*), Bash(git log*), Bash(git status*), Edit, Write
 ---
@@ -37,12 +37,12 @@ Layer-specific rules (read the relevant reference before each phase):
 |------|----------|-----------|
 | `README.md` | EN | Version, test count, hook count, tool count, event count |
 | `README.ko.md` | KO | Same facts, Korean |
-| `docs/en/README.md` | EN | Module map, architecture overview |
-| `docs/ko/README.md` | KO | Same, Korean |
-| `docs/en/AI-GUIDE.md` | EN | Workflow description, tool references |
-| `docs/ko/AI-GUIDE.md` | KO | Same, Korean |
-| `docs/en/TOOLS.md` | EN | Tool catalog with parameters |
-| `docs/ko/TOOLS.md` | KO | Same, Korean |
+| `docs/README.md` | EN | Module map, architecture overview |
+| `docs/ko-KR/README.md` | KO | Same, Korean |
+| `docs/AGENTS.md` | EN | Workflow description, tool references |
+| `docs/ko-KR/AGENTS.md` | KO | Same, Korean |
+| `docs/TOOLS.md` | EN | Tool catalog with parameters |
+| `docs/ko-KR/TOOLS.md` | KO | Same, Korean |
 
 ## Execution
 

@@ -1,6 +1,6 @@
 ---
 name: quorum:doc-sync
-description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AI-GUIDE, TOOLS — EN/KO), L2 RTM, L3 design docs."
+description: "Extract facts from code and fix documentation mismatches across 3 layers: L1 public docs (README, AGENTS, TOOLS — EN/KO), L2 RTM, L3 design docs."
 ---
 
 # Doc-Sync
@@ -11,7 +11,7 @@ Extract facts from code and fix numeric/structural mismatches across all documen
 
 | Layer | Scope | Reference |
 |-------|-------|-----------|
-| **L1** | Public docs (README, AI-GUIDE, TOOLS — EN/KO) | `references/l1-public-docs.md` |
+| **L1** | Public docs (README, AGENTS, TOOLS — EN/KO) | `references/l1-public-docs.md` |
 | **L2** | RTM status transitions | `references/l2-rtm.md` |
 | **L3** | Design docs (PRD, Work Catalog, Track Map) | `references/l3-design-docs.md` |
 
@@ -25,12 +25,12 @@ Read and follow: `agents/knowledge/doc-sync-protocol.md`
 |------|----------|-----------|
 | `README.md` | EN | Version, test count, hook count, tool count, event count |
 | `README.ko.md` | KO | Same facts, Korean |
-| `docs/en/README.md` | EN | Module map, architecture overview |
-| `docs/ko/README.md` | KO | Same, Korean |
-| `docs/en/AI-GUIDE.md` | EN | Workflow description, tool references |
-| `docs/ko/AI-GUIDE.md` | KO | Same, Korean |
-| `docs/en/TOOLS.md` | EN | Tool catalog with parameters |
-| `docs/ko/TOOLS.md` | KO | Same, Korean |
+| `docs/README.md` | EN | Module map, architecture overview |
+| `docs/ko-KR/README.md` | KO | Same, Korean |
+| `docs/AGENTS.md` | EN | Workflow description, tool references |
+| `docs/ko-KR/AGENTS.md` | KO | Same, Korean |
+| `docs/TOOLS.md` | EN | Tool catalog with parameters |
+| `docs/ko-KR/TOOLS.md` | KO | Same, Korean |
 
 ## 5 Phases
 

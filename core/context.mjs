@@ -164,6 +164,14 @@ export function resolvePluginPath(relativePath) {
   return resolve(HOOKS_DIR, relativePath);
 }
 
+/**
+ * Resolve the references directory path for a given locale.
+ * Uses resolvePluginPath() so project overrides in .claude/quorum/ take precedence.
+ */
+export function resolveReferencesDir(locale) {
+  return resolvePluginPath(`templates/references/${locale}`);
+}
+
 // ── Hook toggles ─────────────────────────────────────────
 const _hooksEnabled = plugin.hooks_enabled ?? {};
 /** 훅 활성화 여부 확인. config에 없으면 기본값 true. */
@@ -172,9 +180,11 @@ export function isHookEnabled(hookName) {
 }
 
 // ── Locale 검증 (path traversal 방지) ─────────────────────
+const LOCALE_ALIASES = { "ko-KR": "ko", "en-US": "en" };
 const ALLOWED_LOCALES = new Set(["en", "ko"]);
 const rawLocale = plugin.locale ?? "en";
-export const safeLocale = ALLOWED_LOCALES.has(rawLocale) ? rawLocale : "en";
+const resolved = LOCALE_ALIASES[rawLocale] ?? rawLocale;
+export const safeLocale = ALLOWED_LOCALES.has(resolved) ? resolved : "en";
 
 // ── Section name constants (English defaults; config overrides) ──
 const S = consensus.sections ?? {};

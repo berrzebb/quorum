@@ -396,7 +396,7 @@ quorum verify DEP          # 의존성 취약점 (npm audit)
 quorum verify SCOPE        # diff vs 증거 매칭
 ```
 
-전체 레퍼런스: [docs/ko/TOOLS.md](docs/ko/TOOLS.md) | [docs/en/TOOLS.md](docs/en/TOOLS.md)
+전체 레퍼런스: [docs/ko-KR/TOOLS.md](docs/ko-KR/TOOLS.md) | [docs/TOOLS.md](docs/TOOLS.md)
 
 ## 테스트
 

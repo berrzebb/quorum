@@ -4,13 +4,14 @@
  * Loads handoff + recent changes + audit state as context for new sessions.
  * Detects interrupted audit cycles and orchestrator tracks → provides resume instructions.
  */
-import { readFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffFromMemory } from "./handoff-writer.mjs";
 import { readAuditStatus, readRetroMarker, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
 import { resolveRepoRoot } from "../../adapters/shared/repo-resolver.mjs";
+import { firstRunSetup, buildFirstRunMessage } from "../../adapters/shared/first-run.mjs";
 import { createT } from "../../core/context.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,61 +26,18 @@ const configPath = findConfigPath({ repoRoot: REPO_ROOT, adapterDir: __dirname }
 // ── config.json not found → auto-copy to project dir + prompt to customize ──
 if (!configPath) {
   const projectConfigDir = resolve(REPO_ROOT, ".claude", "quorum");
-  const exampleConfig = resolve(pluginRoot, "examples", "config.example.json");
-  const configDest = resolve(projectConfigDir, "config.json");
-  const exampleTemplates = resolve(pluginRoot, "examples", "templates");
-  const templatesDest = resolve(projectConfigDir, "templates");
-
-  const autoCopied = [];
-
-  // config.json → project directory (survives plugin updates)
-  // Only copy if config.json does NOT already exist — never overwrite user customizations.
-  if (!existsSync(configDest) && existsSync(exampleConfig)) {
-    try {
-      mkdirSync(projectConfigDir, { recursive: true });
-      cpSync(exampleConfig, configDest);
-      autoCopied.push("config.json");
-    } catch { /* write permission error */ }
-  }
-
-  // templates/ → project directory (policy files persist across updates)
-  if (!existsSync(templatesDest) && existsSync(exampleTemplates)) {
-    try {
-      cpSync(exampleTemplates, templatesDest, { recursive: true });
-      autoCopied.push("templates/");
-    } catch { /* write permission error */ }
-  }
-
-  if (autoCopied.length > 0) {
-    const guide = [
-      `[quorum — First-Run Setup Complete]`,
-      ``,
-      `Auto-copied: ${autoCopied.join(", ")}`,
-      `Location: ${projectConfigDir}`,
-      `(Project-scoped — safe across plugin updates)`,
-      ``,
-      `Customize for your project:`,
-      `- config.json → consensus.trigger_tag/agree_tag/pending_tag, quality_rules`,
-      `- templates/references/{locale}/ → audit policies (rejection codes, test criteria, evidence format)`,
-      ``,
-      `Full guide: ${resolve(pluginRoot, "README.md")}`,
-    ].join("\n");
-    const escaped = JSON.stringify(guide);
-    process.stdout.write(`{"additionalContext": ${escaped}}`);
+  const result = firstRunSetup({ adapterRoot: pluginRoot, projectConfigDir });
+  const msg = buildFirstRunMessage(result, resolve(pluginRoot, "README.md"));
+  if (msg) {
+    process.stdout.write(`{"additionalContext": ${JSON.stringify(msg)}}`);
     process.exit(0);
   }
-
-  // examples/ directory missing (broken install) — manual guidance
-  const guide = [
-    `[SETUP REQUIRED — quorum]`,
-    ``,
-    `config.json not found and examples/ directory is missing.`,
-    `Reinstall the plugin: claude plugin add berrzebb/quorum`,
-    `Or manually create config.json. See: https://github.com/berrzebb/quorum`,
-  ].join("\n");
-  const escaped = JSON.stringify(guide);
-  process.stdout.write(`{"additionalContext": ${escaped}}`);
-  process.exit(0);
+  if (result.needsManualSetup) {
+    process.stdout.write(`{"additionalContext": ${JSON.stringify(
+      `[SETUP REQUIRED — quorum]\n\nconfig.json not found and examples/ directory is missing.\nReinstall the plugin: claude plugin add berrzebb/quorum`
+    )}}`);
+    process.exit(0);
+  }
 }
 
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
@@ -175,6 +133,56 @@ if (existsSync(snapshotPath)) {
   } catch { /* snapshot parse error */ }
 }
 
+// ── 3f. Orchestrate track dashboard ──────────────────────────
+// Read wave-state files + track plans → show progress at session start.
+try {
+  const quorumDir = resolve(REPO_ROOT, ".claude", "quorum");
+  if (existsSync(quorumDir)) {
+    const waveFiles = readdirSync(quorumDir).filter(f => f.startsWith("wave-state-") && f.endsWith(".json"));
+    if (waveFiles.length > 0) {
+      const trackLines = [];
+      const STALE_DAYS = 3;
+      for (const wf of waveFiles) {
+        try {
+          const ws = JSON.parse(readFileSync(resolve(quorumDir, wf), "utf8"));
+          const completed = ws.completedIds?.length ?? 0;
+          const failed = ws.failedIds?.length ?? 0;
+          const lastWave = (ws.lastCompletedWave ?? -1) + 1;
+
+          // Stale detection: check updatedAt
+          let staleMark = "";
+          if (ws.updatedAt) {
+            const daysSince = Math.floor((Date.now() - new Date(ws.updatedAt).getTime()) / 86400_000);
+            if (daysSince >= STALE_DAYS) staleMark = ` ⚠ idle ${daysSince}d`;
+          }
+
+          // Progress bar (10-char block)
+          const total = ws.totalItems ?? (completed + failed);
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          const filled = Math.round(pct / 10);
+          const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+
+          const fitnessLabel = ws.lastFitness != null ? ` fitness:${ws.lastFitness.toFixed(2)}` : "";
+          const waveLabel = ws.totalWaves ? `wave ${lastWave}/${ws.totalWaves}` : `wave ${lastWave}`;
+          trackLines.push(
+            `  ${ws.trackName}: [${bar}] ${pct}% (${completed}/${total} done, ${failed} failed, ${waveLabel}${fitnessLabel})${staleMark}`
+          );
+
+          if (failed > 0) {
+            resumeActions.push(
+              `Track "${ws.trackName}" has ${failed} failed item(s). Run: quorum orchestrate run ${ws.trackName} --resume`
+            );
+          }
+        } catch { /* corrupt wave-state */ }
+      }
+
+      if (trackLines.length > 0) {
+        context += `Orchestrate Tracks:\n${trackLines.join("\n")}\n\n`;
+      }
+    }
+  }
+} catch { /* non-fatal */ }
+
 // ── 4. Build resume context ─────────────────────────────────
 if (resumeActions.length > 0) {
   context += `\n${"=".repeat(50)}\n`;
@@ -187,15 +195,16 @@ if (resumeActions.length > 0) {
 
 // ── 5. Context Reinforcement ────────────────────────────────
 // Re-inject core protocol rules every session start so they survive context compression.
-// Dynamically reads the "Absolute Rules" section from AI-GUIDE.md (Policy as Data).
+// Dynamically reads the "Absolute Rules" section from AGENTS.md (Policy as Data).
 const locale = cfg.plugin?.locale ?? "en";
 const guideDir = (() => {
   const pr = process.env.CLAUDE_PLUGIN_ROOT ?? __dirname;
-  const p = resolve(pr, "docs", locale, "AI-GUIDE.md");
+  // New locale convention: docs/ (EN root), docs/ko-KR/ (Korean)
+  const localeDir = locale === "ko" ? "ko-KR" : "";
+  const p = resolve(pr, "docs", localeDir, "AGENTS.md");
   if (existsSync(p)) return p;
-  // fallback: try the other locale
-  const fb = locale === "ko" ? "en" : "ko";
-  const p2 = resolve(pr, "docs", fb, "AI-GUIDE.md");
+  // fallback: try root (English default)
+  const p2 = resolve(pr, "docs", "AGENTS.md");
   if (existsSync(p2)) return p2;
   return null;
 })();
@@ -213,7 +222,7 @@ if (guideDir) {
       context += `\nRun /quorum:verify before evidence submission. Self-promotion (${agreeTag}) is strictly forbidden.\n`;
       context += `</CONTEXT-REINFORCEMENT>\n`;
     }
-  } catch { /* AI-GUIDE read error — non-fatal */ }
+  } catch { /* AGENTS.md read error — non-fatal */ }
 }
 
 // ── Output ──────────────────────────────────────────────────

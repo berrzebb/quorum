@@ -1,8 +1,7 @@
 /**
  * Shared context reinforcement — re-injects core protocol rules into session context.
  *
- * Extracted from session-start.mjs L274-303.
- * Reads "Absolute Rules" section from AI-GUIDE.md (Policy as Data).
+ * Reads "Absolute Rules" section from AGENTS.md (Policy as Data).
  * Returns the reinforcement text — caller decides how to embed it.
  */
 
@@ -10,26 +9,29 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
- * Find AI-GUIDE.md path with locale fallback.
+ * Find AGENTS.md path with locale fallback.
  *
- * @param {string} adapterRoot — adapter root directory (contains docs/{locale}/)
+ * New locale convention: docs/ (EN root), docs/ko-KR/ (Korean)
+ *
+ * @param {string} adapterRoot — adapter root directory (contains docs/)
  * @param {string} [locale="en"] — preferred locale
- * @returns {string|null} Absolute path to AI-GUIDE.md or null
+ * @returns {string|null} Absolute path to AGENTS.md or null
  */
 export function findGuidePath(adapterRoot, locale = "en") {
-  const primary = resolve(adapterRoot, "docs", locale, "AI-GUIDE.md");
+  // New convention: docs/ko-KR/ for Korean, docs/ for English (root)
+  const localeDir = locale === "ko" ? "ko-KR" : "";
+  const primary = resolve(adapterRoot, "docs", localeDir, "AGENTS.md");
   if (existsSync(primary)) return primary;
 
-  // Fallback: try the other locale
-  const fallback = locale === "ko" ? "en" : "ko";
-  const secondary = resolve(adapterRoot, "docs", fallback, "AI-GUIDE.md");
-  if (existsSync(secondary)) return secondary;
+  // Fallback: English root
+  const fallback = resolve(adapterRoot, "docs", "AGENTS.md");
+  if (existsSync(fallback)) return fallback;
 
   return null;
 }
 
 /**
- * Build context reinforcement text from AI-GUIDE.md.
+ * Build context reinforcement text from AGENTS.md.
  *
  * @param {object} params
  * @param {string} params.adapterRoot — adapter root directory

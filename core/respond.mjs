@@ -23,6 +23,7 @@ import { resolveBinary, spawnResolved } from "./cli-runner.mjs";
 import * as bridge from "./bridge.mjs";
 import {
   HOOKS_DIR, REPO_ROOT, cfg, plugin, consensus, safeLocale, t,
+  resolveReferencesDir,
 } from "./context.mjs";
 
 // ── Args ──────────────────────────────────────
@@ -108,7 +109,7 @@ function runAutoFix(codes) {
     .replace(/\{\{PENDING_TAG\}\}/g, consensus.pending_tag)
     .replace(/\{\{LOCALE\}\}/g, safeLocale)
     .replace(/\{\{DESIGN_DOCS_DIR\}\}/g, consensus.design_docs_dir ?? "")
-    .replace(/\{\{REFERENCES_DIR\}\}/g, "");
+    .replace(/\{\{REFERENCES_DIR\}\}/g, resolveReferencesDir(safeLocale).replace(/\\/g, "/"));
 
   console.log("[respond] Invoking claude for auto-fix...");
   const result = spawnResolved(resolveBinary("claude", "CLAUDE_BIN"), ["-p"], {
