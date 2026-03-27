@@ -1,0 +1,27 @@
+name: doc-sync
+classification: capability
+version: 0.4.5
+description: "Documentation fact extraction and sync quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Extracts facts from code: hook counts, tool counts, test counts"
+      - "Builds comparison table showing Code Value vs Doc Value for each fact"
+      - "Identifies and fixes numeric mismatches across documentation files"
+      - "Covers all 3 layers: L1 public (README), L2 RTM, L3 design docs"
+      - "Handles multi-adapter awareness (Claude Code, Gemini, Codex hook counts)"
+      - "Section parity check between related documents"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

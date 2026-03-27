@@ -1,0 +1,27 @@
+name: docx
+classification: capability
+version: 0.4.5
+description: "DOCX document generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Document has proper structure (title page, sections, tables)"
+      - "Content sourced from planning directory and track data"
+      - "Includes WB summary table with columns for ID, name, size, status"
+      - "Formatted consistently with professional styling"
+      - "Valid DOCX file that opens in Word and LibreOffice"
+      - "No placeholder or fabricated content"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

@@ -1,0 +1,25 @@
+name: retrospect
+classification: workflow
+version: 0.4.5
+description: "Retrospective learning extraction procedure compliance evaluation"
+
+evals:
+  - name: retro-extraction-flow
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Selects mode automatically based on context signals"
+      - "Gathers sources from conversation, audit_history, git log"
+      - "Classifies learnings by memory type (user, feedback, project, reference)"
+      - "Filters to only non-obvious and durable insights"
+      - "Writes memories with frontmatter format"
+      - "Does NOT ask questions in headless mode"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

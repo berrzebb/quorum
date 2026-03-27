@@ -1,0 +1,23 @@
+{
+  "version": "0.4.5",
+  "defaultTimeout": 120000,
+  "maxRetries": 2,
+  "parityThreshold": 0.85,
+  "passThreshold": 0.8,
+  "classifications": {
+    "workflow": {
+      "evalType": "process_compliance",
+      "description": "Does the skill follow the correct procedure?",
+      "parityTest": false
+    },
+    "capability": {
+      "evalType": "output_quality",
+      "description": "Does the skill produce correct and complete output?",
+      "parityTest": true
+    }
+  },
+  "benchmark": {
+    "modelBaseline": "claude-sonnet-4-6",
+    "metrics": ["procedure_compliance", "output_quality", "model_parity"]
+  }
+}

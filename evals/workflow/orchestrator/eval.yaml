@@ -1,0 +1,27 @@
+name: orchestrator
+classification: workflow
+version: 0.4.5
+description: "Wave-based track execution procedure compliance evaluation"
+
+evals:
+  - name: wave-execution-flow
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Runs Plan Review gate before execution"
+      - "Computes waves via topological sort on dependsOn"
+      - "Spawns agents per wave with concurrency limit"
+      - "Runs wave-level audit after all agents complete"
+      - "On audit failure spawns Fixer role with targeted findings"
+      - "Saves wave state to JSON for resume capability"
+      - "Does NOT implement code directly — distributes to workers"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance
+    - gate_sequence_accuracy

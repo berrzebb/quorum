@@ -1,0 +1,25 @@
+name: audit
+classification: workflow
+version: 0.4.5
+description: "Manual audit trigger procedure compliance evaluation"
+
+evals:
+  - name: trigger-and-verdict-flow
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Reads config to determine trigger_tag, agree_tag, pending_tag values"
+      - "Evaluates evidence via audit_submit MCP tool or CLI"
+      - "Routes to correct provider based on consensus.roles mapping"
+      - "Stores verdict in SQLite via bridge.recordTransition"
+      - "Writes audit-status.json marker for fast-path hook detection"
+      - "Does NOT look for verdict.md or gpt.md files"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

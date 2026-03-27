@@ -1,0 +1,28 @@
+name: specialist-review
+classification: capability
+version: 0.4.5
+description: "Domain specialist analysis accuracy evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Uses deterministic tools before LLM reasoning (perf_scan, a11y_scan, audit_scan)"
+      - "JSON output format with verdict, reasoning, codes, findings, and confidence"
+      - "Confidence-based filtering at >= 0.8 threshold"
+      - "Maximum 10 findings per review"
+      - "Escalation hint provided for critical findings"
+      - "Each finding includes file path, line number, severity, and remediation"
+      - "Domain-specific knowledge applied (security patterns for auth context)"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

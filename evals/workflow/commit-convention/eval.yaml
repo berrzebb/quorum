@@ -1,0 +1,25 @@
+name: commit-convention
+classification: workflow
+version: 0.4.5
+description: "Git commit convention procedure compliance evaluation"
+
+evals:
+  - name: commit-workflow
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Analyzes staged changes before writing message"
+      - "Determines commit granularity — one logical change per commit"
+      - "Uses Conventional Commits format: type(scope): subject"
+      - "Subject line 50 characters or less"
+      - "Detects when split is needed (mixed types, 'and' in subject)"
+      - "Project CLAUDE.md conventions take precedence over defaults"
+    timeout: 60000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

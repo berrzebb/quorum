@@ -1,0 +1,27 @@
+name: pptx
+classification: capability
+version: 0.4.5
+description: "PPTX presentation generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Slides have logical progression (overview → metrics → trends → actions)"
+      - "Data sourced from audit_history and fitness scores"
+      - "Charts or tables present for quantitative data"
+      - "Consistent formatting across all slides"
+      - "Valid PPTX file that opens in PowerPoint and LibreOffice"
+      - "Slide count appropriate for content (not too sparse or dense)"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

@@ -1,0 +1,28 @@
+name: mermaid
+classification: capability
+version: 0.4.5
+description: "Mermaid diagram generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Valid mermaid syntax that parses without errors"
+      - "Correct participant declarations for all actors in the flow"
+      - "Message flow matches the described process sequence"
+      - "No syntax errors (unclosed blocks, missing arrows, invalid keywords)"
+      - "Diagram type is appropriate for the content (sequenceDiagram for flows)"
+      - "Participants ordered logically (caller on left, downstream on right)"
+      - "Activation bars or notes used where appropriate for clarity"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

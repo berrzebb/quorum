@@ -1,0 +1,25 @@
+name: verify-implementation
+classification: workflow
+version: 0.4.5
+description: "8-category done-criteria check procedure compliance evaluation"
+
+evals:
+  - name: eight-check-sequence
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Gathers evidence context before running checks"
+      - "Runs all 8 categories in order: CQ, T, CC, CL, S, I, FV, CV"
+      - "Uses deterministic tools for each category"
+      - "Detects project languages via language registry"
+      - "Reports pass/fail per category with specific findings"
+      - "Stops if no evidence found with trigger_tag"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

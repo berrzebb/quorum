@@ -1,0 +1,25 @@
+name: merge-worktree
+classification: workflow
+version: 0.4.5
+description: "Squash-merge procedure compliance evaluation"
+
+evals:
+  - name: merge-procedure
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Verifies worktree environment before merge"
+      - "Checks retrospective completion via retro-marker.json"
+      - "Runs doc-sync before squash commit"
+      - "Creates structured squash commit message"
+      - "Verifies merge result with git log"
+      - "Does NOT cleanup worktree in headless mode"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

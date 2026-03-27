@@ -1,0 +1,26 @@
+name: consensus-tools
+classification: capability
+version: 0.4.5
+description: "Tool invocation accuracy evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Correct tool invocation syntax using quorum tool <name>"
+      - "Passes correct parameters matching each tool's JSON schema"
+      - "Interprets JSON output correctly and extracts relevant data"
+      - "Selects appropriate tool for the task context"
+      - "References tool documentation or catalog for unfamiliar tools"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

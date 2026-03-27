@@ -1,0 +1,27 @@
+name: guide
+classification: capability
+version: 0.4.5
+description: "Evidence writing guide quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Shows correct evidence format with all 5 sections: Claim, Changed Files, Test Command, Test Result, Residual Risk"
+      - "Uses correct trigger_tag from project config"
+      - "Explains tag lifecycle (created, submitted, evaluated)"
+      - "Provides concrete example evidence for the given implementation context"
+      - "Explains audit_submit MCP tool usage for evidence submission"
+      - "Warns about common evidence mistakes (missing test results, vague claims)"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

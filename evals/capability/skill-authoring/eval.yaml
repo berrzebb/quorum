@@ -1,0 +1,29 @@
+name: skill-authoring
+classification: capability
+version: 0.4.5
+description: "Skill creation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "SKILL.md has correct YAML frontmatter (name, description, version)"
+      - "References protocol or knowledge files from agents/knowledge/"
+      - "Includes clearly defined execution workflow steps"
+      - "Includes completion gate conditions (what constitutes done)"
+      - "Creates adapter wrappers for all 3 adapters (claude-code, gemini, codex)"
+      - "Follows the protocol-neutral inheritance pattern (knowledge → skill → adapter)"
+      - "Includes references directory with shared protocol pointers"
+      - "Tool bindings are adapter-specific (correct tool names per adapter)"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

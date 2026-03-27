@@ -1,0 +1,29 @@
+name: planner
+classification: capability
+version: 0.4.5
+description: "PRD + WB generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "PRD contains 4 mandatory sections: Goals, Requirements, Scope, Constraints"
+      - "Each WB item includes Action and Verify fields"
+      - "Phase/GATE hierarchy is correctly structured (Phase N gates before Phase N+1)"
+      - "FDE failure checklists are included per functional requirement"
+      - "MECE decomposition covers Actor, System, and Domain layers"
+      - "WB items reference targetFiles with concrete file paths"
+      - "Size estimation (XS/S/M) is present on each WB heading"
+      - "dependsOn references use valid GATE-N or WB identifiers"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

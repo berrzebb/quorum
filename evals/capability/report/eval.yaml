@@ -1,0 +1,28 @@
+name: report
+classification: capability
+version: 0.4.5
+description: "General report generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Report covers full track lifecycle (planning → implementation → audit → retro)"
+      - "Includes quantitative metrics (test count, fitness score, pass rate)"
+      - "Includes qualitative learnings and recommendations"
+      - "Structured markdown format with clear section hierarchy"
+      - "Data sourced from actual track events and audit records"
+      - "Timeline or chronological narrative present"
+      - "Actionable takeaways section included"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

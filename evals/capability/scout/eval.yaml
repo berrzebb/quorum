@@ -1,0 +1,28 @@
+name: scout
+classification: capability
+version: 0.4.5
+description: "RTM generation accuracy evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Produces 3 RTM types: Forward, Backward, and Bidirectional traceability"
+      - "Uses deterministic tools before LLM reasoning (code_map, dependency_graph)"
+      - "Gap report is written identifying uncovered requirements"
+      - "Completion gate 5 conditions are met before declaring done"
+      - "Row counts are present for each RTM table"
+      - "RTM rows link Requirements to Code to Tests with bidirectional references"
+      - "Follows 8-phase RTM generation protocol"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

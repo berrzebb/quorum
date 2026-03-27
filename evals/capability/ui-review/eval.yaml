@@ -1,0 +1,27 @@
+name: ui-review
+classification: capability
+version: 0.4.5
+description: "UI verification checklist coverage evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Follows UI-1 through UI-8 verification checklist items"
+      - "Checks page loads without JavaScript errors"
+      - "Verifies DOM elements exist and are interactable"
+      - "Validates accessibility using a11y_scan tool"
+      - "Reports findings with file:line references"
+      - "Produces structured report with pass/fail per checklist item"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

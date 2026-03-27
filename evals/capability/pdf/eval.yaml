@@ -1,0 +1,27 @@
+name: pdf
+classification: capability
+version: 0.4.5
+description: "PDF report generation quality evaluation"
+
+evals:
+  - name: output-quality
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Report contains structured sections (summary, verdicts, findings, timeline)"
+      - "Data sourced from audit_history MCP tool or SQLite event store"
+      - "Formatted for readability with clear headings and spacing"
+      - "Includes pass/fail statistics with numerical accuracy"
+      - "PDF generation uses valid library calls (pdfkit, puppeteer, or equivalent)"
+      - "Output file path is deterministic and communicated to user"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

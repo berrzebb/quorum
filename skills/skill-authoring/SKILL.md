@@ -1,6 +1,6 @@
 ---
 name: quorum:skill-authoring
-description: "Create new quorum skills following the canonical + pointer wrapper architecture. Generates the shared skill at skills/{name}/ and adapter wrappers for all 4 adapters (claude-code, gemini, codex, openai-compatible). Use this skill whenever creating, scaffolding, or adding a new skill to the quorum project. Triggers on 'create skill', 'new skill', 'add skill', 'scaffold skill', '스킬 만들기', '스킬 추가', '새 스킬'."
+description: "Create new quorum skills with eval as a set — generates canonical skill, 4 adapter wrappers, AND eval definition (eval.yaml + prompt + expected). Use this skill whenever creating, scaffolding, or adding a new skill to the quorum project. Triggers on 'create skill', 'new skill', 'add skill', 'scaffold skill', '스킬 만들기', '스킬 추가', '새 스킬'."
 argument-hint: "<skill name and purpose>"
 ---
 
@@ -147,7 +147,79 @@ node ${CLAUDE_PLUGIN_ROOT}/core/{script}.mjs {{ arguments }}
 
 Most skills don't need overrides — the pointer alone is sufficient.
 
-## Step 4 — Verify
+## Step 4 — Create Eval Definition
+
+Every skill MUST have an eval. Skills and evals are created as a **set** — a skill without an eval is incomplete.
+
+### Classification
+
+Determine the skill's eval classification:
+
+| Classification | When | Parity Test |
+|---------------|------|-------------|
+| **workflow** | The skill enforces a procedure (step sequence matters) | No |
+| **capability** | The skill produces an output (quality matters) | Yes |
+
+### Create 3 Files
+
+```
+evals/{classification}/{name}/
+  ├── eval.yaml       ← criteria definition + parity config
+  ├── prompt-1.md     ← test scenario (realistic user request)
+  └── expected-1.md   ← expected procedure steps OR quality standards
+```
+
+### eval.yaml Template
+
+```yaml
+name: {name}
+classification: {workflow|capability}
+version: 0.4.5
+description: "{skill name} {classification type} evaluation"
+
+evals:
+  - name: {output-quality|procedure-compliance}
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "{What the skill MUST do — be specific}"
+      - "{Another verifiable criterion}"
+      - "{3-8 criteria total}"
+    timeout: 60000
+
+parity:
+  enabled: {true for capability, false for workflow}
+  description: "Tests if model can perform equally well without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - {procedure_compliance|output_quality}
+    - {model_parity (capability only)}
+```
+
+### prompt-1.md Guidelines
+
+- Describe a **realistic scenario** the skill would handle
+- Include enough context (config values, file paths, project state)
+- Write as if a real user is invoking the skill
+
+### expected-1.md Guidelines
+
+- **Workflow**: List numbered procedure steps (10-25 steps)
+- **Capability**: List quality standards with descriptions (4-8 standards)
+- Include keywords that match the criteria in eval.yaml (the runner uses keyword matching)
+- Be specific enough that the eval runner can verify coverage
+
+### Verify Eval
+
+Run the eval to confirm it passes:
+
+```bash
+node evals/runner.mjs --skill {name}
+```
+
+## Step 5 — Verify
 
 After creating all files, check:
 
@@ -155,6 +227,8 @@ After creating all files, check:
 2. All 4 adapter wrappers exist and point to the canonical
 3. Description is identical across canonical and all wrappers
 4. References (if any) are only in `skills/{name}/references/`, not duplicated per adapter
+5. **Eval exists** at `evals/{classification}/{name}/` with all 3 files
+6. **Eval passes**: `node evals/runner.mjs --skill {name}` exits 0
 
 ### File Checklist
 
@@ -165,6 +239,9 @@ adapters/claude-code/skills/{name}/SKILL.md          ✓ pointer wrapper
 adapters/gemini/skills/{name}/SKILL.md               ✓ pointer wrapper
 adapters/codex/skills/{name}/SKILL.md                ✓ pointer wrapper
 adapters/openai-compatible/skills/{name}/SKILL.md    ✓ pointer wrapper
+evals/{classification}/{name}/eval.yaml              ✓ eval definition
+evals/{classification}/{name}/prompt-1.md            ✓ test scenario
+evals/{classification}/{name}/expected-1.md          ✓ expected output
 ```
 
 ## Anti-Patterns
@@ -177,3 +254,5 @@ adapters/openai-compatible/skills/{name}/SKILL.md    ✓ pointer wrapper
 | Hardcode model in canonical | Let each adapter set its own model |
 | Write different descriptions per adapter | Keep description identical everywhere |
 | Create wrapper-only skills (no canonical) | Always start with canonical |
+| Create skill without eval | Always create eval as a set |
+| Skip eval verification | Run `node evals/runner.mjs --skill {name}` |
