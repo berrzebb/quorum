@@ -1,27 +1,31 @@
 /**
- * AgentChatPanel — multi-pane mux session manager in daemon TUI.
+ * AgentChatPanel — scrollable multi-pane mux session manager + git log.
  *
- * Layout:
- * ┌─Sessions──┬─Pane 1 (focused)─────┬─Pane 2 (pinned)──┐
- * │ > advocate│ output...             │ output...         │
- * │   devil   │                       │                   │
- * │   judge   │                       │                   │
- * │           │───────────────────────│                   │
- * │ ↑↓ select│ > input here_         │                   │
- * │ p=pin    │                       │                   │
- * └──────────┴───────────────────────┴───────────────────┘
+ * Layout (adaptive):
+ * ┌─Sessions──┬─Output (scrollable)──────────┬─Git Log──┐
+ * │ > impl-1  │ agent output lines...        │ abc1234  │
+ * │   impl-2  │ (scroll ↑↓)                  │ def5678  │
+ * │   audit   │                               │ ghi9012  │
+ * ├───────────┴──────────────────────────────┴──────────┤
+ * │ > input here_                                       │
+ * └─────────────────────────────────────────────────────┘
  *
  * Keys:
- *   ↑↓   Select session
- *   i    Enter input mode (type message)
- *   Enter Send message
- *   Esc   Exit input mode
- *   p    Pin/unpin selected session (shows in split pane)
+ *   ↑↓       Scroll output
+ *   ←→       Switch session
+ *   i/Enter  Input mode (type message)
+ *   Esc      Exit input mode
+ *   p        Pin/unpin (pinned sessions cycle in sidebar)
+ *
+ * Breakpoints:
+ *   < 60 cols  → hide session list
+ *   < 100 cols → hide git log
  */
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
-import { existsSync, readFileSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
+import { existsSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
+import { execSync } from "node:child_process";
 import type { ProcessMux, MuxSession } from "../../bus/mux.js";
 import type { ParliamentLiveSession } from "../state-reader.js";
 
@@ -30,17 +34,16 @@ interface Props {
   liveSessions: ParliamentLiveSession[];
 }
 
-/**
- * Parse stream-json NDJSON output into human-readable lines.
- * Extracts assistant text from content_block_delta / result events.
- */
+const MAX_BUFFER_LINES = 200;
+const SCROLL_STEP = 3;
+
+// ── NDJSON parser ────────────────────────────
+
 function parseStreamJson(rawLines: string[]): string[] {
   const messageParts: string[] = [];
   let lastRole: "assistant" | "user" | null = null;
 
-  // capture-pane pads lines with spaces — trimEnd before joining to fix wrapped JSON
   const joined = rawLines.map(l => l.trimEnd()).join("");
-  // Split on both {"type": and {"role": to catch user message objects
   const entries = joined.split(/(?=\{"(?:type|role)":)/);
 
   for (const entry of entries) {
@@ -49,62 +52,63 @@ function parseStreamJson(rawLines: string[]): string[] {
     try {
       const obj = JSON.parse(trimmed);
 
-      // User message: {"type":"message","role":"user",...} or {"role":"user","content":...}
       if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {
-        if (lastRole !== "user") {
-          messageParts.push("\n───");
-        }
+        if (lastRole !== "user") messageParts.push("\n───");
         lastRole = "user";
         const content = typeof obj.content === "string"
           ? obj.content
           : Array.isArray(obj.content)
             ? obj.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text : "").join("")
             : "";
-        if (content) {
-          messageParts.push(`[USER] ${content}`);
-        }
+        if (content) messageParts.push(`[USER] ${content}`);
         continue;
       }
 
-      // Claude stream-json: content_block_delta with text (assistant)
       if (obj.type === "content_block_delta" && obj.delta?.text) {
-        if (lastRole !== "assistant") {
-          messageParts.push("\n───");
-          lastRole = "assistant";
-        }
+        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
         messageParts.push(obj.delta.text);
         continue;
       }
 
-      // Claude stream-json: result with final text (assistant)
       if (obj.type === "result" && obj.result) {
-        if (lastRole !== "assistant") {
-          messageParts.push("\n───");
-          lastRole = "assistant";
-        }
+        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
         messageParts.push(obj.result);
         continue;
       }
-
-      // Skip tool_use, tool_result, and other NDJSON noise
-    } catch { /* not JSON, show raw */ }
+    } catch { /* not JSON — skip */ }
   }
 
-  if (messageParts.length === 0) return rawLines;  // fallback: show raw
-
-  // Join text parts and re-split into display lines
-  const fullText = messageParts.join("");
-  return fullText.split("\n").filter(Boolean).slice(-40);
+  if (messageParts.length === 0) return rawLines;
+  return messageParts.join("").split("\n").filter(Boolean).slice(-MAX_BUFFER_LINES);
 }
+
+// ── Main Component ───────────────────────────
 
 export function AgentChatPanel({ mux, liveSessions }: Props) {
   const [selectedIdx, setSelectedIdx] = useState(0);
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [outputs, setOutputs] = useState<Map<string, string[]>>(new Map());
   const [inputBuffer, setInputBuffer] = useState("");
   const [inputMode, setInputMode] = useState(false);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [gitLog, setGitLog] = useState<string[]>([]);
+  const [termSize, setTermSize] = useState({ rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 });
 
-  // Register external sessions in effect (not render body)
+  // Track terminal resize
+  useEffect(() => {
+    const onResize = () => setTermSize({ rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 });
+    process.stdout.on("resize", onResize);
+    return () => { process.stdout.off("resize", onResize); };
+  }, []);
+
+  // Layout breakpoints
+  const showSessionList = termSize.cols >= 60;
+  const showGitLog = termSize.cols >= 100;
+  const sessionListWidth = showSessionList ? 22 : 0;
+  const gitLogWidth = showGitLog ? Math.min(35, Math.floor(termSize.cols * 0.25)) : 0;
+  // Header(1) + separator(1) + bottom input(3) + borders(2) = 7
+  const visibleLines = Math.max(termSize.rows - 7, 5);
+
+  // Register external sessions
   useEffect(() => {
     for (const ls of liveSessions) {
       mux.registerExternal({
@@ -119,61 +123,91 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
 
   const sessions = mux.list().filter(s => s.status === "running");
 
-  // Build outputFile lookup from liveSessions
+  // Output file map
   const outputFileMap = new Map<string, string>();
   for (const ls of liveSessions) {
     if (ls.outputFile) outputFileMap.set(ls.id, ls.outputFile);
   }
 
-  // Poll ALL sessions — prefer output file over capture-pane
+  // Poll session outputs
   useEffect(() => {
     if (sessions.length === 0) return;
-
     const poll = () => {
       const next = new Map(outputs);
       for (const s of sessions) {
         let raw = "";
-
-        // 1. Try output file first (reliable) — read tail only for performance
         const outFile = outputFileMap.get(s.id);
         if (outFile && existsSync(outFile)) {
           try {
             const fd = openSync(outFile, "r");
             const stat = fstatSync(fd);
-            const TAIL_BYTES = 32_768; // 32KB tail — enough for recent output
-            const start = Math.max(0, stat.size - TAIL_BYTES);
-            const buf = Buffer.alloc(Math.min(TAIL_BYTES, stat.size));
+            const TAIL = 65_536; // 64KB for more scroll content
+            const start = Math.max(0, stat.size - TAIL);
+            const buf = Buffer.alloc(Math.min(TAIL, stat.size));
             readSync(fd, buf, 0, buf.length, start);
             closeSync(fd);
             raw = buf.toString("utf8");
           } catch { /* ok */ }
         }
-
-        // 2. Fall back to capture-pane
         if (!raw) {
-          const cap = mux.capture(s.id, 80);
+          const cap = mux.capture(s.id, 120);
           if (cap?.output) raw = cap.output;
         }
-
         if (raw) {
           const rawLines = raw.split("\n").filter(Boolean);
           const hasJson = rawLines.some(l => l.trim().startsWith("{"));
-          next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-40));
+          next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-MAX_BUFFER_LINES));
         }
       }
       setOutputs(next);
     };
-
     poll();
     const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
   }, [sessions.length, sessions.map(s => s.id).join()]);
 
-  useInput(useCallback((input: string, key: { upArrow?: boolean; downArrow?: boolean; return?: boolean; escape?: boolean; backspace?: boolean; delete?: boolean }) => {
+  // Poll git log
+  useEffect(() => {
+    if (!showGitLog) return;
+    const pollGit = () => {
+      try {
+        const log = execSync("git log --oneline -30", {
+          encoding: "utf8", timeout: 3000,
+          stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+        }).trim();
+        setGitLog(log ? log.split("\n") : []);
+      } catch { setGitLog(["(no git repo)"]); }
+    };
+    pollGit();
+    const timer = setInterval(pollGit, 5000);
+    return () => clearInterval(timer);
+  }, [showGitLog]);
+
+  // Current session + lines
+  const safeIdx = Math.min(selectedIdx, Math.max(0, sessions.length - 1));
+  const selected = sessions[safeIdx];
+  const lines = outputs.get(selected?.id ?? "") ?? [];
+  const maxScroll = Math.max(0, lines.length - visibleLines);
+
+  // Auto-scroll to bottom when new content arrives (if already at bottom)
+  useEffect(() => {
+    if (scrollOffset === 0) { /* already at bottom — stays at bottom */ }
+  }, [lines.length]);
+
+  // Compute visible slice
+  const safeOffset = Math.min(scrollOffset, maxScroll);
+  const startIdx = Math.max(0, lines.length - visibleLines - safeOffset);
+  const displayLines = lines.slice(startIdx, startIdx + visibleLines);
+
+  // Key handling
+  useInput(useCallback((input: string, key: {
+    upArrow?: boolean; downArrow?: boolean; leftArrow?: boolean; rightArrow?: boolean;
+    return?: boolean; escape?: boolean; backspace?: boolean; delete?: boolean;
+  }) => {
     if (inputMode) {
       if (key.return) {
-        if (inputBuffer.trim() && sessions[selectedIdx]) {
-          mux.send(sessions[selectedIdx]!.id, inputBuffer.trim());
+        if (inputBuffer.trim() && selected) {
+          mux.send(selected.id, inputBuffer.trim());
           setInputBuffer("");
         }
         setInputMode(false);
@@ -182,23 +216,27 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
         setInputMode(false);
       } else if (key.backspace || key.delete) {
         setInputBuffer(prev => prev.slice(0, -1));
-      } else if (input && !key.upArrow && !key.downArrow) {
+      } else if (input && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow) {
         setInputBuffer(prev => prev + input);
       }
     } else {
-      if (key.upArrow) setSelectedIdx(prev => Math.max(0, prev - 1));
-      else if (key.downArrow) setSelectedIdx(prev => Math.min(sessions.length - 1, prev + 1));
-      else if (input === "i" || key.return) setInputMode(true);
-      else if (input === "p" && sessions[Math.min(selectedIdx, sessions.length - 1)]) {
-        const id = sessions[Math.min(selectedIdx, sessions.length - 1)]!.id;
-        setPinnedIds(prev => {
-          const next = new Set(prev);
-          if (next.has(id)) next.delete(id); else next.add(id);
-          return next;
-        });
+      // ↑↓ = scroll output
+      if (key.upArrow) setScrollOffset(prev => Math.min(prev + SCROLL_STEP, maxScroll));
+      else if (key.downArrow) setScrollOffset(prev => Math.max(0, prev - SCROLL_STEP));
+      // ←→ = switch session
+      else if (key.leftArrow) {
+        setSelectedIdx(prev => Math.max(0, prev - 1));
+        setScrollOffset(0);
+      } else if (key.rightArrow) {
+        setSelectedIdx(prev => Math.min(sessions.length - 1, prev + 1));
+        setScrollOffset(0);
       }
+      // i/Enter = input mode
+      else if (input === "i" || key.return) setInputMode(true);
     }
-  }, [inputMode, inputBuffer, selectedIdx, sessions.length]));
+  }, [inputMode, inputBuffer, selectedIdx, sessions.length, maxScroll]));
+
+  // ── Empty state ─────────────────────────────
 
   if (sessions.length === 0) {
     return (
@@ -210,108 +248,114 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
     );
   }
 
-  const safeIdx = Math.min(selectedIdx, sessions.length - 1);
-  const selected = sessions[safeIdx];
-  if (!selected) return null;
-  const pinnedSessions = sessions.filter(s => pinnedIds.has(s.id) && s.id !== selected.id);
+  // ── Render ──────────────────────────────────
+
+  const live = liveSessions.find(ls => ls.id === selected?.id);
+  const selectedRole = live?.role ?? selected?.name.split("-").slice(-2, -1)[0] ?? "agent";
+  const scrollPct = lines.length > visibleLines
+    ? Math.round(((lines.length - safeOffset - visibleLines) / (lines.length - visibleLines)) * 100)
+    : 100;
 
   return (
-    <Box flexDirection="row" padding={0}>
-      {/* Col 1: Session list */}
-      <Box flexDirection="column" width={24} borderStyle="single" paddingX={1}>
-        <Text bold>Sessions</Text>
-        <Text dimColor>{"─".repeat(20)}</Text>
-        {sessions.map((s, i) => {
-          const isSel = i === selectedIdx;
-          const isPinned = pinnedIds.has(s.id);
-          const age = Math.round((Date.now() - s.startedAt) / 1000);
-          const live = liveSessions.find(ls => ls.id === s.id);
-          const role = live?.role ?? s.name.split("-").slice(-2, -1)[0] ?? "agent";
-          const color = role === "advocate" ? "green" : role === "devil" ? "red" : role === "judge" ? "blue" : "white";
+    <Box flexDirection="column">
+      {/* ── Top: main panels ─────────────── */}
+      <Box flexDirection="row">
 
-          return (
-            <Text key={s.id} color={isSel ? "cyan" : undefined} bold={isSel}>
-              {isSel ? ">" : " "}{isPinned ? "*" : " "}
-              <Text color={color}>{role.slice(0, 8).padEnd(8)}</Text>
-              <Text dimColor>{age}s</Text>
+        {/* Col 1: Session list */}
+        {showSessionList && (
+          <Box flexDirection="column" width={sessionListWidth} borderStyle="single" paddingX={1}>
+            <Text bold>Sessions</Text>
+            <Text dimColor>{"─".repeat(18)}</Text>
+            {sessions.map((s, i) => {
+              const isSel = i === safeIdx;
+              const age = Math.round((Date.now() - s.startedAt) / 1000);
+              const liveInfo = liveSessions.find(ls => ls.id === s.id);
+              const role = liveInfo?.role ?? s.name.split("-").slice(-2, -1)[0] ?? "agent";
+              const color = role === "advocate" ? "green"
+                : role === "devil" ? "red"
+                : role === "judge" ? "blue"
+                : role === "implementer" || role === "impl" ? "yellow"
+                : "white";
+              return (
+                <Text key={s.id} color={isSel ? "cyan" : undefined} bold={isSel}>
+                  {isSel ? ">" : " "} <Text color={color}>{role.slice(0, 10).padEnd(10)}</Text>
+                  <Text dimColor>{age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`}</Text>
+                </Text>
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Col 2: Output pane (scrollable) */}
+        <Box flexDirection="column" flexGrow={1} borderStyle="single" paddingX={1}>
+          {/* Header */}
+          <Box justifyContent="space-between">
+            <Text bold color="cyan">
+              {selectedRole} <Text dimColor>{selected?.backend ?? ""}</Text>
             </Text>
-          );
-        })}
-        <Box marginTop={1}>
-          <Text dimColor>↑↓ sel p=pin i=msg</Text>
+            <Text dimColor>
+              {safeOffset > 0 ? `▲${safeOffset}` : ""} {lines.length}L {scrollPct}%
+            </Text>
+          </Box>
+          <Text dimColor>{"─".repeat(40)}</Text>
+
+          {/* Scrollable output */}
+          <Box flexDirection="column" height={visibleLines}>
+            {displayLines.length === 0 ? (
+              <Text dimColor>waiting for output...</Text>
+            ) : (
+              displayLines.map((line, i) => (
+                <Text key={startIdx + i} wrap="truncate-end">{line}</Text>
+              ))
+            )}
+          </Box>
+
+          {/* Scroll indicator bar */}
+          {lines.length > visibleLines && (
+            <Text dimColor>
+              {safeOffset > 0 ? "▲ " : "  "}
+              {"─".repeat(20)}
+              {startIdx > 0 ? " ▼" : "  "}
+            </Text>
+          )}
         </Box>
-      </Box>
 
-      {/* Col 2: Focused session */}
-      <Box flexDirection="column" flexGrow={1} borderStyle="single" paddingX={1}>
-        <SessionPane
-          session={selected!}
-          lines={outputs.get(selected?.id ?? "") ?? []}
-          inputMode={inputMode}
-          inputBuffer={inputBuffer}
-          focused
-        />
-      </Box>
-
-      {/* Col 3+: Pinned sessions */}
-      {pinnedSessions.map(s => (
-        <Box key={s.id} flexDirection="column" width={35} borderStyle="single" paddingX={1}>
-          <SessionPane
-            session={s}
-            lines={outputs.get(s.id) ?? []}
-            inputMode={false}
-            inputBuffer=""
-            focused={false}
-          />
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-// ── Session Pane (reusable) ─────────────────
-
-function SessionPane({ session, lines, inputMode, inputBuffer, focused }: {
-  session: MuxSession;
-  lines: string[];
-  inputMode: boolean;
-  inputBuffer: string;
-  focused: boolean;
-}) {
-  const name = session.name.length > 30 ? session.name.slice(0, 30) + "..." : session.name;
-
-  return (
-    <>
-      <Text bold color={focused ? "cyan" : undefined}>
-        {name} <Text dimColor>{session.backend}</Text>
-      </Text>
-      <Text dimColor>{"─".repeat(Math.min(name.length + 10, 40))}</Text>
-
-      {/* Output */}
-      <Box flexDirection="column" flexGrow={1}>
-        {lines.length === 0 ? (
-          <Text dimColor>...</Text>
-        ) : (
-          lines.map((line, i) => (
-            <Text key={i} wrap="truncate-end">{line}</Text>
-          ))
+        {/* Col 3: Git log */}
+        {showGitLog && (
+          <Box flexDirection="column" width={gitLogWidth} borderStyle="single" paddingX={1}>
+            <Text bold>Git Log</Text>
+            <Text dimColor>{"─".repeat(gitLogWidth - 4)}</Text>
+            {gitLog.slice(0, visibleLines).map((line, i) => {
+              const isWIP = line.includes("WIP(");
+              return (
+                <Text key={i} wrap="truncate-end" color={isWIP ? "green" : undefined} dimColor={!isWIP}>
+                  {line}
+                </Text>
+              );
+            })}
+            {gitLog.length === 0 && <Text dimColor>no commits</Text>}
+          </Box>
         )}
       </Box>
 
-      {/* Input (focused pane only) */}
-      {focused && (
-        <>
-          <Text dimColor>{"─".repeat(Math.min(name.length + 10, 40))}</Text>
-          {inputMode ? (
-            <Box>
-              <Text color="cyan" bold>{">"} </Text>
-              <Text>{inputBuffer}<Text color="cyan">_</Text></Text>
-            </Box>
-          ) : (
-            <Text dimColor>[p] pin/unpin  msg: quorum tool agent_comm</Text>
-          )}
-        </>
-      )}
-    </>
+      {/* ── Bottom: input area ─────────── */}
+      <Box borderStyle="single" paddingX={1} height={3}>
+        {inputMode ? (
+          <Box flexGrow={1}>
+            <Text color="cyan" bold>{">"} </Text>
+            <Text>{inputBuffer}<Text color="cyan" inverse> </Text></Text>
+          </Box>
+        ) : (
+          <Box justifyContent="space-between" flexGrow={1}>
+            <Text dimColor>
+              [←→] session  [↑↓] scroll  [i] input  [Enter] send
+            </Text>
+            <Text dimColor>
+              {sessions.length} active
+            </Text>
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 }

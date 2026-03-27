@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { dirname } from "node:path";
+import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { type Bridge, type WorkItem, type Wave, type WBSize, DIST, loadBridge, findTracks, parseWorkBreakdown, resolveTrack, reviewPlan, verifyDesignDiagrams, computeWaves } from "./shared.js";
 import { autoGenerateWBs, autoFixDesignDiagrams } from "./planner.js";
 import { autoRetro, autoMerge } from "./lifecycle.js";
@@ -290,6 +291,8 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     }
   }
 
+  let currentPhaseId: string | undefined;
+
   for (let gi = 0; gi < waves.length; gi++) {
     const wave = waves[gi]!;
 
@@ -306,6 +309,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
             if (ps) ps.completed.add(item.id);
           }
         }
+        currentPhaseId = wave.phaseId ?? currentPhaseId;
         continue;
       }
       // Wave has failed items — filter to only re-run those
@@ -316,11 +320,34 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       }
     }
 
+    // ── Phase Completion Gate (mechanical) ──────
+    if (wave.phaseId && currentPhaseId && wave.phaseId !== currentPhaseId) {
+      const prevPhaseItems = waves
+        .filter(w => w.phaseId === currentPhaseId)
+        .flatMap(w => w.items);
+      console.log(`\n  \x1b[36m◈ Phase gate\x1b[0m — verifying ${currentPhaseId} before ${wave.phaseId}`);
+      const phaseResult = verifyPhaseCompletion(repoRoot, currentPhaseId, prevPhaseItems, completedIds);
+      if (!phaseResult.passed) {
+        console.log(`  \x1b[31m✗ Phase gate FAILED\x1b[0m`);
+        for (const f of phaseResult.failures) console.log(`    ✗ ${f}`);
+        console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
+        saveWaveState(repoRoot, { trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "" });
+        await mux.cleanup();
+        if (bridge?.close) bridge.close();
+        return;
+      }
+      console.log(`  \x1b[32m✓ Phase gate passed\x1b[0m — ${currentPhaseId} verified\n`);
+    }
+    currentPhaseId = wave.phaseId ?? currentPhaseId;
+
     const phaseLabel = wave.phaseId ? ` \x1b[2m(${wave.phaseId})\x1b[0m` : "";
     console.log(`  \x1b[1mWave ${wave.index + 1}/${waves.length}\x1b[0m (${wave.items.length} items)${phaseLabel}\n`);
 
     // Snapshot before wave: stash current state for regression comparison
     const waveSnapshotRef = captureSnapshot(repoRoot);
+
+    // Read previous wave manifests from MessageBus (SQLite)
+    const previousManifests = readPreviousManifests(bridge, trackName, gi);
 
     const active: Array<{ item: WorkItem; sessionId: string; retries: number; outputFile?: string }> = [];
 
@@ -367,7 +394,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         const promptFile = resolve(tmpDir, `${sessionName}.prompt.txt`);
         const outputFile = resolve(tmpDir, `${sessionName}.out`);
         const scriptFile = resolve(tmpDir, `${sessionName}${isWin ? ".cmd" : ".sh"}`);
-        const prompt = buildImplementerPrompt(item, trackName, repoRoot, roster);
+        const prompt = buildImplementerPrompt(item, trackName, repoRoot, roster, previousManifests);
 
         writeFileSync(promptFile, prompt, "utf8");
 
@@ -511,15 +538,25 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     }
 
     // ── Regression Gate (mechanical, pre-audit) ───
-    // Detect file overwrites: if an existing tracked file has deletions >> insertions,
-    // the agent used Write instead of Edit — this destroys prior work.
     const waveCompletedIds = wave.items.filter(i => completedIds.has(i.id));
     const regressions = detectRegressions(repoRoot, waveCompletedIds.flatMap(i => i.targetFiles), waveSnapshotRef);
     if (regressions.length > 0) {
       console.log(`\n  \x1b[31m◈ Wave ${wave.index + 1} REGRESSION detected\x1b[0m`);
       for (const r of regressions) console.log(`    ✗ ${r}`);
-      // Fixer must restore — pass regressions as findings
       await runFixer(repoRoot, regressions, regressions.map(r => r.split(":")[0]!.trim()), provider, mux);
+    }
+
+    // ── RTM + WIP Commit (pre-audit) ───────────
+    if (waveCompletedIds.length > 0) {
+      updateRTM(rtmPath, waveCompletedIds, "implemented");
+      console.log(`  \x1b[36m✓ RTM updated\x1b[0m — ${waveCompletedIds.length} items → implemented`);
+
+      const commitFiles = [...new Set(waveCompletedIds.flatMap(i => i.targetFiles))];
+      commitFiles.push(rtmPath);
+      const committed = waveCommit(repoRoot, commitFiles, wave.index + 1, trackName);
+      if (committed) {
+        console.log(`  \x1b[32m✓ Wave ${wave.index + 1} WIP committed\x1b[0m`);
+      }
     }
 
     // ── Wave-level Audit ─────────────────────────
@@ -533,27 +570,35 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       while (!auditPassed) {
         fixAttempt++;
 
-        // Run wave-level audit via CLI
         const auditResult = await runWaveAudit(repoRoot, waveFiles, waveCompletedIds, provider);
 
         if (auditResult.passed) {
           console.log(`  \x1b[32m✓ Wave ${wave.index + 1} audit passed\x1b[0m${fixAttempt > 1 ? ` (after ${fixAttempt - 1} fix round(s))` : ""}`);
           auditPassed = true;
+          // RTM: passed → amend WIP commit
+          updateRTM(rtmPath, waveCompletedIds, "passed");
+          amendWaveCommit(repoRoot, rtmPath);
+          console.log(`  \x1b[32m✓ RTM → passed, commit amended\x1b[0m`);
         } else {
           console.log(`  \x1b[33m↻ Wave ${wave.index + 1} audit failed — spawning fixer (attempt ${fixAttempt})\x1b[0m`);
           for (const f of auditResult.findings) console.log(`    ✗ ${f}`);
 
           if (fixAttempt > maxRetries) {
             console.log(`  \x1b[31m✗ Wave ${wave.index + 1} audit failed after ${maxRetries} fix attempts\x1b[0m`);
+            // RTM: failed → amend WIP commit
+            updateRTM(rtmPath, waveCompletedIds, "failed");
+            amendWaveCommit(repoRoot, rtmPath);
             failedWBs += waveCompletedIds.length;
             break;
           }
 
-          // Spawn fixer agent
           await runFixer(repoRoot, auditResult.findings, waveFiles, provider, mux);
         }
       }
     }
+
+    // ── Record to MessageBus (SQLite) ────────────
+    recordWaveManifest(repoRoot, bridge, trackName, gi, waveCompletedIds, waveSnapshotRef);
 
     // ── Save wave state for resume ──────────────
     saveWaveState(repoRoot, {
@@ -652,6 +697,7 @@ function selectModelForSize(baseProvider: string, size?: WBSize): { provider: st
 function buildImplementerPrompt(
   item: WorkItem, trackName: string, repoRoot: string,
   roster?: Array<{ agentId: string; wbId: string; targetFiles: string[]; dependsOn: string[] }>,
+  manifests?: WaveManifest[],
 ): string {
   let protocol = "";
   try {
@@ -663,24 +709,15 @@ function buildImplementerPrompt(
     ? item.targetFiles.map(f => `- ${f}`).join("\n")
     : "Identify targets from context.";
 
-  // Peer agents in the same execution group
+  // Dependency context injection (mechanical — orchestrator reads from MessageBus)
+  const depContext = buildDepContextFromManifests(item, manifests ?? []);
+
+  // Peer roster (informational — who else is running in this wave)
   const peers = (roster ?? [])
     .filter(r => r.agentId !== `impl-${item.id}`)
     .map(r => `- ${r.agentId}: ${r.wbId} (files: ${r.targetFiles.join(", ") || "TBD"})`)
     .join("\n");
-
-  const commSection = peers ? `
-## Active Peers
-${peers}
-
-## Inter-Agent Communication
-Use \`quorum tool agent_comm\` to coordinate with peers:
-- Ask: \`--action post --agent_id impl-${item.id} --to_agent <peer> --question "..."\`
-- Check inbox: \`--action poll --agent_id impl-${item.id}\`
-- Respond: \`--action respond --agent_id impl-${item.id} --query_id <id> --answer "..."\`
-- Get answers: \`--action responses --agent_id impl-${item.id} --query_id <id>\`
-Do NOT block waiting. Post query → continue working → check later.
-` : "";
+  const peerSection = peers ? `\n## Active Peers (same wave)\n${peers}\n` : "";
 
   // Action / Context Budget / Verify / Constraints — from WB schema
   const actionSection = item.action
@@ -706,16 +743,9 @@ ${actionSection}
 ${ctxSection}
 ${constraintSection}
 ${verifySection}
-${commSection}
+${depContext}${peerSection}
 ## Instructions
 Implement this work breakdown item. Follow the implementer protocol.
-
-**CRITICAL — Regression Prevention:**
-- If a target file already exists, READ it first, then EDIT (not Write/overwrite)
-- Preserve all existing code — add your changes alongside, do not replace
-- After changes, run existing tests to confirm no regression
-- If \`git diff --stat\` shows more deletions than insertions on an existing file, STOP and redo with Edit
-
 When done, run the verify command to confirm your work is correct.
 
 ${protocol}`;
@@ -735,7 +765,7 @@ interface WaveAuditResult {
 async function runWaveAudit(
   repoRoot: string, files: string[], items: WorkItem[], provider: string,
 ): Promise<WaveAuditResult> {
-  const { spawnSync } = await import("node:child_process");
+
   const quorumRoot = resolve(DIST, "..");
   const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
@@ -807,7 +837,7 @@ async function runWaveAudit(
 async function runFixer(
   repoRoot: string, findings: string[], files: string[], provider: string, mux: any,
 ): Promise<void> {
-  const { spawnSync } = await import("node:child_process");
+
   const quorumRoot = resolve(DIST, "..");
   const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
@@ -852,7 +882,7 @@ async function runFixer(
  * Falls back to HEAD if nothing to snapshot.
  */
 function captureSnapshot(repoRoot: string): string {
-  const { execFileSync } = require("node:child_process");
+
   try {
     // stash create makes a commit object without actually stashing
     const ref = execFileSync("git", ["stash", "create"], {
@@ -868,8 +898,8 @@ function captureSnapshot(repoRoot: string): string {
  * Overwrite = more than 50% of the original file's lines were deleted.
  * This catches "Write instead of Edit" where agents replace entire file content.
  */
-function detectRegressions(repoRoot: string, targetFiles: string[], snapshotRef = "HEAD"): string[] {
-  const { execFileSync } = require("node:child_process");
+export function detectRegressions(repoRoot: string, targetFiles: string[], snapshotRef = "HEAD"): string[] {
+
   const regressions: string[] = [];
 
   for (const file of [...new Set(targetFiles)]) {
@@ -917,6 +947,203 @@ function detectRegressions(repoRoot: string, targetFiles: string[], snapshotRef 
   return regressions;
 }
 
+// ── Wave Manifest (SQLite MessageBus) ────────
+
+export interface WaveManifest {
+  trackName: string;
+  waveIndex: number;
+  completedItems: string[];
+  changedFiles: string[];
+  fileExports: Record<string, string[]>;
+  recordedAt: number;
+}
+
+/**
+ * Record wave changes to MessageBus (SQLite KV).
+ * Next wave reads this to inject dependency context mechanically.
+ */
+function recordWaveManifest(
+  repoRoot: string, bridge: Bridge | null, trackName: string, waveIndex: number,
+  completedItems: WorkItem[], snapshotRef: string,
+): void {
+  if (!bridge?.setState) return;
+
+  try {
+    const stat = execFileSync("git", ["diff", "--name-only", snapshotRef], {
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+    }).trim();
+    const changedFiles = stat ? stat.split("\n").filter(Boolean) : [];
+
+    const fileExports: Record<string, string[]> = {};
+    for (const file of changedFiles.slice(0, 20)) {
+      try {
+        const content = readFileSync(resolve(repoRoot, file), "utf8");
+        const exports = content.split("\n")
+          .filter(line => /^export\s/.test(line))
+          .slice(0, 15);
+        if (exports.length > 0) fileExports[file] = exports;
+      } catch { /* skip */ }
+    }
+
+    bridge.setState(`wave:manifest:${trackName}:${waveIndex}`, {
+      trackName, waveIndex,
+      completedItems: completedItems.map(i => i.id),
+      changedFiles, fileExports, recordedAt: Date.now(),
+    });
+  } catch { /* fail-open */ }
+}
+
+/**
+ * Read all previous wave manifests from MessageBus.
+ */
+function readPreviousManifests(
+  bridge: Bridge | null, trackName: string, currentWaveIndex: number,
+): WaveManifest[] {
+  if (!bridge?.getState) return [];
+  const manifests: WaveManifest[] = [];
+  for (let i = 0; i < currentWaveIndex; i++) {
+    try {
+      const m = bridge.getState(`wave:manifest:${trackName}:${i}`);
+      if (m) manifests.push(m as WaveManifest);
+    } catch { /* skip */ }
+  }
+  return manifests;
+}
+
+/**
+ * Build dependency context from MessageBus manifests.
+ * Mechanical injection — orchestrator reads SQLite, injects into prompt.
+ */
+export function buildDepContextFromManifests(item: WorkItem, manifests: WaveManifest[]): string {
+  if (!item.dependsOn || item.dependsOn.length === 0 || manifests.length === 0) return "";
+  const depSet = new Set(item.dependsOn);
+  const sections: string[] = [];
+
+  for (const m of manifests) {
+    const relevantDeps = m.completedItems.filter(id => depSet.has(id));
+    if (relevantDeps.length === 0) continue;
+
+    const fileEntries: string[] = [];
+    for (const [file, exports] of Object.entries(m.fileExports)) {
+      fileEntries.push(`### ${file}\n\`\`\`\n${exports.join("\n")}\n\`\`\``);
+    }
+
+    if (fileEntries.length > 0) {
+      sections.push(`## Wave ${m.waveIndex + 1} (${relevantDeps.join(", ")})\nChanged: ${m.changedFiles.join(", ")}\n\n${fileEntries.join("\n\n")}`);
+    } else if (m.changedFiles.length > 0) {
+      sections.push(`## Wave ${m.waveIndex + 1} (${relevantDeps.join(", ")})\nChanged: ${m.changedFiles.join(", ")}`);
+    }
+  }
+
+  return sections.length > 0
+    ? `# Dependency Output (from MessageBus)\n\n${sections.join("\n\n---\n\n")}\n`
+    : "";
+}
+
+// ── Wave Commit Gate (mechanical) ────────────
+
+/**
+ * WIP commit after wave audit passes.
+ * Protects completed work from being lost by subsequent waves.
+ */
+export function waveCommit(repoRoot: string, files: string[], waveNum: number, trackName: string): boolean {
+
+  try {
+    const existingFiles = files.filter(f => {
+      try {
+        const p = f.startsWith("/") || f.includes(":\\") ? f : resolve(repoRoot, f);
+        return existsSync(p);
+      } catch { return false; }
+    });
+    if (existingFiles.length === 0) return false;
+
+    execFileSync("git", ["add", ...existingFiles], {
+      cwd: repoRoot, windowsHide: true, stdio: "pipe",
+    });
+
+    const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
+      cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (!staged) return false;
+
+    const fileCount = staged.split("\n").length;
+    execFileSync("git", ["commit", "-m", `WIP(${trackName}/wave-${waveNum}): ${fileCount} files`], {
+      cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: "pipe",
+    });
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Amend the latest WIP commit with updated RTM status.
+ * Called after audit to squash RTM "implemented" → "passed"/"failed" into the same commit.
+ */
+function amendWaveCommit(repoRoot: string, rtmPath: string): void {
+  try {
+    execFileSync("git", ["add", rtmPath], { cwd: repoRoot, windowsHide: true, stdio: "pipe" });
+    execFileSync("git", ["commit", "--amend", "--no-edit"], {
+      cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: "pipe",
+    });
+  } catch { /* fail-open: amend is best-effort */ }
+}
+
+// ── Phase Completion Gate (mechanical) ───────
+
+/**
+ * Verify Phase N is complete before allowing Phase N+1.
+ * Checks: all items completed, verify commands pass, no regressions.
+ */
+export function verifyPhaseCompletion(
+  repoRoot: string, phaseId: string, phaseItems: WorkItem[], completedIds: Set<string>,
+): { passed: boolean; failures: string[] } {
+
+  const failures: string[] = [];
+
+  // 1. All items in phase must be completed
+  const incomplete = phaseItems.filter(i => !completedIds.has(i.id));
+  if (incomplete.length > 0) {
+    failures.push(`${incomplete.length} item(s) incomplete: ${incomplete.map(i => i.id).join(", ")}`);
+  }
+
+  // 2. Re-run verify commands (integration check)
+  for (const item of phaseItems) {
+    if (!item.verify || !completedIds.has(item.id)) continue;
+    try {
+      execSync(item.verify, { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
+    } catch {
+      failures.push(`${item.id} verify failed: ${item.verify}`);
+    }
+  }
+
+  // 3. Regression check on all phase files
+  const phaseFiles = [...new Set(phaseItems.flatMap(i => i.targetFiles))];
+  const regressions = detectRegressions(repoRoot, phaseFiles);
+  for (const r of regressions) failures.push(`Regression: ${r}`);
+
+  return { passed: failures.length === 0, failures };
+}
+
+// ── RTM Update (mechanical) ──────────────────
+
+/**
+ * Update RTM status for completed items.
+ * Three states: implemented (pre-audit), passed (audit OK), failed (audit rejected).
+ */
+export function updateRTM(rtmPath: string, items: WorkItem[], status: "implemented" | "passed" | "failed"): void {
+  if (!existsSync(rtmPath)) return;
+  try {
+    let content = readFileSync(rtmPath, "utf8");
+    for (const item of items) {
+      const escapedId = item.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const pattern = new RegExp(
+        `(\\|\\s*${escapedId}\\s*\\|[^\\n]*\\|)\\s*(?:pending|implemented|failed)\\s*\\|`,
+      );
+      content = content.replace(pattern, `$1 ${status} |`);
+    }
+    writeFileSync(rtmPath, content, "utf8");
+  } catch { /* fail-open */ }
+}
+
 // ── RTM Generation ──────────────────────────────
 
 /**
@@ -931,7 +1158,8 @@ function generateSkeletalRTM(items: WorkItem[], trackName: string): string {
   const rows = items.map(item => {
     const files = item.targetFiles.length > 0 ? item.targetFiles.join(", ") : "TBD";
     const verify = item.verify ?? "not specified";
-    const done = item.done ?? "not specified";
+    // Sanitize done field — must be single-line for table row integrity
+    const done = (item.done ?? "not specified").replace(/\n/g, " ").replace(/\s{2,}/g, " ").trim();
     return `| ${item.id} | ${item.title ?? item.id} | ${files} | ${verify} | ${done} | pending |`;
   });
 

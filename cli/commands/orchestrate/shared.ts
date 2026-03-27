@@ -249,12 +249,15 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
 
     const targetFiles: string[] = [];
     const fileRegex = /`([^`]+\.[a-z]{1,5})`/g;
-    const firstTouchStart = body.indexOf("First touch files");
-    if (firstTouchStart !== -1) {
-      const nextSection = body.indexOf("\n- **", firstTouchStart + 1);
-      const fileBlock = nextSection !== -1
-        ? body.slice(firstTouchStart, nextSection)
-        : body.slice(firstTouchStart, Math.min(firstTouchStart + 500, body.length));
+    // Support both "First touch files" and "Target Files" labels
+    const fileFieldStart = body.search(/(?:First touch files|\*\*Target Files?\*\*)\s*:?/i);
+    if (fileFieldStart !== -1) {
+      const nextSection = body.indexOf("\n- **", fileFieldStart + 1);
+      const nextHeading = body.indexOf("\n##", fileFieldStart + 1);
+      const nextBlank = body.indexOf("\n\n", fileFieldStart + 1);
+      const ends = [nextSection, nextHeading, nextBlank].filter(i => i > fileFieldStart);
+      const end = ends.length > 0 ? Math.min(...ends) : Math.min(fileFieldStart + 500, body.length);
+      const fileBlock = body.slice(fileFieldStart, end);
       let fileMatch: RegExpExecArray | null;
       while ((fileMatch = fileRegex.exec(fileBlock)) !== null) {
         targetFiles.push(fileMatch[1]!);
@@ -289,9 +292,9 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
     const constraintsMatch = body.match(/\*\*Constraints?\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|$)/i);
     const constraints = constraintsMatch?.[1]?.trim() || undefined;
 
-    // Done: completion criteria
-    const doneMatch = body.match(/\*\*Done\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|$)/i);
-    const done = doneMatch?.[1]?.trim() || undefined;
+    // Done: completion criteria (stop at next field, section separator, or heading)
+    const doneMatch = body.match(/\*\*Done\*\*:\s*([\s\S]*?)(?=\n-\s+\*\*|\n##|\n---|\n\n|$)/i);
+    const done = doneMatch?.[1]?.trim().replace(/\n---$/, "").trim() || undefined;
 
     // Title: extract from heading (e.g., "### OIN-1: Project Scaffolding (Size: S)")
     const titleMatch = body.match(/^#{2,3}\s+[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?[:\s]+(.+?)(?:\s*\((?:Size:)?\s*(?:XS|S|M)\))?$/m);

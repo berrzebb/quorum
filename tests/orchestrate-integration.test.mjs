@@ -203,6 +203,93 @@ describe("committee routing Korean", () => {
   });
 });
 
+// ── Target Files extraction ─────────────────
+
+describe("parseWorkBreakdown targetFiles", () => {
+  it("extracts Target Files from **Target Files**: `path` format", () => {
+    const root = resolve(tmpdir(), `quorum-target-${Date.now()}`);
+    const dir = resolve(root, "docs", "plan", "player");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "work-breakdown.md"), [
+      "## MP-01 — Audio Engine [S]",
+      "",
+      "**Target Files**: `src/audio/engine.ts`",
+      "**Action**: Create engine",
+      "**Verify**: `npx tsc --noEmit`",
+      "**Done**: Engine works.",
+      "",
+      "---",
+      "",
+      "## MP-02 — UI [S]",
+      "",
+      "**Target Files**: `src/components/Player.tsx`, `src/components/List.tsx`",
+      "**Done**: UI renders.",
+    ].join("\n"), "utf8");
+
+    const items = parseWorkBreakdown(resolve(dir, "work-breakdown.md"));
+    assert.equal(items.length, 2);
+
+    const mp01 = items.find(i => i.id === "MP-01");
+    assert.ok(mp01, "MP-01 should be parsed");
+    assert.deepEqual(mp01.targetFiles, ["src/audio/engine.ts"]);
+
+    const mp02 = items.find(i => i.id === "MP-02");
+    assert.ok(mp02, "MP-02 should be parsed");
+    assert.ok(mp02.targetFiles.includes("src/components/Player.tsx"), "Should extract Player.tsx");
+    assert.ok(mp02.targetFiles.includes("src/components/List.tsx"), "Should extract List.tsx");
+
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("still extracts First touch files format", () => {
+    const root = resolve(tmpdir(), `quorum-ft-${Date.now()}`);
+    const dir = resolve(root, "docs", "plan", "legacy");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "work-breakdown.md"), [
+      "## LEG-1: Setup",
+      "",
+      "First touch files: `src/setup.ts`, `src/config.ts`",
+    ].join("\n"), "utf8");
+
+    const items = parseWorkBreakdown(resolve(dir, "work-breakdown.md"));
+    const leg1 = items.find(i => i.id === "LEG-1");
+    assert.ok(leg1);
+    assert.ok(leg1.targetFiles.includes("src/setup.ts"));
+    assert.ok(leg1.targetFiles.includes("src/config.ts"));
+
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+// ── Done field sanitization ─────────────────
+
+describe("parseWorkBreakdown done field", () => {
+  it("does not include --- separator in done field", () => {
+    const root = resolve(tmpdir(), `quorum-done-${Date.now()}`);
+    const dir = resolve(root, "docs", "plan", "clean");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "work-breakdown.md"), [
+      "## CL-1 — Task [XS]",
+      "",
+      "**Done**: Task is complete.",
+      "",
+      "---",
+      "",
+      "## CL-2 — Other [XS]",
+      "",
+      "**Done**: Other done.",
+    ].join("\n"), "utf8");
+
+    const items = parseWorkBreakdown(resolve(dir, "work-breakdown.md"));
+    const cl1 = items.find(i => i.id === "CL-1");
+    assert.ok(cl1);
+    assert.ok(!cl1.done?.includes("---"), `Done should not contain '---': got "${cl1.done}"`);
+    assert.equal(cl1.done, "Task is complete.");
+
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
 // ── Empty convergence guard ──────────────────
 
 describe("empty convergence guard", () => {
