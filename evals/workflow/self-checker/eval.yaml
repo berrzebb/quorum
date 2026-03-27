@@ -1,0 +1,27 @@
+name: self-checker
+classification: workflow
+version: 0.4.8
+description: "Pre-audit self-verification workflow evaluation"
+
+evals:
+  - name: five-point-verification
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Detects changed files from git diff or explicit input"
+      - "Runs CQ check (lint/type) appropriate to detected language"
+      - "Runs T check (tests pass, coverage of changed code)"
+      - "Runs CC check (actual diff matches target files)"
+      - "Runs S check (security scan on changed files)"
+      - "Runs I check (i18n validation on changed files)"
+      - "Produces structured pass/fail report"
+      - "Does NOT modify any files"
+    timeout: 60000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-haiku-4-5-20251001"
+  metrics:
+    - procedure_compliance

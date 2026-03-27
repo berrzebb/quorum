@@ -1,0 +1,26 @@
+name: gap-detector
+classification: workflow
+version: 0.4.8
+description: "Design-implementation gap detection workflow evaluation"
+
+evals:
+  - name: gap-analysis-pipeline
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Reads design documents to extract verifiable facts"
+      - "Uses code_map and dependency_graph to build codebase model"
+      - "Compares each design fact against implementation"
+      - "Classifies gaps as Match/Partial/Missing/Extra"
+      - "Calculates Match Rate percentage"
+      - "Produces structured gap report with design reference and code location"
+      - "Does NOT modify any files"
+    timeout: 90000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

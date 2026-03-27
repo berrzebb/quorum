@@ -1,0 +1,27 @@
+name: convergence-loop
+classification: workflow
+version: 0.4.8
+description: "Convergence loop workflow evaluation"
+
+evals:
+  - name: evaluate-fix-converge
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Runs initial evaluation via self-checker and gap-detector"
+      - "Calculates convergence score (fitness + pass rate + confluence)"
+      - "Spawns fixer for failed criteria"
+      - "Re-evaluates after fixes"
+      - "Detects stagnation after 3 identical failures"
+      - "Stops on score regression"
+      - "Outputs per-iteration progress table"
+      - "Outputs final convergence report"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

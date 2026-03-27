@@ -1,0 +1,29 @@
+name: skill-status
+classification: capability
+version: 0.4.8
+description: "Skill inventory diagnostics capability evaluation"
+
+evals:
+  - name: inventory-report
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Scans all canonical skills in skills/*/"
+      - "Scans all 4 adapter wrapper directories"
+      - "Scans eval coverage in evals/*/"
+      - "Builds cross-reference compatibility matrix"
+      - "Detects missing wrappers"
+      - "Detects description mismatches"
+      - "Detects trigger conflicts"
+      - "Produces structured health report"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can audit skill inventory without this skill"
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - output_quality
+    - model_parity

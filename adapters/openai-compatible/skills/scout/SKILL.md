@@ -1,6 +1,6 @@
 ---
 name: quorum-scout
-description: "Read-only RTM generator — analyzes track work-breakdowns against the actual codebase using 20 deterministic tools, produces 3 Requirements Traceability Matrices (Forward, Backward, Bidirectional) and gap reports. Use before distributing work, after track completion, or when the orchestrator needs to verify requirement coverage."
+description: "Analyze RTM data to produce gap reports, cross-track audits, and bidirectional summaries. Consumes structured output from wb-parser and rtm-scanner. Single responsibility: requirement gap analysis. Triggers on 'scout', 'gap report', 'RTM analysis', 'RTM 분석', '갭 보고서'."
 model: default
 allowed-tools: read, bash, glob, grep
 ---

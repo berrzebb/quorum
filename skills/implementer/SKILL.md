@@ -1,41 +1,48 @@
 ---
 name: quorum:implementer
-description: "Headless worker — receives task + context, implements code in worktree, runs tests, submits evidence, handles audit corrections. Spawned by orchestrator for Tier 2/3 tasks."
+description: "Headless code writer — receives task + context, implements code in worktree. Focused on Steps 1-3 only: setup, understand, implement. Verification is delegated to self-checker, corrections to fixer. Spawned by orchestrator for Tier 2/3 tasks."
 ---
 
 # Implementer
 
-Autonomous headless worker. Receives a task with context, implements code, verifies quality, submits evidence, and waits for audit approval.
+Autonomous headless code writer. Receives a task with context and writes code. Does NOT self-verify or handle corrections — those are separate roles.
 
 ## Core Protocol
 
 Read and follow: `agents/knowledge/implementer-protocol.md`
 
-## Execution Flow (8 Steps)
+## Role Boundaries
+
+| Responsibility | Role | Model |
+|---------------|------|-------|
+| Code writing | **implementer** (this skill) | sonnet |
+| Pre-audit verification (CQ/T/CC/S/I) | `quorum:self-checker` | haiku |
+| Audit correction | `quorum:fixer` | sonnet |
+| Design documents | `quorum:designer` | opus |
+
+The implementer focuses on producing working code. Quality gates and corrections are handled by specialized roles that the orchestrator dispatches.
+
+## Execution Flow (6 Steps)
 
 1. **Setup** — check worktree environment, read config and reference templates
 2. **Understand** — consume Forward RTM rows (if provided) or identify targets from context
-3. **Implement** — write code; run `quorum tool audit_scan` for zero-token validation
-4. **Verify** — CQ (lint/types), T (tests pass), CC (diff matches claim), S (security), I (i18n)
-5. **Update RTM** — mark Forward RTM rows with status, impl details, test results
-6. **Submit Evidence** — call `audit_submit` tool with `[trigger_tag]` (mandatory)
-7. **Wait for Audit** — poll `quorum tool audit_history --summary --json`; handle agree/pending/infra_failure
-8. **WIP Commit** — `git add <specific files>` + `git commit -m "WIP(scope): ..."` (mandatory after agree)
+3. **Implement** — write code; run `quorum tool audit_scan` for basic zero-token validation
+4. **Update RTM** — mark Forward RTM rows with status, impl details, test results
+5. **Submit Evidence** — call `audit_submit` tool with `[trigger_tag]` (mandatory)
+6. **WIP Commit** — `git add <specific files>` + `git commit -m "WIP(scope): ..."` (mandatory after agree)
 
-## Correction Round
+Steps 4-6 occur after the orchestrator confirms that self-checker has passed.
 
-When audit returns `[pending_tag]`: read rejection codes, fix each issue, re-verify, re-submit. Do NOT spawn a new agent — corrections happen in-place.
-
-## Completion Gate (6 Conditions)
+## Completion Gate (4 Conditions)
 
 | # | Condition | Verification |
 |---|-----------|-------------|
 | 1 | Code changes exist | `git diff --name-only` |
-| 2 | CQ passed | linter/type check exit 0 |
-| 3 | Tests passed | test runner exit 0 |
-| 4 | Evidence submitted | audit_submit tool called with trigger_tag |
-| 5 | Audit approved | verdict contains agree_tag |
-| 6 | WIP committed | git log shows WIP commit |
+| 2 | Evidence submitted | audit_submit tool called with trigger_tag |
+| 3 | Audit approved | verdict contains agree_tag |
+| 4 | WIP committed | git log shows WIP commit |
+
+CQ/T verification is the self-checker's responsibility, not the implementer's.
 
 ## Available Tools
 

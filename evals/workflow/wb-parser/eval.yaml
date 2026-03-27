@@ -1,0 +1,26 @@
+name: wb-parser
+classification: workflow
+version: 0.4.8
+description: "Work breakdown parsing workflow evaluation"
+
+evals:
+  - name: requirement-extraction
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Reads work-breakdown.md files from planning directory"
+      - "Extracts Req ID, Title, Size from WB headings"
+      - "Extracts Action, Verify, Target files, dependsOn from WB body"
+      - "Builds dependency graph from dependsOn fields"
+      - "Outputs structured requirements table"
+      - "Reports parsing errors for malformed WBs"
+      - "Does NOT run code analysis tools"
+    timeout: 60000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-haiku-4-5-20251001"
+  metrics:
+    - procedure_compliance

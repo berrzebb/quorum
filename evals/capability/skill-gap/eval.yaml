@@ -1,0 +1,27 @@
+name: skill-gap
+classification: capability
+version: 0.4.8
+description: "Skill gap analysis capability evaluation"
+
+evals:
+  - name: prd-skill-matching
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Extracts technical signals from CPS/PRD"
+      - "Matches signals against skill catalog"
+      - "Classifies each match as COVERED/PARTIAL/GAP"
+      - "Checks tool catalog for relevant MCP tools"
+      - "Identifies domain detection results"
+      - "Outputs structured gap report with recommended actions"
+    timeout: 60000
+
+parity:
+  enabled: true
+  description: "Tests if model can identify skill needs without this skill"
+
+benchmark:
+  model_baseline: "claude-haiku-4-5-20251001"
+  metrics:
+    - output_quality
+    - model_parity

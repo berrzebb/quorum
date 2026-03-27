@@ -1,0 +1,26 @@
+name: fde-analyst
+classification: workflow
+version: 0.4.8
+description: "Failure Driven Engineering analysis workflow evaluation"
+
+evals:
+  - name: failure-analysis-pipeline
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Selects P0/P1 FRs for analysis"
+      - "Generates failure scenarios across 4 categories (external, data, input, infra)"
+      - "Classifies each scenario with HIGH/MEDIUM/LOW severity"
+      - "Provides concrete mitigation strategy per failure"
+      - "Creates new WB items for HIGH severity failures"
+      - "Creates new WB items for MEDIUM severity unless deferred"
+      - "Presents derived WB summary for user confirmation"
+    timeout: 90000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

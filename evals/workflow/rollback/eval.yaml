@@ -1,0 +1,26 @@
+name: rollback
+classification: workflow
+version: 0.4.8
+description: "Checkpoint management and state recovery workflow evaluation"
+
+evals:
+  - name: checkpoint-lifecycle
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Lists existing checkpoints with metadata"
+      - "Creates checkpoint with wave state, event count, work catalog snapshot"
+      - "Creates safety checkpoint before restore"
+      - "Restores wave state from checkpoint"
+      - "Does NOT delete SQLite events"
+      - "Does NOT auto-checkout git"
+      - "Shows diff between current state and checkpoint"
+    timeout: 90000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

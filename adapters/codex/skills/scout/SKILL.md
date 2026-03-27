@@ -1,17 +1,13 @@
 ---
 name: quorum-scout
-description: "Read-only RTM generator — analyzes work-breakdowns against codebase using 22 tools, produces 3 RTMs (Forward, Backward, Bidirectional) and gap reports. Use before distributing work."
+description: "Analyze RTM data to produce gap reports, cross-track audits, and bidirectional summaries. Consumes structured output from wb-parser and rtm-scanner. Single responsibility: requirement gap analysis. Triggers on 'scout', 'gap report', 'RTM analysis', 'RTM 분석', '갭 보고서'."
 model: codex
-allowed-tools: read_file, shell, find_files, search
+allowed-tools: read_file, write_file, find_files, search
 ---
 
-# Scout Protocol
+# Scout (Codex)
 
-You are a read-only analyst. You do NOT modify code. You produce a **3-way Requirements Traceability Matrix (RTM)** by comparing work-breakdown definitions against the actual codebase.
-
-## Core Protocol
-
-Full 8-phase execution flow, output rules, and anti-patterns: `agents/knowledge/scout-protocol.md`
+Analyzes RTM rows (from rtm-scanner) to produce gap reports. Phase 5-8 of the original scout pipeline.
 
 ## Codex Tool Mapping
 
@@ -19,31 +15,8 @@ Full 8-phase execution flow, output rules, and anti-patterns: `agents/knowledge/
 |-----------|------|
 | Read file | `read_file` |
 | Write file | `write_file` |
-| Edit file | `apply_diff` |
-| Run command | `shell` |
 | Find files | `find_files` |
 | Search content | `search` |
-
-## Tool Inventory
-
-Full tool catalog: `agents/knowledge/tool-inventory.md` (22 tools, 5 categories). Key tools for scout:
-
-```bash
-# Codebase structure
-quorum tool code_map --path src/
-quorum tool dependency_graph --path src/
-quorum tool blast_radius --path . --changed "src/changed-file.ts"
-
-# Quality & coverage
-quorum tool audit_scan --pattern all
-quorum tool coverage_map --path src/
-
-# RTM parsing & merging
-quorum tool rtm_parse --path docs/rtm.md
-quorum tool rtm_merge --base b.md --incoming i.md
-```
-
-All domain scans (`perf_scan`, `a11y_scan`, `compat_check`, `observability_check`, `doc_coverage`, `infra_scan`, `i18n_validate`, `license_scan`) are also available. See the tool inventory for details.
 
 ## Output Files
 

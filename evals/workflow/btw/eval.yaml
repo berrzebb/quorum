@@ -1,0 +1,25 @@
+name: btw
+classification: workflow
+version: 0.4.8
+description: "BTW suggestion capture workflow evaluation"
+
+evals:
+  - name: suggestion-lifecycle
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Records suggestion to .claude/quorum/btw.jsonl"
+      - "Auto-categorizes suggestion content"
+      - "Captures context (current file, session, task)"
+      - "Does not interrupt current workflow"
+      - "Lists suggestions with category filtering"
+      - "Analyzes patterns from accumulated suggestions"
+    timeout: 60000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

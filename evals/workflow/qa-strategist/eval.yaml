@@ -1,0 +1,26 @@
+name: qa-strategist
+classification: workflow
+version: 0.4.8
+description: "Quality strategy planning workflow evaluation"
+
+evals:
+  - name: phase-criteria-definition
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Assesses track context from PRD/CPS"
+      - "Selects applicable phases based on track scope"
+      - "Defines quality criteria per phase with thresholds"
+      - "Includes parliamentary checks (Confluence, Amendment) for Tier 3"
+      - "Adjusts thresholds per domain (security, UI, data)"
+      - "Outputs structured quality plan with mandatory vs advisory checks"
+      - "Delegates to evaluator roles, does NOT execute checks"
+    timeout: 60000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

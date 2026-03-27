@@ -1,0 +1,27 @@
+name: fixer
+classification: workflow
+version: 0.4.8
+description: "Targeted audit finding fix workflow evaluation"
+
+evals:
+  - name: surgical-fix-pipeline
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Reads audit findings and maps to rejection codes"
+      - "Plans minimal fixes for each finding"
+      - "Applies surgical fixes without restructuring surrounding code"
+      - "Runs build check after fixes"
+      - "Runs tests after fixes"
+      - "Produces structured fix report"
+      - "Does NOT delete tests or suppress type errors"
+      - "Detects stagnation after 3 identical failures"
+    timeout: 90000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

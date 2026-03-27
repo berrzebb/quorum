@@ -1,0 +1,27 @@
+name: rtm-scanner
+classification: workflow
+version: 0.4.8
+description: "RTM tracing workflow evaluation"
+
+evals:
+  - name: forward-backward-trace
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Takes structured requirements table as input"
+      - "Runs code_map per target file to check existence and symbols"
+      - "Runs dependency_graph to verify import chains"
+      - "Runs coverage_map to get per-file coverage"
+      - "Produces Forward RTM with Exists/Impl/Test/Coverage columns"
+      - "Traces test imports backward to produce Backward RTM"
+      - "Batches tool calls by directory for efficiency"
+      - "Records tool failures as infra_failure, not silent skips"
+    timeout: 90000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-haiku-4-5-20251001"
+  metrics:
+    - procedure_compliance

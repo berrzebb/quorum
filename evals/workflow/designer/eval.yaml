@@ -1,0 +1,27 @@
+name: designer
+classification: workflow
+version: 0.4.8
+description: "Design document generation workflow compliance evaluation"
+
+evals:
+  - name: design-artifact-generation
+    prompt: prompt-1.md
+    expected: expected-1.md
+    criteria:
+      - "Reads PRD and DRM to determine required design artifacts"
+      - "Generates Spec with sequenceDiagram for each API flow"
+      - "Generates Blueprint with flowchart/classDiagram and naming conventions table"
+      - "Generates Domain Model with erDiagram and stateDiagram-v2"
+      - "Generates Architecture with system topology diagram"
+      - "Validates all required mermaid diagrams exist"
+      - "Runs blueprint_lint for naming convention validation"
+      - "Outputs completeness report with per-artifact status"
+    timeout: 120000
+
+parity:
+  enabled: false
+
+benchmark:
+  model_baseline: "claude-sonnet-4-6"
+  metrics:
+    - procedure_compliance

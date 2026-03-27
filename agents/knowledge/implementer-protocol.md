@@ -55,23 +55,13 @@ Read config: `{ADAPTER_ROOT}/core/config.json`
 - **I**: Locale keys in ALL locale files
 - **WB Verify**: If a `Verify` command was provided in the task, run it. It MUST pass.
 
-### 4. Self-Check Gate (Oracle Loop)
+### 4. Self-Check (Delegated to `quorum:self-checker`)
 
-Before submitting evidence, run deterministic self-checks. These are **free** (no LLM tokens) and catch issues that would otherwise cost a full audit round-trip.
+The orchestrator spawns a **self-checker** (haiku) after implementation completes. The self-checker runs 5-point verification (CQ/T/CC/S/I) using deterministic tools — zero LLM tokens for judgment. Language-specific commands are resolved from `languages/{lang}/spec.mjs` → `verify` field.
 
-```bash
-# 1. Fitness pre-check — does the change degrade quality?
-quorum tool audit_scan --path <changed_files>
+If the self-checker reports FAIL, the orchestrator spawns a **fixer** (sonnet) to address blocking issues before evidence submission.
 
-# 2. Scope check — do changed files match target files?
-git diff --name-only | sort > /tmp/actual
-# Compare with target files from task — flag any unexpected files
-
-# 3. Blast radius — are transitive dependents safe?
-quorum tool blast_radius --path <changed_files>
-```
-
-**Gate rule**: If audit_scan finds new violations not present before your change, fix them BEFORE submitting. Do NOT submit and hope the auditor misses them.
+The implementer does NOT run self-checks — it focuses on code writing only.
 
 ### 5. Update Forward RTM Rows
 After fixing each target, update: Status, Exists, Impl, Test Case, Test Result, Agent.
@@ -125,54 +115,18 @@ Verification:
 
 This report is parsed by the orchestrator for progress tracking.
 
-## Correction Round Flow (WORK → DECLARE → VERIFY Loop)
+## Correction Round (Delegated to `quorum:fixer`)
 
-The implementer operates in a self-correcting loop until the Oracle (auditor) passes:
+When audit returns `[pending_tag]`, the **orchestrator** spawns a **fixer** agent (sonnet) — not the implementer. The fixer:
 
-```
-LOOP:
-  1. Analyze: what failed? what changed since last attempt? what approach hasn't been tried?
-  2. Work: fix issues with a DIFFERENT approach if previous attempt failed
-  3. Verify locally: build + test + lint must ALL pass
-  4. Declare: submit evidence via audit_submit
-  5. Oracle verifies: wait for audit verdict
-     - [agree_tag] → exit loop (success)
-     - [pending_tag] → go to step 1 with new rejection context
-     - infra_failure → git stash, exit
-```
+1. Reads rejection codes from `quorum tool audit_history --summary --json`
+2. Applies targeted fixes for each rejection code
+3. Re-verifies via self-checker
+4. Re-submits evidence
 
-### Correction Rules
+The implementer does NOT handle corrections. If the implementer receives a correction request, it should report `[DELEGATION]` — the orchestrator will route to the fixer.
 
-When audit returns `[pending_tag]`:
-
-1. **Read rejection** — query audit history: `quorum tool audit_history --summary --json`. Extract rejection codes and correction instructions.
-2. **Measure progress** — each correction round MUST produce measurable change. Compare git diff before/after. If diff is empty or identical to previous round, you are stagnating.
-3. **Fix each issue** — address every rejection code. Do NOT ignore low-severity findings.
-   - `test-gap` → add tests covering the claimed changes
-   - `claim-drift` → update evidence claim to match actual diff
-   - `scope-mismatch` → update Changed Files section
-   - `quality-violation` → fix lint/type errors
-   - `contract-drift` → fix type signatures to match contract in types/ directory
-4. **Re-verify** — run the same checks from Step 3 (Verify) above
-5. **Re-submit evidence** — `quorum tool audit_submit`
-6. **Wait for re-audit** — same polling as Step 6
-
-### Stagnation Detection
-
-If the **same rejection code appears 3 consecutive times**:
-- STOP using the current approach
-- Read the rejection detail carefully — the issue is structural, not incremental
-- Try a fundamentally different solution (different algorithm, different data structure, different API)
-- If genuinely stuck, include `[STAGNATION]` in evidence claim — the orchestrator will escalate
-
-### Forbidden Shortcuts
-
-- Do NOT delete tests to make them "pass" — test count must not decrease
-- Do NOT use `as any`, `@ts-ignore`, `@ts-expect-error` to suppress type errors
-- Do NOT weaken type signatures to avoid contract drift (fix the implementation, not the contract)
-- Do NOT copy the same evidence text between correction rounds without actual code changes
-
-Do NOT spawn a new agent for corrections — the orchestrator sends corrections via message to the existing agent.
+See `skills/fixer/SKILL.md` for the full correction protocol.
 
 ## Available Analysis Tools
 

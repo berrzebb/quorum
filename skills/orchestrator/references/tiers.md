@@ -58,11 +58,13 @@ The default for most feature work. Full quorum protocol.
 
 **Protocol:**
 1. Scout (if RTM stale or doesn't exist)
-2. Spawn implementer with `isolation: "worktree"`, `run_in_background: true`
-3. Implementer: implement → verify → submit evidence → audit cycle
-4. Correction rounds via SendMessage if rejected
-5. On approval → retrospective → squash merge
-6. Update handoff
+2. Designer (if DRM requires design artifacts)
+3. Spawn **implementer** with `isolation: "worktree"`, `run_in_background: true` → code writing only
+4. Spawn **self-checker** (haiku) → CQ/T/CC/S/I verification (deterministic tools, zero LLM judgment)
+5. Submit evidence → audit cycle
+6. If rejected → spawn **fixer** (sonnet) → targeted fixes → re-verify → re-submit
+7. On approval → retrospective → squash merge
+8. Update handoff
 
 **Examples:**
 - Add a new API endpoint with tests
@@ -77,10 +79,15 @@ For large, cross-cutting, or high-risk work. Additional safeguards.
 1. **Mandatory scout** — always re-run, even if RTM exists
 2. **Impact analysis** — run `dependency_graph` on all target files, check cross-track consumers
 3. **Split check** — if files_affected > 15, consider splitting into multiple Tier 2 tasks
-4. Spawn implementer with `isolation: "worktree"`
-5. Full audit cycle (CQ/T/CC/CL/S/I/FV/CV — all categories)
-6. **Post-merge regression** — after squash merge, run project-wide tests (not just changed files)
-7. Full retrospective with `quorum:retrospect` (Full mode)
+4. **Designer** (opus) — generate design artifacts if DRM requires
+5. **FDE-analyst** (opus) — failure analysis for P0/P1 FRs
+6. Spawn **implementer** (sonnet) with `isolation: "worktree"` → code writing only
+7. Spawn **self-checker** (haiku) → full CQ/T/CC/CL/S/I/FV/CV verification
+8. Full audit cycle
+9. If rejected → spawn **fixer** (sonnet) → targeted fixes → re-verify → re-submit
+10. **Gap-detector** (sonnet) — compare design docs vs implementation (Match Rate)
+11. **Post-merge regression** — after squash merge, run project-wide tests
+12. Full retrospective with `quorum:retrospect` (Full mode)
 
 **Additional for domain_risk:**
 - Security changes → audit must include S category with OWASP perspective
