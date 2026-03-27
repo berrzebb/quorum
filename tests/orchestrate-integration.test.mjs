@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 // Import from dist (compiled)
-import { resolveTrack, trackRef, parseWorkBreakdown, findTracks } from "../dist/cli/commands/orchestrate/shared.js";
+import { resolveTrack, trackRef, parseWorkBreakdown, findTracks, reviewPlan } from "../dist/cli/commands/orchestrate/shared.js";
 import { routeToCommittee, checkConvergence, createMeetingLog, storeMeetingLog } from "../dist/bus/meeting-log.js";
 import { EventStore } from "../dist/bus/store.js";
 
@@ -335,5 +335,43 @@ describe("empty convergence guard", () => {
 
     store.close();
     try { rmSync(dbPath, { force: true }); } catch {}
+  });
+});
+
+// ── reviewPlan tsc-only Verify warning ───────
+
+describe("reviewPlan verify warnings", () => {
+  it("warns when Verify is tsc-only", () => {
+    const items = [
+      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npx tsc --noEmit", isParent: false, dependsOn: [] },
+    ];
+    const result = reviewPlan(items);
+    assert.ok(result.passed, "tsc-only should pass (warning, not error)");
+    assert.ok(result.warnings.some(w => w.includes("tsc-only")), "Should warn about tsc-only verify");
+  });
+
+  it("does not warn when Verify includes test runner", () => {
+    const items = [
+      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npx tsc --noEmit && npx vitest run", isParent: false, dependsOn: [] },
+    ];
+    const result = reviewPlan(items);
+    assert.ok(result.passed);
+    assert.ok(!result.warnings.some(w => w.includes("tsc-only")), "Should not warn when test runner present");
+  });
+
+  it("does not warn for npm test", () => {
+    const items = [
+      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npm test", isParent: false, dependsOn: [] },
+    ];
+    const result = reviewPlan(items);
+    assert.ok(!result.warnings.some(w => w.includes("tsc-only")));
+  });
+
+  it("does not warn for node --test", () => {
+    const items = [
+      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "node --test tests/foo.test.mjs", isParent: false, dependsOn: [] },
+    ];
+    const result = reviewPlan(items);
+    assert.ok(!result.warnings.some(w => w.includes("tsc-only")));
   });
 });

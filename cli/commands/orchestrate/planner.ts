@@ -473,7 +473,9 @@ Each WB item MUST include these fields. The goal: a sub-agent can complete this 
   - Read: \`file1.ts\` (interface), \`file2.ts\` (usage pattern) — files the agent MUST read
   - Skip: \`large-module/\` — files the agent must NOT explore (use tools instead)
 - **Verify**: Exact command(s) to confirm completion.
-  \`npm test -- tests/foo.test.mjs\` or \`npx tsc --noEmit\` — NOT prose.
+  MUST include a test runner command (e.g. \`npx vitest run\`, \`npm test\`, \`npx jest\`).
+  \`npx tsc --noEmit\` alone is INSUFFICIENT — type checks miss runtime bugs.
+  Example: \`npx tsc --noEmit && npx vitest run src/__tests__/foo.test.ts\`
 - **Constraints**: What this WB must NOT do. Scope boundary.
   e.g. "Do NOT modify the public API" / "Do NOT add new dependencies"
 - **Done**: Machine-checkable condition. e.g. "test X passes AND tsc clean"
@@ -483,6 +485,18 @@ Each WB item MUST include these fields. The goal: a sub-agent can complete this 
 **Action rule**: Write actions as if giving instructions to a new team member on their first day.
 **Context budget rule**: List ONLY files needed — less is more. Agents use \`code_map\`/\`blast_radius\` for discovery.
 **Verify rule**: Must be a runnable command, not "verify it works."
+**Test rule**: Each WB that creates logic (not config/style) MUST include a test in its Action steps.
+  Ask: "Can I write \`expect(fn(input)).toBe(output)\` for this?" If yes → include test writing in Action.
+  If no test framework exists, the FIRST WB (Wave 0) MUST set up the test framework.
+
+### Wave 0 — Mandatory Prerequisites
+
+If the project lacks a test framework (no \`vitest.config\`, \`jest.config\`, or test script in package.json):
+- Generate a Wave 0 WB that sets up the test framework + creates a smoke test.
+- All subsequent WBs depend on Wave 0.
+- Wave 0 items have NO prerequisites.
+
+Wave 0 is also for architectural prerequisites that MUST complete before any implementation (e.g. lazy init, API changes).
 
 Rules: Design MANDATORY. Blueprint naming = law. Ask before assuming. User's language.
 

@@ -25,6 +25,8 @@ const {
   waveCommit,
   verifyPhaseCompletion,
   detectRegressions,
+  runProjectTests,
+  scanForStubs,
 } = await import("../dist/cli/commands/orchestrate/runner.js");
 
 // ── Helpers ──────────────────────────────────
@@ -338,5 +340,118 @@ describe("detectRegressions", () => {
   it("handles missing files gracefully", () => {
     const regressions = detectRegressions(repo, ["nonexistent.ts"]);
     assert.strictEqual(regressions.length, 0);
+  });
+});
+
+// ═══ 6. runProjectTests — project test gate ═════════════════════════
+
+describe("runProjectTests", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+  });
+
+  it("returns ran=false when no test command exists", () => {
+    const result = runProjectTests(repo);
+    assert.strictEqual(result.ran, false);
+  });
+
+  it("runs npm test when package.json has test script", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test-proj",
+      scripts: { test: "echo test-passed" },
+    }));
+    const result = runProjectTests(repo);
+    assert.strictEqual(result.ran, true);
+    assert.strictEqual(result.passed, true);
+  });
+
+  it("detects npm test failure", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test-proj",
+      scripts: { test: "exit 1" },
+    }));
+    const result = runProjectTests(repo);
+    assert.strictEqual(result.ran, true);
+    assert.strictEqual(result.passed, false);
+  });
+
+  it("skips default npm test placeholder", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test-proj",
+      scripts: { test: 'echo "Error: no test specified" && exit 1' },
+    }));
+    // The "no test" pattern should be skipped
+    const result = runProjectTests(repo);
+    assert.strictEqual(result.ran, false);
+  });
+});
+
+// ═══ 7. scanForStubs — anti-pattern detection ═══════════════════════
+
+describe("scanForStubs", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("detects TODO markers", () => {
+    writeFileSync(join(repo, "src/app.ts"), "function init() {\n  // TODO: implement\n}\n");
+    const stubs = scanForStubs(repo, ["src/app.ts"]);
+    assert.ok(stubs.length > 0);
+    assert.ok(stubs[0].includes("TODO"));
+  });
+
+  it("detects FIXME markers", () => {
+    writeFileSync(join(repo, "src/util.ts"), "export const x = 1; // FIXME broken\n");
+    const stubs = scanForStubs(repo, ["src/util.ts"]);
+    assert.ok(stubs.length > 0);
+    assert.ok(stubs[0].includes("FIXME"));
+  });
+
+  it("detects empty arrow functions", () => {
+    writeFileSync(join(repo, "src/handler.ts"), "const onClick = () => {};\n");
+    const stubs = scanForStubs(repo, ["src/handler.ts"]);
+    assert.ok(stubs.length > 0);
+    assert.ok(stubs[0].includes("empty arrow"));
+  });
+
+  it("detects placeholder keyword", () => {
+    writeFileSync(join(repo, "src/data.ts"), 'const name = "placeholder value";\n');
+    const stubs = scanForStubs(repo, ["src/data.ts"]);
+    assert.ok(stubs.length > 0);
+    assert.ok(stubs[0].includes("placeholder"));
+  });
+
+  it("does not flag clean code", () => {
+    writeFileSync(join(repo, "src/clean.ts"), [
+      "export function add(a: number, b: number): number {",
+      "  return a + b;",
+      "}",
+    ].join("\n"));
+    const stubs = scanForStubs(repo, ["src/clean.ts"]);
+    assert.strictEqual(stubs.length, 0);
+  });
+
+  it("skips test files", () => {
+    writeFileSync(join(repo, "src/app.test.ts"), "// TODO: add more tests\n");
+    const stubs = scanForStubs(repo, ["src/app.test.ts"]);
+    assert.strictEqual(stubs.length, 0, "Test files should be excluded from stub scan");
+  });
+
+  it("skips lines with scan-ignore pragma", () => {
+    writeFileSync(join(repo, "src/patterns.ts"), "const re = /TODO/; // scan-ignore\n");
+    const stubs = scanForStubs(repo, ["src/patterns.ts"]);
+    assert.strictEqual(stubs.length, 0, "scan-ignore should suppress findings");
+  });
+
+  it("detects not implemented throw", () => {
+    writeFileSync(join(repo, "src/service.ts"), 'throw new Error("not implemented yet");\n');
+    const stubs = scanForStubs(repo, ["src/service.ts"]);
+    assert.ok(stubs.length > 0);
+    assert.ok(stubs[0].includes("not implemented"));
   });
 });

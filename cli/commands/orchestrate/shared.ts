@@ -376,6 +376,13 @@ export function reviewPlan(items: WorkItem[]): PlanReviewResult {
       errors.push(`${prefix} Missing Verify — no way to confirm completion`);
     } else if (!/[a-z]/.test(item.verify) || item.verify.length < 5) {
       warnings.push(`${prefix} Verify looks too short — should be a runnable command`);
+    } else {
+      // Warn if Verify is type-check only (tsc without test runner)
+      const hasTestRunner = /\b(vitest|jest|mocha|pytest|cargo\s+test|go\s+test|npm\s+test|node\s+--test)\b/i.test(item.verify);
+      const isTscOnly = /\btsc\b/.test(item.verify) && !hasTestRunner;
+      if (isTscOnly) {
+        warnings.push(`${prefix} Verify is tsc-only — type checks miss runtime bugs. Add test runner command.`);
+      }
     }
 
     // Recommended: constraints
