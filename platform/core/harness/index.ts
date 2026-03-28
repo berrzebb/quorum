@@ -6,3 +6,4 @@ export * from './runtime-evaluation-spec.js';
 export * from './negotiation-record.js';
 export * from './iteration-policy.js';
 export * from './quality-rubric.js';
+export * from './provider-session-record.js';

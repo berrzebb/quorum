@@ -38,3 +38,5 @@ export * from './amendment.js';
 export * from './contract-enforcer.js';
 export * from './promotion-gate.js';
 export * from './handoff-gate.js';
+export * from './provider-approval-gate.js';
+export * from './provider-session-projector.js';
