@@ -186,10 +186,9 @@ describe("adapter wrapper structure — shared modules", () => {
     assert.ok(existsSync(PLATFORM_SHARED_DIR), "platform/adapters/shared/ should exist");
   });
 
-  it("adapters/shared/ should contain only README.md (facades removed)", () => {
-    assert.ok(existsSync(LEGACY_SHARED_DIR), "adapters/shared/ directory should still exist");
-    const readme = resolve(LEGACY_SHARED_DIR, "README.md");
-    assert.ok(existsSync(readme), "adapters/shared/README.md should exist as redirect");
+  it("adapters/shared/ directory should have been removed", () => {
+    assert.ok(!existsSync(LEGACY_SHARED_DIR),
+      "adapters/shared/ should have been removed — platform/adapters/shared/ is the sole source");
   });
 
   const requiredFiles = [

@@ -191,16 +191,15 @@ describe("platform/adapters/shared is canonical shared adapter source", () => {
   });
 });
 
-// ═══ 8. Emptied directories contain README.md ═══════════════════════════
+// ═══ 8. Root runtime directories removed ═════════════════════════════════
 
-describe("emptied root directories contain README.md", () => {
-  const dirs = ["cli", "bus", "orchestrate", "providers"];
+describe("root runtime directories removed", () => {
+  const dirs = ["cli", "bus", "orchestrate", "providers", "skills"];
 
   for (const dir of dirs) {
-    it(`${dir}/README.md should exist`, () => {
-      const readme = resolve(REPO_ROOT, dir, "README.md");
-      assert.ok(existsSync(readme),
-        `${dir}/README.md should exist to explain the move to platform/${dir}/`);
+    it(`${dir}/ directory should not exist`, () => {
+      assert.ok(!existsSync(resolve(REPO_ROOT, dir)),
+        `${dir}/ should have been removed — platform/${dir}/ is the sole source`);
     });
   }
 });
