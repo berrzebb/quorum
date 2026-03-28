@@ -12,7 +12,7 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
 // ── Default tags from config (single source of truth) ─────
-import { loadConfig, extractTags } from "../adapters/shared/config-resolver.mjs";
+import { loadConfig, extractTags } from "../platform/adapters/shared/config-resolver.mjs";
 const DEFAULT_TAGS = extractTags({});  // no config → defaults
 const TRIGGER = DEFAULT_TAGS.triggerTag;
 const AGREE = DEFAULT_TAGS.agreeTag;
@@ -50,7 +50,7 @@ describe("shared/repo-resolver", () => {
     const saved = process.env.QUORUM_REPO_ROOT;
     delete process.env.QUORUM_REPO_ROOT;
     try {
-      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      const { resolveRepoRoot } = await import("../platform/adapters/shared/repo-resolver.mjs");
       const adapterInRepo = resolve(REPO_DIR, "adapters", "claude-code", "hooks");
       mkdirSync(adapterInRepo, { recursive: true });
       const result = resolveRepoRoot({ adapterDir: adapterInRepo, cache: false });
@@ -66,7 +66,7 @@ describe("shared/repo-resolver", () => {
   it("uses cached env var when available", async () => {
     process.env.QUORUM_REPO_ROOT = "/cached/path";
     try {
-      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      const { resolveRepoRoot } = await import("../platform/adapters/shared/repo-resolver.mjs");
       assert.equal(resolveRepoRoot(), "/cached/path");
     } finally {
       delete process.env.QUORUM_REPO_ROOT;
@@ -77,7 +77,7 @@ describe("shared/repo-resolver", () => {
     const saved = process.env.QUORUM_REPO_ROOT;
     delete process.env.QUORUM_REPO_ROOT;
     try {
-      const { resolveRepoRoot } = await import("../adapters/shared/repo-resolver.mjs");
+      const { resolveRepoRoot } = await import("../platform/adapters/shared/repo-resolver.mjs");
       const result = resolveRepoRoot({ adapterDir: resolve(TEST_DIR, "nonexistent"), cache: false });
       // Should fallback — either git resolves or returns cwd
       assert.ok(typeof result === "string" && result.length > 0);
@@ -97,7 +97,7 @@ describe("shared/config-resolver", () => {
     const configData = { consensus: { trigger_tag: "[TEST_TAG]" } };
     writeFileSync(resolve(REPO_DIR, ".claude", "quorum", "config.json"), JSON.stringify(configData));
 
-    const { findConfigPath, loadConfig } = await import("../adapters/shared/config-resolver.mjs");
+    const { findConfigPath, loadConfig } = await import("../platform/adapters/shared/config-resolver.mjs");
     const path = findConfigPath({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR });
     assert.ok(path?.endsWith("config.json"));
     assert.ok(path?.includes(".claude"));
@@ -110,7 +110,7 @@ describe("shared/config-resolver", () => {
   it("falls back to adapter dir config", async () => {
     writeFileSync(resolve(ADAPTER_DIR, "config.json"), JSON.stringify({ plugin: { locale: "ko" } }));
 
-    const { findConfigPath } = await import("../adapters/shared/config-resolver.mjs");
+    const { findConfigPath } = await import("../platform/adapters/shared/config-resolver.mjs");
     // Use a repo root without project config
     const emptyRepo = resolve(TEST_DIR, "empty-repo");
     mkdirSync(emptyRepo, { recursive: true });
@@ -119,7 +119,7 @@ describe("shared/config-resolver", () => {
   });
 
   it("returns null when no config exists", async () => {
-    const { findConfigPath, loadConfig } = await import("../adapters/shared/config-resolver.mjs");
+    const { findConfigPath, loadConfig } = await import("../platform/adapters/shared/config-resolver.mjs");
     const noConfigDir = resolve(TEST_DIR, "no-config");
     mkdirSync(noConfigDir, { recursive: true });
     const path = findConfigPath({ repoRoot: noConfigDir, adapterDir: noConfigDir });
@@ -131,7 +131,7 @@ describe("shared/config-resolver", () => {
   });
 
   it("extracts tags with defaults", async () => {
-    const { extractTags } = await import("../adapters/shared/config-resolver.mjs");
+    const { extractTags } = await import("../platform/adapters/shared/config-resolver.mjs");
     const tags = extractTags({ consensus: { trigger_tag: "[TEST]" } });
     assert.equal(tags.triggerTag, "[TEST]");
     assert.ok(tags.agreeTag); // has default
@@ -153,13 +153,13 @@ describe("shared/audit-state", () => {
       JSON.stringify({ status: "approved", timestamp: Date.now() })
     );
 
-    const { readAuditStatus } = await import("../adapters/shared/audit-state.mjs");
+    const { readAuditStatus } = await import("../platform/adapters/shared/audit-state.mjs");
     const status = readAuditStatus(REPO_DIR);
     assert.equal(status?.status, "approved");
   });
 
   it("returns null when no audit status", async () => {
-    const { readAuditStatus } = await import("../adapters/shared/audit-state.mjs");
+    const { readAuditStatus } = await import("../platform/adapters/shared/audit-state.mjs");
     const emptyDir = resolve(TEST_DIR, "no-audit");
     mkdirSync(emptyDir, { recursive: true });
     assert.equal(readAuditStatus(emptyDir), null);
@@ -171,7 +171,7 @@ describe("shared/audit-state", () => {
       JSON.stringify({ retro_pending: true, rx_id: "test-123" })
     );
 
-    const { readRetroMarker } = await import("../adapters/shared/audit-state.mjs");
+    const { readRetroMarker } = await import("../platform/adapters/shared/audit-state.mjs");
     const marker = readRetroMarker(ADAPTER_DIR);
     assert.equal(marker?.retro_pending, true);
     assert.equal(marker?.rx_id, "test-123");
@@ -183,7 +183,7 @@ describe("shared/audit-state", () => {
       resolve(REPO_DIR, ".claude", "audit-status.json"),
       JSON.stringify({ status: "approved" })
     );
-    const { buildStatusSignals } = await import("../adapters/shared/audit-state.mjs");
+    const { buildStatusSignals } = await import("../platform/adapters/shared/audit-state.mjs");
     const cfg = { consensus: { agree_tag: AGREE } };
     const signals = buildStatusSignals({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
     assert.ok(signals.length > 0);
@@ -194,7 +194,7 @@ describe("shared/audit-state", () => {
       resolve(REPO_DIR, ".claude", "audit-status.json"),
       JSON.stringify({ status: "changes_requested", rejectionCodes: ["R01", "R02"] })
     );
-    const { buildResumeState } = await import("../adapters/shared/audit-state.mjs");
+    const { buildResumeState } = await import("../platform/adapters/shared/audit-state.mjs");
     const cfg = { consensus: { trigger_tag: TRIGGER, pending_tag: PENDING } };
     const { resumeActions } = buildResumeState({ repoRoot: REPO_DIR, adapterDir: ADAPTER_DIR, cfg });
     assert.ok(resumeActions.length > 0);
@@ -212,7 +212,7 @@ describe("shared/first-run", () => {
 
     const destDir = resolve(TEST_DIR, "first-run-dest");
 
-    const { firstRunSetup, buildFirstRunMessage } = await import("../adapters/shared/first-run.mjs");
+    const { firstRunSetup, buildFirstRunMessage } = await import("../platform/adapters/shared/first-run.mjs");
     const result = firstRunSetup({ adapterRoot: ADAPTER_DIR, projectConfigDir: destDir });
     assert.ok(result.copied.includes("config.json"));
     assert.ok(existsSync(resolve(destDir, "config.json")));
@@ -225,7 +225,7 @@ describe("shared/first-run", () => {
     const emptyAdapter = resolve(TEST_DIR, "empty-adapter");
     mkdirSync(emptyAdapter, { recursive: true });
 
-    const { firstRunSetup, buildFirstRunMessage } = await import("../adapters/shared/first-run.mjs");
+    const { firstRunSetup, buildFirstRunMessage } = await import("../platform/adapters/shared/first-run.mjs");
     const result = firstRunSetup({ adapterRoot: emptyAdapter, projectConfigDir: resolve(TEST_DIR, "no-dest") });
     assert.equal(result.needsManualSetup, true);
 
@@ -253,7 +253,7 @@ describe("shared/context-reinforcement", () => {
   after(cleanup);
 
   it("extracts Absolute Rules section", async () => {
-    const { buildContextReinforcement } = await import("../adapters/shared/context-reinforcement.mjs");
+    const { buildContextReinforcement } = await import("../platform/adapters/shared/context-reinforcement.mjs");
     const result = buildContextReinforcement({ adapterRoot: ADAPTER_DIR, locale: "en", agreeTag: AGREE });
     assert.ok(result?.includes("CONTEXT-REINFORCEMENT"));
     assert.ok(result?.includes("Never self-approve"));
@@ -261,13 +261,13 @@ describe("shared/context-reinforcement", () => {
   });
 
   it("returns null when guide not found", async () => {
-    const { buildContextReinforcement } = await import("../adapters/shared/context-reinforcement.mjs");
+    const { buildContextReinforcement } = await import("../platform/adapters/shared/context-reinforcement.mjs");
     const result = buildContextReinforcement({ adapterRoot: resolve(TEST_DIR, "no-guide"), locale: "en" });
     assert.equal(result, null);
   });
 
   it("falls back to English root when locale not found", async () => {
-    const { findGuidePath } = await import("../adapters/shared/context-reinforcement.mjs");
+    const { findGuidePath } = await import("../platform/adapters/shared/context-reinforcement.mjs");
     // "ko" → docs/ko-KR/ doesn't exist, should fallback to docs/AGENTS.md (English root)
     const path = findGuidePath(ADAPTER_DIR, "ko");
     assert.ok(path?.includes("AGENTS.md"));
@@ -277,7 +277,7 @@ describe("shared/context-reinforcement", () => {
 // ── trigger-runner ─────────────────────────────────────────
 describe("shared/trigger-runner", () => {
   it("validates evidence format — missing sections", async () => {
-    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const { validateEvidenceFormat } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const content = `## Item ${TRIGGER}\nSome content without proper sections`;
     const consensus = { trigger_tag: TRIGGER, agree_tag: AGREE };
     const { errors } = validateEvidenceFormat(content, consensus);
@@ -285,7 +285,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("validates evidence format — all sections present", async () => {
-    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const { validateEvidenceFormat } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const content = [
       `## Item ${TRIGGER}`,
       "### Claim",
@@ -305,7 +305,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("detects tag conflict", async () => {
-    const { validateEvidenceFormat } = await import("../adapters/shared/trigger-runner.mjs");
+    const { validateEvidenceFormat } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const content = `## Item ${TRIGGER} ${AGREE}\nContent`;
     const consensus = { trigger_tag: TRIGGER, agree_tag: AGREE };
     const { warnings } = validateEvidenceFormat(content, consensus);
@@ -313,7 +313,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("parses changed files from evidence", async () => {
-    const { parseChangedFiles, countChangedFiles } = await import("../adapters/shared/trigger-runner.mjs");
+    const { parseChangedFiles, countChangedFiles } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const content = "### Changed Files\n- `src/a.ts`\n- `src/b.ts`\n### Next";
     const files = parseChangedFiles(content);
     assert.deepEqual(files, ["src/a.ts", "src/b.ts"]);
@@ -321,7 +321,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("builds trigger context", async () => {
-    const { buildTriggerContext } = await import("../adapters/shared/trigger-runner.mjs");
+    const { buildTriggerContext } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const ctx = buildTriggerContext({
       content: "### Changed Files\n- `src/auth/login.ts`\n- `tests/auth.test.ts`",
       changedFiles: ["src/auth/login.ts", "tests/auth.test.ts"],
@@ -339,7 +339,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("detects planning files", async () => {
-    const { isPlanningFile } = await import("../adapters/shared/trigger-runner.mjs");
+    const { isPlanningFile } = await import("../platform/adapters/shared/trigger-runner.mjs");
     const consensus = { planning_files: ["docs/plan/prd.md"], planning_dirs: ["docs/plan/"] };
     assert.equal(isPlanningFile("docs/plan/prd.md", consensus), true);
     assert.equal(isPlanningFile("docs/plan/track-1.md", consensus), true);
@@ -347,7 +347,7 @@ describe("shared/trigger-runner", () => {
   });
 
   it("checks plan document existence", async () => {
-    const { hasPlanDocuments } = await import("../adapters/shared/trigger-runner.mjs");
+    const { hasPlanDocuments } = await import("../platform/adapters/shared/trigger-runner.mjs");
     // Add docs/plan for planning file detection test
     mkdirSync(resolve(REPO_DIR, "docs", "plan"), { recursive: true });
     assert.equal(hasPlanDocuments(REPO_DIR), true);
@@ -361,7 +361,7 @@ describe("shared/trigger-runner", () => {
 // ── tool-names ─────────────────────────────────────────────
 describe("shared/tool-names", () => {
   it("maps tool names across adapters", async () => {
-    const { getToolName, getCanonicalName, isFileEditTool } = await import("../adapters/shared/tool-names.mjs");
+    const { getToolName, getCanonicalName, isFileEditTool } = await import("../platform/adapters/shared/tool-names.mjs");
 
     // Claude Code
     assert.equal(getToolName("claude-code", "bash"), "Bash");
@@ -386,7 +386,7 @@ describe("shared/tool-names", () => {
   });
 
   it("returns canonical name for unknown adapter", async () => {
-    const { getToolName, getCanonicalName } = await import("../adapters/shared/tool-names.mjs");
+    const { getToolName, getCanonicalName } = await import("../platform/adapters/shared/tool-names.mjs");
     assert.equal(getToolName("unknown", "bash"), "bash"); // passthrough
     assert.equal(getCanonicalName("unknown", "anything"), null);
   });

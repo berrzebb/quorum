@@ -10,7 +10,7 @@ allowed-tools: read_file, find_files, search, shell
 
 # Merge Worktree (Codex)
 
-Follow the canonical protocol at `skills/merge-worktree/SKILL.md`.
+Follow the canonical protocol at `platform/skills/merge-worktree/SKILL.md`.
 
 ## Tool Mapping
 

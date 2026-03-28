@@ -6,4 +6,4 @@
  * This module provides a stable import path for all adapters.
  */
 
-export { runQualityChecks } from "../../../adapters/claude-code/run-quality-checks.mjs";
+export { runQualityChecks } from "../claude-code/run-quality-checks.mjs";

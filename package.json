@@ -23,7 +23,7 @@
     "gemini"
   ],
   "bin": {
-    "quorum": "dist/cli/index.js"
+    "quorum": "dist/platform/cli/index.js"
   },
   "pkg": {
     "assets": [
@@ -37,7 +37,7 @@
     "preversion": "npm run version-sync",
     "postversion": "npm run version-sync",
     "prepublishOnly": "npm run build",
-    "package": "pkg dist/cli/index.js --compress GZip",
+    "package": "pkg dist/platform/cli/index.js --compress GZip",
     "dev": "tsx daemon/index.ts",
     "daemon": "node dist/daemon/index.js",
     "test": "node --test tests/*.test.mjs",

@@ -62,7 +62,7 @@ Each artifact lives at `{planning_dir}/{track}/design/` and must include mermaid
 | Domain Model | `domain-model.md` | `erDiagram` + `stateDiagram-v2` | Entities + state machines |
 | Architecture | `architecture.md` | `architecture-beta` or `flowchart` | System topology + data flow |
 
-Read `skills/designer/references/design-phase.md` for templates and examples of each artifact.
+Read `platform/skills/designer/references/design-phase.md` for templates and examples of each artifact.
 
 ## Workflow
 

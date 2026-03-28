@@ -10,7 +10,7 @@ allowed-tools: read_file, glob, grep, shell
 
 # Merge Worktree (Gemini)
 
-Follow the canonical protocol at `skills/merge-worktree/SKILL.md`.
+Follow the canonical protocol at `platform/skills/merge-worktree/SKILL.md`.
 
 ## Tool Mapping
 

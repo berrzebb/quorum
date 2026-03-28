@@ -155,21 +155,7 @@ agents/knowledge/          ← Cross-adapter shared protocols
   ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
   └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
 
-adapters/shared/           ← Adapter-agnostic business logic (17 modules)
-  ├→ repo-resolver.mjs     ← resolveRepoRoot() (git → env → fallback)
-  ├→ config-resolver.mjs   ← findConfigPath(), loadConfig(), extractTags()
-  ├→ audit-state.mjs       ← readAuditStatus(), buildResumeState(), buildStatusSignals()
-  ├→ trigger-runner.mjs    ← validateEvidenceFormat(), buildTriggerContext()
-  ├→ tool-names.mjs        ← TOOL_MAP (claude-code/gemini/codex canonical mapping)
-  ├→ hook-runner.mjs       ← HookRunner engine (command/http, deny-first-break, async fire-and-forget)
-  ├→ hook-loader.mjs       ← HOOK.md YAML parser + JSON config → HooksConfig + merge
-  ├→ hook-bridge.mjs       ← HookRunner → PreToolHook/PostToolHook/AuditGate adapters
-  ├→ ndjson-parser.mjs     ← Stream NDJSON line parser (10MB buffer guard)
-  ├→ cli-adapter.mjs       ← Multi-CLI adapters (Claude/Codex/Gemini NDJSON wire format)
-  ├→ jsonrpc-client.mjs    ← JSON-RPC 2.0 stdio client (Codex app-server mode)
-  ├→ sdk-tool-bridge.mjs   ← JSON Schema → Zod conversion (SDK native tool loops)
-  ├→ mux-adapter.mjs       ← ProcessMux ↔ CliAdapter bridge (spawn/send/capture/awaitConsensus)
-  └→ ...                   ← first-run, context-reinforcement, quality-runner
+adapters/shared/           ← README.md redirect only (facades removed → platform/adapters/shared/)
 
 adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
@@ -222,7 +208,7 @@ adapters/codex/
 - **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.
 - **MuxAdapter**: `mux-adapter.mjs` — bridges ProcessMux (tmux/psmux) sessions with CliAdapter/NdjsonParser. `spawn()` creates a CLI session per model, `send()` writes prompts via mux, `capture()` parses NDJSON output. `spawnConsensus()` + `awaitConsensus()` for 3-model deliberative protocol.
 - **Doc-Sync**: `agents/knowledge/doc-sync-protocol.md` — extracts facts from code (hook counts, tool counts, test counts, versions) and fixes numeric mismatches + section parity gaps in 8 doc files. 3-adapter aware (counts all adapters). Runs automatically in merge-worktree Phase 2.5 before squash commit. `/quorum:doc-sync` for manual invocation.
-- **Skill Architecture**: `skills/ARCHITECTURE.md` — protocol-neutral inheritance: `agents/knowledge/` (protocols) → `skills/` (shared canonical + references) → 3 equal adapter wrappers (Claude Code / Gemini / Codex). Each adapter skill = tool mapping + protocol ref. References resolve via `skills/*/references/` paths.
+- **Skill Architecture**: `platform/skills/ARCHITECTURE.md` — protocol-neutral inheritance: `agents/knowledge/` (protocols) → `platform/skills/` (shared canonical + references) → 4 equal adapter wrappers (Claude Code / Gemini / Codex / OpenAI-Compatible). Each adapter skill = tool mapping + protocol ref. References resolve via `platform/skills/*/references/` paths.
 - **Diverge-Converge Consensus**: `consensus.ts` `runDivergeConverge()` — Parliament-style deliberation. Phase A: free divergence (no role constraints, all speak freely). Phase B: Judge converges into 4 MECE registers (statusChanges, decisions, requirementChanges, risks). Phase C: 5-classification analysis (gap/strength/out/buy/build). Implementer testimony via `DivergeConvergeOptions`.
 - **Meeting Log**: `meeting-log.ts` — accumulates N session logs per standing committee → 3-path convergence detection → CPS generation (Context-Problem-Solution). 6 standing committees: Principles, Definitions, Structure, Architecture, Scope, Research Questions. Three convergence paths (any triggers): **exact** (delta=0, mature projects), **no-new-items** (item set subset, greenfield), **relaxed** (delta ≤ 30% of items, LLM non-determinism). `filterNoiseLogs()` skips parse-fallback rounds (>50% item drop). `logTimestamp` in event payload preserves insertion order.
 - **Amendment Protocol**: `amendment.ts` — legislative change management. `proposeAmendment()` → `voteOnAmendment()` → `resolveAmendment()`. Majority voting (>50% of eligible). Implementer has testimony but no vote. All amendments stored as parliament.amendment.* events.

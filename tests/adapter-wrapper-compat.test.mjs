@@ -2,11 +2,11 @@
 /**
  * Adapter Wrapper Compatibility Tests — golden baseline for PLT track.
  *
- * Verifies the structural rules from skills/ARCHITECTURE.md:
+ * Verifies the structural rules from platform/skills/ARCHITECTURE.md:
  * - Each adapter has skill wrappers
  * - Each wrapper contains SKILL.md
  * - Cross-reference between canonical skills and adapter wrappers
- * - adapters/shared/ contains key modules
+ * - platform/adapters/shared/ contains key modules (adapters/shared/ facades removed)
  *
  * Run: node --test tests/adapter-wrapper-compat.test.mjs
  */
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const SKILLS_DIR = resolve(REPO_ROOT, "skills");
+const SKILLS_DIR = resolve(REPO_ROOT, "platform", "skills");
 const ADAPTERS_DIR = resolve(REPO_ROOT, "adapters");
 
 const ADAPTER_NAMES = ["claude-code", "codex", "gemini", "openai-compatible"];
@@ -176,13 +176,20 @@ describe("adapter wrapper structure — cross-reference coverage", () => {
   });
 });
 
-// ═══ 5. adapters/shared/ key files ════════════════════════════════════
+// ═══ 5. platform/adapters/shared/ canonical source ═══════════════════
 
 describe("adapter wrapper structure — shared modules", () => {
-  const SHARED_DIR = resolve(ADAPTERS_DIR, "shared");
+  const PLATFORM_SHARED_DIR = resolve(REPO_ROOT, "platform", "adapters", "shared");
+  const LEGACY_SHARED_DIR = resolve(ADAPTERS_DIR, "shared");
 
-  it("adapters/shared/ directory should exist", () => {
-    assert.ok(existsSync(SHARED_DIR), "adapters/shared/ should exist");
+  it("platform/adapters/shared/ directory should exist", () => {
+    assert.ok(existsSync(PLATFORM_SHARED_DIR), "platform/adapters/shared/ should exist");
+  });
+
+  it("adapters/shared/ should contain only README.md (facades removed)", () => {
+    assert.ok(existsSync(LEGACY_SHARED_DIR), "adapters/shared/ directory should still exist");
+    const readme = resolve(LEGACY_SHARED_DIR, "README.md");
+    assert.ok(existsSync(readme), "adapters/shared/README.md should exist as redirect");
   });
 
   const requiredFiles = [
@@ -193,9 +200,9 @@ describe("adapter wrapper structure — shared modules", () => {
   ];
 
   for (const file of requiredFiles) {
-    it(`adapters/shared/${file} should exist`, () => {
-      const filePath = resolve(SHARED_DIR, file);
-      assert.ok(existsSync(filePath), `${file} should exist in adapters/shared/`);
+    it(`platform/adapters/shared/${file} should exist`, () => {
+      const filePath = resolve(PLATFORM_SHARED_DIR, file);
+      assert.ok(existsSync(filePath), `${file} should exist in platform/adapters/shared/`);
     });
   }
 });

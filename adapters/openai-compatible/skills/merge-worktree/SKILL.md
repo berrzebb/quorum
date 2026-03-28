@@ -10,7 +10,7 @@ allowed-tools: read, grep, glob, bash(git *)
 
 # Merge Worktree (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/merge-worktree/SKILL.md`.
+Follow the canonical protocol at `platform/skills/merge-worktree/SKILL.md`.
 
 ## Tool Mapping
 

@@ -19,4 +19,4 @@ allowed-tools: read, write, glob, grep, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/skill-authoring/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/skill-authoring/SKILL.md`.

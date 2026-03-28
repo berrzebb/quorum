@@ -49,7 +49,7 @@ The system makes mistakes **structurally hard** — not through better prompts, 
 | Component | Count | Location |
 |-----------|-------|----------|
 | **Agents** | 13 | `adapters/claude-code/agents/` |
-| **Skills** | 25 canonical | `skills/*/SKILL.md` |
+| **Skills** | 25 canonical | `platform/skills/*/SKILL.md` |
 | **Hook Events** | 26 unique | `adapters/*/hooks/hooks.json` |
 | **MCP Tools** | 22 deterministic | `core/tools/mcp-server.mjs` (data, not yet moved) |
 | **Domain Specialists** | 11 | `agents/knowledge/domains/` |
@@ -111,14 +111,14 @@ Source modules are consolidated under `platform/`. Root-level directories are th
 | Context | `platform/core/context.mjs` | `core/context.mjs` |
 | Orchestration | `platform/orchestrate/` | `orchestrate/` |
 | Providers | `platform/providers/` | `providers/` |
-| Adapters (shared) | `platform/adapters/shared/` | `adapters/shared/` |
+| Adapters (shared) | `platform/adapters/shared/` | _(facades removed)_ |
 
 Data files and non-consolidated modules remain at root:
 
 | Component | Path |
 |-----------|------|
-| Skills (canonical) | `skills/*/SKILL.md` |
-| Skills (references) | `skills/*/references/*.md` |
+| Skills (canonical) | `platform/skills/*/SKILL.md` |
+| Skills (references) | `platform/skills/*/references/*.md` |
 | Agents (Claude Code) | `adapters/claude-code/agents/*.md` |
 | Agent Protocols | `agents/knowledge/*.md` |
 | Domain Knowledge | `agents/knowledge/domains/*.md` |
@@ -139,9 +139,9 @@ Data files and non-consolidated modules remain at root:
 |----------|------------|
 | New user | `README.md` → `docs/README.md` |
 | New contributor | `CLAUDE.md` → `agents/knowledge/` protocols |
-| Skill author | `skills/ARCHITECTURE.md` → `skills/skill-authoring/SKILL.md` |
-| Tool user | `docs/TOOLS.md` or `skills/consensus-tools/references/` |
-| Adapter author | `adapters/shared/` → adapter `hooks/hooks.json` |
+| Skill author | `platform/skills/ARCHITECTURE.md` → `platform/skills/skill-authoring/SKILL.md` |
+| Tool user | `docs/TOOLS.md` or `platform/skills/consensus-tools/references/` |
+| Adapter author | `platform/adapters/shared/` → adapter `hooks/hooks.json` |
 
 ## Related Documents
 

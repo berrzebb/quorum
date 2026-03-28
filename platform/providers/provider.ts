@@ -10,8 +10,8 @@
  * The daemon and core protocol never touch provider internals.
  */
 
-import type { QuorumBus } from "../../bus/bus.js";
-import type { ProviderKind, QuorumEvent } from "../../bus/events.js";
+import type { QuorumBus } from "../bus/bus.js";
+import type { ProviderKind, QuorumEvent } from "../bus/events.js";
 
 // ── Provider interface ────────────────────────────────
 

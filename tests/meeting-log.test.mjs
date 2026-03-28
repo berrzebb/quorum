@@ -7,8 +7,8 @@ import {
   checkConvergence,
   generateCPS,
   STANDING_COMMITTEES,
-} from "../dist/bus/meeting-log.js";
-import { EventStore } from "../dist/bus/store.js";
+} from "../dist/platform/bus/meeting-log.js";
+import { EventStore } from "../dist/platform/bus/store.js";
 
 // ═══ 1. createMeetingLog ═══════════════════════════════
 

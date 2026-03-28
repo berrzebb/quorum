@@ -4,7 +4,7 @@
  * Pure function. No file I/O, no provider calls.
  */
 
-import type { WBSize } from "../../../cli/commands/orchestrate/shared.js";
+import type { WBSize } from "../../cli/commands/orchestrate/shared.js";
 
 // ── Domain risk tiers ────────────────────────
 const HIGH_RISK_DOMAINS = new Set(["security", "concurrency", "migration", "compliance"]);

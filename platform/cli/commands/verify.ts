@@ -359,7 +359,7 @@ async function runTemplateCheck(): Promise<void> {
   const scanDirs = [
     resolve(coreRoot, "templates"),
     resolve(pluginRoot, "agents"),
-    resolve(pluginRoot, "skills"),
+    resolve(pluginRoot, "platform", "skills"),
   ].filter(d => existsSync(d));
 
   let issues = 0;

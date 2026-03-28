@@ -7,7 +7,7 @@ allowed-tools: read_file, shell, glob, grep
 
 # UI Reviewer (Gemini)
 
-Follow the canonical protocol at `skills/ui-review/SKILL.md`.
+Follow the canonical protocol at `platform/skills/ui-review/SKILL.md`.
 Core protocol: `agents/knowledge/ui-review-protocol.md`.
 
 ## Tool Mapping
@@ -25,4 +25,4 @@ Gemini uses `shell` + Playwright (not Chrome MCP). All browser automation runs t
 
 ## Tool References
 
-For detailed parameters and examples: `skills/consensus-tools/references/`
+For detailed parameters and examples: `platform/skills/consensus-tools/references/`

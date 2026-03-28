@@ -8,8 +8,8 @@ allowed-tools: read_file, shell, glob
 
 # quorum-tools (Gemini)
 
-Follow the canonical protocol at `skills/consensus-tools/SKILL.md`.
-References at `skills/consensus-tools/references/`.
+Follow the canonical protocol at `platform/skills/consensus-tools/SKILL.md`.
+References at `platform/skills/consensus-tools/references/`.
 
 ## Tool Mapping
 

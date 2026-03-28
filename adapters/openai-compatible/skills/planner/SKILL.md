@@ -9,8 +9,8 @@ allowed-tools: read, write, grep, glob, bash(node *), bash(cat *), bash(ls *)
 
 # Planner (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/planner/SKILL.md`.
-Reference documents are in `skills/planner/references/`.
+Follow the canonical protocol at `platform/skills/planner/SKILL.md`.
+Reference documents are in `platform/skills/planner/references/`.
 
 ## Tool Mapping
 

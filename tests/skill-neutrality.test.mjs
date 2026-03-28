@@ -3,7 +3,7 @@
  * Skill Neutrality Tests — frozen contract for PLT track.
  *
  * Enforces zero-tolerance: adapter-specific references MUST NOT appear
- * in canonical skills (skills/**). These tests prevent regression after
+ * in canonical skills (platform/skills/**). These tests prevent regression after
  * PLT-11A (env vars), PLT-11B (script invocations), and PLT-11C (freeze).
  *
  * Run: node --test tests/skill-neutrality.test.mjs
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const SKILLS_DIR = resolve(REPO_ROOT, "skills");
+const SKILLS_DIR = resolve(REPO_ROOT, "platform", "skills");
 
 /**
  * Recursively find all .md files in a directory, excluding workspace dirs.
@@ -39,7 +39,7 @@ function findMarkdownFiles(dir) {
 }
 
 /**
- * Count occurrences of a string pattern in all .md files under skills/ (excluding workspace).
+ * Count occurrences of a string pattern in all .md files under platform/skills/ (excluding workspace).
  * Optionally exclude specific files (by relative path from SKILLS_DIR, forward-slash normalized).
  */
 function countPatternInSkills(pattern, excludeFiles = []) {
@@ -60,7 +60,7 @@ function countPatternInSkills(pattern, excludeFiles = []) {
 }
 
 /**
- * Count occurrences of a regex pattern in all .md files under skills/ (excluding workspace).
+ * Count occurrences of a regex pattern in all .md files under platform/skills/ (excluding workspace).
  * Optionally exclude specific files (by relative path from SKILLS_DIR).
  */
 function countRegexInSkills(regex, excludeFiles = []) {
@@ -196,9 +196,9 @@ describe("skill neutrality — canonical skill inventory", () => {
     );
   });
 
-  it("skills/ARCHITECTURE.md should exist", () => {
+  it("platform/skills/ARCHITECTURE.md should exist", () => {
     const archPath = resolve(SKILLS_DIR, "ARCHITECTURE.md");
-    assert.ok(existsSync(archPath), "skills/ARCHITECTURE.md should exist");
+    assert.ok(existsSync(archPath), "platform/skills/ARCHITECTURE.md should exist");
   });
 });
 

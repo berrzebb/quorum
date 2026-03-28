@@ -21,4 +21,4 @@ allowed-tools: read_file, write_file, apply_diff, find_files, search, shell
 
 ## Start
 
-Read and follow the canonical skill at `skills/fixer/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/fixer/SKILL.md`.

@@ -11,7 +11,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ParliamentInfo } from "../state-reader.js";
-import { STANDING_COMMITTEES, type StandingCommittee } from "../../bus/meeting-log.js";
+import { STANDING_COMMITTEES, type StandingCommittee } from "../../platform/bus/meeting-log.js";
 
 interface ParliamentPanelProps {
   parliament: ParliamentInfo;

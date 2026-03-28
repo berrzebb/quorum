@@ -8,7 +8,7 @@ allowed-tools: read_file, write_file, shell, find_files, search
 
 # Implementation Verification (Codex)
 
-Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
+Follow the canonical protocol at `platform/skills/verify-implementation/SKILL.md`.
 
 ## Tool Mapping
 
@@ -23,7 +23,7 @@ Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
 
 ## Tool References
 
-For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
+For detailed parameters and examples for each tool, see: `platform/skills/consensus-tools/references/`
 
 ## Setup
 

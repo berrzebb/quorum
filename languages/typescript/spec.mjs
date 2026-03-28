@@ -13,4 +13,10 @@ export default {
   commentPrefixes: ["//", "/*", "*"],
   jsxExtensions: [".tsx", ".jsx"],
   i18nHardcodedRe: />\s*[A-Z가-힣][A-Za-z가-힣\s]{2,30}\s*</m,
+  verify: {
+    CQ:   { cmd: "npx eslint", detect: ["package.json"] },
+    T:    { cmd: "npx tsc --noEmit", detect: ["tsconfig.json"] },
+    TEST: { cmd: "npm test", detect: ["package.json"] },
+    DEP:  { cmd: "npm audit --audit-level=high", detect: ["package-lock.json"] },
+  },
 };

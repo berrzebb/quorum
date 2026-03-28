@@ -27,8 +27,8 @@ argument-hint: "<operation: read|create|merge|split|form|ocr>"
 
 1. **Identify the operation** from the table above
 2. **Read the appropriate reference** for detailed code patterns:
-   - General operations: `skills/pdf/references/reference.md`
-   - Form filling: `skills/pdf/references/forms.md`
+   - General operations: `platform/skills/pdf/references/reference.md`
+   - Form filling: `platform/skills/pdf/references/forms.md`
 3. **Use bundled scripts** for form processing (see Scripts below)
 4. **Verify output** — always check the result with `pdfplumber` or visual inspection
 
@@ -49,7 +49,7 @@ Command-line: `qpdf`, `pdftk`, `pdftotext` (poppler-utils), `pdfimages`
 
 ## Bundled Scripts
 
-Located at `skills/pdf/scripts/`:
+Located at `platform/skills/pdf/scripts/`:
 
 | Script | Purpose |
 |--------|---------|

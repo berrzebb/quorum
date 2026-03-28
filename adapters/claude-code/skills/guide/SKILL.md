@@ -7,7 +7,7 @@ allowed-tools: Read, Grep, Bash(node *), Bash(git diff *), Bash(git status *)
 
 # Quorum Evidence Guide (Claude Code)
 
-Follow the canonical protocol at `skills/guide/SKILL.md`.
+Follow the canonical protocol at `platform/skills/guide/SKILL.md`.
 
 ## Tool Mapping
 

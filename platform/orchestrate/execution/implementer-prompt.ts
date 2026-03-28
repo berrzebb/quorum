@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { WorkItem } from "../../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
 import { buildDepContextFromManifests, type WaveManifest } from "./dependency-context.js";
 
 /** Agent roster entry — who else is running in this wave. */

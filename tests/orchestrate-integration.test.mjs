@@ -10,9 +10,9 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 // Import from dist (compiled)
-import { resolveTrack, trackRef, parseWorkBreakdown, findTracks, reviewPlan } from "../dist/cli/commands/orchestrate/shared.js";
-import { routeToCommittee, checkConvergence, createMeetingLog, storeMeetingLog } from "../dist/bus/meeting-log.js";
-import { EventStore } from "../dist/bus/store.js";
+import { resolveTrack, trackRef, parseWorkBreakdown, findTracks, reviewPlan } from "../dist/platform/cli/commands/orchestrate/shared.js";
+import { routeToCommittee, checkConvergence, createMeetingLog, storeMeetingLog } from "../dist/platform/bus/meeting-log.js";
+import { EventStore } from "../dist/platform/bus/store.js";
 
 // ── Setup: temp project with tracks ──────────
 

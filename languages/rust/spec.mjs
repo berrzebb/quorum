@@ -12,4 +12,10 @@ export default {
   extensions: [".rs"],
   endBlock: "brace",
   commentPrefixes: ["//", "///", "/*"],
+  verify: {
+    CQ:   { cmd: "cargo clippy -- -D warnings", detect: ["Cargo.toml"] },
+    T:    { cmd: "cargo check", detect: ["Cargo.toml"] },
+    TEST: { cmd: "cargo test", detect: ["Cargo.toml"] },
+    DEP:  { cmd: "cargo audit", detect: ["Cargo.lock"] },
+  },
 };

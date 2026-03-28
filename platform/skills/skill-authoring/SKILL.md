@@ -21,11 +21,11 @@ adapters/{adapter}/skills/{name}/ ← Layer 2: Pointer Wrappers (per-adapter)
 adapters/shared/tool-names.mjs    ← Layer 3: Tool name registry
 ```
 
-**Principle**: Add once at `skills/`, reference everywhere. Adapter wrappers contain only what differs per adapter.
+**Principle**: Add once at `platform/skills/`, reference everywhere. Adapter wrappers contain only what differs per adapter.
 
 ## Step 1 — Create Canonical Skill
 
-Write `skills/{name}/SKILL.md`:
+Write `platform/skills/{name}/SKILL.md`:
 
 ```markdown
 ---
@@ -55,7 +55,7 @@ argument-hint: "<optional args>"
 - **No tool name references** — don't write `Read` or `read_file`; use generic verbs ("read the file", "search for")
 - **No adapter paths** — don't use adapter-specific env vars (e.g. `CLAUDE_PLUGIN_ROOT`, `GEMINI_EXTENSION_ROOT`); use `{ADAPTER_ROOT}` placeholder if a path is needed
 - **Use `quorum` CLI** for execution — `quorum audit`, `quorum tool code_map`, not `node path/to/script.mjs`
-- **References** go in `skills/{name}/references/` — one file per sub-topic, read on demand
+- **References** go in `platform/skills/{name}/references/` — one file per sub-topic, read on demand
 
 ### Description Guidelines
 
@@ -112,7 +112,7 @@ allowed-tools: {adapter-tool-list}
 
 ## Start
 
-Read and follow the canonical skill at `skills/{name}/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/{name}/SKILL.md`.
 ```
 
 ### Adapter-Specific Values
@@ -138,7 +138,7 @@ If a skill has adapter-specific execution (e.g., CLI paths), add it **below** th
 ```markdown
 ## Start
 
-Read and follow the canonical skill at `skills/{name}/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/{name}/SKILL.md`.
 
 ## Execute
 
@@ -223,10 +223,10 @@ node evals/runner.mjs --skill {name}
 
 After creating all files, check:
 
-1. `skills/{name}/SKILL.md` exists with no adapter-specific content
+1. `platform/skills/{name}/SKILL.md` exists with no adapter-specific content
 2. All 4 adapter wrappers exist and point to the canonical
 3. Description is identical across canonical and all wrappers
-4. References (if any) are only in `skills/{name}/references/`, not duplicated per adapter
+4. References (if any) are only in `platform/skills/{name}/references/`, not duplicated per adapter
 5. **Eval exists** at `evals/{classification}/{name}/` with all 3 files
 6. **Eval passes**: `node evals/runner.mjs --skill {name}` exits 0
 
@@ -249,7 +249,7 @@ evals/{classification}/{name}/expected-1.md          ✓ expected output
 | Don't | Do |
 |-------|----|
 | Copy canonical body into wrapper | Point to canonical with one line |
-| Put references in adapter directories | Put in `skills/{name}/references/` |
+| Put references in adapter directories | Put in `platform/skills/{name}/references/` |
 | Use adapter tool names in canonical | Use generic verbs or `quorum` CLI |
 | Hardcode model in canonical | Let each adapter set its own model |
 | Write different descriptions per adapter | Keep description identical everywhere |

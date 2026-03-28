@@ -19,4 +19,4 @@ allowed-tools: read_file, glob, grep, run_shell_command
 
 ## Start
 
-Read and follow the canonical skill at `skills/self-checker/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/self-checker/SKILL.md`.

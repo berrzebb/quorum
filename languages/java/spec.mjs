@@ -12,4 +12,10 @@ export default {
   extensions: [".java"],
   endBlock: "brace",
   commentPrefixes: ["//", "/*", "*"],
+  verify: {
+    CQ:   { cmd: "mvn checkstyle:check", detect: ["pom.xml"] },
+    T:    { cmd: "mvn compile -q", detect: ["pom.xml"] },
+    TEST: { cmd: "mvn test -q", detect: ["pom.xml"] },
+    DEP:  { cmd: "mvn dependency-check:check", detect: ["pom.xml"] },
+  },
 };

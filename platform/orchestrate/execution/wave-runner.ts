@@ -11,7 +11,7 @@
  * Minimal own logic: orchestration glue only.
  */
 
-import type { WorkItem, Wave, Bridge } from "../../../cli/commands/orchestrate/shared.js";
+import type { WorkItem, Wave, Bridge } from "../../cli/commands/orchestrate/shared.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
 import type { WaveAuditResult } from "./audit-loop.js";

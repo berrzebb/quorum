@@ -7,7 +7,7 @@ allowed-tools: read, bash(node *), bash(git *)
 
 # Consensus Loop Status (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/status/SKILL.md`.
+Follow the canonical protocol at `platform/skills/status/SKILL.md`.
 
 ## Tool Mapping
 

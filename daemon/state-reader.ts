@@ -15,19 +15,19 @@
 import type Database from "better-sqlite3";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import type { EventStore } from "../bus/store.js";
-import type { LockInfo } from "../bus/lock.js";
-import { COMMITTEE_IDS } from "../bus/meeting-log.js";
-import { getPendingAmendmentCount } from "../bus/amendment.js";
-import type { Finding, EventType } from "../bus/events.js";
+import type { EventStore } from "../platform/bus/store.js";
+import type { LockInfo } from "../platform/bus/lock.js";
+import { COMMITTEE_IDS } from "../platform/bus/meeting-log.js";
+import { getPendingAmendmentCount } from "../platform/bus/amendment.js";
+import type { Finding, EventType } from "../platform/bus/events.js";
 import type {
   QuorumEvent,
   FindingDetectPayload,
   FindingAckPayload,
   FindingResolvePayload,
   ReviewProgressPayload,
-} from "../bus/events.js";
-import type { MessageBus } from "../bus/message-bus.js";
+} from "../platform/bus/events.js";
+import type { MessageBus } from "../platform/bus/message-bus.js";
 
 // ── Types ────────────────────────────────────
 

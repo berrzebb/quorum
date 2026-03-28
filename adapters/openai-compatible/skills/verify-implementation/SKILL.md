@@ -8,7 +8,7 @@ allowed-tools: read, grep, glob, bash(npx *), bash(node *), bash(python *), bash
 
 # Implementation Verification (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
+Follow the canonical protocol at `platform/skills/verify-implementation/SKILL.md`.
 
 ## Tool Mapping
 
@@ -21,7 +21,7 @@ Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
 
 ## Tool References
 
-For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
+For detailed parameters and examples for each tool, see: `platform/skills/consensus-tools/references/`
 
 ## Setup
 

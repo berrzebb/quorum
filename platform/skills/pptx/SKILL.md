@@ -20,8 +20,8 @@ argument-hint: "<operation: read|create|edit|template>"
 
 1. **Identify the operation** from the table above
 2. **Read the appropriate reference**:
-   - Editing existing: `skills/pptx/references/editing.md`
-   - Creating from scratch: `skills/pptx/references/pptxgenjs.md`
+   - Editing existing: `platform/skills/pptx/references/editing.md`
+   - Creating from scratch: `platform/skills/pptx/references/pptxgenjs.md`
 3. **Follow design guidelines** below for professional results
 4. **QA is mandatory** — never declare success without verification
 
@@ -92,7 +92,7 @@ Look for: overlapping elements, text overflow, uneven gaps, low contrast, leftov
 
 ## Bundled Scripts
 
-Located at `skills/pptx/scripts/`:
+Located at `platform/skills/pptx/scripts/`:
 
 | Script | Purpose |
 |--------|---------|

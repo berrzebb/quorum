@@ -21,4 +21,4 @@ allowed-tools: read_file, write_file, glob, grep, run_shell_command, spawn_agent
 
 ## Start
 
-Read and follow the canonical skill at `skills/convergence-loop/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/convergence-loop/SKILL.md`.

@@ -97,7 +97,7 @@ Fill-in templates for project documents. Located in `artifacts/{locale}/`.
 
 ### Planner References (format specifications)
 
-Detailed format specs for planning documents. Located in `skills/planner/references/`.
+Detailed format specs for planning documents. Located in `platform/skills/planner/references/`.
 
 | Reference | Document Type |
 |-----------|--------------|

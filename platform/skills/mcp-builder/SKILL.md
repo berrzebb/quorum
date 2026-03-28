@@ -13,10 +13,10 @@ Build MCP servers that enable LLMs to interact with external services through we
 ### Phase 1: Research & Plan
 
 1. Study the target API — endpoints, auth, data models
-2. Read `skills/mcp-builder/references/mcp-best-practices.md` for universal MCP guidelines
+2. Read `platform/skills/mcp-builder/references/mcp-best-practices.md` for universal MCP guidelines
 3. Choose language and read the implementation guide:
-   - **TypeScript (recommended)**: `skills/mcp-builder/references/node-mcp-server.md`
-   - **Python**: `skills/mcp-builder/references/python-mcp-server.md`
+   - **TypeScript (recommended)**: `platform/skills/mcp-builder/references/node-mcp-server.md`
+   - **Python**: `platform/skills/mcp-builder/references/python-mcp-server.md`
 4. Plan tool list — prioritize comprehensive API coverage over workflow shortcuts
 
 **Key design principles:**
@@ -51,7 +51,7 @@ Build MCP servers that enable LLMs to interact with external services through we
 
 Create 10 complex, realistic questions to test LLM effectiveness with your tools.
 
-Read `skills/mcp-builder/references/evaluation.md` for the complete evaluation framework.
+Read `platform/skills/mcp-builder/references/evaluation.md` for the complete evaluation framework.
 
 **Requirements:** each question must be independent, read-only, multi-tool, realistic, verifiable, and stable.
 

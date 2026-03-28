@@ -21,4 +21,4 @@ allowed-tools: read_file, write_file, edit_file, glob, grep, run_shell_command
 
 ## Start
 
-Read and follow the canonical skill at `skills/mcp-builder/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/mcp-builder/SKILL.md`.

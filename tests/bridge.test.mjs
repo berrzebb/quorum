@@ -16,7 +16,7 @@ import { describe, it, before, after } from "node:test";
 import { mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import * as bridge from "../core/bridge.mjs";
+import * as bridge from "../platform/core/bridge.mjs";
 
 let tmpDir;
 

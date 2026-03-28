@@ -13,8 +13,8 @@
 import { existsSync, readFileSync, statSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import type { QuorumBus } from "../../../bus/bus.js";
-import { createEvent } from "../../../bus/events.js";
+import type { QuorumBus } from "../../bus/bus.js";
+import { createEvent } from "../../bus/events.js";
 import type {
   QuorumProvider,
   ProviderCapability,

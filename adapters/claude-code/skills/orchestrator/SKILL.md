@@ -9,8 +9,8 @@ allowed-tools: Read, Grep, Glob, Bash(node *), Bash(git *)
 
 # Orchestrator (Claude Code)
 
-Follow the canonical protocol at `skills/orchestrator/SKILL.md`.
-Reference documents are in `skills/orchestrator/references/`.
+Follow the canonical protocol at `platform/skills/orchestrator/SKILL.md`.
+Reference documents are in `platform/skills/orchestrator/references/`.
 
 ## Tool Mapping
 

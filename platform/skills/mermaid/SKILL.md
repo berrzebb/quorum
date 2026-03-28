@@ -11,7 +11,7 @@ Generate publication-quality mermaid diagrams. Each diagram type has a dedicated
 ## Workflow
 
 1. **Determine diagram type** from user request (see Selection Guide below) or auto-detect from context
-2. **Read the reference** at `skills/mermaid/references/{type}.md` — always read before generating
+2. **Read the reference** at `platform/skills/mermaid/references/{type}.md` — always read before generating
 3. **Analyze codebase** if the diagram should reflect actual code (see Codebase Analysis below)
 4. **Generate mermaid code** following the reference syntax exactly
 5. **Self-verify** the output (see Verification Checklist below)

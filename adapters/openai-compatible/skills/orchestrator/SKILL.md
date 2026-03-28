@@ -9,8 +9,8 @@ allowed-tools: read, grep, glob, bash(node *), bash(git *)
 
 # Orchestrator (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/orchestrator/SKILL.md`.
-Reference documents are in `skills/orchestrator/references/`.
+Follow the canonical protocol at `platform/skills/orchestrator/SKILL.md`.
+Reference documents are in `platform/skills/orchestrator/references/`.
 
 ## Tool Mapping
 

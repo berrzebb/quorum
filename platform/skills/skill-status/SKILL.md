@@ -33,17 +33,17 @@ Not bound to a specific phase. Used for plugin health checks at any point.
 
 ### Phase 1: Scan Canonical Skills
 
-Scan `skills/*/SKILL.md` for all canonical skill definitions. Extract:
+Scan `platform/skills/*/SKILL.md` for all canonical skill definitions. Extract:
 - `name` (from frontmatter)
 - `description` (from frontmatter)
 - `argument-hint` (from frontmatter, if present)
-- Has references? (`skills/{name}/references/` exists)
+- Has references? (`platform/skills/{name}/references/` exists)
 
 ### Phase 2: Scan Adapter Wrappers
 
 For each adapter (`claude-code`, `gemini`, `codex`, `openai-compatible`), scan `adapters/{adapter}/skills/*/SKILL.md`. Extract:
 - `name`, `description`, `model`, `allowed-tools`
-- Points to canonical? (contains `skills/{name}/SKILL.md` reference)
+- Points to canonical? (contains `platform/skills/{name}/SKILL.md` reference)
 
 ### Phase 3: Scan Evals
 

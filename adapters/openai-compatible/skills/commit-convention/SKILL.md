@@ -16,4 +16,4 @@ allowed-tools: read, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/commit-convention/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/commit-convention/SKILL.md`.

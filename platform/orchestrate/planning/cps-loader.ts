@@ -49,7 +49,7 @@ export function loadCPS(projectRoot: string): CPSContent | null {
  * Returns empty string if not found.
  */
 export function loadPlannerProtocol(projectRoot: string): string {
-  const skillPath = resolve(projectRoot, "skills", "planner", "SKILL.md");
+  const skillPath = resolve(projectRoot, "platform", "skills", "planner", "SKILL.md");
   if (existsSync(skillPath)) return readFileSync(skillPath, "utf8");
   return "";
 }

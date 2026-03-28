@@ -7,7 +7,7 @@ allowed-tools: read, write, edit, bash, glob, grep
 
 # Implementer (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/implementer/SKILL.md`.
+Follow the canonical protocol at `platform/skills/implementer/SKILL.md`.
 Core protocol: `agents/knowledge/implementer-protocol.md`.
 Frontend reference: `agents/references/frontend.md`.
 
@@ -24,4 +24,4 @@ Frontend reference: `agents/references/frontend.md`.
 
 ## Tool References
 
-For detailed parameters and examples: `skills/consensus-tools/references/`
+For detailed parameters and examples: `platform/skills/consensus-tools/references/`

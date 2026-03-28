@@ -22,8 +22,8 @@ const REPO_ROOT = resolve(__dirname, "..");
 describe("core/context.mjs path resolution", () => {
   let ctx;
 
-  it("should import core/context.mjs without error", async () => {
-    ctx = await import("../core/context.mjs");
+  it("should import platform/core/context.mjs without error", async () => {
+    ctx = await import("../platform/core/context.mjs");
     assert.ok(ctx, "module loaded");
   });
 
@@ -89,7 +89,7 @@ describe("adapters/shared/config-resolver.mjs", () => {
   let configResolver;
 
   it("should import config-resolver without error", async () => {
-    configResolver = await import("../adapters/shared/config-resolver.mjs");
+    configResolver = await import("../platform/adapters/shared/config-resolver.mjs");
     assert.ok(configResolver, "module loaded");
   });
 
@@ -134,7 +134,7 @@ describe("adapters/shared/repo-resolver.mjs", () => {
   let repoResolver;
 
   it("should import repo-resolver without error", async () => {
-    repoResolver = await import("../adapters/shared/repo-resolver.mjs");
+    repoResolver = await import("../platform/adapters/shared/repo-resolver.mjs");
     assert.ok(repoResolver, "module loaded");
   });
 
@@ -152,7 +152,7 @@ describe("core/cli-runner.mjs", () => {
   let cliRunner;
 
   it("should import cli-runner without error", async () => {
-    cliRunner = await import("../core/cli-runner.mjs");
+    cliRunner = await import("../platform/core/cli-runner.mjs");
     assert.ok(cliRunner, "module loaded");
   });
 
@@ -167,7 +167,7 @@ describe("orchestrate/planning/track-catalog (dist)", () => {
   let trackCatalog;
 
   it("should import track-catalog from dist without error", async () => {
-    trackCatalog = await import("../dist/orchestrate/planning/track-catalog.js");
+    trackCatalog = await import("../dist/platform/orchestrate/planning/track-catalog.js");
     assert.ok(trackCatalog, "module loaded");
   });
 
@@ -190,7 +190,7 @@ describe("orchestrate/state/filesystem/track-file-store (dist)", () => {
   let trackFileStore;
 
   it("should import track-file-store from dist without error", async () => {
-    trackFileStore = await import("../dist/orchestrate/state/filesystem/track-file-store.js");
+    trackFileStore = await import("../dist/platform/orchestrate/state/filesystem/track-file-store.js");
     assert.ok(trackFileStore, "module loaded");
   });
 
@@ -215,107 +215,18 @@ describe("orchestrate/state/filesystem/track-file-store (dist)", () => {
   });
 });
 
-// ═══ 7. platform/core facade identity ══════════════════════════════════
-
-describe("platform/core facade identity", () => {
-  let coreCtx, platformCtx;
-  let coreBridge, platformBridge;
-  let coreCli, platformCli;
-
-  it("should import core/context.mjs and platform/core/context.mjs", async () => {
-    coreCtx = await import("../core/context.mjs");
-    platformCtx = await import("../platform/core/context.mjs");
-    assert.ok(coreCtx, "core/context.mjs loaded");
-    assert.ok(platformCtx, "platform/core/context.mjs loaded");
-  });
-
-  it("HOOKS_DIR should be === equal across facade and platform", () => {
-    assert.strictEqual(coreCtx.HOOKS_DIR, platformCtx.HOOKS_DIR,
-      "HOOKS_DIR identity: core facade === platform implementation");
-  });
-
-  it("REPO_ROOT should be === equal across facade and platform", () => {
-    assert.strictEqual(coreCtx.REPO_ROOT, platformCtx.REPO_ROOT,
-      "REPO_ROOT identity: core facade === platform implementation");
-  });
-
-  it("resolvePluginPath should be === equal across facade and platform", () => {
-    assert.strictEqual(coreCtx.resolvePluginPath, platformCtx.resolvePluginPath,
-      "resolvePluginPath identity: core facade === platform implementation");
-  });
-
-  it("resolveReferencesDir should be === equal across facade and platform", () => {
-    assert.strictEqual(coreCtx.resolveReferencesDir, platformCtx.resolveReferencesDir,
-      "resolveReferencesDir identity: core facade === platform implementation");
-  });
-
-  it("should import core/bridge.mjs and platform/core/bridge.mjs", async () => {
-    coreBridge = await import("../core/bridge.mjs");
-    platformBridge = await import("../platform/core/bridge.mjs");
-    assert.ok(coreBridge, "core/bridge.mjs loaded");
-    assert.ok(platformBridge, "platform/core/bridge.mjs loaded");
-  });
-
-  it("init should be === equal across facade and platform", () => {
-    assert.strictEqual(coreBridge.init, platformBridge.init,
-      "init identity: core facade === platform implementation");
-  });
-
-  it("close should be === equal across facade and platform", () => {
-    assert.strictEqual(coreBridge.close, platformBridge.close,
-      "close identity: core facade === platform implementation");
-  });
-
-  it("should import core/cli-runner.mjs and platform/core/cli-runner.mjs", async () => {
-    coreCli = await import("../core/cli-runner.mjs");
-    platformCli = await import("../platform/core/cli-runner.mjs");
-    assert.ok(coreCli, "core/cli-runner.mjs loaded");
-    assert.ok(platformCli, "platform/core/cli-runner.mjs loaded");
-  });
-
-  it("resolveBinary should be === equal across facade and platform", () => {
-    assert.strictEqual(coreCli.resolveBinary, platformCli.resolveBinary,
-      "resolveBinary identity: core facade === platform implementation");
-  });
-});
-
-// ═══ 8. platform/core/audit facade identity ════════════════════════════
-// NOTE: core/audit/index.mjs and platform/core/audit/index.mjs have a top-level
-// main() call that runs on import. We verify structural identity by reading the
-// facade source and confirming it re-exports from the platform canonical path,
-// rather than importing the modules (which would trigger the audit main).
-
-describe("platform/core/audit facade identity", () => {
-  it("core/audit/index.mjs should exist as a facade re-exporting from platform/core/audit/index.mjs", () => {
-    const facadePath = resolve(REPO_ROOT, "core", "audit", "index.mjs");
-    assert.ok(existsSync(facadePath), "core/audit/index.mjs should exist");
-
-    const content = readFileSync(facadePath, "utf8");
-    assert.ok(
-      content.includes("platform/core/audit/index.mjs"),
-      "facade should re-export from platform/core/audit/index.mjs"
-    );
-  });
-
-  it("platform/core/audit/index.mjs should exist", () => {
-    const canonicalPath = resolve(REPO_ROOT, "platform", "core", "audit", "index.mjs");
-    assert.ok(existsSync(canonicalPath), "platform/core/audit/index.mjs should exist");
-  });
-
-  it("facade should re-export runRespond and deriveAuditCwd", () => {
-    const content = readFileSync(resolve(REPO_ROOT, "core", "audit", "index.mjs"), "utf8");
-    assert.ok(content.includes("runRespond"), "facade should re-export runRespond");
-    assert.ok(content.includes("deriveAuditCwd"), "facade should re-export deriveAuditCwd");
-  });
-});
+// ═══ 7. Root facade directories removed (PLT-20) ════════════════════════
+// Sections 7 and 8 previously tested core/ facade identity.
+// Root facades (core/bridge.mjs, core/context.mjs, etc.) have been removed.
+// All canonical sources are in platform/core/.
 
 // ═══ 9. resolver consistency after unification ═════════════════════════
 
 describe("resolver consistency after unification", () => {
   let ctx;
 
-  it("should import core/context.mjs", async () => {
-    ctx = await import("../core/context.mjs");
+  it("should import platform/core/context.mjs", async () => {
+    ctx = await import("../platform/core/context.mjs");
     assert.ok(ctx, "module loaded");
   });
 
@@ -344,9 +255,10 @@ describe("resolver consistency after unification", () => {
     );
   });
 
-  it("HOOKS_DIR should contain context.mjs", () => {
-    assert.ok(existsSync(resolve(ctx.HOOKS_DIR, "context.mjs")),
-      `HOOKS_DIR (${ctx.HOOKS_DIR}) should contain context.mjs`);
+  it("HOOKS_DIR should point to core/ directory with runtime data", () => {
+    // context.mjs facade removed in PLT-20; canonical source is platform/core/context.mjs
+    assert.ok(existsSync(resolve(ctx.HOOKS_DIR, "config.json")),
+      `HOOKS_DIR (${ctx.HOOKS_DIR}) should contain config.json (runtime data)`);
   });
 
   it("QUORUM_ROOT should be the parent of HOOKS_DIR", () => {

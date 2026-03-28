@@ -17,7 +17,7 @@ After PRD confirmation and before Work Breakdown generation, produce 4 design ar
 
 ## Diagram Requirements
 
-Every design artifact **must** include at least one mermaid diagram of the appropriate type. Read `skills/mermaid/references/{type}.md` for syntax before generating.
+Every design artifact **must** include at least one mermaid diagram of the appropriate type. Read `platform/skills/mermaid/references/{type}.md` for syntax before generating.
 
 | Artifact | Required Diagram | Mermaid Type | Reference |
 |----------|-----------------|-------------|-----------|
@@ -170,7 +170,7 @@ Defines system topology and data flow. **Must include mermaid diagrams.**
 
 ## System Diagram
 
-Use `/quorum:mermaid` to generate. Read `skills/mermaid/references/architecture.md` for syntax.
+Use `/quorum:mermaid` to generate. Read `platform/skills/mermaid/references/architecture.md` for syntax.
 
 ```mermaid
 architecture-beta
@@ -186,7 +186,7 @@ For logic flows, use `flowchart`. For state machines, use `stateDiagram-v2`.
 
 **When the track includes UI work, wireframes are mandatory.**
 Generate SVG wireframes and save to `{planning_dir}/{track}/wireframes/`.
-See `skills/planner/references/ui-spec.md` for SVG template and rules.
+See `platform/skills/planner/references/ui-spec.md` for SVG template and rules.
 No implementation WB may start without a corresponding wireframe.
 
 ## Data Flow

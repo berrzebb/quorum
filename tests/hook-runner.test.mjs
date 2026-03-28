@@ -16,14 +16,14 @@ import {
   parseHookJson,
   runCommandHook,
   HookRunner,
-} from "../adapters/shared/hook-runner.mjs";
+} from "../platform/adapters/shared/hook-runner.mjs";
 
 // ─── hook-loader ───────────────────────────────────────────────────
 import {
   loadHooksFromFile,
   hooksConfigFromJson,
   mergeHooksConfigs,
-} from "../adapters/shared/hook-loader.mjs";
+} from "../platform/adapters/shared/hook-loader.mjs";
 
 // ─── hook-bridge ───────────────────────────────────────────────────
 import {
@@ -31,7 +31,7 @@ import {
   hookRunnerToPostToolHook,
   hookRunnerToAuditGate,
   buildHookInput,
-} from "../adapters/shared/hook-bridge.mjs";
+} from "../platform/adapters/shared/hook-bridge.mjs";
 
 
 // ═══════════════════════════════════════════════════════════════════
@@ -647,7 +647,7 @@ describe("bridge.mjs HookRunner integration", () => {
   const hookScript = join(process.cwd(), "tests", "fixtures", "mock-hook.mjs");
 
   it("initHookRunner loads hooks from config", async () => {
-    const bridge = await import("../core/bridge.mjs");
+    const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
 
     const runner = await bridge.initHookRunner(process.cwd(), {
@@ -662,7 +662,7 @@ describe("bridge.mjs HookRunner integration", () => {
   });
 
   it("checkHookGate allow — receives additional_context from hook stdin", async () => {
-    const bridge = await import("../core/bridge.mjs");
+    const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
     await bridge.initHookRunner(process.cwd(), {
       "audit.submit": [
@@ -680,7 +680,7 @@ describe("bridge.mjs HookRunner integration", () => {
   });
 
   it("checkHookGate deny — hook exits with code 2", async () => {
-    const bridge = await import("../core/bridge.mjs");
+    const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
     await bridge.initHookRunner(process.cwd(), {
       "audit.submit": [
@@ -698,7 +698,7 @@ describe("bridge.mjs HookRunner integration", () => {
   });
 
   it("fireHook fail-safe — no crash when HookRunner not initialized", async () => {
-    const bridge = await import("../core/bridge.mjs");
+    const bridge = await import("../platform/core/bridge.mjs");
     bridge.close(); // ensure clean state
 
     const results = await bridge.fireHook("audit.submit");
@@ -709,7 +709,7 @@ describe("bridge.mjs HookRunner integration", () => {
   });
 
   it("unregistered events pass through", async () => {
-    const bridge = await import("../core/bridge.mjs");
+    const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
     await bridge.initHookRunner(process.cwd(), {});
 

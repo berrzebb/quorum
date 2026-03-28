@@ -7,7 +7,7 @@ allowed-tools: read_file, write_file, shell
 
 # Quorum Evidence Guide (Gemini)
 
-Follow the canonical protocol at `skills/guide/SKILL.md`.
+Follow the canonical protocol at `platform/skills/guide/SKILL.md`.
 
 ## Tool Mapping
 

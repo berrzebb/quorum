@@ -19,4 +19,4 @@ allowed-tools: Read, Write, Glob, Bash(node *)
 
 ## Start
 
-Read and follow the canonical skill at `skills/btw/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/btw/SKILL.md`.

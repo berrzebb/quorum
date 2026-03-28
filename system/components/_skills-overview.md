@@ -16,13 +16,13 @@ Skills are **domain knowledge + workflow definitions** that Claude Code loads on
 
 ## Skill Architecture
 
-quorum uses a **3-layer inheritance model** (see `skills/ARCHITECTURE.md`):
+quorum uses a **3-layer inheritance model** (see `platform/skills/ARCHITECTURE.md`):
 
 ```
 agents/knowledge/        ← protocols (business logic)
        │
-skills/*/SKILL.md        ← canonical definitions (protocol-neutral)
-skills/*/references/     ← progressive disclosure docs
+platform/skills/*/SKILL.md    ← canonical definitions (protocol-neutral)
+platform/skills/*/references/ ← progressive disclosure docs
        │
        ├── adapters/claude-code/skills/   ← tool bindings
        ├── adapters/gemini/skills/        ← tool bindings
@@ -123,7 +123,7 @@ allowed-tools:
 
 | Adapter | Skill Count | Notes |
 |---------|-------------|-------|
-| Canonical (`skills/`) | 25 | Protocol-neutral definitions |
+| Canonical (`platform/skills/`) | 25 | Protocol-neutral definitions |
 | Claude Code | 16 | Subset with CC-specific tool bindings |
 | Gemini | 20 | Gemini CLI tool bindings |
 | Codex | 20 | Codex tool bindings |
@@ -133,7 +133,7 @@ allowed-tools:
 
 ```
 quorum/
-├── skills/                          ← canonical (25 directories)
+├── platform/skills/                 ← canonical (25 directories)
 │   ├── ARCHITECTURE.md              ← inheritance model documentation
 │   ├── audit/SKILL.md
 │   ├── planner/

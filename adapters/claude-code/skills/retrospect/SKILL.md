@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Grep, Glob, Bash(node *), Bash(git log*)
 
 # Retrospect (Claude Code)
 
-Follow the canonical protocol at `skills/retrospect/SKILL.md`.
+Follow the canonical protocol at `platform/skills/retrospect/SKILL.md`.
 
 ## Tool Mapping
 

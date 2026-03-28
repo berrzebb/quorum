@@ -34,9 +34,9 @@ Generate comprehensive project completion reports with visual deliverables.
 Every report MUST include:
 
 1. **Architecture diagram** — use `/quorum:mermaid architecture` or `flowchart`
-   - Read `skills/mermaid/references/architecture.md` for syntax
+   - Read `platform/skills/mermaid/references/architecture.md` for syntax
 2. **Quality radar** — use `/quorum:mermaid radar`
-   - Read `skills/mermaid/references/radar.md` for syntax
+   - Read `platform/skills/mermaid/references/radar.md` for syntax
 3. **Timeline** — use `/quorum:mermaid gantt` or `timeline`
 
 ### UI / Wireframes

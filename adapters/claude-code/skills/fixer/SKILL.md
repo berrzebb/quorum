@@ -21,4 +21,4 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node *), Bash(quorum *), Bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/fixer/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/fixer/SKILL.md`.

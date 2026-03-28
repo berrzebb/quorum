@@ -19,4 +19,4 @@ allowed-tools: read, write, glob, grep, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/fde-analyst/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/fde-analyst/SKILL.md`.

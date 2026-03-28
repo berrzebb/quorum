@@ -26,7 +26,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import { existsSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
 import { execSync } from "node:child_process";
-import type { ProcessMux, MuxSession } from "../../bus/mux.js";
+import type { ProcessMux, MuxSession } from "../../platform/bus/mux.js";
 import type { ParliamentLiveSession } from "../state-reader.js";
 
 interface Props {
@@ -114,7 +114,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
       mux.registerExternal({
         id: ls.id,
         name: ls.name,
-        backend: ls.backend as import("../../bus/mux.js").MuxBackend,
+        backend: ls.backend as import("../../platform/bus/mux.js").MuxBackend,
         startedAt: ls.startedAt,
         status: "running",
       });

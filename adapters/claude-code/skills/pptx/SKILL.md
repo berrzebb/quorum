@@ -18,5 +18,5 @@ allowed-tools: Read, Write, Bash(python *), Bash(node *), Bash(npm *), Bash(pip 
 
 ## Start
 
-Read and follow the canonical skill at `skills/pptx/SKILL.md`.
-Scripts are at `skills/pptx/scripts/`.
+Read and follow the canonical skill at `platform/skills/pptx/SKILL.md`.
+Scripts are at `platform/skills/pptx/scripts/`.

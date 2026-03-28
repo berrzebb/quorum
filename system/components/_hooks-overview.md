@@ -32,7 +32,7 @@ Hooks are **scripts that execute on specific Claude Code events**.
         │
         ▼
 ┌─ Hook Engine ────────────────────────────────────────────┐
-│  adapters/shared/hook-runner.mjs                         │
+│  platform/adapters/shared/hook-runner.mjs                 │
 │  ├── command/http handlers                               │
 │  ├── env interpolation (${CLAUDE_PLUGIN_ROOT}, etc.)     │
 │  ├── deny-first-break (any deny → stop)                  │
@@ -181,7 +181,7 @@ quorum/
 │   └── hooks/hooks.json          ← 11 event registrations
 ├── adapters/codex/
 │   └── hooks/hooks.json          ← 6 event registrations
-└── adapters/shared/
+└── platform/adapters/shared/
     ├── hook-runner.mjs           ← Generic hook execution engine
     ├── hook-loader.mjs           ← HOOK.md YAML + JSON config loader
     └── hook-bridge.mjs           ← HookRunner → PreToolHook/PostToolHook adapters

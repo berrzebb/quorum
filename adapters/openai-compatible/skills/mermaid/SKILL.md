@@ -19,5 +19,5 @@ allowed-tools: read, write, glob, grep, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/mermaid/SKILL.md`.
-Diagram syntax references are at `skills/mermaid/references/{type}.md`.
+Read and follow the canonical skill at `platform/skills/mermaid/SKILL.md`.
+Diagram syntax references are at `platform/skills/mermaid/references/{type}.md`.

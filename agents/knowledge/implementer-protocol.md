@@ -126,7 +126,7 @@ When audit returns `[pending_tag]`, the **orchestrator** spawns a **fixer** agen
 
 The implementer does NOT handle corrections. If the implementer receives a correction request, it should report `[DELEGATION]` — the orchestrator will route to the fixer.
 
-See `skills/fixer/SKILL.md` for the full correction protocol.
+See `platform/skills/fixer/SKILL.md` for the full correction protocol.
 
 ## Available Analysis Tools
 

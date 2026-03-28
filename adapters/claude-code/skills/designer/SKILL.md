@@ -21,7 +21,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node *), Bash(quorum *)
 
 ## Start
 
-Read and follow the canonical skill at `skills/designer/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/designer/SKILL.md`.
 
 ## Execute
 

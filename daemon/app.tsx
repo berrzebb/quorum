@@ -8,10 +8,10 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import type { QuorumBus } from "../bus/bus.js";
-import type { QuorumEvent } from "../bus/events.js";
+import type { QuorumBus } from "../platform/bus/bus.js";
+import type { QuorumEvent } from "../platform/bus/events.js";
 import type { StateReader, FullState, FindingInfo, FindingStats, ReviewProgressInfo, FileThread } from "./state-reader.js";
-import { listProviders } from "../providers/provider.js";
+import { listProviders } from "../platform/providers/provider.js";
 import { GateStatus } from "./components/GateStatus.js";
 import { AuditStream } from "./components/AuditStream.js";
 import { AgentPanel } from "./components/AgentPanel.js";
@@ -31,7 +31,7 @@ function stateFingerprint(s: FullState): string {
 interface AppProps {
   bus: QuorumBus;
   stateReader?: StateReader;
-  mux?: import("../bus/mux.js").ProcessMux | null;
+  mux?: import("../platform/bus/mux.js").ProcessMux | null;
 }
 
 export function App({ bus, stateReader, mux }: AppProps) {
@@ -78,7 +78,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
       mux.registerExternal({
         id: ls.id,
         name: ls.name,
-        backend: ls.backend as import("../bus/mux.js").MuxBackend,
+        backend: ls.backend as import("../platform/bus/mux.js").MuxBackend,
         startedAt: ls.startedAt,
         status: "running",
       });

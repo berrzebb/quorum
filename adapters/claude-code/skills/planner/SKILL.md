@@ -9,8 +9,8 @@ allowed-tools: Read, Write, Grep, Glob, Bash(node *), Bash(cat *), Bash(ls *)
 
 # Planner (Claude Code)
 
-Follow the canonical protocol at `skills/planner/SKILL.md`.
-Reference documents are in `skills/planner/references/`.
+Follow the canonical protocol at `platform/skills/planner/SKILL.md`.
+Reference documents are in `platform/skills/planner/references/`.
 
 ## Tool Mapping
 
@@ -41,4 +41,4 @@ When generating planning documents, use these skills for rich output:
 - Every PRD must include at least one architecture diagram (mermaid flowchart or architecture-beta)
 - Every Track README must include a dependency diagram
 - **UI tracks must include SVG wireframes** for key screens — no UI work starts without wireframes
-- Use `skills/mermaid/references/` for syntax
+- Use `platform/skills/mermaid/references/` for syntax

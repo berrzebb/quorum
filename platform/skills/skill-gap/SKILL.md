@@ -121,7 +121,7 @@ Missing domains: none
 ## Rules
 
 - Read-only — does not modify PRD, CPS, or skill files
-- Catalog comparison uses current `skills/*/SKILL.md` descriptions
+- Catalog comparison uses current `platform/skills/*/SKILL.md` descriptions
 - Tool comparison uses `agents/knowledge/tool-inventory.md`
 - GAP status is informational — does not block any workflow
 

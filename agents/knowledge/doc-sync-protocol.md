@@ -83,7 +83,7 @@ Doc-sync must account for all 3 adapters when counting:
 | Hook total | Sum hooks across `adapters/{claude-code,gemini,codex}/hooks/hooks.json` |
 | Skill count per adapter | Count `adapters/{adapter}/skills/*/SKILL.md` separately |
 | Agent count per adapter | Count `adapters/{adapter}/agents/*.md` separately |
-| Shared skills | Count `skills/*/SKILL.md` (adapter-independent) |
+| Shared skills | Count `platform/skills/*/SKILL.md` (adapter-independent) |
 
 When a document says "N hooks" without specifying adapter, verify it means the per-adapter count or the total across all adapters (context-dependent).
 

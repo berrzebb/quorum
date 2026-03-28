@@ -10,13 +10,13 @@
  */
 
 import type { EventStore } from "./store.js";
-import type { AuditRequest } from "../../providers/provider.js";
+import type { AuditRequest } from "../providers/provider.js";
 import {
   DeliberativeConsensus,
   type ConsensusConfig,
   type ConsensusVerdict,
   type DivergeConvergeOptions,
-} from "../../providers/consensus.js";
+} from "../providers/consensus.js";
 import {
   createMeetingLog,
   storeMeetingLog,

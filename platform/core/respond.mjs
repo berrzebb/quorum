@@ -185,7 +185,7 @@ function handleStagnation(track) {
 
 async function handleTechDebt(track) {
   try {
-    const { parseResidualRisk, appendTechDebt } = await import("../../core/enforcement.mjs");
+    const { parseResidualRisk, appendTechDebt } = await import("./enforcement.mjs");
     // Read evidence from the latest evidence.submit event
     const evidenceEvents = bridge.queryEvents({ eventType: "evidence.submit", limit: 1 });
     if (!evidenceEvents?.length) return;

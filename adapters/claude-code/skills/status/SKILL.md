@@ -7,7 +7,7 @@ allowed-tools: Read, Bash(node *), Bash(git *)
 
 # Consensus Loop Status (Claude Code)
 
-Follow the canonical protocol at `skills/status/SKILL.md`.
+Follow the canonical protocol at `platform/skills/status/SKILL.md`.
 
 ## Tool Mapping
 

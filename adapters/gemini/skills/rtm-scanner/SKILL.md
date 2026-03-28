@@ -19,4 +19,4 @@ allowed-tools: read_file, glob, grep, run_shell_command
 
 ## Start
 
-Read and follow the canonical skill at `skills/rtm-scanner/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/rtm-scanner/SKILL.md`.

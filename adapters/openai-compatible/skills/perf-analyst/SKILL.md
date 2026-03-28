@@ -7,7 +7,7 @@ allowed-tools: read, bash, glob, grep
 
 # Performance Analyst (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/specialist-review/SKILL.md` (domain: Performance).
+Follow the canonical protocol at `platform/skills/specialist-review/SKILL.md` (domain: Performance).
 Core protocols: `agents/knowledge/specialist-base.md`, `agents/knowledge/domains/perf.md`.
 
 ## Tool Mapping
@@ -21,4 +21,4 @@ Core protocols: `agents/knowledge/specialist-base.md`, `agents/knowledge/domains
 
 ## Tool References
 
-For detailed parameters and examples: `skills/consensus-tools/references/`
+For detailed parameters and examples: `platform/skills/consensus-tools/references/`

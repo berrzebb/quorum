@@ -7,7 +7,7 @@
 
 import React from "react";
 import { Box, Text } from "ink";
-import type { QuorumEvent } from "../../bus/events.js";
+import type { QuorumEvent } from "../../platform/bus/events.js";
 
 interface AgentPanelProps {
   events: QuorumEvent[];

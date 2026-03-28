@@ -5,7 +5,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { isComplete, extractAssistantText, buildArgs, parseAuditOutput } from "../dist/providers/auditors/mux.js";
+import { isComplete, extractAssistantText, buildArgs, parseAuditOutput } from "../dist/platform/providers/auditors/mux.js";
 
 // ── Fixtures: actual capture-pane output samples ──────────
 

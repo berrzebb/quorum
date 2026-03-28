@@ -21,11 +21,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { platform } from "node:os";
 import { spawnSync } from "node:child_process";
-import { ProcessMux, type MuxSession, type MuxBackend } from "../../../bus/mux.js";
+import { ProcessMux, type MuxSession, type MuxBackend } from "../../bus/mux.js";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { extractJson } from "./parse.js";
 import { parseSpec } from "./factory.js";
-import { AUDIT_VERDICT } from "../../../bus/events.js";
+import { AUDIT_VERDICT } from "../../bus/events.js";
 
 // ── Types ────────────────────────────────────
 

@@ -18,5 +18,5 @@ allowed-tools: Read, Write, Bash(python *), Bash(pip *), Bash(qpdf *), Bash(pdft
 
 ## Start
 
-Read and follow the canonical skill at `skills/pdf/SKILL.md`.
-Scripts are at `skills/pdf/scripts/`.
+Read and follow the canonical skill at `platform/skills/pdf/SKILL.md`.
+Scripts are at `platform/skills/pdf/scripts/`.

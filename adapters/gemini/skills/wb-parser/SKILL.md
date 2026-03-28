@@ -20,4 +20,4 @@ Read-only skill — parses work-breakdown files only.
 
 ## Start
 
-Read and follow the canonical skill at `skills/wb-parser/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/wb-parser/SKILL.md`.

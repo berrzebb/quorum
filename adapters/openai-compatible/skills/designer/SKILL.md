@@ -20,4 +20,4 @@ allowed-tools: read, write, edit, glob, grep, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/designer/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/designer/SKILL.md`.

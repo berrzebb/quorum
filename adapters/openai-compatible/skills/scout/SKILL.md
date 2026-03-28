@@ -7,7 +7,7 @@ allowed-tools: read, bash, glob, grep
 
 # Scout (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/scout/SKILL.md`.
+Follow the canonical protocol at `platform/skills/scout/SKILL.md`.
 Core protocol: `agents/knowledge/scout-protocol.md`.
 
 ## Tool Mapping
@@ -21,4 +21,4 @@ Core protocol: `agents/knowledge/scout-protocol.md`.
 
 ## Tool References
 
-For detailed parameters and examples: `skills/consensus-tools/references/`
+For detailed parameters and examples: `platform/skills/consensus-tools/references/`

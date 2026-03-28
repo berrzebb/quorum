@@ -12,4 +12,10 @@ export default {
   extensions: [".go"],
   endBlock: "brace",
   commentPrefixes: ["//", "/*"],
+  verify: {
+    CQ:   { cmd: "golangci-lint run", detect: ["go.mod"] },
+    T:    { cmd: "go vet ./...", detect: ["go.mod"] },
+    TEST: { cmd: "go test ./...", detect: ["go.mod"] },
+    DEP:  { cmd: "govulncheck ./...", detect: ["go.sum"] },
+  },
 };

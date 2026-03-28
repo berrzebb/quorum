@@ -67,7 +67,7 @@ export async function main() {
   // Structural enforcement: auto-detect if audit quality has degraded.
   let policyReview = null;
   try {
-    const { checkFalsePositiveRate } = await import("../../core/enforcement.mjs");
+    const { checkFalsePositiveRate } = await import("./enforcement.mjs");
     const { REPO_ROOT } = await import("./context.mjs");
     const historyPath = resolve(REPO_ROOT, ".claude", "audit-history.jsonl");
     // Extract track from agreed items (best effort)

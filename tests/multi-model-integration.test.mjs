@@ -14,12 +14,12 @@ import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 
 // ─── Modules under test ────────────────────────────────────────
-import { NdjsonParser } from "../adapters/shared/ndjson-parser.mjs";
-import { ClaudeCliAdapter, CodexCliAdapter, GeminiCliAdapter, createCliAdapter } from "../adapters/shared/cli-adapter.mjs";
-import { HookRunner } from "../adapters/shared/hook-runner.mjs";
-import { hookRunnerToPreToolHook, hookRunnerToAuditGate } from "../adapters/shared/hook-bridge.mjs";
-import { JsonRpcClient } from "../adapters/shared/jsonrpc-client.mjs";
-import { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } from "../adapters/shared/hook-loader.mjs";
+import { NdjsonParser } from "../platform/adapters/shared/ndjson-parser.mjs";
+import { ClaudeCliAdapter, CodexCliAdapter, GeminiCliAdapter, createCliAdapter } from "../platform/adapters/shared/cli-adapter.mjs";
+import { HookRunner } from "../platform/adapters/shared/hook-runner.mjs";
+import { hookRunnerToPreToolHook, hookRunnerToAuditGate } from "../platform/adapters/shared/hook-bridge.mjs";
+import { JsonRpcClient } from "../platform/adapters/shared/jsonrpc-client.mjs";
+import { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } from "../platform/adapters/shared/hook-loader.mjs";
 
 // ═══════════════════════════════════════════════════════════════
 // NDJSON wire format simulation scripts
@@ -516,8 +516,8 @@ describe("Live process → NDJSON → CliAdapter pipeline", () => {
   /**
    * Spawn a mock CLI process, collect NDJSON output, parse through adapter.
    * @param {string} script — mock script path
-   * @param {import("../adapters/shared/cli-adapter.mjs").ClaudeCliAdapter|import("../adapters/shared/cli-adapter.mjs").CodexCliAdapter|import("../adapters/shared/cli-adapter.mjs").GeminiCliAdapter} adapter
-   * @returns {Promise<import("../adapters/shared/ndjson-parser.mjs").AgentOutputMessage[]>}
+   * @param {import("../platform/adapters/shared/cli-adapter.mjs").ClaudeCliAdapter|import("../platform/adapters/shared/cli-adapter.mjs").CodexCliAdapter|import("../platform/adapters/shared/cli-adapter.mjs").GeminiCliAdapter} adapter
+   * @returns {Promise<import("../platform/adapters/shared/ndjson-parser.mjs").AgentOutputMessage[]>}
    */
   function runMockCli(script, adapter) {
     return new Promise((resolve, reject) => {

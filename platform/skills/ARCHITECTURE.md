@@ -3,7 +3,7 @@
 ## Directory Structure
 
 ```
-skills/                          ← Protocol-neutral canonical definitions (source of truth)
+platform/skills/                 ← Protocol-neutral canonical definitions (source of truth)
   ├── {skill}/SKILL.md           ← What the skill does (no adapter-specific content)
   ├── {skill}/references/        ← Progressive-disclosure references
   └── ARCHITECTURE.md            ← This file
@@ -27,8 +27,8 @@ agents/knowledge/                ← Cross-adapter protocols (business logic)
 ```
 agents/knowledge/ (protocols)     ← Business logic, adapter-independent
         ↓ referenced by
-skills/ (canonical skills)        ← Protocol-neutral definitions + references
-        ↓ adapted by (all 3 adapters are equal peers)
+platform/skills/ (canonical)      ← Protocol-neutral definitions + references
+        ↓ adapted by (all 4 adapters are equal peers)
 adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
 adapters/gemini/skills/           ← Gemini tool names + adapter paths
 adapters/codex/skills/            ← Codex tool names + adapter paths
@@ -36,7 +36,7 @@ adapters/codex/skills/            ← Codex tool names + adapter paths
 
 ## Protocol Neutrality
 
-`skills/` contains **protocol-neutral** canonical skill definitions:
+`platform/skills/` contains **protocol-neutral** canonical skill definitions:
 - Define WHAT the skill does (phases, rules, constraints)
 - NO adapter-specific tool names (not `Read`, not `read_file`, not `apply_diff`)
 - NO adapter-specific paths (not adapter-specific env vars like `CLAUDE_PLUGIN_ROOT`)
@@ -47,11 +47,11 @@ adapters/codex/skills/            ← Codex tool names + adapter paths
 All three adapters are **equal peers** — each creates its own wrapper with:
 - Adapter-native tool mapping table
 - Adapter-specific invocation paths
-- Protocol references to `agents/knowledge/` and `skills/*/references/`
+- Protocol references to `agents/knowledge/` and `platform/skills/*/references/`
 
 ## Neutrality Contract
 
-Canonical skills (`skills/**`) MUST NOT contain:
+Canonical skills (`platform/skills/**`) MUST NOT contain:
 
 | Prohibited | Example | Use instead |
 |------------|---------|-------------|
@@ -80,9 +80,9 @@ description: "..."           # Preserved from original — do not abbreviate
 
 # {Skill Title} ({Adapter Name})
 
-Follow the canonical protocol at `skills/{skill-name}/SKILL.md`.
+Follow the canonical protocol at `platform/skills/{skill-name}/SKILL.md`.
 [Optional: Core protocol reference, e.g. `agents/knowledge/{protocol}.md`.]
-[Optional: References at `skills/{skill-name}/references/`.]
+[Optional: References at `platform/skills/{skill-name}/references/`.]
 
 ## Tool Mapping
 
@@ -101,9 +101,9 @@ Follow the canonical protocol at `skills/{skill-name}/SKILL.md`.
 
 | Content | Location | NOT in wrapper |
 |---------|----------|---------------|
-| Protocol phases, rules, constraints | `skills/{name}/SKILL.md` | Never duplicate |
+| Protocol phases, rules, constraints | `platform/skills/{name}/SKILL.md` | Never duplicate |
 | Business logic, checklists, gates | `agents/knowledge/*.md` | Never duplicate |
-| Tool parameter details, examples | `skills/{name}/references/` | Never duplicate |
+| Tool parameter details, examples | `platform/skills/{name}/references/` | Never duplicate |
 | Tool name mapping (Read vs read_file) | **Wrapper** | -- |
 | Adapter-specific paths, env vars | **Wrapper** | -- |
 | Adapter-specific invocation commands | **Wrapper** | -- |
@@ -129,18 +129,18 @@ Follow the canonical protocol at `skills/{skill-name}/SKILL.md`.
 
 ## Reference Resolution
 
-References live in `skills/{skill-name}/references/`. All adapters reference by project-root path:
+References live in `platform/skills/{skill-name}/references/`. All adapters reference by project-root path:
 
 ```
-skills/{skill}/references/xxx.md
+platform/skills/{skill}/references/xxx.md
 ```
 
 Consistent across all 3 adapters — no special cases.
 
 ## Adding a New Skill
 
-1. Create `skills/{name}/SKILL.md` with protocol-neutral content
-2. Create `skills/{name}/references/` if progressive disclosure needed
+1. Create `platform/skills/{name}/SKILL.md` with protocol-neutral content
+2. Create `platform/skills/{name}/references/` if progressive disclosure needed
 3. Create adapter wrappers (all 4) using the **Wrapper Template** above:
    - `adapters/claude-code/skills/{name}/SKILL.md` (Read/Write/Edit/Bash/Glob/Grep)
    - `adapters/codex/skills/{name}/SKILL.md` (read_file/write_file/apply_diff/shell/find_files/search)
@@ -155,6 +155,6 @@ Consistent across all 3 adapters — no special cases.
 2. For each shared skill, create adapter version with:
    - Adapter-native tool names (from `adapters/shared/tool-names.mjs`)
    - Protocol references (`agents/knowledge/`)
-   - Shared reference paths (`skills/*/references/`)
+   - Shared reference paths (`platform/skills/*/references/`)
 3. Register tool names in `adapters/shared/tool-names.mjs`
 4. Create hooks in `adapters/{name}/hooks/hooks.json`

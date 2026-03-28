@@ -65,7 +65,7 @@ Language-aware scans using `languages/{lang}/spec.{domain}.mjs` fragments. Auto-
 
 ## Detailed References
 
-For parameters, examples, and output format of each tool, see: `skills/consensus-tools/references/`
+For parameters, examples, and output format of each tool, see: `platform/skills/consensus-tools/references/`
 
 ## Error Handling
 

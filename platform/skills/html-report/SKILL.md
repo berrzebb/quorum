@@ -69,7 +69,7 @@ Auto-generated from headings. Sidebar navigation with:
 ### Mermaid Diagrams
 ```` ```mermaid ```` blocks render as interactive diagrams. Supports all 13 diagram types (flowchart, sequence, class, state, ER, gantt, pie, radar, gitgraph, mindmap, timeline, architecture, block).
 
-For diagram syntax, reference `skills/mermaid/references/`.
+For diagram syntax, reference `platform/skills/mermaid/references/`.
 
 ### Code Highlighting
 Fenced code blocks get automatic syntax highlighting via Prism.js. Supported languages include: javascript, typescript, python, go, rust, java, bash, json, yaml, sql, css, html, and more.

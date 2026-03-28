@@ -8,7 +8,7 @@ allowed-tools: read, bash(node *), bash(git *)
 
 # Manual Audit (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/audit/SKILL.md`.
+Follow the canonical protocol at `platform/skills/audit/SKILL.md`.
 
 ## Tool Mapping
 

@@ -27,7 +27,7 @@ Signs you should split:
 - Refactoring is mixed with behavior change
 - You can imagine wanting to revert only part of this commit
 
-Read `skills/commit-convention/references/split-patterns.md` for detailed split strategies.
+Read `platform/skills/commit-convention/references/split-patterns.md` for detailed split strategies.
 
 ### Step 3: Write the subject line
 
@@ -43,7 +43,7 @@ type(scope)!: subject          ← breaking change
 - Imperative or noun form: "기능 추가" not "기능을 추가했다"
 - Lowercase `type` and `scope`; no period at the end
 
-Read `skills/commit-convention/references/types.md` for the standard type list and scope conventions.
+Read `platform/skills/commit-convention/references/types.md` for the standard type list and scope conventions.
 
 ### Step 4: Write the body
 
@@ -59,7 +59,7 @@ Err on the side of writing one. Commits are permanent history.
 - `docs: fix typo in README`
 - `chore: bump dependency versions`
 
-Read `skills/commit-convention/references/body-guide.md` for format, examples, and what to write vs. avoid.
+Read `platform/skills/commit-convention/references/body-guide.md` for format, examples, and what to write vs. avoid.
 
 ## Checklist
 

@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { execFileSync, execSync } from "node:child_process";
-import type { WorkItem } from "../../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 
 // ── Stub / Perf Pattern Definitions ──────────

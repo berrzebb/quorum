@@ -8,8 +8,8 @@ allowed-tools: read_file, shell, find_files, search
 
 # Orchestrator (Codex)
 
-Follow the canonical protocol at `skills/orchestrator/SKILL.md`.
-Reference documents are in `skills/orchestrator/references/`.
+Follow the canonical protocol at `platform/skills/orchestrator/SKILL.md`.
+Reference documents are in `platform/skills/orchestrator/references/`.
 
 ## Tool Mapping
 

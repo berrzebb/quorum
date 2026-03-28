@@ -8,7 +8,7 @@ allowed-tools: read_file, write_file, shell, find_files, search
 
 # Retrospect (Codex)
 
-Follow the canonical protocol at `skills/retrospect/SKILL.md`.
+Follow the canonical protocol at `platform/skills/retrospect/SKILL.md`.
 
 ## Tool Mapping
 

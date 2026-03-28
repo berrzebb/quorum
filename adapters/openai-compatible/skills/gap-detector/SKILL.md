@@ -20,4 +20,4 @@ Read-only skill — does not modify code or design documents.
 
 ## Start
 
-Read and follow the canonical skill at `skills/gap-detector/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/gap-detector/SKILL.md`.

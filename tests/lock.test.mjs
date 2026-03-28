@@ -352,7 +352,7 @@ describe("Bridge state management", () => {
   let bridge;
 
   it("loads bridge module", async () => {
-    bridge = await import("../core/bridge.mjs");
+    bridge = await import("../platform/core/bridge.mjs");
     assert.ok(bridge.init);
     assert.ok(bridge.acquireLock);
     assert.ok(bridge.releaseLock);

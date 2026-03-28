@@ -19,4 +19,4 @@ allowed-tools: Read, Glob, Grep, Bash(node *), Bash(quorum *)
 
 ## Start
 
-Read and follow the canonical skill at `skills/rtm-scanner/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/rtm-scanner/SKILL.md`.

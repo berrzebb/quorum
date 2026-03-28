@@ -10,7 +10,7 @@ allowed-tools: Read, Grep, Glob, Bash(git *)
 
 # Merge Worktree (Claude Code)
 
-Follow the canonical protocol at `skills/merge-worktree/SKILL.md`.
+Follow the canonical protocol at `platform/skills/merge-worktree/SKILL.md`.
 
 ## Tool Mapping
 

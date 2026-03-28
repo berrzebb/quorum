@@ -8,7 +8,7 @@
  * All functions are side-effect-free: params → { text, summary, json? } | { error }.
  */
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync as _writeFileSync, copyFileSync, unlinkSync } from "node:fs";
-import { readJsonlFile } from "../context.mjs";
+import { readJsonlFile } from "../../platform/core/context.mjs";
 import { resolve, relative, extname, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -2560,7 +2560,7 @@ let _commBridge = null;
 async function _getCommBridge() {
   if (_commBridge) return _commBridge;
   try {
-    _commBridge = await import("../bridge.mjs");
+    _commBridge = await import("../../platform/core/bridge.mjs");
     if (!_commBridge._store) await _commBridge.init(process.cwd());
     return _commBridge;
   } catch { return null; }
@@ -2821,7 +2821,7 @@ ${rows}
 
 ## Start
 
-Read and follow the canonical skill at \`skills/${skillName}/SKILL.md\`.
+Read and follow the canonical skill at \`platform/skills/${skillName}/SKILL.md\`.
 `;
 }
 
@@ -2834,10 +2834,10 @@ Read and follow the canonical skill at \`skills/${skillName}/SKILL.md\`.
 export function toolSkillSync(params) {
   const { mode = "check" } = params;
   const repoRoot = params.path ? safePath(params.path) : _cwd;
-  const skillsDir = resolve(repoRoot, "skills");
+  const skillsDir = resolve(repoRoot, "platform", "skills");
   const adaptersDir = resolve(repoRoot, "adapters");
 
-  if (!existsSync(skillsDir)) return { error: `skills/ directory not found at ${repoRoot}` };
+  if (!existsSync(skillsDir)) return { error: `platform/skills/ directory not found at ${repoRoot}` };
   if (!existsSync(adaptersDir)) return { error: `adapters/ directory not found at ${repoRoot}` };
 
   const ADAPTERS = ["claude-code", "codex", "gemini", "openai-compatible"];
@@ -2846,7 +2846,7 @@ export function toolSkillSync(params) {
   // Scan canonical skills
   let skillDirs;
   try { skillDirs = readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory()); }
-  catch { return { error: `Cannot read skills/ directory` }; }
+  catch { return { error: `Cannot read platform/skills/ directory` }; }
 
   for (const dir of skillDirs) {
     const skillName = dir.name;

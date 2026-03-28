@@ -7,9 +7,9 @@ allowed-tools: Read, Grep, Glob, Bash(node *), Bash(npm test*), Bash(ls *), Bash
 
 # Doc-Sync (Claude Code)
 
-Follow the canonical protocol at `skills/doc-sync/SKILL.md`.
+Follow the canonical protocol at `platform/skills/doc-sync/SKILL.md`.
 Core protocol: `agents/knowledge/doc-sync-protocol.md`.
-References at `skills/doc-sync/references/`.
+References at `platform/skills/doc-sync/references/`.
 
 ## Tool Mapping
 

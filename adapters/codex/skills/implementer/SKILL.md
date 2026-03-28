@@ -7,7 +7,7 @@ allowed-tools: read_file, write_file, apply_diff, shell, find_files, search
 
 # Implementer (Codex)
 
-Follow the canonical protocol at `skills/implementer/SKILL.md`.
+Follow the canonical protocol at `platform/skills/implementer/SKILL.md`.
 Core protocol: `agents/knowledge/implementer-protocol.md`.
 
 ## Tool Mapping
@@ -23,4 +23,4 @@ Core protocol: `agents/knowledge/implementer-protocol.md`.
 
 ## Tool References
 
-For detailed parameters and examples: `skills/consensus-tools/references/`
+For detailed parameters and examples: `platform/skills/consensus-tools/references/`

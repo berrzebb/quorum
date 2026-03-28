@@ -37,4 +37,4 @@ Analyzes RTM rows (from rtm-scanner) to produce gap reports. Phase 5-8 of the or
 
 ## Tool References
 
-For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
+For detailed parameters and examples for each tool, see: `platform/skills/consensus-tools/references/`

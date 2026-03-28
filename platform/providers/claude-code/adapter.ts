@@ -11,8 +11,8 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import type { QuorumBus } from "../../../bus/bus.js";
-import { createEvent } from "../../../bus/events.js";
+import type { QuorumBus } from "../../bus/bus.js";
+import { createEvent } from "../../bus/events.js";
 import type {
   QuorumProvider,
   ProviderCapability,

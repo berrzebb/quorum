@@ -19,4 +19,4 @@ allowed-tools: Read, Write, Glob, Bash(node *), Bash(git *)
 
 ## Start
 
-Read and follow the canonical skill at `skills/rollback/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/rollback/SKILL.md`.

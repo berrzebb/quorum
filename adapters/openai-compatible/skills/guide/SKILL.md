@@ -7,7 +7,7 @@ allowed-tools: read, grep, bash(node *), bash(git diff *), bash(git status *)
 
 # Quorum Evidence Guide (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/guide/SKILL.md`.
+Follow the canonical protocol at `platform/skills/guide/SKILL.md`.
 
 ## Tool Mapping
 

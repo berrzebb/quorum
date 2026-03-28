@@ -11,14 +11,14 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { platform } from "node:os";
 import React from "react";
 import { render } from "ink";
-import { QuorumBus } from "../bus/bus.js";
-import { EventStore } from "../bus/store.js";
-import { createEvent } from "../bus/events.js";
-import { ClaudeCodeProvider } from "../providers/claude-code/adapter.js";
-import { registerProvider, listProviders } from "../providers/provider.js";
-import type { ProviderConfig } from "../providers/provider.js";
-import { ProcessMux, ensureMuxBackend } from "../bus/mux.js";
-import { MessageBus } from "../bus/message-bus.js";
+import { QuorumBus } from "../platform/bus/bus.js";
+import { EventStore } from "../platform/bus/store.js";
+import { createEvent } from "../platform/bus/events.js";
+import { ClaudeCodeProvider } from "../platform/providers/claude-code/adapter.js";
+import { registerProvider, listProviders } from "../platform/providers/provider.js";
+import type { ProviderConfig } from "../platform/providers/provider.js";
+import { ProcessMux, ensureMuxBackend } from "../platform/bus/mux.js";
+import { MessageBus } from "../platform/bus/message-bus.js";
 import { StateReader } from "./state-reader.js";
 import { App } from "./app.js";
 
@@ -124,7 +124,7 @@ export default async function startDaemon(): Promise<void> {
   // Config refresh (lazy import to avoid circular deps with MJS module)
   let _refreshConfig: (() => void) | null = null;
   try {
-    const mod = await import("../core/context.mjs" as any);
+    const mod = await import("../platform/core/context.mjs" as any);
     _refreshConfig = mod.refreshConfigIfChanged;
   } catch { /* non-critical */ }
   const configInterval = setInterval(() => {

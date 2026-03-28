@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Glob, Bash(npx *), Bash(node *), Bash(python *), Bash
 
 # Implementation Verification (Claude Code)
 
-Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
+Follow the canonical protocol at `platform/skills/verify-implementation/SKILL.md`.
 
 ## Tool Mapping
 
@@ -21,7 +21,7 @@ Follow the canonical protocol at `skills/verify-implementation/SKILL.md`.
 
 ## Tool References
 
-For detailed parameters and examples for each tool, see: `skills/consensus-tools/references/`
+For detailed parameters and examples for each tool, see: `platform/skills/consensus-tools/references/`
 
 ## Setup
 

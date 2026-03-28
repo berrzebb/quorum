@@ -17,5 +17,5 @@ allowed-tools: read, write, bash
 
 ## Start
 
-Read and follow the canonical skill at `skills/pdf/SKILL.md`.
-Scripts are at `skills/pdf/scripts/`.
+Read and follow the canonical skill at `platform/skills/pdf/SKILL.md`.
+Scripts are at `platform/skills/pdf/scripts/`.

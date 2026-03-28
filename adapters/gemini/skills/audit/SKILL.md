@@ -8,7 +8,7 @@ allowed-tools: read_file, shell, glob
 
 # Manual Audit (Gemini)
 
-Follow the canonical protocol at `skills/audit/SKILL.md`.
+Follow the canonical protocol at `platform/skills/audit/SKILL.md`.
 
 ## Tool Mapping
 

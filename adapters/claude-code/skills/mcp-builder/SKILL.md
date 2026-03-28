@@ -21,4 +21,4 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash(node *), Bash(npm *), Bash(np
 
 ## Start
 
-Read and follow the canonical skill at `skills/mcp-builder/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/mcp-builder/SKILL.md`.

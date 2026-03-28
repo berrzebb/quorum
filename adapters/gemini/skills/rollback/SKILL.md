@@ -19,4 +19,4 @@ allowed-tools: read_file, write_file, glob, run_shell_command
 
 ## Start
 
-Read and follow the canonical skill at `skills/rollback/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/rollback/SKILL.md`.

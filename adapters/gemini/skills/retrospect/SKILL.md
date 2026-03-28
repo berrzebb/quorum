@@ -8,7 +8,7 @@ allowed-tools: read_file, write_file, shell, glob, grep
 
 # Retrospect (Gemini)
 
-Follow the canonical protocol at `skills/retrospect/SKILL.md`.
+Follow the canonical protocol at `platform/skills/retrospect/SKILL.md`.
 
 ## Tool Mapping
 

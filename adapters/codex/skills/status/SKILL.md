@@ -7,7 +7,7 @@ allowed-tools: read_file, shell
 
 # Consensus Loop Status (Codex)
 
-Follow the canonical protocol at `skills/status/SKILL.md`.
+Follow the canonical protocol at `platform/skills/status/SKILL.md`.
 
 ## Tool Mapping
 

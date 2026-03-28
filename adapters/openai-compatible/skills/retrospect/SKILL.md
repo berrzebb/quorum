@@ -8,7 +8,7 @@ allowed-tools: read, write, grep, glob, bash(node *), bash(git log*)
 
 # Retrospect (OpenAI-Compatible)
 
-Follow the canonical protocol at `skills/retrospect/SKILL.md`.
+Follow the canonical protocol at `platform/skills/retrospect/SKILL.md`.
 
 ## Tool Mapping
 

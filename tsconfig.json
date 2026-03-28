@@ -17,19 +17,13 @@
     "jsx": "react-jsx"
   },
   "include": [
-    "bus/**/*.ts",
-    "providers/**/*.ts",
+    "platform/**/*.ts",
     "daemon/**/*.ts",
-    "daemon/**/*.tsx",
-    "cli/**/*.ts",
-    "orchestrate/**/*.ts",
-    "platform/**/*.ts"
+    "daemon/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "core",
-    "adapters",
     "tests"
   ]
 }

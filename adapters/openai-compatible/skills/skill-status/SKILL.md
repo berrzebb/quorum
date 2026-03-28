@@ -18,4 +18,4 @@ Read-only skill — scans files only, never modifies.
 
 ## Start
 
-Read and follow the canonical skill at `skills/skill-status/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/skill-status/SKILL.md`.

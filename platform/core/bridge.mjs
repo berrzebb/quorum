@@ -24,7 +24,7 @@ import { existsSync, mkdirSync } from "node:fs";
  */
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUORUM_ROOT = resolve(__dirname, "..", "..");
-const DIST = resolve(QUORUM_ROOT, "dist");
+const DIST = resolve(QUORUM_ROOT, "dist", "platform");
 
 // ── Lazy singletons ───────────────────────────
 
@@ -722,13 +722,13 @@ let _hookRunner = null;
  *
  * @param {string} repoRoot — workspace directory
  * @param {object} [hooksCfg] — hooks section from config.json (optional)
- * @returns {import("../../adapters/shared/hook-runner.mjs").HookRunner|null}
+ * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
 export async function initHookRunner(repoRoot, hooksCfg) {
   if (_hookRunner) return _hookRunner;
   try {
-    const { HookRunner } = await import("../../adapters/shared/hook-runner.mjs");
-    const { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } = await import("../../adapters/shared/hook-loader.mjs");
+    const { HookRunner } = await import("../adapters/shared/hook-runner.mjs");
+    const { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } = await import("../adapters/shared/hook-loader.mjs");
 
     const fileConfig = loadHooksFromFile(repoRoot, "HOOK.md");
     const jsonConfig = hooksCfg ? hooksConfigFromJson({ hooks: hooksCfg }) : { hooks: {} };
@@ -743,7 +743,7 @@ export async function initHookRunner(repoRoot, hooksCfg) {
 
 /**
  * Get the current HookRunner instance (null if not initialized).
- * @returns {import("../../adapters/shared/hook-runner.mjs").HookRunner|null}
+ * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
 export function getHookRunner() {
   return _hookRunner;
@@ -755,7 +755,7 @@ export function getHookRunner() {
  *
  * @param {string} event — hook event name (e.g., "audit.submit", "audit.verdict", "PreToolUse")
  * @param {object} input — HookInput fields
- * @returns {Promise<import("../../adapters/shared/hook-runner.mjs").HookExecutionResult[]>}
+ * @returns {Promise<import("../adapters/shared/hook-runner.mjs").HookExecutionResult[]>}
  */
 export async function fireHook(event, input = {}) {
   if (!_hookRunner) return [];

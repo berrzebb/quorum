@@ -5,7 +5,7 @@
  * No file I/O, no SQLite access.
  */
 
-import type { WorkItem } from "../../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
 
 // ── Manifest type ────────────────────────────
 

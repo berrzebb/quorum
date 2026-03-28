@@ -5,7 +5,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { ProcessMux } from "../dist/bus/mux.js";
+import { ProcessMux } from "../dist/platform/bus/mux.js";
 
 // Skip all tests if no mux backend available
 const backend = detectBackend();

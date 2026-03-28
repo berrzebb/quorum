@@ -8,7 +8,7 @@ allowed-tools: read_file, shell, find_files
 
 # Manual Audit (Codex)
 
-Follow the canonical protocol at `skills/audit/SKILL.md`.
+Follow the canonical protocol at `platform/skills/audit/SKILL.md`.
 
 ## Tool Mapping
 

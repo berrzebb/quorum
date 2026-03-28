@@ -24,7 +24,7 @@ import {
   appendTechDebt,
   checkFalsePositiveRate,
   checkExplanation,
-} from "../core/enforcement.mjs";
+} from "../platform/core/enforcement.mjs";
 
 let tmpDir;
 
@@ -246,7 +246,7 @@ describe("smoke: audit history → false positive detection → retro marker", (
 
 describe("smoke: enforcement module import", () => {
   it("can be imported from scripts/ directory", async () => {
-    const mod = await import("../core/enforcement.mjs");
+    const mod = await import("../platform/core/enforcement.mjs");
     assert.ok(typeof mod.countTrackPendings === "function");
     assert.ok(typeof mod.blockDownstreamTasks === "function");
     assert.ok(typeof mod.parseResidualRisk === "function");

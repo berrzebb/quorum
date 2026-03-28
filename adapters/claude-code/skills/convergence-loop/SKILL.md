@@ -21,4 +21,4 @@ allowed-tools: Read, Write, Glob, Grep, Bash(node *), Bash(quorum *), Agent
 
 ## Start
 
-Read and follow the canonical skill at `skills/convergence-loop/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/convergence-loop/SKILL.md`.

@@ -8,7 +8,7 @@ allowed-tools: Read, Bash(node *), Bash(git *)
 
 # Manual Audit (Claude Code)
 
-Follow the canonical protocol at `skills/audit/SKILL.md`.
+Follow the canonical protocol at `platform/skills/audit/SKILL.md`.
 
 ## Tool Mapping
 

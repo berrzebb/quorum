@@ -20,4 +20,4 @@ allowed-tools: read_file, write_file, find_files, search, shell
 
 ## Start
 
-Read and follow the canonical skill at `skills/skill-authoring/SKILL.md`.
+Read and follow the canonical skill at `platform/skills/skill-authoring/SKILL.md`.

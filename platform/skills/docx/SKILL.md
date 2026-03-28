@@ -154,7 +154,7 @@ Rendering priority:
 1. `mmdc` (mermaid-cli) → PNG image embedded in DOCX
 2. Fallback → formatted code block with "(install mmdc for image rendering)" note
 
-For diagram syntax, reference `skills/mermaid/references/` — particularly `flowchart.md`, `sequence.md`, `architecture.md`.
+For diagram syntax, reference `platform/skills/mermaid/references/` — particularly `flowchart.md`, `sequence.md`, `architecture.md`.
 
 ## Integration with /report
 

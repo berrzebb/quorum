@@ -7,9 +7,9 @@ allowed-tools: read_file, write_file, apply_diff, shell, find_files, search
 
 # Doc-Sync (Codex)
 
-Follow the canonical protocol at `skills/doc-sync/SKILL.md`.
+Follow the canonical protocol at `platform/skills/doc-sync/SKILL.md`.
 Core protocol: `agents/knowledge/doc-sync-protocol.md`.
-References at `skills/doc-sync/references/`.
+References at `platform/skills/doc-sync/references/`.
 
 ## Tool Mapping
 

@@ -30,7 +30,7 @@ import {
   readBulletSection,
   isEmptyMarker,
   stripStatusFormatting,
-} from "../core/context.mjs";
+} from "../platform/core/context.mjs";
 
 describe("escapeRe", () => {
   it("escapes regex special characters", () => {

@@ -136,9 +136,9 @@ describe("buildRawGraph", () => {
 
 describe("computeBlastRadius", () => {
   it("computes blast radius for bridge.mjs", () => {
-    const result = computeBlastRadius(resolve("."), [resolve("core/bridge.mjs")]);
+    const result = computeBlastRadius(resolve("."), [resolve("platform/core/bridge.mjs")]);
     assert.ok(!result.error, `Unexpected error: ${result.error}`);
-    assert.ok(result.affected > 0, `bridge.mjs should have dependents, got ${result.affected}`);
+    assert.ok(result.affected > 0, `platform/core/bridge.mjs should have dependents, got ${result.affected}`);
     assert.ok(result.total > 0);
     assert.ok(result.ratio > 0 && result.ratio <= 1);
     assert.ok(Array.isArray(result.files));

@@ -7,7 +7,7 @@
 
 import React from "react";
 import { Box, Text } from "ink";
-import type { QuorumEvent, EventType } from "../../bus/events.js";
+import type { QuorumEvent, EventType } from "../../platform/bus/events.js";
 
 interface AuditStreamProps {
   events: QuorumEvent[];
