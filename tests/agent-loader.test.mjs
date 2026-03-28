@@ -34,7 +34,7 @@ function writeAgent(dir, name, content) {
 
 describe("AgentLoader basic", () => {
   it("loads agent from adapter directory", () => {
-    const adapterDir = join(tmpDir, "adapters", "claude-code", "agents");
+    const adapterDir = join(tmpDir, "platform", "adapters", "claude-code", "agents");
     writeAgent(adapterDir, "implementer", "# Implementer\n\n## Role\nHeadless worker\n\n## Rules\n- Test everything\n");
 
     const loader = new AgentLoader({
@@ -97,7 +97,7 @@ describe("section extraction", () => {
 
 describe("4-tier resolution", () => {
   it("project-scoped overrides adapter default", () => {
-    const adapterDir = join(tmpDir, "tier-test", "adapters", "claude-code", "agents");
+    const adapterDir = join(tmpDir, "tier-test", "platform", "adapters", "claude-code", "agents");
     const projectDir = join(tmpDir, "tier-test", "project", ".quorum", "agents");
 
     writeAgent(adapterDir, "planner", "## Role\nAdapter default planner\n");
@@ -122,7 +122,7 @@ describe("4-tier resolution", () => {
 
   it("env var overrides all other tiers", () => {
     const envDir = join(tmpDir, "env-agents");
-    const adapterDir = join(tmpDir, "env-test", "adapters", "claude-code", "agents");
+    const adapterDir = join(tmpDir, "env-test", "platform", "adapters", "claude-code", "agents");
 
     writeAgent(envDir, "judge", "## Role\nEnv override judge\n");
     writeAgent(adapterDir, "judge", "## Role\nAdapter default judge\n");
@@ -148,7 +148,7 @@ describe("4-tier resolution", () => {
 describe("listAvailable", () => {
   it("lists agents from all tiers without duplicates", () => {
     const root = join(tmpDir, "list-test");
-    const adapterDir = join(root, "adapters", "claude-code", "agents");
+    const adapterDir = join(root, "platform", "adapters", "claude-code", "agents");
     const builtinDir = join(root, "agents");
 
     writeAgent(adapterDir, "implementer", "## Role\nimpl\n");

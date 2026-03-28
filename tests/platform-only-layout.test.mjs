@@ -110,51 +110,45 @@ describe("root facade directories do NOT contain .ts files", () => {
   }
 });
 
-// ═══ 4. Root core/ facade .mjs files removed ════════════════════════════
+// ═══ 4. Root core/ directory fully removed ═══════════════════════════════
 
-describe("root core/ facade .mjs files removed", () => {
-  const removedFacades = [
-    "core/bridge.mjs",
-    "core/context.mjs",
-    "core/cli-runner.mjs",
-    "core/enforcement.mjs",
-    "core/respond.mjs",
-    "core/retrospective.mjs",
-    "core/audit.mjs",
-    "core/audit/index.mjs",
-    "core/audit/args.mjs",
-    "core/audit/codex-runner.mjs",
-    "core/audit/pre-verify.mjs",
-    "core/audit/scope.mjs",
-    "core/audit/session.mjs",
-    "core/audit/solo-verdict.mjs",
+describe("root core/ directory fully removed", () => {
+  it("core/ directory should NOT exist (all content migrated to platform/core/)", () => {
+    const full = resolve(REPO_ROOT, "core");
+    assert.ok(!existsSync(full),
+      "core/ should have been removed — platform/core/ is the sole source for config, locales, templates, and all code");
+  });
+});
+
+// ═══ 5. platform/core/ canonical data files ═══════════════════════════════
+
+describe("platform/core/ canonical data files", () => {
+  const canonical = [
+    { path: "platform/core/config.json", label: "config.json" },
+    { path: "platform/core/locales", label: "locales/" },
+    { path: "platform/core/templates", label: "templates/" },
   ];
 
-  for (const file of removedFacades) {
-    it(`${file} should NOT exist (facade removed)`, () => {
-      const full = resolve(REPO_ROOT, file);
-      assert.ok(!existsSync(full),
-        `${file} facade should have been removed — canonical source is at platform/${file}`);
+  for (const { path, label } of canonical) {
+    it(`platform/core/${label} should exist (canonical data source)`, () => {
+      const full = resolve(REPO_ROOT, path);
+      assert.ok(existsSync(full),
+        `platform/core/${label} must exist — HOOKS_DIR resolves here`);
     });
   }
 });
 
-// ═══ 5. Core runtime data files preserved ═══════════════════════════════
-
-describe("core/ runtime data files preserved", () => {
-  const preserved = [
-    { path: "core/config.json", label: "config.json" },
-    { path: "core/locales", label: "locales/" },
-    { path: "core/templates", label: "templates/" },
-    { path: "core/tools/mcp-server.mjs", label: "tools/mcp-server.mjs" },
-    { path: "core/tools/tool-runner.mjs", label: "tools/tool-runner.mjs" },
+describe("platform/core/tools/ migrated runtime scripts", () => {
+  const migrated = [
+    { path: "platform/core/tools/mcp-server.mjs", label: "tools/mcp-server.mjs" },
+    { path: "platform/core/tools/tool-runner.mjs", label: "tools/tool-runner.mjs" },
   ];
 
-  for (const { path, label } of preserved) {
-    it(`core/${label} should still exist`, () => {
+  for (const { path, label } of migrated) {
+    it(`platform/core/${label} should exist (migrated runtime script)`, () => {
       const full = resolve(REPO_ROOT, path);
       assert.ok(existsSync(full),
-        `core/${label} must be preserved (runtime data or unmigrated source)`);
+        `platform/core/${label} must exist (migrated from core/tools/)`);
     });
   }
 });
@@ -194,7 +188,7 @@ describe("platform/adapters/shared is canonical shared adapter source", () => {
 // ═══ 8. Root runtime directories removed ═════════════════════════════════
 
 describe("root runtime directories removed", () => {
-  const dirs = ["cli", "bus", "orchestrate", "providers", "skills"];
+  const dirs = ["cli", "bus", "orchestrate", "providers", "skills", "adapters"];
 
   for (const dir of dirs) {
     it(`${dir}/ directory should not exist`, () => {
@@ -202,4 +196,24 @@ describe("root runtime directories removed", () => {
         `${dir}/ should have been removed — platform/${dir}/ is the sole source`);
     });
   }
+});
+
+// ═══ 9. Root core/ fully removed (no data or code files remain) ══════════
+
+describe("root core/ fully removed", () => {
+  it("core/ should NOT exist at all (migrated to platform/core/)", () => {
+    const full = resolve(REPO_ROOT, "core");
+    assert.ok(!existsSync(full),
+      "core/ should have been fully deleted — all data and code migrated to platform/core/");
+  });
+});
+
+// ═══ 10. Root adapters/ directory removed ═════════════════════════════════
+
+describe("root adapters/ directory removed", () => {
+  it("adapters/ directory should NOT exist", () => {
+    const full = resolve(REPO_ROOT, "adapters");
+    assert.ok(!existsSync(full),
+      "adapters/ should have been removed — platform/adapters/ is the sole source");
+  });
 });

@@ -19,7 +19,7 @@ import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { pathToFileURL } from "node:url";
-const VALIDATOR = pathToFileURL(resolve(__dirname, "..", "core", "tools", "fvm-validator.mjs")).href;
+const VALIDATOR = pathToFileURL(resolve(__dirname, "..", "platform", "core", "tools", "fvm-validator.mjs")).href;
 
 const {
   parseFvmRows,

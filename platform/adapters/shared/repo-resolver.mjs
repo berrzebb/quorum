@@ -7,7 +7,7 @@
  * Resolution order:
  *   1. QUORUM_REPO_ROOT env var (cached from previous call)
  *   2. git rev-parse --show-toplevel (worktree-aware)
- *   3. Adapter layout fallback (3 levels up from adapter dir)
+ *   3. Adapter layout fallback (4 levels up from platform adapter dir)
  *   4. process.cwd()
  */
 
@@ -45,11 +45,11 @@ export function resolveRepoRoot(opts = {}) {
   } catch { /* git not available */ }
 
   // 2. Adapter layout fallback: adapter dir is typically inside the repo
-  //    claude-code: adapters/claude-code/ → 3 levels up = repo root
-  //    gemini:      adapters/gemini/hooks/scripts/ → 4 levels up = repo root
+  //    claude-code: platform/adapters/claude-code/ → 4 levels up = repo root
+  //    gemini:      platform/adapters/gemini/hooks/scripts/ → 5 levels up = repo root
   if (adapterDir) {
-    // Try 3 levels up first (standard adapter layout)
-    for (const levels of [3, 4, 2]) {
+    // Try 4 levels up first (platform/adapters/X/ layout), then 3 (legacy), then 5 (gemini scripts), then 2
+    for (const levels of [4, 3, 5, 2]) {
       const parts = new Array(levels).fill("..");
       const candidate = resolve(adapterDir, ...parts);
       if (existsSync(resolve(candidate, ".git"))) {

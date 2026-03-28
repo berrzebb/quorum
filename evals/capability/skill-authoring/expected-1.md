@@ -9,13 +9,13 @@
 4. **Completion Gate**: The skill must define explicit completion gate conditions — what must be true for the skill to report "done." For dependency-audit: all dependencies checked, severity classified, report generated with zero unhandled errors.
 
 5. **Adapter Wrappers for All 3 Adapters**: The skill must create wrapper files under:
-   - `adapters/claude-code/skills/dependency-audit.md`
-   - `adapters/gemini/skills/dependency-audit.md`
-   - `adapters/codex/skills/dependency-audit.md`
+   - `platform/adapters/claude-code/skills/dependency-audit.md`
+   - `platform/adapters/gemini/skills/dependency-audit.md`
+   - `platform/adapters/codex/skills/dependency-audit.md`
    Each wrapper maps adapter-specific tool names (e.g., Bash vs shell vs execute) and references the canonical SKILL.md.
 
 6. **Protocol-Neutral Inheritance**: The architecture must follow the 3-layer pattern: `agents/knowledge/` (shared protocols) → `platform/skills/dependency-audit/` (canonical implementation) → adapter wrappers (tool bindings only). Domain logic must not be duplicated across adapters.
 
-7. **Tool Binding Correctness**: Each adapter wrapper must use the correct tool names for its platform. Claude Code uses `Bash`, `Read`, `Write`; Gemini uses `shell`, `read_file`, `write_file`; Codex uses `execute`, `read`, `write`. Tool name mapping must be consistent with `adapters/shared/tool-names.mjs`.
+7. **Tool Binding Correctness**: Each adapter wrapper must use the correct tool names for its platform. Claude Code uses `Bash`, `Read`, `Write`; Gemini uses `shell`, `read_file`, `write_file`; Codex uses `execute`, `read`, `write`. Tool name mapping must be consistent with `platform/adapters/shared/tool-names.mjs`.
 
 8. **Output Format Compliance**: The skill's output must follow the specialist JSON output format defined in `specialist-base.md`: structured findings with severity, location, description, and suggested fix. This ensures the output integrates with the audit pipeline.

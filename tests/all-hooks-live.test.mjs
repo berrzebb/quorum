@@ -28,8 +28,8 @@ function runHook(scriptPath, stdinJson, timeoutMs = TIMEOUT) {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
-        CLAUDE_PLUGIN_ROOT: resolve("adapters/claude-code"),
-        GEMINI_EXTENSION_ROOT: resolve("adapters/gemini"),
+        CLAUDE_PLUGIN_ROOT: resolve("platform/adapters/claude-code"),
+        GEMINI_EXTENSION_ROOT: resolve("platform/adapters/gemini"),
         QUORUM_REPO_ROOT: CWD,
         // Prevent reentrant guard from blocking
         FEEDBACK_LOOP_ACTIVE: undefined,
@@ -69,7 +69,7 @@ const BASE_INPUT = {
 // ═══════════════════════════════════════════════════════════════
 
 describe("Claude Code hooks — live execution (22)", () => {
-  const ROOT = resolve("adapters/claude-code");
+  const ROOT = resolve("platform/adapters/claude-code");
 
   it("SessionStart → exit 0, stdout has context", async () => {
     const r = await runHook(resolve(ROOT, "session-start.mjs"), null);
@@ -290,7 +290,7 @@ describe("Claude Code hooks — live execution (22)", () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe("Gemini CLI hooks — live execution (11)", () => {
-  const ROOT = resolve("adapters/gemini/hooks/scripts");
+  const ROOT = resolve("platform/adapters/gemini/hooks/scripts");
 
   it("SessionStart → exit 0, stdout is JSON", async () => {
     const r = await runHook(resolve(ROOT, "session-start.mjs"), null);
@@ -388,7 +388,7 @@ describe("Gemini CLI hooks — live execution (11)", () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe("Codex CLI hooks — live execution (5)", () => {
-  const ROOT = resolve("adapters/codex/hooks/scripts");
+  const ROOT = resolve("platform/adapters/codex/hooks/scripts");
 
   it("SessionStart → exit 0, stdout has context", async () => {
     const r = await runHook(resolve(ROOT, "session-start.mjs"), null);

@@ -40,7 +40,7 @@ let _cachedRequired = null;
 let _hasPlanDoc = null;
 
 /** Pre-validate evidence package format — regex-based, zero tokens. */
-// validate_evidence_format removed — migrated to audit_submit MCP tool (core/tools/tool-core.mjs)
+// validate_evidence_format removed — migrated to audit_submit MCP tool (platform/core/tools/tool-core.mjs)
 
 function get_mtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
 function read_ack()   { try { return Number(readFileSync(ackFile, "utf8").trim()) || 0; } catch { return 0; } }
@@ -181,7 +181,7 @@ async function main() {
 
   // (A) Evidence via audit_submit MCP tool — no hook-side detection.
   // Evidence submission is now via `audit_submit` MCP tool (no file I/O).
-  // See: core/tools/tool-core.mjs → toolAuditSubmit()
+  // See: platform/core/tools/tool-core.mjs → toolAuditSubmit()
 
   // Other file edited → check for pending response
   check_pending_response();

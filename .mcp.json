@@ -3,7 +3,7 @@
     "quorum": {
       "command": "node",
       "args": [
-        "core/tools/mcp-server.mjs"
+        "platform/core/tools/mcp-server.mjs"
       ],
       "type": "stdio"
     }

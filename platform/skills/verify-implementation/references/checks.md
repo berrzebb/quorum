@@ -50,7 +50,7 @@ Record: PASS, FAIL, or N/A.
 quorum tool audit_scan --pattern hardcoded
 
 # S-2: OWASP security scan (SSRF, SQLi, XSS, path traversal, command injection)
-node -e "import('${ADAPTER_ROOT}/core/security-scan.mjs').then(m => { const r = m.securityScan('.'); console.log(m.formatFindings(r)); if (r.summary.critical > 0) process.exit(1); })"
+node -e "import('${ADAPTER_ROOT}/platform/core/security-scan.mjs').then(m => { const r = m.securityScan('.'); console.log(m.formatFindings(r)); if (r.summary.critical > 0) process.exit(1); })"
 ```
 
 For new API endpoints: check for auth guard in route handler.

@@ -45,8 +45,8 @@ if (staged) {
 
 // Auto-update RTMs
 try {
-  const quorumRoot = resolve(ADAPTER_DIR, "..", "..");
-  const rtmUpdater = resolve(quorumRoot, "core", "rtm-updater.mjs");
+  const platformRoot = resolve(ADAPTER_DIR, "..", "..", "..");
+  const rtmUpdater = resolve(platformRoot, "core", "rtm-updater.mjs");
   if (existsSync(rtmUpdater)) {
     const { updateAllRtms } = await import(rtmUpdater);
     updateAllRtms(REPO_ROOT);

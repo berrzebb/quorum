@@ -18,13 +18,14 @@ import { execFileSync } from "node:child_process";
 /**
  * core/ directory — where protocol modules, templates, locales reside.
  *
- * This file lives at platform/core/context.mjs, so we resolve two levels up
- * then into core/ to reach the original core/ directory.
+ * This file lives at platform/core/context.mjs.  platform/core/ IS the
+ * canonical data directory (config.json, locales/, templates/).
+ * No fallback to root core/ — platform/core/ is the single source of truth.
  */
-export const HOOKS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "core");
+export const HOOKS_DIR = resolve(dirname(fileURLToPath(import.meta.url)));
 
-/** quorum package root — one level above core/. */
-export const QUORUM_ROOT = resolve(HOOKS_DIR, "..");
+/** quorum package root — two levels above platform/core/. */
+export const QUORUM_ROOT = resolve(HOOKS_DIR, "..", "..");
 
 /**
  * Resolve the repository root directory.

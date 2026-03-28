@@ -1,0 +1,5 @@
+prompt = """
+Run the quorum consensus audit on pending evidence.
+
+!{quorum audit 2>&1 || node platform/core/audit.mjs 2>&1}
+"""

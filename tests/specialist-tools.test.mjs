@@ -22,7 +22,7 @@ const {
   toolDocCoverage,
   toolAiGuide,
   TOOL_NAMES,
-} = await import("../core/tools/tool-core.mjs");
+} = await import("../platform/core/tools/tool-core.mjs");
 
 let tmpDir;
 

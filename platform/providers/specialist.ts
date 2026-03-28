@@ -71,7 +71,7 @@ export async function runSpecialistTool(
 ): Promise<ToolResult> {
   const start = Date.now();
   try {
-    const toolRunner = new URL("../../core/tools/tool-runner.mjs", import.meta.url).pathname;
+    const toolRunner = new URL("../core/tools/tool-runner.mjs", import.meta.url).pathname;
     const { stdout } = await execFileAsync("node", [toolRunner, tool, "--json"], {
       cwd,
       timeout: 30_000,

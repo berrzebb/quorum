@@ -17,9 +17,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 
-// ═══ 1. core/context.mjs path exports ════════════════════════════════
+// ═══ 1. platform/core/context.mjs path exports ════════════════════════
 
-describe("core/context.mjs path resolution", () => {
+describe("platform/core/context.mjs path resolution", () => {
   let ctx;
 
   it("should import platform/core/context.mjs without error", async () => {
@@ -34,15 +34,16 @@ describe("core/context.mjs path resolution", () => {
     assert.ok(existsSync(ctx.HOOKS_DIR), "HOOKS_DIR directory exists");
   });
 
-  it("QUORUM_ROOT should be one level above HOOKS_DIR", () => {
+  it("QUORUM_ROOT should be two levels above HOOKS_DIR (platform/core/)", () => {
     assert.ok(ctx.QUORUM_ROOT, "QUORUM_ROOT is defined");
     assert.ok(isAbsolute(ctx.QUORUM_ROOT), "QUORUM_ROOT is absolute");
-    const expected = resolve(ctx.HOOKS_DIR, "..");
+    // HOOKS_DIR = platform/core/, QUORUM_ROOT = package root (two levels up)
+    const expected = resolve(ctx.HOOKS_DIR, "..", "..");
     // Normalize to handle Windows path separators
     assert.equal(
       ctx.QUORUM_ROOT.replace(/\\/g, "/"),
       expected.replace(/\\/g, "/"),
-      "QUORUM_ROOT is parent of HOOKS_DIR"
+      "QUORUM_ROOT is grandparent of HOOKS_DIR (platform/core/)"
     );
   });
 
@@ -83,9 +84,9 @@ describe("core/context.mjs path resolution", () => {
   });
 });
 
-// ═══ 2. adapters/shared/config-resolver.mjs ═══════════════════════════
+// ═══ 2. platform/adapters/shared/config-resolver.mjs ═══════════════════
 
-describe("adapters/shared/config-resolver.mjs", () => {
+describe("platform/adapters/shared/config-resolver.mjs", () => {
   let configResolver;
 
   it("should import config-resolver without error", async () => {
@@ -128,9 +129,9 @@ describe("adapters/shared/config-resolver.mjs", () => {
   });
 });
 
-// ═══ 3. adapters/shared/repo-resolver.mjs ═════════════════════════════
+// ═══ 3. platform/adapters/shared/repo-resolver.mjs ═══════════════════
 
-describe("adapters/shared/repo-resolver.mjs", () => {
+describe("platform/adapters/shared/repo-resolver.mjs", () => {
   let repoResolver;
 
   it("should import repo-resolver without error", async () => {
@@ -255,18 +256,21 @@ describe("resolver consistency after unification", () => {
     );
   });
 
-  it("HOOKS_DIR should point to core/ directory with runtime data", () => {
-    // context.mjs facade removed in PLT-20; canonical source is platform/core/context.mjs
+  it("HOOKS_DIR should point to platform/core/ directory with runtime data", () => {
+    // HOOKS_DIR now resolves to platform/core/ directly (no root core/ fallback)
     assert.ok(existsSync(resolve(ctx.HOOKS_DIR, "config.json")),
       `HOOKS_DIR (${ctx.HOOKS_DIR}) should contain config.json (runtime data)`);
+    const normalized = ctx.HOOKS_DIR.replace(/\\/g, "/");
+    assert.ok(normalized.endsWith("platform/core"),
+      `HOOKS_DIR should end with platform/core, got: ${normalized}`);
   });
 
-  it("QUORUM_ROOT should be the parent of HOOKS_DIR", () => {
-    const expected = resolve(ctx.HOOKS_DIR, "..");
+  it("QUORUM_ROOT should be the grandparent of HOOKS_DIR (platform/core/)", () => {
+    const expected = resolve(ctx.HOOKS_DIR, "..", "..");
     assert.equal(
       ctx.QUORUM_ROOT.replace(/\\/g, "/"),
       expected.replace(/\\/g, "/"),
-      "QUORUM_ROOT is parent of HOOKS_DIR"
+      "QUORUM_ROOT is grandparent of HOOKS_DIR (platform/core/)"
     );
   });
 });

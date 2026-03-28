@@ -20,8 +20,8 @@ import { resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CORE_DIR = resolve(__dirname, "..", "core");
-const ADAPTER_DIR = resolve(__dirname, "..", "adapters", "claude-code");
+const CORE_DIR = resolve(__dirname, "..", "platform", "core");
+const ADAPTER_DIR = resolve(__dirname, "..", "platform", "adapters", "claude-code");
 
 // ── deriveAuditCwd logic (replicated from audit.mjs for unit testing) ──
 function deriveAuditCwd(path, repoRoot = "/repo") {
@@ -78,21 +78,9 @@ describe("deriveAuditCwd", () => {
 // ── audit.mjs source code invariants ──
 // Canonical modules live in platform/core/audit/ — facades in core/audit/ just re-export
 describe("audit.mjs worktree isolation invariants", () => {
-  const PLATFORM_CORE_DIR = resolve(__dirname, "..", "platform", "core");
-  const auditDir = resolve(PLATFORM_CORE_DIR, "audit");
+  const auditDir = resolve(CORE_DIR, "audit");
   const auditModules = ["index.mjs", "args.mjs", "session.mjs", "scope.mjs", "pre-verify.mjs", "codex-runner.mjs", "solo-verdict.mjs"];
-  let auditSource;
-  try {
-    auditSource = auditModules.map(f => readFileSync(resolve(auditDir, f), "utf8")).join("\n");
-  } catch {
-    // Fallback: try core/audit/ (pre-migration)
-    const legacyDir = resolve(CORE_DIR, "audit");
-    try {
-      auditSource = auditModules.map(f => readFileSync(resolve(legacyDir, f), "utf8")).join("\n");
-    } catch {
-      auditSource = readFileSync(resolve(CORE_DIR, "audit.mjs"), "utf8");
-    }
-  }
+  const auditSource = auditModules.map(f => readFileSync(resolve(auditDir, f), "utf8")).join("\n");
 
   it("has zero cwd:REPO_ROOT in audit chain functions", () => {
     // Find all `cwd: REPO_ROOT` occurrences

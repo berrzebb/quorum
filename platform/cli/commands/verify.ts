@@ -164,7 +164,7 @@ async function runUnwiredScan(repoRoot: string): Promise<boolean> {
 
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "unwired-scan.mjs")));
+    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "unwired-scan.mjs")));
 
     const scanPath = existsSync(resolve(repoRoot, "src")) ? resolve(repoRoot, "src") : repoRoot;
     const result = scanner.unwiredScan(scanPath);
@@ -215,7 +215,7 @@ async function runScopeCheck(repoRoot: string, baseBranch?: string): Promise<boo
   }
 
   try {
-    const scopeChecker = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "scope-checker.mjs")));
+    const scopeChecker = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "scope-checker.mjs")));
     const result = scopeChecker.checkScope(evidenceArg, repoRoot, baseBranch);
 
     process.stdout.write("  SCOPE  Scope Match           ");
@@ -247,7 +247,7 @@ async function runSecurityScan(repoRoot: string): Promise<boolean> {
 
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "security-scan.mjs")));
+    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "security-scan.mjs")));
     const result = scanner.securityScan(resolve(repoRoot, "src"));
 
     const critical = result.findings.filter((f: { severity: string }) => f.severity === "critical").length;
@@ -280,7 +280,7 @@ async function runGitleaksScan(repoRoot: string): Promise<boolean> {
 
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "security-scan.mjs")));
+    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "security-scan.mjs")));
     const result = scanner.gitleaksScan(repoRoot);
 
     if (result.findings.length === 0) {
@@ -304,7 +304,7 @@ async function runDepAudit(repoRoot: string): Promise<boolean> {
 
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "security-scan.mjs")));
+    const scanner = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "security-scan.mjs")));
     const result = scanner.depAuditScan(repoRoot);
 
     const critical = result.findings.filter((f: { severity: string }) => f.severity === "critical").length;

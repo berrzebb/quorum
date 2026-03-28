@@ -127,7 +127,7 @@ providers/
   ├→ claude-code/       ← ClaudeCodeProvider (hook-forwarding)
   └→ codex/             ← CodexProvider (file-watch) + CodexAuditor
 
-core/
+platform/core/
   ├→ bridge.mjs         ← MJS hooks ↔ TS modules bridge (+ domain/specialist/claim/orchestrator routing)
   ├→ context.mjs        ← config, paths, parser, i18n, refreshConfigIfChanged
   ├→ cli-runner.mjs     ← cross-platform spawn (resolveBinary, execResolved, gitSync)
@@ -155,9 +155,9 @@ agents/knowledge/          ← Cross-adapter shared protocols
   ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
   └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
 
-adapters/shared/           ← README.md redirect only (facades removed → platform/adapters/shared/)
+platform/adapters/shared/  ← Adapter-agnostic business logic (17 modules)
 
-adapters/claude-code/
+platform/adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
@@ -165,20 +165,20 @@ adapters/claude-code/
   ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
-adapters/gemini/
+platform/adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
   ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
   ├→ skills/               ← 14 skills (10 shared + implementer, scout, perf-analyst, ui-reviewer)
   └→ commands/             ← 4 TOML commands
 
-adapters/codex/
+platform/adapters/codex/
   ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
   └→ skills/               ← 14 skills (10 shared + implementer, scout, perf-analyst, ui-reviewer)
 ```
 
 ## Key Patterns
 
-- **Bridge**: `core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe — hooks run in legacy mode if dist/ is unavailable.
+- **Bridge**: `platform/core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe — hooks run in legacy mode if dist/ is unavailable.
 - **Consensus Gate**: evidence → trigger eval → domain detection → specialist tools → T1 skip / T2 simple / T3 deliberative → verdict → retro → commit.
 - **SQLite Unified State**: `state_transitions`, `locks`, `kv_state` tables + `events` — single source of truth. No verdict files (verdict.md/gpt.md eliminated). `audit-status.json` marker for fast-path hook detection.
 - **Domain Specialists**: Zero-cost file pattern matching → 22 deterministic tools + domain-specific LLM agents activated conditionally per domain × tier. 11 domains: perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security.
@@ -197,12 +197,12 @@ adapters/codex/
 - **Execution Planner**: `planParallel()` uses graph coloring for conflict-free execution groups. `selectMode()` auto-selects serial/parallel/fan-out/pipeline/hybrid based on conflict density + dependency topology.
 - **Auto-Learning**: `analyzeAndSuggest()` detects repeat rejection patterns (3+ occurrences) from audit history and generates CLAUDE.md rule suggestions. `learnFromStagnation()` feeds stagnation patterns back into trigger scoring (FDE feedback loop).
 - **Blast Radius**: BFS on reverse import graph (`inEdges`) computes transitive dependents of changed files. `buildRawGraph()` extracted from `dependency_graph` for reuse. Trigger factor (ratio > 0.1 → score += up to 0.15). Pre-verify evidence includes blast radius section.
-- **3-Layer Adapter**: I/O (adapter-specific stdin/stdout) + Business logic (`adapters/shared/`) + Bridge (`core/`). New adapter = I/O wrappers only (~650 lines vs ~2,000).
+- **3-Layer Adapter**: I/O (adapter-specific stdin/stdout) + Business logic (`platform/adapters/shared/`) + Bridge (`platform/core/`). New adapter = I/O wrappers only (~650 lines vs ~2,000).
 - **Shared Agent Knowledge**: `agents/knowledge/` protocols referenced by all adapters. Protocol change → 1 file edit → all adapters reflect. Agents keep only tool-name bindings + path variables.
 - **Fragment-Only Language Specs**: `languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
-- **Adapter Env Fallback**: `core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
-- **Tool Name Mapping**: `adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
-- **HookRunner Engine**: `adapters/shared/hook-runner.mjs` — generic hook execution engine (ported from SoulFlow). command/http handlers, env interpolation, deny-first-break, async fire-and-forget, matcher filtering. `hook-loader.mjs` loads from HOOK.md YAML or JSON config. `hook-bridge.mjs` adapts to PreToolHook/PostToolHook/AuditGate interfaces.
+- **Adapter Env Fallback**: `platform/core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
+- **Tool Name Mapping**: `platform/adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
+- **HookRunner Engine**: `platform/adapters/shared/hook-runner.mjs` — generic hook execution engine (ported from SoulFlow). command/http handlers, env interpolation, deny-first-break, async fire-and-forget, matcher filtering. `hook-loader.mjs` loads from HOOK.md YAML or JSON config. `hook-bridge.mjs` adapts to PreToolHook/PostToolHook/AuditGate interfaces.
 - **NDJSON Wire Protocol**: `ndjson-parser.mjs` + `cli-adapter.mjs` — stream-based NDJSON parsing for 3 CLI formats (Claude stream-json, Codex exec --json, Gemini stream-json). Unified `AgentOutputMessage` type (assistant_chunk, tool_use, tool_result, complete, error). Factory: `createCliAdapter("claude"|"codex"|"gemini")`.
 - **JSON-RPC Client**: `jsonrpc-client.mjs` — stdio JSON-RPC 2.0 client for Codex app-server mode. Bidirectional: client requests + server-initiated requests + notifications. 10MB buffer guard, request timeout, auto-reject on process exit.
 - **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.

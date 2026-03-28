@@ -14,7 +14,7 @@ node -e "const h=JSON.parse(require('fs').readFileSync('adapters/codex/hooks/hoo
 ls adapters/shared/*.mjs | wc -l
 
 # MCP tool count (name: entries in TOOLS array)
-grep -c '"name":' core/tools/mcp-server.mjs
+grep -c '"name":' platform/core/tools/mcp-server.mjs
 
 # Test count
 npm test 2>&1 | grep -oP 'tests \K\d+'
@@ -102,4 +102,4 @@ All adapters with `hooks/hooks.json` must have a row in the provider/adapter tab
 
 ### Tool Sections (TOOLS.md)
 
-Every tool `name` in `core/tools/mcp-server.mjs` TOOLS array must have a `## tool_name` section in TOOLS.md (both EN and KO).
+Every tool `name` in `platform/core/tools/mcp-server.mjs` TOOLS array must have a `## tool_name` section in TOOLS.md (both EN and KO).

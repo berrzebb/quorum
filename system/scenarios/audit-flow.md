@@ -14,10 +14,10 @@ Developer (or AI agent) edits a file. The `PostToolUse` hook fires on `Edit|Writ
 
 ```
 PostToolUse [Edit] fires
-  └─▶ adapters/claude-code/index.mjs
+  └─▶ platform/adapters/claude-code/index.mjs
       ├── Read changed file list from tool_input
       ├── Build evidence context (file path, change type, diff summary)
-      └── Forward to core/bridge.mjs
+      └── Forward to platform/core/bridge.mjs
 ```
 
 ### Step 2: Fitness Gate

@@ -211,20 +211,20 @@ async function loadToolCore(): Promise<Record<string, Function>> {
   if (_toolCore) return _toolCore;
 
   // Resolve tool-core.mjs relative to this module's compiled location
-  // dist/platform/providers/auditors/openai-compatible.js → ../../../core/tools/tool-core.mjs
+  // dist/platform/providers/auditors/openai-compatible.js → ../../../../platform/core/tools/tool-core.mjs
   const { fileURLToPath } = await import("node:url");
   const { dirname, join } = await import("node:path");
   const here = dirname(fileURLToPath(import.meta.url));
-  const toolCorePath = join(here, "..", "..", "..", "core", "tools", "tool-core.mjs");
+  const toolCorePath = join(here, "..", "..", "..", "..", "platform", "core", "tools", "tool-core.mjs");
 
   try {
     _toolCore = await import(toolCorePath);
     return _toolCore!;
   } catch {
-    // Fallback: try relative path from project root
+    // Fallback: try relative path from source location
     try {
       // @ts-expect-error — MJS module without type declarations
-      _toolCore = await import("../../../core/tools/tool-core.mjs");
+      _toolCore = await import("../../core/tools/tool-core.mjs");
       return _toolCore!;
     } catch {
       _toolCore = {};

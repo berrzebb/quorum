@@ -53,7 +53,7 @@ quorum tool dependency_graph src/ --depth 2
 변경 파일의 전이적 영향 범위 (역방향 import 그래프 BFS).
 
 ```bash
-quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+quorum tool blast_radius --changed_files '["platform/core/bridge.mjs"]'
 quorum tool blast_radius --changed_files '["src/api.ts"]' --max_depth 5
 ```
 

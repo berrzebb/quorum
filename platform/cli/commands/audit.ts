@@ -21,9 +21,7 @@ export async function run(args: string[]): Promise<void> {
 
   if (args[0] === "history") {
     const quorumBase = resolve(DIST, "..");
-    const platformRunner = resolve(quorumBase, "platform", "core", "tools", "tool-runner.mjs");
-    const rootRunner = resolve(quorumBase, "core", "tools", "tool-runner.mjs");
-    const toolRunner = existsSync(platformRunner) ? platformRunner : rootRunner;
+    const toolRunner = resolve(quorumBase, "platform", "core", "tools", "tool-runner.mjs");
     const historyPath = resolve(repoRoot, ".claude", "audit-history.jsonl");
     const { spawnSync } = await import("node:child_process");
     const result = spawnSync(process.execPath, [toolRunner, "audit_history", "--path", historyPath, ...args.slice(1)], {

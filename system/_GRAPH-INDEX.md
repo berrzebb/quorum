@@ -20,19 +20,19 @@ Fitness Gate ──▶ proceed / self-correct / auto-reject
 
 | Agent | Protocol | Domain |
 |-------|----------|--------|
-| [implementer](../adapters/claude-code/agents/implementer.md) | [implementer-protocol](../agents/knowledge/implementer-protocol.md) | — |
-| [scout](../adapters/claude-code/agents/scout.md) | [scout-protocol](../agents/knowledge/scout-protocol.md) | — |
-| [ui-reviewer](../adapters/claude-code/agents/ui-reviewer.md) | [ui-review-protocol](../agents/knowledge/ui-review-protocol.md) | — |
-| [doc-sync](../adapters/claude-code/agents/doc-sync.md) | [doc-sync-protocol](../agents/knowledge/doc-sync-protocol.md) | docs |
-| [perf-analyst](../adapters/claude-code/agents/perf-analyst.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [perf](../agents/knowledge/domains/perf.md) |
-| [a11y-auditor](../adapters/claude-code/agents/a11y-auditor.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [a11y](../agents/knowledge/domains/a11y.md) |
-| [compat-reviewer](../adapters/claude-code/agents/compat-reviewer.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [compat](../agents/knowledge/domains/compat.md) |
-| [compliance-officer](../adapters/claude-code/agents/compliance-officer.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [compliance](../agents/knowledge/domains/compliance.md) |
-| [concurrency-verifier](../adapters/claude-code/agents/concurrency-verifier.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [concurrency](../agents/knowledge/domains/concurrency.md) |
-| [doc-steward](../adapters/claude-code/agents/doc-steward.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [docs](../agents/knowledge/domains/docs.md) |
-| [i18n-checker](../adapters/claude-code/agents/i18n-checker.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [i18n](../agents/knowledge/domains/i18n.md) |
-| [infra-validator](../adapters/claude-code/agents/infra-validator.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [infra](../agents/knowledge/domains/infra.md) |
-| [observability-inspector](../adapters/claude-code/agents/observability-inspector.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [observability](../agents/knowledge/domains/observability.md) |
+| [implementer](../platform/adapters/claude-code/agents/implementer.md) | [implementer-protocol](../agents/knowledge/implementer-protocol.md) | — |
+| [scout](../platform/adapters/claude-code/agents/scout.md) | [scout-protocol](../agents/knowledge/scout-protocol.md) | — |
+| [ui-reviewer](../platform/adapters/claude-code/agents/ui-reviewer.md) | [ui-review-protocol](../agents/knowledge/ui-review-protocol.md) | — |
+| [doc-sync](../platform/adapters/claude-code/agents/doc-sync.md) | [doc-sync-protocol](../agents/knowledge/doc-sync-protocol.md) | docs |
+| [perf-analyst](../platform/adapters/claude-code/agents/perf-analyst.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [perf](../agents/knowledge/domains/perf.md) |
+| [a11y-auditor](../platform/adapters/claude-code/agents/a11y-auditor.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [a11y](../agents/knowledge/domains/a11y.md) |
+| [compat-reviewer](../platform/adapters/claude-code/agents/compat-reviewer.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [compat](../agents/knowledge/domains/compat.md) |
+| [compliance-officer](../platform/adapters/claude-code/agents/compliance-officer.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [compliance](../agents/knowledge/domains/compliance.md) |
+| [concurrency-verifier](../platform/adapters/claude-code/agents/concurrency-verifier.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [concurrency](../agents/knowledge/domains/concurrency.md) |
+| [doc-steward](../platform/adapters/claude-code/agents/doc-steward.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [docs](../agents/knowledge/domains/docs.md) |
+| [i18n-checker](../platform/adapters/claude-code/agents/i18n-checker.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [i18n](../agents/knowledge/domains/i18n.md) |
+| [infra-validator](../platform/adapters/claude-code/agents/infra-validator.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [infra](../agents/knowledge/domains/infra.md) |
+| [observability-inspector](../platform/adapters/claude-code/agents/observability-inspector.md) | [specialist-base](../agents/knowledge/specialist-base.md) | [observability](../agents/knowledge/domains/observability.md) |
 
 ## Skill → Agent Connections
 

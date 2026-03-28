@@ -49,7 +49,7 @@ const CODEX_NDJSON = [
 const GEMINI_NDJSON = [
   '{"type":"init","session_id":"gemini-session-001","model":"gemini-2.5-flash"}',
   '{"type":"message","role":"assistant","content":"Reviewing the submission as judge.","delta":true}',
-  '{"type":"tool_use","tool_name":"read_file","tool_id":"t1","parameters":{"path":"core/bridge.mjs"}}',
+  '{"type":"tool_use","tool_name":"read_file","tool_id":"t1","parameters":{"path":"platform/core/bridge.mjs"}}',
   '{"type":"tool_result","tool_name":"read_file","tool_id":"t1","status":"success","output":"// bridge module content..."}',
   '{"type":"message","role":"assistant","content":" After weighing both perspectives, the code is approved with one suggestion.","delta":true}',
   '{"type":"result","stats":{"input_tokens":1500,"output_tokens":400}}',

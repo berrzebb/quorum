@@ -4,7 +4,7 @@
 
 The doc-sync output MUST extract concrete facts from source code:
 
-- **Tool count**: Counts MCP tools in `core/tools/` directory (should reflect 22 + 3 = 25)
+- **Tool count**: Counts MCP tools in `platform/core/tools/` directory (should reflect 22 + 3 = 25)
 - **Hook counts per adapter**: Reads each adapter's `hooks.json` and counts registrations
 - **Test count**: Parses test runner output or test file count
 - Values must be derived from code inspection, not from documentation (code is source of truth)

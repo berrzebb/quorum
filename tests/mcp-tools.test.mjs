@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MCP_SERVER = resolve(__dirname, "..", "core", "tools", "mcp-server.mjs");
+const MCP_SERVER = resolve(__dirname, "..", "platform", "core", "tools", "mcp-server.mjs");
 
 // Helper: send JSON-RPC to MCP server and return result
 function mcpCall(toolName, args, cwd) {

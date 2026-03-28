@@ -49,7 +49,7 @@ Facts are extracted from code and compared against documentation values:
 |----------|--------|-------|
 | Hook counts (per adapter) | `adapters/*/hooks/hooks.json` | Read + count |
 | Shared module count | `adapters/shared/*.mjs` | Glob + count |
-| MCP tool count | `core/tools/mcp-server.mjs` TOOLS array | Grep |
+| MCP tool count | `platform/core/tools/mcp-server.mjs` TOOLS array | Grep |
 | Test count | `npm test` output | Shell |
 | Agent/Skill counts (per adapter) | `adapters/*/agents/`, `adapters/*/skills/` | Glob + count |
 | Version | `package.json` | Read |

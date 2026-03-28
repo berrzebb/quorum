@@ -7,10 +7,9 @@ import { REPO_ROOT } from "../context.mjs";
 import { extractChangedFilesFromEvidence, extractTestCommands } from "./scope.mjs";
 
 // Blast radius — fail-safe top-level import (non-critical)
-// tool-core.mjs lives in core/tools/ which has not been moved to platform yet
 let _computeBlastRadius = null;
 try {
-  const tc = await import("../../../core/tools/tool-core.mjs");
+  const tc = await import("../tools/tool-core.mjs");
   _computeBlastRadius = tc.computeBlastRadius;
 } catch { /* tool-core unavailable — blast radius skipped */ }
 

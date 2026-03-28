@@ -1,5 +1,5 @@
 /**
- * Tests for adapters/shared/ modules — Phase 1 of Plan C (Gemini adapter).
+ * Tests for platform/adapters/shared/ modules — Phase 1 of Plan C (Gemini adapter).
  *
  * Covers: repo-resolver, config-resolver, audit-state, first-run,
  * context-reinforcement, trigger-runner, tool-names.

@@ -693,7 +693,7 @@ let _toolCoreMod = null;
 async function _getToolCore() {
   if (_toolCoreMod) return _toolCoreMod;
   const toURL = (p) => pathToFileURL(p).href;
-  _toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "core", "tools", "tool-core.mjs")));
+  _toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "tool-core.mjs")));
   return _toolCoreMod;
 }
 

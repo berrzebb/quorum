@@ -1,5 +1,5 @@
 /**
- * Tests for adapters/shared/hook-runner, hook-loader, hook-bridge.
+ * Tests for platform/adapters/shared/hook-runner, hook-loader, hook-bridge.
  *
  * Ported from SoulFlow HookRunner with quorum adaptations.
  */

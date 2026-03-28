@@ -14,7 +14,7 @@ evals:
       - "Handles errors gracefully with try/catch and meaningful error messages"
       - "Includes parameter validation for all inputs"
       - "Supports scan-ignore pragma where applicable"
-      - "Function signature matches existing tool patterns in core/tools/"
+      - "Function signature matches existing tool patterns in platform/core/tools/"
     timeout: 60000
 
 parity:

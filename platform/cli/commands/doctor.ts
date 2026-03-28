@@ -18,10 +18,8 @@ export async function run(args: string[]): Promise<void> {
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
     const pkgRoot = resolve(__dirname, "..", "..", "..", "..");
-    // Fallback chain: platform/core/ first, then root core/
-    const platformHC = resolve(pkgRoot, "platform", "core", "health-check.mjs");
-    const rootHC = resolve(pkgRoot, "core", "health-check.mjs");
-    const healthCheckPath = existsSync(platformHC) ? platformHC : rootHC;
+    // platform/core/ is the canonical location (no root core/ fallback)
+    const healthCheckPath = resolve(pkgRoot, "platform", "core", "health-check.mjs");
     const { runHealthCheck, formatHealthCheck } = await import(
       toURL(healthCheckPath)
     );

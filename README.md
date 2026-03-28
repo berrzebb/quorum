@@ -69,7 +69,7 @@ For automatic hook integration with OpenAI Codex CLI:
 
 ```bash
 # Copy hooks config to project
-cp adapters/codex/hooks/hooks.json .codex/hooks.json
+cp platform/adapters/codex/hooks/hooks.json .codex/hooks.json
 # Enable hooks feature flag
 codex -c features.codex_hooks=true
 ```
@@ -163,17 +163,17 @@ quorum/
 ├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
 ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
 ├── providers/        ← consensus protocol + trigger (13-factor) + router + domain specialists + AST analyzer
-├── core/             ← audit protocol (7 modules), templates, 23 MCP tools
+├── platform/core/    ← audit protocol (7 modules), templates, 23 MCP tools
 ├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 ├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
-└── adapters/
+└── platform/adapters/
     ├── shared/       ← adapter-agnostic business logic (17 modules, incl. HookRunner, NDJSON, MuxAdapter)
     ├── claude-code/  ← Claude Code hooks (22) + agents (12) + skills (9)
     ├── gemini/       ← Gemini CLI hooks (11) + skills (8) + commands (4)
     └── codex/        ← Codex CLI hooks (5)
 ```
 
-The `adapters/` layer is **optional**. Everything above it runs independently. Adding a new adapter requires only I/O wrappers — business logic is in `adapters/shared/`.
+The `platform/adapters/` layer is **optional**. Everything above it runs independently. Adding a new adapter requires only I/O wrappers — business logic is in `platform/adapters/shared/`.
 
 ## Core Concepts
 
@@ -305,16 +305,16 @@ Not every change needs full consensus. A 13-factor scoring system (6 base + doma
 Shared business logic across adapters. Only I/O differs per runtime:
 
 ```
-I/O (adapters/{adapter}/)
+I/O (platform/adapters/{adapter}/)
   Claude Code: hookSpecificOutput, permissionDecision
   Gemini CLI:  JSON-only stdout, hookSpecificOutput
   Codex CLI:   .codex/hooks.json, config.toml
       ↓ readStdinJson() + withBridge() + createHookContext()
-Business Logic (adapters/shared/ — 17 modules)
+Business Logic (platform/adapters/shared/ — 17 modules)
   hook-runner, hook-loader, trigger-runner, ndjson-parser,
   cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
       ↓ bridge.init() + bridge.checkHookGate()
-Core (core/)
+Core (platform/core/)
   audit, tools (21 MCP), EventStore, bus, providers
 ```
 
@@ -366,7 +366,7 @@ If the audit loop cycles without progress, 7 patterns are detected:
 BFS on the reverse import graph computes transitive dependents of changed files:
 
 ```bash
-quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+quorum tool blast_radius --changed_files '["platform/core/bridge.mjs"]'
 # → 12/95 files affected (12.6%) — depth-sorted impact list
 ```
 

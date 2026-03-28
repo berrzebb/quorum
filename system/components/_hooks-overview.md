@@ -125,7 +125,7 @@ Hooks are **scripts that execute on specific Claude Code events**.
            ├── Trigger evaluation (13-factor scoring)
            ├── Domain detection (zero-cost file patterns)
            ├── Specialist tool injection
-           └── Bridge to core/bridge.mjs
+           └── Bridge to platform/core/bridge.mjs
 
 4. Subagent lifecycle
    ├─▶ SubagentStart [implementer|scout]
@@ -170,16 +170,16 @@ console.log(JSON.stringify(result));
 
 ```
 quorum/
-├── adapters/claude-code/
+├── platform/adapters/claude-code/
 │   ├── hooks/hooks.json          ← 21 event registrations
 │   ├── index.mjs                 ← PostToolUse (main hook)
 │   ├── session-gate.mjs          ← PreToolUse (retro/audit block)
 │   ├── session-start.mjs         ← SessionStart
 │   ├── prompt-submit.mjs         ← UserPromptSubmit
 │   └── stop.mjs                  ← Stop
-├── adapters/gemini/
+├── platform/adapters/gemini/
 │   └── hooks/hooks.json          ← 11 event registrations
-├── adapters/codex/
+├── platform/adapters/codex/
 │   └── hooks/hooks.json          ← 6 event registrations
 └── platform/adapters/shared/
     ├── hook-runner.mjs           ← Generic hook execution engine

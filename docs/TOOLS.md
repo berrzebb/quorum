@@ -53,7 +53,7 @@ quorum tool dependency_graph src/ --depth 2
 Transitive impact of changed files via BFS on reverse import graph.
 
 ```bash
-quorum tool blast_radius --changed_files '["core/bridge.mjs"]'
+quorum tool blast_radius --changed_files '["platform/core/bridge.mjs"]'
 quorum tool blast_radius --changed_files '["src/api.ts"]' --max_depth 5
 ```
 

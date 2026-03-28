@@ -27,7 +27,7 @@
   },
   "pkg": {
     "assets": [
-      "core/**/*",
+      "platform/core/**/*",
       "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
     ],
     "outputPath": "release"
@@ -42,8 +42,8 @@
     "daemon": "node dist/daemon/index.js",
     "test": "node --test tests/*.test.mjs",
     "test:single": "node --test",
-    "mcp": "node core/tools/mcp-server.mjs",
-    "tool": "node core/tools/tool-runner.mjs",
+    "mcp": "node platform/core/tools/mcp-server.mjs",
+    "tool": "node platform/core/tools/tool-runner.mjs",
     "typecheck": "tsc --noEmit",
     "version-sync": "node --input-type=module -e \"import{readFileSync as r,writeFileSync as w}from'fs';const v=JSON.parse(r('package.json','utf8')).version;const f='adapters/gemini/gemini-extension.json';const j=JSON.parse(r(f,'utf8'));j.version=v;w(f,JSON.stringify(j,null,2)+'\\n');console.log('Synced '+v+' → '+f)\""
   },

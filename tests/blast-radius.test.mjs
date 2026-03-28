@@ -21,7 +21,7 @@ const {
   computeBlastRadiusFromGraph,
   computeBlastRadius,
   toolBlastRadius,
-} = await import("../core/tools/tool-core.mjs");
+} = await import("../platform/core/tools/tool-core.mjs");
 
 const { evaluateTrigger } = await import("../dist/providers/trigger.js");
 
@@ -101,7 +101,7 @@ describe("computeBlastRadiusFromGraph", () => {
 
 describe("buildRawGraph", () => {
   it("builds graph for quorum core/ directory", () => {
-    const result = buildRawGraph(resolve("core"), 3, null);
+    const result = buildRawGraph(resolve("platform/core"), 3, null);
     assert.ok(!result.error, `Expected no error, got: ${result.error}`);
     assert.ok(result.files.length > 5, `Expected >5 files, got ${result.files.length}`);
     assert.ok(result.edges instanceof Map);
@@ -116,7 +116,7 @@ describe("buildRawGraph", () => {
   });
 
   it("populates both edges and inEdges", () => {
-    const result = buildRawGraph(resolve("core"), 3, null);
+    const result = buildRawGraph(resolve("platform/core"), 3, null);
     // At least some files should have edges
     let hasEdge = false;
     for (const deps of result.edges.values()) {
@@ -172,7 +172,7 @@ describe("toolBlastRadius", () => {
 
   it("returns markdown output for valid input", () => {
     const result = toolBlastRadius({
-      changed_files: ["core/bridge.mjs"],
+      changed_files: ["platform/core/bridge.mjs"],
       path: resolve("."),
     });
     assert.ok(!result.error, `Unexpected error: ${result.error}`);
@@ -184,7 +184,7 @@ describe("toolBlastRadius", () => {
   });
 
   it("caches results for same input", () => {
-    const params = { changed_files: ["core/context.mjs"], path: resolve(".") };
+    const params = { changed_files: ["platform/core/context.mjs"], path: resolve(".") };
     const first = toolBlastRadius(params);
     const second = toolBlastRadius(params);
     assert.ok(!first.cached);

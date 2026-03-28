@@ -147,10 +147,8 @@ export async function run(args: string[]): Promise<void> {
 
   const mcpServers = (mcpConfig.mcpServers ?? {}) as Record<string, unknown>;
   if (!mcpServers.quorum) {
-    // Fallback chain: platform/core/tools/ first, then root core/tools/
-    const platformPath = resolve(QUORUM_PKG_ROOT, "platform", "core", "tools", "mcp-server.mjs");
-    const rootPath = resolve(QUORUM_PKG_ROOT, "core", "tools", "mcp-server.mjs");
-    const mcpServerPath = existsSync(platformPath) ? platformPath : rootPath;
+    // platform/core/tools/ is the canonical location (no root core/ fallback)
+    const mcpServerPath = resolve(QUORUM_PKG_ROOT, "platform", "core", "tools", "mcp-server.mjs");
     mcpServers.quorum = {
       command: "node",
       args: [mcpServerPath],

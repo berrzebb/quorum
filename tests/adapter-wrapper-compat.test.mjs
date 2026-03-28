@@ -20,12 +20,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const SKILLS_DIR = resolve(REPO_ROOT, "platform", "skills");
-const ADAPTERS_DIR = resolve(REPO_ROOT, "adapters");
+const ADAPTERS_DIR = resolve(REPO_ROOT, "platform", "adapters");
 
 const ADAPTER_NAMES = ["claude-code", "codex", "gemini", "openai-compatible"];
 
 /**
- * List skill directories for an adapter (directories under adapters/<name>/skills/).
+ * List skill directories for an adapter (directories under platform/adapters/<name>/skills/).
  */
 function listAdapterSkills(adapterName) {
   const skillsPath = resolve(ADAPTERS_DIR, adapterName, "skills");
@@ -180,15 +180,15 @@ describe("adapter wrapper structure — cross-reference coverage", () => {
 
 describe("adapter wrapper structure — shared modules", () => {
   const PLATFORM_SHARED_DIR = resolve(REPO_ROOT, "platform", "adapters", "shared");
-  const LEGACY_SHARED_DIR = resolve(ADAPTERS_DIR, "shared");
+  const LEGACY_ADAPTERS_DIR = resolve(REPO_ROOT, "adapters");
 
   it("platform/adapters/shared/ directory should exist", () => {
     assert.ok(existsSync(PLATFORM_SHARED_DIR), "platform/adapters/shared/ should exist");
   });
 
-  it("adapters/shared/ directory should have been removed", () => {
-    assert.ok(!existsSync(LEGACY_SHARED_DIR),
-      "adapters/shared/ should have been removed — platform/adapters/shared/ is the sole source");
+  it("root adapters/ directory should have been removed", () => {
+    assert.ok(!existsSync(LEGACY_ADAPTERS_DIR),
+      "root adapters/ should have been removed — platform/adapters/ is the sole source");
   });
 
   const requiredFiles = [

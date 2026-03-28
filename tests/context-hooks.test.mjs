@@ -299,7 +299,7 @@ describe("i18n", () => {
 
   // i18n.mjs createT(locale) uses __dirname/locales — test with actual locale files
   it("creates translator with variable substitution", async () => {
-    const { createT } = await import("../core/i18n.mjs");
+    const { createT } = await import("../platform/core/i18n.mjs");
     const t = createT("en");
     // Use a key that exists in locales/en.json
     const result = t("index.audit.start");
@@ -308,13 +308,13 @@ describe("i18n", () => {
   });
 
   it("returns key for missing message", async () => {
-    const { createT } = await import("../core/i18n.mjs");
+    const { createT } = await import("../platform/core/i18n.mjs");
     const t = createT("en");
     assert.equal(t("nonexistent.key.12345"), "nonexistent.key.12345");
   });
 
   it("substitutes variables", async () => {
-    const { createT } = await import("../core/i18n.mjs");
+    const { createT } = await import("../platform/core/i18n.mjs");
     const t = createT("en");
     // Test variable substitution with a known pattern
     const result = t("test.{x}.{y}", { x: "A", y: "B" });
@@ -323,7 +323,7 @@ describe("i18n", () => {
   });
 
   it("falls back gracefully for missing locale", async () => {
-    const { createT } = await import("../core/i18n.mjs");
+    const { createT } = await import("../platform/core/i18n.mjs");
     const t = createT("zz"); // nonexistent locale
     // Should fall back to en.json
     const result = t("nonexistent.key");

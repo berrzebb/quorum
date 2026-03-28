@@ -4,7 +4,7 @@
  * Resolution order:
  * 1. $QUORUM_AGENTS_DIR env var (user override)
  * 2. .quorum/agents/ in cwd (project-scoped)
- * 3. adapters/<provider>/agents/ in plugin dir (adapter default)
+ * 3. platform/adapters/<provider>/agents/ in plugin dir (adapter default)
  * 4. Built-in fallback (empty persona)
  *
  * Personas are markdown files with ## sections.
@@ -167,7 +167,7 @@ function buildSearchPaths(config: LoaderConfig): string[] {
 
   // Tier 3: adapter default
   if (config.quorumRoot && config.adapter) {
-    const adapterDir = resolve(config.quorumRoot, "adapters", config.adapter, "agents");
+    const adapterDir = resolve(config.quorumRoot, "platform", "adapters", config.adapter, "agents");
     paths.push(adapterDir);
   }
 

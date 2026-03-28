@@ -19,7 +19,7 @@ Track C (Quality):         PO-5                     ← Track A 이후
 - **Goal**: Codex 어댑터에 parliament 세션 트리거 추가
 - **Size**: S (~40줄)
 - **First touch files**:
-  - `adapters/codex/hooks/hooks.json` — AfterToolUse hook에 parliament 경로 확인
+  - `platform/adapters/codex/hooks/hooks.json` — AfterToolUse hook에 parliament 경로 확인
   - Codex의 PostToolUse 상당 hook에서 `bridge.runParliamentSession()` 분기 추가
 - **Implementation**:
   - Claude Code index.mjs와 동일한 패턴: T3 + `config.parliament.enabled` → runParliamentSession()
@@ -31,7 +31,7 @@ Track C (Quality):         PO-5                     ← Track A 이후
 - **Goal**: Gemini 어댑터에 parliament 세션 트리거 추가
 - **Size**: S (~40줄)
 - **First touch files**:
-  - `adapters/gemini/hooks/hooks.json` — AfterAgent hook에 parliament 경로 확인
+  - `platform/adapters/gemini/hooks/hooks.json` — AfterAgent hook에 parliament 경로 확인
   - Gemini의 해당 hook에서 `bridge.runParliamentSession()` 분기 추가
 - **Implementation**:
   - Claude Code와 동일한 패턴

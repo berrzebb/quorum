@@ -1,7 +1,7 @@
 /**
  * quorum tool <name> — run MCP analysis tools from CLI.
  *
- * Delegates to core/tools/tool-runner.mjs which already supports
+ * Delegates to platform/core/tools/tool-runner.mjs which already supports
  * all 19+ tools: code_map, dependency_graph, audit_scan, coverage_map,
  * rtm_parse, rtm_merge, audit_history, fvm_generate, fvm_validate,
  * perf_scan, a11y_scan, license_scan, i18n_validate, infra_scan,
@@ -10,7 +10,6 @@
  */
 
 import { resolve, dirname } from "node:path";
-import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -59,10 +58,8 @@ export async function run(args: string[]): Promise<void> {
 
   // __dirname = dist/platform/cli/commands/ → 4 levels up to package root
   const pkgRoot = resolve(__dirname, "..", "..", "..", "..");
-  // Fallback chain: platform/core/tools/ first, then root core/tools/
-  const platformRunner = resolve(pkgRoot, "platform", "core", "tools", "tool-runner.mjs");
-  const rootRunner = resolve(pkgRoot, "core", "tools", "tool-runner.mjs");
-  const toolRunner = existsSync(platformRunner) ? platformRunner : rootRunner;
+  // platform/core/tools/ is the canonical location (no root core/ fallback)
+  const toolRunner = resolve(pkgRoot, "platform", "core", "tools", "tool-runner.mjs");
 
   // If second arg exists and doesn't start with --, treat it as --path shorthand
   // e.g., "quorum tool code_map src/" → "node tool-runner.mjs code_map --path src/"

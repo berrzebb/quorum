@@ -24,10 +24,10 @@ agents/knowledge/        ← protocols (business logic)
 platform/skills/*/SKILL.md    ← canonical definitions (protocol-neutral)
 platform/skills/*/references/ ← progressive disclosure docs
        │
-       ├── adapters/claude-code/skills/   ← tool bindings
-       ├── adapters/gemini/skills/        ← tool bindings
-       ├── adapters/codex/skills/         ← tool bindings
-       └── adapters/openai-compatible/skills/
+       ├── platform/adapters/claude-code/skills/   ← tool bindings
+       ├── platform/adapters/gemini/skills/        ← tool bindings
+       ├── platform/adapters/codex/skills/         ← tool bindings
+       └── platform/adapters/openai-compatible/skills/
 ```
 
 Protocol change → 1 file edit → all adapters reflect.
@@ -143,10 +143,10 @@ quorum/
 │   │   ├── SKILL.md
 │   │   └── references/              ← 21 reference files
 │   └── ...
-├── adapters/claude-code/skills/     ← CC wrappers (16 SKILL.md)
-├── adapters/gemini/skills/          ← Gemini wrappers (20 SKILL.md)
-├── adapters/codex/skills/           ← Codex wrappers (20 SKILL.md)
-└── adapters/openai-compatible/skills/ ← OAI wrappers (20 SKILL.md)
+├── platform/adapters/claude-code/skills/     ← CC wrappers (16 SKILL.md)
+├── platform/adapters/gemini/skills/          ← Gemini wrappers (20 SKILL.md)
+├── platform/adapters/codex/skills/           ← Codex wrappers (20 SKILL.md)
+└── platform/adapters/openai-compatible/skills/ ← OAI wrappers (20 SKILL.md)
 ```
 
 ## Related Documents

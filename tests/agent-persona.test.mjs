@@ -2,7 +2,7 @@
 /**
  * Agent Persona Integration Tests — verifies real persona files load correctly.
  *
- * Tests that adapters/claude-code/agents/*.md are parseable by AgentLoader
+ * Tests that platform/adapters/claude-code/agents/*.md are parseable by AgentLoader
  * and contain expected sections. After shared-knowledge refactoring, agents
  * reference agents/knowledge/ for protocol details — tests verify the binding
  * file contains adapter-specific content and points to shared protocol.

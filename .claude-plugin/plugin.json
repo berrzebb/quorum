@@ -30,8 +30,8 @@
   "mcpServers": {
     "quorum": {
       "command": "node",
-      "args": ["core/tools/mcp-server.mjs"]
+      "args": ["platform/core/tools/mcp-server.mjs"]
     }
   },
-  "skills": "./adapters/claude-code/skills/"
+  "skills": "./platform/adapters/claude-code/skills/"
 }

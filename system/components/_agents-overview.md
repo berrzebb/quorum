@@ -36,8 +36,8 @@ Agents are **AI sub-agents specialized for specific domains**.
 │              ▼                          ▼                   │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  Adapter Agents (tool bindings only)                 │  │
-│  │  adapters/claude-code/agents/*.md                    │  │
-│  │  adapters/openai-compatible/agents/*.md              │  │
+│  │  platform/adapters/claude-code/agents/*.md            │  │
+│  │  platform/adapters/openai-compatible/agents/*.md     │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -100,7 +100,7 @@ Changed file: src/api/users.ts
 ```
 agents/knowledge/specialist-base.md      ← base protocol (all 9 specialists)
 agents/knowledge/domains/{domain}.md     ← domain patterns + rules
-adapters/claude-code/agents/{name}.md    ← tool bindings (Read, Grep, MCP tools)
+platform/adapters/claude-code/agents/{name}.md    ← tool bindings (Read, Grep, MCP tools)
 ```
 
 Changing `specialist-base.md` affects all 9 specialists across all 4 adapters.
@@ -121,8 +121,8 @@ quorum/
 │       ├── perf.md
 │       ├── a11y.md
 │       └── ...
-├── adapters/claude-code/agents/    ← Claude Code bindings (13 files)
-└── adapters/openai-compatible/agents/ ← OpenAI bindings (13 files)
+├── platform/adapters/claude-code/agents/    ← Claude Code bindings (13 files)
+└── platform/adapters/openai-compatible/agents/ ← OpenAI bindings (13 files)
 ```
 
 ## Related Documents

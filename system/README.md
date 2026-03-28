@@ -48,10 +48,10 @@ The system makes mistakes **structurally hard** — not through better prompts, 
 
 | Component | Count | Location |
 |-----------|-------|----------|
-| **Agents** | 13 | `adapters/claude-code/agents/` |
+| **Agents** | 13 | `platform/adapters/claude-code/agents/` |
 | **Skills** | 25 canonical | `platform/skills/*/SKILL.md` |
 | **Hook Events** | 26 unique | `adapters/*/hooks/hooks.json` |
-| **MCP Tools** | 22 deterministic | `core/tools/mcp-server.mjs` (data, not yet moved) |
+| **MCP Tools** | 22 deterministic | `platform/core/tools/mcp-server.mjs` |
 | **Domain Specialists** | 11 | `agents/knowledge/domains/` |
 | **Event Types** | 58 | `platform/bus/events.ts` (`bus/events.ts` facade) |
 | **Adapters** | 4 | Claude Code, Gemini CLI, Codex, OpenAI-compatible |
@@ -73,7 +73,7 @@ All runtime modules consolidated under `platform/`. Root directories are re-expo
 
 ```
 ┌─ I/O Layer ──────────────────────────────────────────────┐
-│  adapters/claude-code/  adapters/gemini/  adapters/codex/ │
+│  platform/adapters/claude-code/  platform/adapters/gemini/  platform/adapters/codex/ │
 │  (hooks, skills, agents — adapter-specific tool bindings) │
 └──────────────────────────────────────────────────────────┘
          │                    │                    │
@@ -119,16 +119,16 @@ Data files and non-consolidated modules remain at root:
 |-----------|------|
 | Skills (canonical) | `platform/skills/*/SKILL.md` |
 | Skills (references) | `platform/skills/*/references/*.md` |
-| Agents (Claude Code) | `adapters/claude-code/agents/*.md` |
+| Agents (Claude Code) | `platform/adapters/claude-code/agents/*.md` |
 | Agent Protocols | `agents/knowledge/*.md` |
 | Domain Knowledge | `agents/knowledge/domains/*.md` |
-| Hooks (Claude Code) | `adapters/claude-code/hooks/hooks.json` |
-| Hooks (Gemini) | `adapters/gemini/hooks/hooks.json` |
-| Hooks (Codex) | `adapters/codex/hooks/hooks.json` |
-| MCP Tools | `core/tools/*.mjs` |
-| MCP Server | `core/tools/mcp-server.mjs` |
-| Templates | `core/templates/` |
-| Locales | `core/locales/` |
+| Hooks (Claude Code) | `platform/adapters/claude-code/hooks/hooks.json` |
+| Hooks (Gemini) | `platform/adapters/gemini/hooks/hooks.json` |
+| Hooks (Codex) | `platform/adapters/codex/hooks/hooks.json` |
+| MCP Tools | `platform/core/tools/*.mjs` |
+| MCP Server | `platform/core/tools/mcp-server.mjs` |
+| Templates | `platform/core/templates/` |
+| Locales | `platform/core/locales/` |
 | Language Specs | `languages/*/spec.mjs` |
 | TUI Dashboard | `daemon/` |
 | Public Docs | `docs/`, `docs/ko-KR/` |

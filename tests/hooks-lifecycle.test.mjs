@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PLUGIN_ROOT = resolve(__dirname, "..", "adapters", "claude-code");
+const PLUGIN_ROOT = resolve(__dirname, "..", "platform", "adapters", "claude-code");
 
 /**
  * Run a hook script with JSON stdin in a controlled environment.

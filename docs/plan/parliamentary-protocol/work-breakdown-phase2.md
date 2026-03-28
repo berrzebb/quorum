@@ -117,11 +117,11 @@ PI-4 ──┘     │
 
 ### PI-6: Bridge Integration
 
-- **Goal**: core/bridge.mjs에서 parliament 모듈 노출
+- **Goal**: platform/core/bridge.mjs에서 parliament 모듈 노출
 - **Prerequisite**: PI-5
 - **Size**: S (~80줄)
 - **First touch files**:
-  - `core/bridge.mjs` — parliament 함수 노출 추가
+  - `platform/core/bridge.mjs` — parliament 함수 노출 추가
   - `bus/index.ts` — 새 모듈 re-export
 - **Implementation**:
   - `bridge.startParliamentSession()` → ParliamentSession.startSession()
@@ -140,8 +140,8 @@ PI-4 ──┘     │
 - **Prerequisite**: PI-6
 - **Size**: S (~60줄)
 - **First touch files**:
-  - `adapters/claude-code/index.mjs` — T3 deliberative 시 diverge-converge 경로 추가
-  - `adapters/shared/trigger-runner.mjs` — parliament mode 플래그
+  - `platform/adapters/claude-code/index.mjs` — T3 deliberative 시 diverge-converge 경로 추가
+  - `platform/adapters/shared/trigger-runner.mjs` — parliament mode 플래그
 - **Implementation**:
   - PostToolUse에서 trigger 결과가 T3이고 config에 `parliament.enabled: true`이면 → `bridge.startParliamentSession()` 호출
   - 기존 T3 deliberative 경로는 fallback으로 유지 (parliament 비활성 시)

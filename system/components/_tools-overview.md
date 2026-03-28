@@ -11,7 +11,7 @@
 
 MCP (Model Context Protocol) tools are **deterministic analysis functions** exposed to AI assistants.
 - Run without LLM — pure code analysis producing structured JSON output
-- Registered in `core/tools/mcp-server.mjs` as a single MCP server
+- Registered in `platform/core/tools/mcp-server.mjs` as a single MCP server
 - Used by domain specialists to establish facts before LLM reasoning
 - Available to any adapter (Claude Code, Gemini, Codex) via MCP protocol
 
@@ -123,7 +123,7 @@ Auditor receives facts, not raw code
 
 ```
 quorum/
-├── core/tools/
+├── platform/core/tools/
 │   ├── mcp-server.mjs           ← MCP server registration (all 22 tools)
 │   ├── code-map.mjs             ← code_map
 │   ├── dependency-graph.mjs     ← dependency_graph
