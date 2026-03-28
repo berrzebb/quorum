@@ -34,28 +34,49 @@ Respond with JSON:
       "file": "path/to/file.ts",
       "line": 42,
       "severity": "high" | "medium" | "low",
+      "confidence": 0.0-1.0,
       "issue": "description",
       "suggestion": "how to fix"
     }
   ],
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "findingsSummary": "N reported, M filtered (below threshold)"
 }
 ```
 
+## Confidence-Based Filtering
+
+Assign a confidence score (0.0-1.0) to each finding:
+- **0.9-1.0**: Certain — clear bug, definite vulnerability, obvious violation
+- **0.8-0.89**: High — very likely an issue based on context and tool output
+- **0.5-0.79**: Medium — possible but context-dependent → **DO NOT REPORT**
+- **Below 0.5**: Low — speculation → **DO NOT REPORT**
+
+**Report only findings with confidence >= 0.8.** Track filtered count in `findingsSummary`.
+
+## Finding Limits
+
+- Maximum **10 findings** per review. If more exist, keep the 10 highest-severity + highest-confidence.
+- Each finding MUST include `file`, `line`, `severity`, `confidence`, `issue`, `suggestion`.
+
 ## Judgment Criteria
 
-- High severity findings → `changes_requested`
-- Low severity findings → `approved` with advisory notes
+- High severity findings (confidence >= 0.8) → `changes_requested`
+- Medium/low severity findings only → `approved` with advisory notes
 - Tools fail or evidence insufficient → `infra_failure`
+- **Escalation hint**: If any finding is critical (data loss, security vulnerability, crash), add `"escalation": "block"` to the finding — consensus roles will treat it as a hard blocker.
 
 ## Completion Gate
 
 1. Every changed file assessed against domain checklist
-2. All findings include file path, line number, and severity
-3. Verdict reflects the highest-severity finding
+2. All reported findings have confidence >= 0.8
+3. Verdict reflects the highest-severity reported finding
+4. `findingsSummary` accurately reports filtered count
 
 ## Anti-Patterns
 
 - Do NOT review outside your domain
 - Do NOT produce a verdict without checking tool results first
 - Do NOT leave `findings` empty when verdict is `changes_requested`
+- Do NOT report low-confidence findings — they waste audit cycles
+- Do NOT produce more than 10 findings — prioritize by severity × confidence

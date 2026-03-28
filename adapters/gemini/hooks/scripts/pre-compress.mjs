@@ -1,14 +1,6 @@
-#!/usr/bin/env node
 /**
- * Gemini CLI Hook: PreCompress — state snapshot before context compression.
+ * Facade — main implementation at platform/adapters/gemini/hooks/scripts/pre-compress.mjs
+ *
+ * All exports are re-exported unchanged. No import paths in consumers need updating.
  */
-import { createHookContext, withBridge } from "../../../shared/hook-io.mjs";
-
-const { REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);
-if (configMissing) process.exit(0);
-
-await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("session.compress", {
-    cwd: REPO_ROOT, metadata: { provider: "gemini" },
-  });
-});
+export * from '../../../../platform/adapters/gemini/hooks/scripts/pre-compress.mjs';

@@ -1,26 +1,4 @@
-#!/usr/bin/env node
 /**
- * Hook: StopFailure
- * Fires when the session ends abnormally (crash, timeout, etc.).
- * Saves diagnostic state to the event bus for post-mortem analysis.
+ * Facade — main implementation at platform/adapters/claude-code/stop-failure.mjs
  */
-import { REPO_ROOT, cfg, configMissing } from "../../core/context.mjs";
-import { readStdinJson, withBridge } from "../shared/hook-io.mjs";
-
-if (configMissing) process.exit(0);
-
-try {
-  const input = await readStdinJson({ exitOnEmpty: false, fallback: {} });
-  const error = input?.error ?? "unknown";
-
-  await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-    bridge.emitEvent("session.stop_failure", "claude-code", {
-      error,
-      timestamp: new Date().toISOString(),
-    }, { sessionId: input?.session_id });
-  });
-
-  console.error(`[quorum] StopFailure: ${error}`);
-} catch {
-  // Hook must never block shutdown — fail silently
-}
+import '../../platform/adapters/claude-code/stop-failure.mjs';

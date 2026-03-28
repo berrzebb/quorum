@@ -1,13 +1,6 @@
-#!/usr/bin/env node
 /**
- * Gemini CLI Hook: AfterModel
+ * Facade — main implementation at platform/adapters/gemini/hooks/scripts/after-model.mjs
  *
- * Fires after LLM response (per chunk in streaming mode).
- * Extension point for real-time redaction, PII filtering.
- *
- * Input:  { llm_request, llm_response }
- * Output: { hookSpecificOutput.llm_response?, decision? }
- *
- * Currently a pass-through — no-op.
+ * All exports are re-exported unchanged. No import paths in consumers need updating.
  */
-process.exit(0);
+export * from '../../../../platform/adapters/gemini/hooks/scripts/after-model.mjs';

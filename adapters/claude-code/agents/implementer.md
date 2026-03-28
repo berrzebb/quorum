@@ -2,6 +2,7 @@
 name: implementer
 description: Headless worker for quorum — receives task + context, implements code, runs tests, submits evidence via audit_submit tool, handles audit corrections. Use when the orchestrator needs to delegate a coding task to a worker agent.
 model: claude-sonnet-4-6
+maxTurns: 30
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 disallowedTools:
   - "Bash(rm -rf*)"

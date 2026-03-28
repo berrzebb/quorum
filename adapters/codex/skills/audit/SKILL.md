@@ -6,11 +6,11 @@ model: codex
 allowed-tools: read_file, shell, find_files
 ---
 
-# Manual Audit
+# Manual Audit (Codex)
 
-Trigger the consensus audit process manually. The audit evaluates pending evidence items and produces verdicts stored in SQLite.
+Follow the canonical protocol at `skills/audit/SKILL.md`.
 
-## Codex Tool Mapping
+## Tool Mapping
 
 | Operation | Tool |
 |-----------|------|
@@ -23,75 +23,8 @@ Trigger the consensus audit process manually. The audit evaluates pending eviden
 
 ## Setup
 
-Read config via `read_file` at `core/config.json` relative to the quorum package root:
-- `audit_submit` MCP tool — evidence submission
-- `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
-- `consensus.roles` — provider-per-role mapping (advocate, devil, judge)
+Audit runner: `quorum audit` (fallback: `node core/audit.mjs`)
 
-## Execute
+Config: `core/config.json` — `consensus.trigger_tag`, `agree_tag`, `pending_tag`, `consensus.roles`.
 
-```bash
-quorum audit
-```
-
-If quorum CLI is not available, run directly:
-```bash
-node core/audit.mjs
-```
-
-## Options
-
-| Flag | Effect |
-|------|--------|
-| `--dry-run` | Print the audit prompt without executing — use to preview what will be sent |
-| `--no-resume` | Start a fresh session (discard any saved Codex session) |
-| `--auto-fix` | After audit, auto-correct rejected items via CLI |
-| `--model <name>` | Override auditor model (default from config) |
-| `--reset-session` | Delete saved session state before running |
-| `--evidence <markdown>` | Submit evidence directly (useful for worktree audits) |
-
-## Verdict Flow
-
-Verdicts are stored in **SQLite** (not markdown files). The flow:
-
-```
-audit.mjs -> provider reviews evidence
-  -> verdict stored via bridge.recordTransition()
-  -> audit-status.json marker written (fast-path for hooks)
-  -> quorum status shows result
-```
-
-Do NOT look for verdict.md or gpt.md — these files are eliminated. Use `quorum status` or `audit_history` tool.
-
-## After Completion
-
-Check the audit result:
-
-```bash
-quorum tool audit_history --summary
-```
-
-Or use `quorum status` to see current gate state.
-
-Interpret the result:
-- **[agree_tag]** — consensus reached, proceed to retrospective then merge
-- **[pending_tag]** — rejection with codes; read rejection reasons, fix issues, re-submit evidence
-- **No verdict** — audit may have failed; check stderr output
-
-## Execution Context
-
-| Context | Behavior |
-|---------|----------|
-| **Interactive** | Run audit, show verdict summary, suggest next steps |
-| **Headless** | Run audit, output verdict, exit (caller reads audit-status.json) |
-
-In headless mode, do NOT ask follow-up questions. Output the result and exit.
-
-## Common Rejection Codes
-
-| Code | Meaning | Fix |
-|------|---------|-----|
-| `test-gap` | Missing or insufficient tests | Add tests covering the claimed changes |
-| `claim-drift` | Evidence claim doesn't match actual diff | Update claim to match git diff |
-| `scope-mismatch` | Changed files not listed in evidence | Update Changed Files section |
-| `quality-violation` | Code quality check failed | Fix lint/type errors |
+Audit history: `quorum tool audit_history --summary`

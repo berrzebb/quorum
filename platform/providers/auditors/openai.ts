@@ -1,0 +1,102 @@
+/**
+ * OpenAI Auditor — runs audits via OpenAI API (direct HTTP).
+ *
+ * No CLI dependency. Calls the chat completions API directly.
+ * Works with GPT-4o, GPT-4.1, or any OpenAI-compatible endpoint.
+ */
+
+import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
+import { parseAuditResponse } from "./parse.js";
+
+export interface OpenAIAuditorConfig {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+  timeout?: number;
+}
+
+export class OpenAIAuditor implements Auditor {
+  private apiKey: string;
+  private model: string;
+  private baseUrl: string;
+  private timeout: number;
+
+  constructor(config: OpenAIAuditorConfig = {}) {
+    this.apiKey = config.apiKey ?? process.env.OPENAI_API_KEY ?? "";
+    this.model = config.model ?? "gpt-4o";
+    this.baseUrl = config.baseUrl ?? "https://api.openai.com/v1";
+    this.timeout = config.timeout ?? 120_000;
+  }
+
+  async audit(request: AuditRequest): Promise<AuditResult> {
+    const start = Date.now();
+
+    if (!this.apiKey) {
+      return {
+        verdict: "infra_failure",
+        codes: ["auditor-error"],
+        summary: "OPENAI_API_KEY not set",
+        raw: "",
+        duration: Date.now() - start,
+      };
+    }
+
+    const prompt = formatPrompt(request);
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: "You are a code auditor. Respond with ONLY a JSON object." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        const err = await response.text();
+        return {
+          verdict: "infra_failure",
+          codes: ["auditor-error"],
+          summary: `OpenAI API ${response.status}: ${err.slice(0, 200)}`,
+          raw: err,
+          duration: Date.now() - start,
+        };
+      }
+
+      const data = await response.json() as { choices: { message: { content: string } }[] };
+      const raw = data.choices?.[0]?.message?.content ?? "";
+      return parseAuditResponse(raw, Date.now() - start, true);
+    } catch (err) {
+      return {
+        verdict: "infra_failure",
+        codes: ["auditor-error"],
+        summary: `OpenAI API error: ${(err as Error).message}`,
+        raw: "",
+        duration: Date.now() - start,
+      };
+    }
+  }
+
+  async available(): Promise<boolean> {
+    return !!this.apiKey;
+  }
+}
+
+function formatPrompt(request: AuditRequest): string {
+  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
+}

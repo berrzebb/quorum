@@ -1,440 +1,72 @@
 #!/usr/bin/env node
 /**
- * Shared context module — config, paths, tag constants, markdown parser, i18n cache.
+ * Facade — main implementation at platform/core/context.mjs
  *
- * All quorum scripts import from this module to avoid
- * duplicate config parsing, path resolution, and function implementations.
+ * All exports are re-exported unchanged. No import paths in consumers need updating.
  */
 
-import { readFileSync, existsSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+// ── Paths ──
+export {
+  HOOKS_DIR,
+  QUORUM_ROOT,
+  REPO_ROOT,
+  PROJECT_CONFIG_DIR,
+} from "../platform/core/context.mjs";
 
-// ── Paths ─────────────────────────────────────────────────
-/** core/ directory — where protocol modules, templates, locales reside. */
-export const HOOKS_DIR = dirname(fileURLToPath(import.meta.url));
+// ── Config ──
+export {
+  configMissing,
+  cfg,
+  plugin,
+  consensus,
+  refreshConfigIfChanged,
+} from "../platform/core/context.mjs";
 
-/** quorum package root — one level above core/. */
-export const QUORUM_ROOT = resolve(HOOKS_DIR, "..");
+// ── Path resolvers ──
+export {
+  resolvePluginPath,
+  resolveReferencesDir,
+} from "../platform/core/context.mjs";
 
-/**
- * Resolve the repository root directory.
- *
- * Worktree-aware: cwd-based git resolution runs first so that
- * subagents running inside a git worktree see the worktree root,
- * not the main repo root.
- *
- * Plugin layout:  installed anywhere              → git rev-parse (primary)
- * Quorum layout:  core/ inside quorum package     → QUORUM_ROOT/../.. (fallback)
- *
- * Falls back to process.cwd() when git is unavailable.
- */
-function resolveRepoRoot() {
-  // 0. Cached via env var — avoids git subprocess on every hook invocation
-  if (process.env.QUORUM_REPO_ROOT) return process.env.QUORUM_REPO_ROOT;
+// ── Hook toggles ──
+export { isHookEnabled } from "../platform/core/context.mjs";
 
-  // 1. cwd-based git resolution — worktree-aware (primary)
-  try {
-    const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      windowsHide: true,
-    }).trim();
-    process.env.QUORUM_REPO_ROOT = root;
-    return root;
-  } catch { /* git not available or not in a repo */ }
+// ── Locale ──
+export { safeLocale, createT, t } from "../platform/core/context.mjs";
 
-  // 2. Adapter layout fallback: adapter installed under .claude/hooks/ or similar
-  //    quorum root is 2 levels above adapter dir, target repo is 3 more levels up
-  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
-    ?? process.env.CLAUDE_PLUGIN_ROOT
-    ?? process.env.GEMINI_EXTENSION_ROOT;
-  if (adapterRoot) {
-    const candidate = resolve(adapterRoot, "..", "..", "..");
-    if (existsSync(resolve(candidate, ".git"))) return candidate;
-  }
+// ── Section / tag constants ──
+export {
+  SEC,
+  DOC_PATTERNS,
+  escapeRe,
+  triggerInner,
+  agreeInner,
+  pendingInner,
+  STATUS_TAG_RE,
+  STATUS_TAG_RE_GLOBAL,
+} from "../platform/core/context.mjs";
 
-  // 3. Last resort
-  return process.cwd();
-}
+// ── Markdown parser ──
+export {
+  extractStatusFromLine,
+  readSection,
+  replaceSection,
+  removeSection,
+  parseStatusLines,
+  stripStatusFormatting,
+  replaceStatusTag,
+  collectIdsFromLine,
+  readBulletSection,
+  isEmptyMarker,
+} from "../platform/core/context.mjs";
 
-export const REPO_ROOT = resolveRepoRoot();
+// ── ID extraction ──
+export {
+  extractApprovedIds,
+  extractPendingIds,
+  extractApprovedIdsFromSection,
+  mergeIdSets,
+} from "../platform/core/context.mjs";
 
-// ── Config ────────────────────────────────────────────────
-
-/** Project-scoped config directory — survives plugin updates. */
-export const PROJECT_CONFIG_DIR = resolve(REPO_ROOT, ".claude", "quorum");
-
-/**
- * Find config.json path.
- *
- * Priority:
- *   1. REPO_ROOT/.claude/quorum/config.json — project-scoped (survives plugin updates)
- *   2. $CLAUDE_PLUGIN_ROOT/config.json              — plugin dir (cleared on update)
- *   3. HOOKS_DIR/config.json                        — legacy / direct CLI invocation
- */
-function findConfigPath() {
-  // 1. Project-scoped (persistent across plugin updates)
-  const projectConfig = resolve(PROJECT_CONFIG_DIR, "config.json");
-  if (existsSync(projectConfig)) return projectConfig;
-
-  // 2. Adapter root (set by hooks.json — supports multiple runtimes)
-  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
-    ?? process.env.CLAUDE_PLUGIN_ROOT
-    ?? process.env.GEMINI_EXTENSION_ROOT;
-  if (adapterRoot) {
-    const p = resolve(adapterRoot, "config.json");
-    if (existsSync(p)) return p;
-  }
-
-  // 3. Legacy fallback
-  const local = resolve(HOOKS_DIR, "config.json");
-  if (existsSync(local)) return local;
-  return null;
-}
-
-const _configPath = findConfigPath();
-
-/** config.json이 존재하지 않으면 true. 훅에서 설정 안내를 출력할 때 사용. */
-export const configMissing = _configPath === null;
-
-/** config.json 미존재 시 훅이 crash하지 않도록 최소 기본값 제공. */
-const DEFAULT_CONFIG = {
-  plugin: { locale: "en", hooks_enabled: {} },
-  consensus: {
-    trigger_tag: "[REVIEW_NEEDED]",
-    agree_tag: "[APPROVED]",
-    pending_tag: "[CHANGES_REQUESTED]",
-  },
-};
-
-export const cfg = _configPath
-  ? JSON.parse(readFileSync(_configPath, "utf8"))
-  : DEFAULT_CONFIG;
-export const plugin = cfg.plugin ?? DEFAULT_CONFIG.plugin;
-export const consensus = cfg.consensus ?? DEFAULT_CONFIG.consensus;
-
-/**
- * Re-read config.json if the file has been modified since last read.
- * Returns true if config was refreshed, false if unchanged.
- * Called by daemon periodic timer and optionally by hooks.
- */
-let _configMtime = _configPath ? statSync(_configPath).mtimeMs : 0;
-export function refreshConfigIfChanged() {
-  if (!_configPath) return false;
-  try {
-    const mtime = statSync(_configPath).mtimeMs;
-    if (mtime <= _configMtime) return false;
-    _configMtime = mtime;
-    const newCfg = JSON.parse(readFileSync(_configPath, "utf8"));
-    // Clear + merge into existing objects so references stay valid and stale keys are removed
-    for (const k of Object.keys(cfg)) delete cfg[k];
-    Object.assign(cfg, newCfg);
-    for (const k of Object.keys(plugin)) delete plugin[k];
-    Object.assign(plugin, newCfg.plugin ?? DEFAULT_CONFIG.plugin);
-    for (const k of Object.keys(consensus)) delete consensus[k];
-    Object.assign(consensus, newCfg.consensus ?? DEFAULT_CONFIG.consensus);
-    _emptyMarkerRe = null; // force recompile on next isEmptyMarker() call
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Resolve a plugin-relative path, checking project config dir first.
- * This allows project-scoped templates/references to override plugin defaults.
- *
- * Priority: PROJECT_CONFIG_DIR → QUORUM_ADAPTER_ROOT/CLAUDE_PLUGIN_ROOT/GEMINI_EXTENSION_ROOT → HOOKS_DIR
- */
-export function resolvePluginPath(relativePath) {
-  const projectPath = resolve(PROJECT_CONFIG_DIR, relativePath);
-  if (existsSync(projectPath)) return projectPath;
-
-  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
-    ?? process.env.CLAUDE_PLUGIN_ROOT
-    ?? process.env.GEMINI_EXTENSION_ROOT;
-  if (adapterRoot) {
-    const p = resolve(adapterRoot, relativePath);
-    if (existsSync(p)) return p;
-  }
-
-  return resolve(HOOKS_DIR, relativePath);
-}
-
-/**
- * Resolve the references directory path for a given locale.
- * Uses resolvePluginPath() so project overrides in .claude/quorum/ take precedence.
- */
-export function resolveReferencesDir(locale) {
-  return resolvePluginPath(`templates/references/${locale}`);
-}
-
-// ── Hook toggles ─────────────────────────────────────────
-const _hooksEnabled = plugin.hooks_enabled ?? {};
-/** 훅 활성화 여부 확인. config에 없으면 기본값 true. */
-export function isHookEnabled(hookName) {
-  return _hooksEnabled[hookName] ?? true;
-}
-
-// ── Locale 검증 (path traversal 방지) ─────────────────────
-const LOCALE_ALIASES = { "ko-KR": "ko", "en-US": "en" };
-const ALLOWED_LOCALES = new Set(["en", "ko"]);
-const rawLocale = plugin.locale ?? "en";
-const resolved = LOCALE_ALIASES[rawLocale] ?? rawLocale;
-export const safeLocale = ALLOWED_LOCALES.has(resolved) ? resolved : "en";
-
-// ── Section name constants (English defaults; config overrides) ──
-const S = consensus.sections ?? {};
-export const SEC = {
-  auditScope:         S.audit_scope         ?? "Audit Scope",
-  finalVerdict:       S.final_verdict       ?? "Final Verdict",
-  agreedAnchor:       S.agreed_anchor       ?? "Agreed",
-  resetCriteria:      S.reset_criteria      ?? "Reset Criteria",
-  rejectCodes:        S.reject_codes        ?? "Reject Codes",
-  additionalTasks:    S.additional_tasks    ?? "Additional Tasks",
-  nextTask:           S.next_task           ?? "Next Task",
-  deprecatedProtocol: S.deprecated_protocol ?? "Improved Protocol",
-  promotionTarget:    S.promotion_target    ?? "Current Promotion Target",
-  changedFiles:       S.changed_files       ?? "Changed Files",
-};
-
-export const DOC_PATTERNS = consensus.doc_patterns ?? {};
-
-// ── Tag constants + regex ─────────────────────────────────
-export const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-export const triggerInner = consensus.trigger_tag.replace(/^\[|\]$/g, "");
-export const agreeInner   = consensus.agree_tag.replace(/^\[|\]$/g, "");
-export const pendingInner = consensus.pending_tag.replace(/^\[|\]$/g, "");
-
-const tagAlts = [agreeInner, pendingInner, triggerInner].map(escapeRe).join("|");
-
-export const STATUS_TAG_RE = new RegExp(`\\[(${tagAlts})(?:[^\\]]*?)\\]`);
-export const STATUS_TAG_RE_GLOBAL = new RegExp(
-  "`?\\[(" + tagAlts + ")(?:[^\\]]*?)\\]`?", "g",
-);
-const TAG_INNER_RE_G = new RegExp(tagAlts, "g");
-
-// ── Path resolution removed — evidence via SQLite EventStore ──
-
-// ── i18n (cached) ─────────────────────────────────────────
-const localeCache = new Map();
-
-/** Resolve locales directory — prefer adapter root so worktree copies can find locale files. */
-function findLocalesDir() {
-  const adapterRoot = process.env.QUORUM_ADAPTER_ROOT
-    ?? process.env.CLAUDE_PLUGIN_ROOT
-    ?? process.env.GEMINI_EXTENSION_ROOT;
-  if (adapterRoot) {
-    const p = resolve(adapterRoot, "locales");
-    if (existsSync(p)) return p;
-  }
-  return resolve(HOOKS_DIR, "locales");
-}
-
-export function createT(locale) {
-  if (localeCache.has(locale)) return localeCache.get(locale);
-
-  const localePath = resolve(findLocalesDir(), `${locale}.json`);
-  let messages = {};
-  try { messages = JSON.parse(readFileSync(localePath, "utf8")); } catch { /* fallback */ }
-
-  const t = (key, vars) => {
-    let msg = messages[key] ?? key;
-    if (vars) {
-      for (const [k, v] of Object.entries(vars)) {
-        msg = msg.split(`{${k}}`).join(String(v));
-      }
-    }
-    return msg;
-  };
-
-  localeCache.set(locale, t);
-  return t;
-}
-
-export const t = createT(safeLocale);
-
-// ── Markdown parser ───────────────────────────────────────
-
-/** Extract status tag from a line. When multiple tags exist, the last (newest) wins. */
-export function extractStatusFromLine(line) {
-  const match = line.match(STATUS_TAG_RE);
-  if (!match) return null;
-
-  TAG_INNER_RE_G.lastIndex = 0;
-  const statuses = [...match[0].matchAll(TAG_INNER_RE_G)].map((item) => item[0]);
-  return statuses.at(-1) ?? null;
-}
-
-/** Find a `## heading` section in markdown and return { start, end, lines }. */
-export function readSection(markdown, heading) {
-  const lines = typeof markdown === "string" ? markdown.split(/\r?\n/) : markdown;
-  const headingRe = new RegExp(`^##\\s+${escapeRe(heading)}\\s*$`);
-  const start = lines.findIndex((line) =>
-    headingRe.test((typeof line === "string" ? line : "").trim())
-  );
-  if (start < 0) return null;
-  const end = lines.findIndex((line, idx) =>
-    idx > start && /^##\s+/.test((typeof line === "string" ? line : "").trim())
-  );
-  return {
-    start,
-    end: end >= 0 ? end : lines.length,
-    lines: lines.slice(start, end >= 0 ? end : lines.length),
-  };
-}
-
-/** Replace a section. Appends to end of file if section not found. */
-export function replaceSection(markdown, heading, replacementLines) {
-  const lines = markdown.split(/\r?\n/);
-  const section = readSection(lines, heading);
-  if (section) {
-    lines.splice(section.start, section.end - section.start, ...replacementLines);
-    return `${lines.join("\n")}\n`;
-  }
-  return `${markdown.replace(/\s*$/, "")}\n\n${replacementLines.join("\n")}\n`;
-}
-
-/** Remove a section. */
-export function removeSection(markdown, heading) {
-  const lines = markdown.split(/\r?\n/);
-  const section = readSection(lines, heading);
-  if (!section) return markdown;
-  lines.splice(section.start, section.end - section.start);
-  return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "")}\n`;
-}
-
-/** Parse all lines containing status tags. */
-export function parseStatusLines(markdown) {
-  const items = [];
-  for (const line of markdown.split(/\r?\n/)) {
-    const status = extractStatusFromLine(line);
-    if (!status) continue;
-    const key = line
-      .replace(STATUS_TAG_RE_GLOBAL, "")
-      .replace(/\*\*/g, "")
-      .replace(/`/g, "")
-      .replace(/^[\s-]*/, "")
-      .replace(/:\s*$/, "")
-      .trim();
-    items.push({ status, key, raw: line.trim() });
-  }
-  return items;
-}
-
-export function stripStatusFormatting(line) {
-  return line
-    .replace(STATUS_TAG_RE_GLOBAL, "")
-    .replace(/^[\s#-]*/, "")
-    .replace(/`/g, "")
-    .replace(/\*\*/g, "")
-    .replace(/:\s*$/, "")
-    .trim();
-}
-
-export function replaceStatusTag(line, status) {
-  return line.replace(STATUS_TAG_RE, `[${status}]`);
-}
-
-/** Extract IDs (e.g. TN-1, FE-6A, E1) from a line. Supports ranges (TN-1~TN-6). */
-export function collectIdsFromLine(line) {
-  const ids = new Set();
-
-  const rangeRe = /\b([A-Z]{2,})-(\d+)([A-Z]?)\s*~\s*(?:\1-?)?(\d+)([A-Z]?)\b/g;
-  let m;
-  while ((m = rangeRe.exec(line)) !== null) {
-    const [, prefix, startStr, startSuffix, endStr, endSuffix] = m;
-    const start = Number(startStr), end = Number(endStr);
-    if (Number.isFinite(start) && Number.isFinite(end) && end >= start && startSuffix === endSuffix) {
-      for (let i = start; i <= end; i++) ids.add(`${prefix}-${i}${startSuffix}`);
-    }
-  }
-
-  const idRe = /\b([A-Z]{2,})-(\d+)([A-Z]?)\b/g;
-  while ((m = idRe.exec(line)) !== null) ids.add(`${m[1]}-${m[2]}${m[3] ?? ""}`);
-
-  const singleRe = /\b([A-Z])(\d{1,2})\b/g;
-  while ((m = singleRe.exec(line)) !== null) {
-    const id = `${m[1]}${m[2]}`;
-    if (!/^H[1-6]$/.test(id)) ids.add(id);
-  }
-
-  return [...ids];
-}
-
-/** Extract `- ` bullet items from a section. */
-export function readBulletSection(markdown, heading) {
-  const section = readSection(markdown, heading);
-  if (!section) return [];
-  return section.lines
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("- "))
-    .map((line) => line.replace(/^- /, "").trim());
-}
-
-/** Check for empty markers (해당 없음, 없음, none, n/a). */
-const BASE_EMPTY_MARKERS = "해당 없음|없음|none|n\\/a";
-let _emptyMarkerRe = null;
-export function isEmptyMarker(line) {
-  if (!_emptyMarkerRe) {
-    const extra = DOC_PATTERNS.empty_markers;
-    const pattern = extra ? `${BASE_EMPTY_MARKERS}|${extra}` : BASE_EMPTY_MARKERS;
-    _emptyMarkerRe = new RegExp(`^\`?(${pattern})\`?$`, "i");
-  }
-  return _emptyMarkerRe.test(line.trim());
-}
-
-/** Extract approved IDs from markdown. */
-export function extractApprovedIds(markdown) {
-  const ids = new Set();
-  for (const line of markdown.split(/\r?\n/)) {
-    if (extractStatusFromLine(line) !== agreeInner) continue;
-    for (const id of collectIdsFromLine(line)) ids.add(id);
-  }
-  return ids;
-}
-
-/** Extract pending IDs from markdown. */
-export function extractPendingIds(markdown) {
-  const ids = new Set();
-  for (const line of markdown.split(/\r?\n/)) {
-    if (extractStatusFromLine(line) !== pendingInner) continue;
-    for (const id of collectIdsFromLine(line)) ids.add(id);
-  }
-  return ids;
-}
-
-/** Extract approved IDs from a specific section. */
-export function extractApprovedIdsFromSection(markdown, heading) {
-  const section = readSection(markdown, heading);
-  return section ? extractApprovedIds(section.lines.join("\n")) : new Set();
-}
-
-export function mergeIdSets(...sets) {
-  const merged = new Set();
-  for (const s of sets) for (const v of s) merged.add(v);
-  return merged;
-}
-
-/**
- * Read a JSONL file and parse each line into an object.
- * Skips malformed lines (fail-open). Returns empty array if file is missing or unreadable.
- *
- * @param {string} filePath  Absolute path to the JSONL file
- * @returns {object[]}       Parsed entries
- */
-export function readJsonlFile(filePath) {
-  if (!existsSync(filePath)) return [];
-  let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
-  const entries = [];
-  for (const line of content.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    try { entries.push(JSON.parse(line)); } catch { /* skip malformed */ }
-  }
-  return entries;
-}
+// ── JSONL ──
+export { readJsonlFile } from "../platform/core/context.mjs";

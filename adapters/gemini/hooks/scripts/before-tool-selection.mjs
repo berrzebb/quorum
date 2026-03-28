@@ -1,13 +1,6 @@
-#!/usr/bin/env node
 /**
- * Gemini CLI Hook: BeforeToolSelection
+ * Facade — main implementation at platform/adapters/gemini/hooks/scripts/before-tool-selection.mjs
  *
- * Fires before LLM selects tools. Can filter tool availability
- * via toolConfig.allowedFunctionNames.
- *
- * Input:  { llm_request: { model, messages, config, toolConfig } }
- * Output: { hookSpecificOutput.toolConfig? }
- *
- * Currently a pass-through — no-op.
+ * All exports are re-exported unchanged. No import paths in consumers need updating.
  */
-process.exit(0);
+export * from '../../../../platform/adapters/gemini/hooks/scripts/before-tool-selection.mjs';

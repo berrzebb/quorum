@@ -9,6 +9,7 @@ disallowedTools:
   - "Bash(git checkout*)"
   - "Bash(git clean*)"
 model: claude-opus-4-6
+maxTurns: 30
 skills:
   - quorum:tools
 ---

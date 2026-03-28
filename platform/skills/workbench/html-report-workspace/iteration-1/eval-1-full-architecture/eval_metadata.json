@@ -1,0 +1,49 @@
+{
+  "eval_id": 1,
+  "eval_name": "full-architecture-html",
+  "prompt": "quorum 프로젝트의 전체 아키텍처를 분석해서 인터랙티브 HTML 리포트를 만들어줘.",
+  "assertions": [
+    {
+      "name": "html_file_created",
+      "description": "HTML 파일이 생성되었고 5KB 이상인가",
+      "type": "file_exists_and_size",
+      "check": "outputs/report.html exists and > 5KB"
+    },
+    {
+      "name": "single_file_html",
+      "description": "외부 CSS/JS 파일 없이 단일 HTML 파일인가",
+      "type": "content_check",
+      "check": "report.html contains <style> and <script> tags (no external links except CDN)"
+    },
+    {
+      "name": "contains_mermaid_diagram",
+      "description": "Mermaid 다이어그램이 포함되었는가",
+      "type": "content_contains",
+      "check": "report.html contains class='mermaid' or pre.mermaid"
+    },
+    {
+      "name": "has_toc_sidebar",
+      "description": "사이드바 TOC가 있는가",
+      "type": "content_contains",
+      "check": "report.html contains sidebar and toc elements"
+    },
+    {
+      "name": "has_theme_toggle",
+      "description": "다크/라이트 모드 토글이 있는가",
+      "type": "content_contains",
+      "check": "report.html contains theme-toggle and data-theme"
+    },
+    {
+      "name": "covers_all_layers",
+      "description": "CLI, Bus, Providers, Core 레이어가 모두 다뤄졌는가",
+      "type": "content_contains",
+      "check": "report.html mentions CLI, Bus, Providers, Core"
+    },
+    {
+      "name": "contains_quality_metrics",
+      "description": "품질 메트릭 테이블이 있는가",
+      "type": "content_contains",
+      "check": "report.html contains a table with metrics/scores"
+    }
+  ]
+}

@@ -28,7 +28,7 @@
 
 ## ⑤ Act — Register improvement items (PDCA)
 
-Run `act_analyze` tool (or `node tool-runner.mjs act_analyze`) to produce structured improvement items from audit history + FVM results.
+Run `act_analyze` tool (or `quorum tool act_analyze`) to produce structured improvement items from audit history + FVM results.
 
 1. Review the metrics and improvement items with the user
 2. User approves, modifies, or rejects each item

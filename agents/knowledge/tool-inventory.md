@@ -8,7 +8,7 @@
 quorum tool <tool_name> [--param value] [--json]
 ```
 
-Or directly: `node {ADAPTER_ROOT}/core/tools/tool-runner.mjs <tool_name> [--param value]`
+Or directly: `quorum tool <tool_name> [--param value]`
 
 Add `--json` to any command for structured JSON output.
 

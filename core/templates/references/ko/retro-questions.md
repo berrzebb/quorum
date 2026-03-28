@@ -28,7 +28,7 @@
 
 ## ⑤ Act — 개선 항목 등록 (PDCA)
 
-`act_analyze` 도구 (또는 `node tool-runner.mjs act_analyze`)를 실행하여 감사 이력 + FVM 결과에서 구조화된 개선 항목을 생성합니다.
+`act_analyze` 도구 (또는 `quorum tool act_analyze`)를 실행하여 감사 이력 + FVM 결과에서 구조화된 개선 항목을 생성합니다.
 
 1. 지표와 개선 항목을 사용자와 리뷰
 2. 사용자가 각 항목을 승인, 수정, 또는 거부

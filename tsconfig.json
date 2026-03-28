@@ -22,7 +22,8 @@
     "daemon/**/*.ts",
     "daemon/**/*.tsx",
     "cli/**/*.ts",
-    "orchestrate/**/*.ts"
+    "orchestrate/**/*.ts",
+    "platform/**/*.ts"
   ],
   "exclude": [
     "node_modules",

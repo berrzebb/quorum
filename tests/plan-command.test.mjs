@@ -138,8 +138,11 @@ describe("quorum plan show", () => {
 
 describe("no parser duplication", () => {
   it("plan.ts imports from orchestrate/planning, not inline parser", async () => {
-    const { readFileSync } = await import("node:fs");
-    const src = readFileSync(resolve("cli/commands/plan.ts"), "utf8");
+    const { readFileSync, existsSync } = await import("node:fs");
+    // Check platform source (canonical) or facade fallback
+    const platformPath = resolve("platform/cli/commands/plan.ts");
+    const legacyPath = resolve("cli/commands/plan.ts");
+    const src = existsSync(platformPath) ? readFileSync(platformPath, "utf8") : readFileSync(legacyPath, "utf8");
 
     // Must import from orchestrate/planning
     assert.ok(

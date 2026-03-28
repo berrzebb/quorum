@@ -1,13 +1,6 @@
-#!/usr/bin/env node
 /**
- * Gemini CLI Hook: BeforeModel
+ * Facade — main implementation at platform/adapters/gemini/hooks/scripts/before-model.mjs
  *
- * Fires before sending request to LLM. Extension point for
- * request modification or synthetic responses.
- *
- * Input:  { llm_request: { model, messages, config, toolConfig } }
- * Output: { hookSpecificOutput.llm_request?, hookSpecificOutput.llm_response? }
- *
- * Currently a pass-through — no-op.
+ * All exports are re-exported unchanged. No import paths in consumers need updating.
  */
-process.exit(0);
+export * from '../../../../platform/adapters/gemini/hooks/scripts/before-model.mjs';

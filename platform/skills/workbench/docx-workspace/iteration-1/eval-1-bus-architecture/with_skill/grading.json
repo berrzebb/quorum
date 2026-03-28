@@ -1,0 +1,10 @@
+{
+  "expectations": [
+    {"text": "docx_file_created", "passed": true, "evidence": "Size: 43019 bytes (42.0 KB)"},
+    {"text": "markdown_source_created", "passed": true, "evidence": "MD file exists: True"},
+    {"text": "contains_architecture_diagram", "passed": true, "evidence": "Mermaid block found: True"},
+    {"text": "contains_module_table", "passed": true, "evidence": "Table with module info: True"},
+    {"text": "contains_code_example", "passed": true, "evidence": "TS/JS code block: True"},
+    {"text": "mentions_key_modules", "passed": true, "evidence": "Found: ['EventStore', 'LockService', 'ClaimService']"}
+  ]
+}

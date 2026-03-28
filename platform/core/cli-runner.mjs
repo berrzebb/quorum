@@ -1,0 +1,193 @@
+#!/usr/bin/env node
+/**
+ * Cross-platform CLI binary resolver and spawner.
+ *
+ * Canonical implementation (moved from core/cli-runner.mjs).
+ * core/cli-runner.mjs is now a thin re-export facade.
+ *
+ * resolveBinary(command, envVarName)
+ *   Finds the absolute path to a CLI binary. Checks an optional env-var override
+ *   first, then searches PATH. On Windows, also probes PATHEXT extensions
+ *   (.exe, .cmd, .bat, …).
+ *
+ * spawnResolved(binary, args, options)
+ *   Wraps spawnSync with Windows-specific handling:
+ *   - .cmd/.bat → shell: COMSPEC, windowsHide: true
+ *   - .ps1      → delegates to pwsh / powershell
+ *   - all paths → windowsHide: true on Windows (prevents console popups)
+ */
+
+import { existsSync } from "node:fs";
+import { delimiter, extname, isAbsolute, join } from "node:path";
+import { spawnSync, spawn, execSync as nodeExecSync, execFileSync as nodeExecFileSync } from "node:child_process";
+
+function normalizeExecutablePath(value) {
+  if (!value) {
+    return null;
+  }
+
+  let normalized = String(value).trim();
+  let previous = null;
+  while (normalized && normalized !== previous) {
+    previous = normalized;
+    normalized = normalized.trim();
+    normalized = normalized.replace(/^['"]+/, "").replace(/['"]+$/, "");
+    normalized = normalized.replace(/^\\+"/, "").replace(/\\+"$/, "");
+    normalized = normalized.replace(/^\\+/, "").replace(/\\+$/, "");
+  }
+  return normalized || null;
+}
+
+function getWindowsExtensions() {
+  const raw = process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD";
+  return raw
+    .split(";")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function candidatePaths(command) {
+  const normalized = normalizeExecutablePath(command);
+  if (!normalized) {
+    return [];
+  }
+
+  const hasPathSeparator = /[\\/]/.test(normalized);
+  const directBases = hasPathSeparator || isAbsolute(normalized)
+    ? [normalized]
+    : (process.env.PATH || "")
+        .split(delimiter)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => join(entry, normalized));
+
+  if (process.platform !== "win32") {
+    return directBases;
+  }
+
+  const ext = extname(normalized).toLowerCase();
+  const exts = getWindowsExtensions();
+  const results = [];
+
+  // On Windows: PATHEXT extensions first, extensionless last (fallback only).
+  // This prevents POSIX shell scripts (no extension) from being picked over
+  // .cmd/.exe wrappers, which would invoke Git Bash (msys-2.0.dll) and crash.
+  const withExt = [];
+  const withoutExt = [];
+
+  for (const base of directBases) {
+    if (!ext) {
+      for (const suffix of exts) {
+        withExt.push(`${base}${suffix}`);
+      }
+      withoutExt.push(base);
+    } else {
+      withExt.push(base);
+    }
+  }
+
+  return [...new Set([...withExt, ...withoutExt])];
+}
+
+export function resolveBinary(command, envVarName) {
+  const override = envVarName ? normalizeExecutablePath(process.env[envVarName]) : null;
+
+  for (const candidate of override ? candidatePaths(override) : []) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of candidatePaths(command)) {
+    if (existsSync(candidate)) {
+      // Warn if falling back to extensionless file on Windows (potential POSIX script)
+      if (process.platform === "win32" && !extname(candidate)) {
+        console.error(`[cli-runner] Warning: resolved to extensionless file ${candidate} — may be a POSIX script. Prefer .cmd/.exe wrapper.`);
+      }
+      return candidate;
+    }
+  }
+
+  return override || command;
+}
+
+function quoteForCmd(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+export function spawnResolved(binary, args, options = {}) {
+  const opts = process.platform === "win32" ? { ...options, windowsHide: true } : options;
+
+  if (process.platform === "win32") {
+    if (/\.(cmd|bat)$/i.test(binary)) {
+      const line = [binary, ...args].map(quoteForCmd).join(" ");
+      return spawnSync(line, { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
+    }
+
+    if (/\.ps1$/i.test(binary)) {
+      const shell = resolveBinary("pwsh") || resolveBinary("powershell");
+      return spawnSync(
+        shell,
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", binary, ...args],
+        opts,
+      );
+    }
+  }
+
+  return spawnSync(binary, args, opts);
+}
+
+/** Async spawn — Windows .cmd/.bat/.ps1 처리 포함, ChildProcess 반환. */
+export function spawnResolvedAsync(binary, args, options = {}) {
+  const opts = process.platform === "win32" ? { ...options, windowsHide: true } : options;
+
+  if (process.platform === "win32") {
+    if (/\.(cmd|bat)$/i.test(binary)) {
+      const line = [binary, ...args].map(quoteForCmd).join(" ");
+      // DEP0190: pass command as single string (no args array) when using shell
+      return spawn(line, { ...opts, shell: process.env.COMSPEC || "cmd.exe" });
+    }
+
+    if (/\.ps1$/i.test(binary)) {
+      const shell = resolveBinary("pwsh") || resolveBinary("powershell");
+      return spawn(
+        shell,
+        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", binary, ...args],
+        opts,
+      );
+    }
+  }
+
+  return spawn(binary, args, opts);
+}
+
+// ── Shell command helpers ─────────────────────
+
+/** Default shell options for Windows (COMSPEC) and Unix (true). */
+function shellOpts(options = {}) {
+  const base = process.platform === "win32"
+    ? { ...options, shell: process.env.COMSPEC || "cmd.exe", windowsHide: true }
+    : { ...options, shell: true };
+  return base;
+}
+
+/**
+ * execSync wrapper — runs a shell command string with cross-platform defaults.
+ * Automatically uses COMSPEC on Windows and sets windowsHide: true.
+ */
+export function execResolved(cmd, options = {}) {
+  return nodeExecSync(cmd, shellOpts(options));
+}
+
+/**
+ * Git command helper — runs `git <args>` via execFileSync (no shell needed).
+ * Avoids mingw entirely by not going through any shell.
+ *
+ * @param {string[]} args  Git subcommand + arguments, e.g. ["diff", "--name-only"]
+ * @param {object}   opts  Node execFileSync options (cwd, encoding, etc.)
+ * @returns {string}       Trimmed stdout
+ */
+export function gitSync(args, opts = {}) {
+  const options = { encoding: "utf8", windowsHide: true, ...opts };
+  return nodeExecFileSync("git", args, options).trim();
+}

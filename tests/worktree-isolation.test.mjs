@@ -76,16 +76,22 @@ describe("deriveAuditCwd", () => {
 });
 
 // ── audit.mjs source code invariants ──
-// After split: read all sub-modules to get the combined source
+// Canonical modules live in platform/core/audit/ — facades in core/audit/ just re-export
 describe("audit.mjs worktree isolation invariants", () => {
-  const auditDir = resolve(CORE_DIR, "audit");
+  const PLATFORM_CORE_DIR = resolve(__dirname, "..", "platform", "core");
+  const auditDir = resolve(PLATFORM_CORE_DIR, "audit");
   const auditModules = ["index.mjs", "args.mjs", "session.mjs", "scope.mjs", "pre-verify.mjs", "codex-runner.mjs", "solo-verdict.mjs"];
   let auditSource;
   try {
     auditSource = auditModules.map(f => readFileSync(resolve(auditDir, f), "utf8")).join("\n");
   } catch {
-    // Fallback: original monolithic file (pre-split)
-    auditSource = readFileSync(resolve(CORE_DIR, "audit.mjs"), "utf8");
+    // Fallback: try core/audit/ (pre-migration)
+    const legacyDir = resolve(CORE_DIR, "audit");
+    try {
+      auditSource = auditModules.map(f => readFileSync(resolve(legacyDir, f), "utf8")).join("\n");
+    } catch {
+      auditSource = readFileSync(resolve(CORE_DIR, "audit.mjs"), "utf8");
+    }
   }
 
   it("has zero cwd:REPO_ROOT in audit chain functions", () => {
@@ -165,7 +171,8 @@ describe("audit.mjs worktree isolation invariants", () => {
 
 // ── index.mjs worktree isolation ──
 describe("index.mjs worktree isolation invariants", () => {
-  const indexSource = readFileSync(resolve(ADAPTER_DIR, "index.mjs"), "utf8");
+  const PLATFORM_ADAPTER_DIR = resolve(__dirname, "..", "platform", "adapters", "claude-code");
+  const indexSource = readFileSync(resolve(PLATFORM_ADAPTER_DIR, "index.mjs"), "utf8");
 
   // Evidence detection via audit_submit MCP tool — no file-based detection needed
 
@@ -177,7 +184,8 @@ describe("index.mjs worktree isolation invariants", () => {
 
 // ── worktree-create.mjs nesting guard ──
 describe("worktree-create.mjs nesting guard", () => {
-  const createSource = readFileSync(resolve(ADAPTER_DIR, "worktree-create.mjs"), "utf8");
+  const PLATFORM_ADAPTER_DIR = resolve(__dirname, "..", "platform", "adapters", "claude-code");
+  const createSource = readFileSync(resolve(PLATFORM_ADAPTER_DIR, "worktree-create.mjs"), "utf8");
 
   it("resolves MAIN_ROOT from git common-dir", () => {
     assert.match(createSource, /git-common-dir/);
