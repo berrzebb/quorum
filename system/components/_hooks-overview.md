@@ -10,7 +10,7 @@
 ## What are Hooks?
 
 Hooks are **scripts that execute on specific Claude Code events**.
-- Defined in `hooks/hooks.json` per adapter
+- Defined in `platform/adapters/<adapter>/hooks/hooks.json` per adapter
 - Run Node.js scripts that output JSON (`allow`/`block` decisions)
 - Fail-open: all hooks pass through on error (no system lockout)
 
@@ -19,7 +19,7 @@ Hooks are **scripts that execute on specific Claude Code events**.
 ```
 ┌─ Hook Sources ───────────────────────────────────────────┐
 │                                                          │
-│  hooks/hooks.json (adapter-level)                        │
+│  platform/adapters/<adapter>/hooks/hooks.json             │
 │  ├── SessionStart, UserPromptSubmit, PreCompact, ...     │
 │  │                                                       │
 │  SKILL.md frontmatter hooks                              │

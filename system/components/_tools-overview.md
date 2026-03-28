@@ -150,7 +150,7 @@ quorum/
 │   ├── agent-comm.mjs           ← agent_comm
 │   ├── audit-submit.mjs         ← audit_submit
 │   └── ast-bridge.mjs           ← Fail-safe MJS↔AST bridge
-├── providers/ast-analyzer.ts    ← TypeScript Compiler API wrapper
+├── platform/providers/ast-analyzer.ts    ← TypeScript Compiler API wrapper
 └── languages/                   ← Language-specific scan patterns
     ├── typescript/spec.*.mjs
     ├── go/spec.*.mjs

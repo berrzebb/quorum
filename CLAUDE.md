@@ -14,7 +14,7 @@ npm run dev            # tsx daemon/index.ts
 ## Module Map
 
 ```
-cli/index.ts           ← quorum <command> dispatcher
+platform/cli/index.ts   ← quorum <command> dispatcher
   ├→ commands/setup.ts      ← project initialization
   ├→ commands/status.ts     ← gate status (--attach/--capture for mux remote view)
   ├→ commands/audit.ts      ← manual audit trigger
@@ -29,9 +29,9 @@ cli/index.ts           ← quorum <command> dispatcher
   ├→ commands/ask.ts        ← provider direct query
   └→ commands/tool.ts       ← MCP tool CLI
 
-orchestrate/             ← Orchestration library (extracted from monolithic runner.ts/shared.ts/planner.ts)
+platform/orchestrate/    ← Orchestration library (extracted from monolithic runner.ts/shared.ts/planner.ts)
   ├→ index.ts             ← Root barrel (re-exports all 5 layers as namespaces)
-  ├→ planning/            ← Legislation/blueprint generation
+  ├→ planning/            ← Legislation/blueprint generation (15 modules)
   │   ├→ index.ts          ← Barrel export
   │   ├→ types.ts          ← WorkItem, Wave, TrackInfo, PlanReviewResult, HeadingInfo
   │   ├→ track-catalog.ts  ← findTracks, resolveTrack, trackRef
@@ -45,8 +45,9 @@ orchestrate/             ← Orchestration library (extracted from monolithic ru
   │   ├→ planner-prompts.ts ← buildPlannerSystemPrompt, buildAutoPrompt, buildSocraticPrompt
   │   ├→ planner-mode.ts   ← determinePlannerMode (auto/socratic/inline)
   │   ├→ planner-session.ts ← runPlannerSession (high-level planner orchestration)
-  │   └→ auto-planner.ts   ← autoGenerateWBs, autoFixDesignDiagrams
-  ├→ execution/           ← Model routing, agent sessions, audit/fixer loops
+  │   ├→ auto-planner.ts   ← autoGenerateWBs, autoFixDesignDiagrams
+  │   └→ contract-negotiation.ts ← negotiateContracts (pre-execution contract binding)
+  ├→ execution/           ← Model routing, agent sessions, audit/fixer loops (13 modules)
   │   ├→ index.ts          ← Barrel export
   │   ├→ model-routing.ts  ← selectModelForTask (XS→haiku, S→sonnet, M→opus)
   │   ├→ dependency-context.ts ← buildDepContextFromManifests
@@ -60,7 +61,7 @@ orchestrate/             ← Orchestration library (extracted from monolithic ru
   │   ├→ wave-runner.ts    ← runWave (single wave execution)
   │   ├→ wave-audit-llm.ts ← runWaveAuditLLM (LLM-based wave audit)
   │   └→ snapshot.ts       ← captureSnapshot, recordWaveManifest, readPreviousManifests
-  ├→ governance/          ← RTM, phase gates, lifecycle, fitness, scope, confluence
+  ├→ governance/          ← RTM, phase gates, lifecycle, fitness, scope, confluence (12 modules)
   │   ├→ index.ts          ← Barrel export
   │   ├→ rtm-generator.ts  ← generateSkeletalRTM
   │   ├→ rtm-updater.ts    ← updateRTM, updateRTMContent
@@ -69,7 +70,10 @@ orchestrate/             ← Orchestration library (extracted from monolithic ru
   │   ├→ fitness-gates.ts  ← collectFitnessSignals, runFitnessGate, computeFitness
   │   ├→ scope-gates.ts    ← scanLines, scanForStubs, detectFileScopeViolations, etc. (13 gate functions)
   │   ├→ confluence-gates.ts ← runConfluenceCheck, proposeConfluenceAmendments
-  │   └→ e2e-verification.ts ← runE2EVerification
+  │   ├→ e2e-verification.ts ← runE2EVerification
+  │   ├→ adaptive-gate-profile.ts ← per-track gate threshold tuning
+  │   ├→ iteration-budget.ts     ← max iteration/cost budget enforcement
+  │   └→ runtime-evaluation-gate.ts ← runtime eval criteria checking
   ├→ state/               ← State contracts + filesystem stores
   │   ├→ index.ts          ← Barrel export
   │   ├→ state-types.ts    ← WaveCheckpoint, AgentSessionState, RTMEntry, RTMState
@@ -93,7 +97,7 @@ daemon/index.ts         ← Ink TUI entry point (StateReader + LockService injec
   ├→ state-reader.ts    ← SQLite-only state reader (gates, items, locks, specialists, tracks, fitness)
   └→ components/        ← GateStatus, AgentPanel, FitnessPanel, ParliamentPanel, AuditStream, TrackProgress, Header
 
-bus/
+platform/bus/
   ├→ bus.ts             ← QuorumBus (EventEmitter + SQLite/JSONL)
   ├→ store.ts           ← EventStore (SQLite WAL) + UnitOfWork + TransactionalUnitOfWork
   ├→ lock.ts            ← LockService (atomic SQL lock, replaces JSON lock files)
@@ -102,7 +106,7 @@ bus/
   ├→ orchestrator.ts    ← OrchestratorMode (5-mode auto-selection: serial/parallel/fan-out/pipeline/hybrid)
   ├→ auto-learn.ts      ← Auto-learning (repeat pattern detection + CLAUDE.md rule suggestions)
   ├→ projector.ts       ← MarkdownProjector (SQLite → markdown view generation)
-  ├→ events.ts          ← 53 event types (incl. finding.*, fitness.*, parliament.*)
+  ├→ events.ts          ← 58 event types (incl. finding.*, fitness.*, parliament.*)
   ├→ message-bus.ts     ← MessageBus (finding-level SQLite communication, replaces file-based IPC)
   ├→ fitness.ts         ← Fitness score engine (7-component 0.0-1.0 quality metric)
   ├→ fitness-loop.ts    ← Autonomous fitness gate (proceed/self-correct/auto-reject)
@@ -112,9 +116,14 @@ bus/
   ├→ confluence.ts      ← Confluence verification (4-point post-audit integrity: law-code/part-whole/intent-result/law-law)
   ├→ normal-form.ts     ← Normal form convergence tracking (raw-output → autofix → manual-fix → normal-form)
   ├→ parliament-gate.ts ← Enforcement gates (5 gates: amendment, verdict, confluence, design, regression)
+  ├→ parliament-session.ts ← Parliament session orchestration (diverge-converge lifecycle)
+  ├→ handoff-gate.ts    ← Artifact + evaluation contract validation (pre-handoff)
+  ├→ promotion-gate.ts  ← Status change gates (role promotion/demotion rules)
+  ├→ contract-enforcer.ts ← Contract breach detection (harness ↔ bus integration)
+  ├→ blueprint-parser.ts ← Blueprint naming convention extraction for lint
   └→ mux.ts             ← ProcessMux (tmux/psmux/raw)
 
-providers/
+platform/providers/
   ├→ provider.ts        ← QuorumProvider + Auditor interfaces
   ├→ consensus.ts       ← DeliberativeConsensus (Advocate/Devil/Judge + Diverge-Converge)
   ├→ trigger.ts         ← 13-factor conditional trigger (12 base + interaction multipliers; T1/T2/T3)
@@ -125,7 +134,11 @@ providers/
   ├→ domain-router.ts   ← Conditional specialist activation (domain × tier)
   ├→ specialist.ts      ← Specialist review orchestrator (tools + agents → enriched evidence)
   ├→ claude-code/       ← ClaudeCodeProvider (hook-forwarding)
-  └→ codex/             ← CodexProvider (file-watch) + CodexAuditor
+  ├→ codex/             ← CodexProvider (file-watch) + CodexAuditor
+  ├→ auditors/          ← Auditor implementations (claude, codex, gemini, ollama, openai, openai-compatible, vllm, mux, parse)
+  │   └→ factory.ts     ← createConsensusAuditors()
+  └→ evaluators/        ← Runtime evaluation probes (cli-session, api-probe, data-probe, artifact-validator, browser-playwright)
+      └→ evaluator-port.ts ← Evaluator interface
 
 platform/core/
   ├→ bridge.mjs         ← MJS hooks ↔ TS modules bridge (+ domain/specialist/claim/orchestrator routing)
@@ -136,7 +149,16 @@ platform/core/
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
   ├→ tools/             ← 22 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, audit_submit, ...)
-  └→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
+  ├→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
+  └→ harness/           ← Execution contracts (8 modules)
+      ├→ contract-ledger.ts      ← Contract lifecycle tracking
+      ├→ evaluation-contract.ts  ← Evaluation criteria contracts
+      ├→ handoff-artifact.ts     ← Artifact handoff validation
+      ├→ iteration-policy.ts     ← Iteration budget policies
+      ├→ negotiation-record.ts   ← Contract negotiation audit trail
+      ├→ quality-rubric.ts       ← Quality scoring rubrics
+      ├→ runtime-evaluation-spec.ts ← Runtime eval specifications
+      └→ sprint-contract.ts      ← Sprint-level contract bindings
 
 languages/
   ├→ registry.mjs       ← LanguageRegistry (auto-discover + fragment merge, CORE_FIELDS enforcement)
@@ -146,34 +168,43 @@ languages/
   ├→ rust/               ← spec.mjs + verify + 7 fragments
   └→ java/               ← spec.mjs + verify + 7 fragments
 
-agents/knowledge/          ← Cross-adapter shared protocols
+agents/knowledge/          ← Retained shared protocol corpus (stable, adapter-neutral — NOT a migration residual)
   ├→ implementer-protocol.md  ← code-only execution (self-check → self-checker, correction → fixer delegation)
   ├→ scout-protocol.md        ← Phase 5-8 RTM gap analyzer (upstream: wb-parser + rtm-scanner)
   ├→ specialist-base.md       ← JSON output format, confidence ≥ 0.8 filter, max 10 findings
   ├→ ui-review-protocol.md    ← UI-1~8 verification checklist, report format, completion gate
   ├→ doc-sync-protocol.md     ← 3-layer fact extraction, numeric mismatch, section parity
+  ├→ parliament-rules.md      ← Standing rules for parliamentary sessions (consensus, amendment, confluence)
   ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
   └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
 
-platform/adapters/shared/  ← Adapter-agnostic business logic (17 modules)
+platform/skills/          ← Canonical skill definitions (37 skills)
+  ├→ ARCHITECTURE.md     ← Skill inheritance: agents/knowledge/ → platform/skills/ → 4 adapter wrappers
+  └→ {skill}/            ← SKILL.md + references/ + scripts/ per skill
+
+platform/adapters/shared/  ← Adapter-agnostic business logic (20 modules)
 
 platform/adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
-  ├→ skills/            ← 14 skills (adapter wrappers; see skills/ARCHITECTURE.md)
+  ├→ skills/            ← 29 skills (adapter wrappers; see platform/skills/ARCHITECTURE.md)
   ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
 platform/adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
   ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
-  ├→ skills/               ← 14 skills (10 shared + implementer, scout, perf-analyst, ui-reviewer)
+  ├→ skills/               ← 29 skills (shared wrappers)
   └→ commands/             ← 4 TOML commands
 
 platform/adapters/codex/
   ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
-  └→ skills/               ← 14 skills (10 shared + implementer, scout, perf-analyst, ui-reviewer)
+  └→ skills/               ← 29 skills (shared wrappers)
+
+platform/adapters/openai-compatible/
+  ├→ agents/               ← 13 agents (mirror of claude-code agents)
+  └→ skills/               ← 29 skills (shared wrappers)
 ```
 
 ## Key Patterns
@@ -198,7 +229,7 @@ platform/adapters/codex/
 - **Auto-Learning**: `analyzeAndSuggest()` detects repeat rejection patterns (3+ occurrences) from audit history and generates CLAUDE.md rule suggestions. `learnFromStagnation()` feeds stagnation patterns back into trigger scoring (FDE feedback loop).
 - **Blast Radius**: BFS on reverse import graph (`inEdges`) computes transitive dependents of changed files. `buildRawGraph()` extracted from `dependency_graph` for reuse. Trigger factor (ratio > 0.1 → score += up to 0.15). Pre-verify evidence includes blast radius section.
 - **3-Layer Adapter**: I/O (adapter-specific stdin/stdout) + Business logic (`platform/adapters/shared/`) + Bridge (`platform/core/`). New adapter = I/O wrappers only (~650 lines vs ~2,000).
-- **Shared Agent Knowledge**: `agents/knowledge/` protocols referenced by all adapters. Protocol change → 1 file edit → all adapters reflect. Agents keep only tool-name bindings + path variables.
+- **Shared Agent Knowledge**: `agents/knowledge/` is a retained shared protocol corpus (not a migration residual). Protocol definitions referenced by all 4 adapters. Protocol change → 1 file edit → all adapters reflect. Agents keep only tool-name bindings + path variables. Changes require all-adapter verification. See `agents/knowledge/README.md`.
 - **Fragment-Only Language Specs**: `languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
 - **Adapter Env Fallback**: `platform/core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
 - **Tool Name Mapping**: `platform/adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
@@ -218,10 +249,10 @@ platform/adapters/codex/
 - **Parliament Config**: `config.json` `parliament` section: `convergenceThreshold`, `eligibleVoters`, `maxRounds`, `maxAutoAmendments`, `roles` (overrides consensus.roles). Priority: CLI flags > parliament.roles > consensus.roles > defaults.
 - **CPS→Planner Pipeline**: Planner Phase 0 (CPS Intake) reads parliament CPS before Phase 1. CPS.Context→PRD §1, CPS.Problem→PRD §2, CPS.Solution→PRD §4. Skips Phase 1 if CPS covers full intent. Design Phase is mandatory for CPS-origin tracks (DRM must include Design row). Design before WB — Blueprint naming conventions are binding law.
 - **Parliament Events**: `parliament.convergence` emitted per session (fixes TUI display). `parliament.debate.round` emitted for diverge/converge phases. `parliament.cps.generated` for CPS persistence. Normal-form report emitted as session.digest subType.
-- **Parliament Enforcement Gates**: `bus/parliament-gate.ts` — 5 structural gates that BLOCK work: Amendment gate, Verdict gate, Confluence gate, Design gate, Regression gate. `checkAllGates()` runs all at once. `quorum merge --force` to bypass. Bridge exports all gate functions.
+- **Parliament Enforcement Gates**: `platform/bus/parliament-gate.ts` — 5 structural gates that BLOCK work: Amendment gate, Verdict gate, Confluence gate, Design gate, Regression gate. `checkAllGates()` runs all at once. `quorum merge --force` to bypass. Bridge exports all gate functions.
 - **MuxAuditor**: `providers/auditors/mux.ts` — Auditor implementation backed by ProcessMux (tmux/psmux). `--mux` flag in parliament CLI spawns LLM sessions as mux panes. Sessions saved to `.claude/agents/` (daemon-discoverable). `createMuxConsensusAuditors()` creates 3 mux-backed auditors sharing one ProcessMux instance. Daemon TUI shows live sessions (role, backend, age).
 - **Parliament Session Observability**: Daemon `ParliamentPanel` shows: live mux sessions (LIVE section with role/backend/age), committee convergence, pending amendments, Normal Form conformance, session count.
-- **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
+- **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `platform/bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
 - **Wave Execution**: `quorum orchestrate run <track> --provider claude [--concurrency N] [--resume]` — Wave-based implementation loop with 21-gate chain. `computeWaves()` groups WBs by Phase gates (topological sort on `dependsOn`). Each Wave: implementer → self-checker (haiku) → 21 gates → audit. On audit failure, Fixer agent applies targeted fixes (max 3 rounds). `--resume` loads `.claude/quorum/wave-state-{track}.json` to skip completed waves and retry failed items. Post-audit: confluence check + project tests. Events: agent.spawn, track.progress, track.complete.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (13 factors) for auto-escalation on future similar files.
@@ -230,8 +261,13 @@ platform/adapters/codex/
 - **Role Delegation**: Implementer writes code only. Self-checking delegated to `self-checker` (haiku, deterministic tools). Corrections delegated to `fixer` (sonnet). Orchestrator dispatches via `[DELEGATION]` hint. 9 roles total: wb-parser, rtm-scanner, scout, designer, fde-analyst, implementer, self-checker, fixer, gap-detector.
 - **Fixer Role**: `runFixer()` in `runner.ts` — spawned when Wave audit fails or self-checker fails. Receives specific audit findings + affected files + fitness context. Applies targeted fixes without rewriting (different from Implementer). Single-turn `claude -p` with `--dangerously-skip-permissions`.
 - **Self-Checker Role**: Haiku-tier deterministic-only verification: CQ, T, lint, scope, blast-radius. No LLM judgment — mechanical pass/fail. Spawned by orchestrator after implementer completes. On failure → fixer → re-check.
-- **Governance Modules**: `cli/commands/orchestrate/governance/` — 21-gate chain extracted from monolithic runner.ts. fitness-gates, scope-gates (10 functions), confluence-gates, lifecycle-hooks, phase-gates, rtm-updater, rtm-generator. Each gate is independently testable.
-- **Planning Modules**: `cli/commands/orchestrate/planning/` — track-catalog, work-breakdown-parser, cps-loader, planner-prompts, planner-session. Planner.ts is now a thin wrapper dispatching to `runPlannerSession()`.
+- **Governance Modules**: `platform/orchestrate/governance/` — 21-gate chain extracted from monolithic runner.ts. fitness-gates, scope-gates (13 functions), confluence-gates, lifecycle-hooks, phase-gates, rtm-updater, rtm-generator, adaptive-gate-profile, iteration-budget, runtime-evaluation-gate. Each gate is independently testable.
+- **Planning Modules**: `platform/orchestrate/planning/` — track-catalog, work-breakdown-parser, cps-loader, planner-prompts, planner-session, contract-negotiation. Planner.ts is now a thin wrapper dispatching to `runPlannerSession()`.
+- **Harness Contracts**: `platform/core/harness/` — 8 modules defining execution contracts: contract-ledger (lifecycle tracking), evaluation-contract (criteria), handoff-artifact (validation), iteration-policy (budget), quality-rubric (scoring). `platform/bus/contract-enforcer.ts` detects breaches.
+- **Evaluator Probes**: `platform/providers/evaluators/` — runtime evaluation framework. cli-session (terminal probes), api-probe (HTTP probes), data-probe (DB probes), artifact-validator (file output checks), browser-playwright (UI verification). `evaluator-port.ts` defines the interface.
+- **Handoff/Promotion Gates**: `platform/bus/handoff-gate.ts` validates artifact + evaluation contracts before role transitions. `platform/bus/promotion-gate.ts` enforces status change rules (role promotion/demotion).
+- **Parliament Session**: `platform/bus/parliament-session.ts` — full diverge-converge lifecycle orchestration. Manages round progression, convergence detection, and session state.
+- **Platform-Only Layout**: All source code lives under `platform/` (7 layers: cli, orchestrate, bus, providers, core, adapters, skills). Root has no source — only `daemon/`, `languages/`, `agents/knowledge/`, `tests/` remain at root as build/runtime/shared concerns.
 - **Wave State Persistence**: `wave-state-{track}.json` saved after each Wave. Contains `completedIds`, `failedIds`, `lastCompletedWave`, `totalItems`, `lastFitness`, `totalWaves`. `--resume` flag loads state, skips completed waves, retries failed items. Survives process crashes and computer restarts.
 - **Design Auto-Fix**: `autoFixDesignDiagrams()` in `planner.ts` — spawns fresh `claude -p` per attempt (not mux multi-turn). Includes exact file paths in prompt. Infinite retry loop for mermaid diagram generation.
 - **Model Tier Routing**: `selectModelForTask()` in `runner.ts` — XS→haiku, S→sonnet, M→opus. WB Size parsed from heading. Domain detection feeds into tier selection. `--model` flag auto-appended to CLI args.
@@ -246,7 +282,7 @@ platform/adapters/codex/
 ## Testing
 
 ```bash
-npm test                              # all (1077 tests)
+npm test                              # all (1590 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore
@@ -271,4 +307,11 @@ node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing 
 node --test tests/parliament-gate.test.mjs         # Parliament enforcement gates (16 tests)
 node --test tests/blueprint-lint.test.mjs          # Blueprint naming convention lint (12 tests)
 node --test tests/wave-gates.test.mjs             # 21-gate chain (scope, blueprint, perf, dep, orphan, test-file)
+node --test tests/platform-only-layout.test.mjs   # platform/ directory structure validation
+node --test tests/platform-path-compat.test.mjs   # platform/ path compatibility (imports, aliases)
+node --test tests/contract-enforcer.test.mjs      # Contract breach detection
+node --test tests/contract-negotiation.test.mjs   # Contract negotiation lifecycle
+node --test tests/handoff-gate.test.mjs           # Handoff artifact/evaluation gate
+node --test tests/runtime-evaluation-gate.test.mjs # Runtime evaluation criteria gate
+node --test tests/adaptive-gate-profile.test.mjs  # Per-track gate threshold tuning
 ```

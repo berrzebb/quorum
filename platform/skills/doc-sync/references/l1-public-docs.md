@@ -6,9 +6,9 @@ Run these to collect current facts from code:
 
 ```bash
 # Hook counts (per adapter — count event registrations, not top-level keys)
-node -e "const h=JSON.parse(require('fs').readFileSync('adapters/claude-code/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('claude-code:',c)"
-node -e "const h=JSON.parse(require('fs').readFileSync('adapters/gemini/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('gemini:',c)"
-node -e "const h=JSON.parse(require('fs').readFileSync('adapters/codex/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('codex:',c)"
+node -e "const h=JSON.parse(require('fs').readFileSync('platform/adapters/claude-code/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('claude-code:',c)"
+node -e "const h=JSON.parse(require('fs').readFileSync('platform/adapters/gemini/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('gemini:',c)"
+node -e "const h=JSON.parse(require('fs').readFileSync('platform/adapters/codex/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('codex:',c)"
 
 # Shared module count
 ls adapters/shared/*.mjs | wc -l
@@ -95,7 +95,7 @@ Extract `## ` headers from each EN/KO document pair:
 
 ### Adapter Table
 
-All adapters with `hooks/hooks.json` must have a row in the provider/adapter table:
+All adapters with `platform/adapters/<adapter>/hooks/hooks.json` must have a row in the provider/adapter table:
 - Claude Code
 - Gemini
 - Codex

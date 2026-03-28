@@ -47,7 +47,7 @@ Facts are extracted from code and compared against documentation values:
 
 | Category | Source | Tools |
 |----------|--------|-------|
-| Hook counts (per adapter) | `adapters/*/hooks/hooks.json` | Read + count |
+| Hook counts (per adapter) | `platform/adapters/*/hooks/hooks.json` | Read + count |
 | Shared module count | `adapters/shared/*.mjs` | Glob + count |
 | MCP tool count | `platform/core/tools/mcp-server.mjs` TOOLS array | Grep |
 | Test count | `npm test` output | Shell |
@@ -80,7 +80,7 @@ Doc-sync must account for all 3 adapters when counting:
 
 | Fact | Count Method |
 |------|-------------|
-| Hook total | Sum hooks across `adapters/{claude-code,gemini,codex}/hooks/hooks.json` |
+| Hook total | Sum hooks across `platform/adapters/{claude-code,gemini,codex}/hooks/hooks.json` |
 | Skill count per adapter | Count `adapters/{adapter}/skills/*/SKILL.md` separately |
 | Agent count per adapter | Count `adapters/{adapter}/agents/*.md` separately |
 | Shared skills | Count `platform/skills/*/SKILL.md` (adapter-independent) |

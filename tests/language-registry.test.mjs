@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 let registry, loadAll, findEndLineBrace, findEndLineIndent, findEndLineKeyword, getEndLineFinder;
 
 before(async () => {
-  const mod = await import("../languages/registry.mjs");
+  const mod = await import("../platform/core/languages/registry.mjs");
   registry = mod.registry;
   loadAll = mod.loadAll;
   findEndLineBrace = mod.findEndLineBrace;

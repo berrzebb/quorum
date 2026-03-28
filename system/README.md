@@ -50,7 +50,7 @@ The system makes mistakes **structurally hard** — not through better prompts, 
 |-----------|-------|----------|
 | **Agents** | 13 | `platform/adapters/claude-code/agents/` |
 | **Skills** | 25 canonical | `platform/skills/*/SKILL.md` |
-| **Hook Events** | 26 unique | `adapters/*/hooks/hooks.json` |
+| **Hook Events** | 26 unique | `platform/adapters/*/hooks/hooks.json` |
 | **MCP Tools** | 22 deterministic | `platform/core/tools/mcp-server.mjs` |
 | **Domain Specialists** | 11 | `agents/knowledge/domains/` |
 | **Event Types** | 58 | `platform/bus/events.ts` (`bus/events.ts` facade) |
@@ -141,7 +141,7 @@ Data files and non-consolidated modules remain at root:
 | New contributor | `CLAUDE.md` → `agents/knowledge/` protocols |
 | Skill author | `platform/skills/ARCHITECTURE.md` → `platform/skills/skill-authoring/SKILL.md` |
 | Tool user | `docs/TOOLS.md` or `platform/skills/consensus-tools/references/` |
-| Adapter author | `platform/adapters/shared/` → adapter `hooks/hooks.json` |
+| Adapter author | `platform/adapters/shared/` → `platform/adapters/<adapter>/hooks/hooks.json` |
 
 ## Related Documents
 

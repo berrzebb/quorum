@@ -188,7 +188,7 @@ describe("platform/adapters/shared is canonical shared adapter source", () => {
 // ═══ 8. Root runtime directories removed ═════════════════════════════════
 
 describe("root runtime directories removed", () => {
-  const dirs = ["cli", "bus", "orchestrate", "providers", "skills", "adapters"];
+  const dirs = ["cli", "bus", "orchestrate", "providers", "skills", "adapters", "languages", "hooks"];
 
   for (const dir of dirs) {
     it(`${dir}/ directory should not exist`, () => {

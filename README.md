@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 23 MCP tools, 14 skills, and 12 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 22 MCP tools, 29 skills, and 13 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -76,7 +76,7 @@ codex -c features.codex_hooks=true
 
 This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
 
-This registers 11 hooks, 14 skills, 4 commands, and 23 MCP tools. Same audit engine as Claude Code.
+This registers 11 hooks, 29 skills, 4 commands, and 22 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -153,24 +153,28 @@ you write code
     → commit allowed
 ```
 
-Both paths use the same core engine: `bus/` + `providers/` + `core/`.
+Both paths use the same core engine: `platform/bus/` + `platform/providers/` + `platform/core/`.
 
 ## Architecture
 
 ```
 quorum/
-├── cli/              ← unified entry point (works without any plugin)
-├── daemon/           ← Ink TUI dashboard + FitnessPanel (works standalone)
-├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Orchestrator
-├── providers/        ← consensus protocol + trigger (13-factor) + router + domain specialists + AST analyzer
-├── platform/core/    ← audit protocol (7 modules), templates, 23 MCP tools
-├── languages/        ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
-├── agents/knowledge/ ← shared agent protocols (cross-adapter: implementer, scout, 9 specialist domains)
-└── platform/adapters/
-    ├── shared/       ← adapter-agnostic business logic (17 modules, incl. HookRunner, NDJSON, MuxAdapter)
-    ├── claude-code/  ← Claude Code hooks (22) + agents (12) + skills (9)
-    ├── gemini/       ← Gemini CLI hooks (11) + skills (8) + commands (4)
-    └── codex/        ← Codex CLI hooks (5)
+├── platform/             ← All source code (7 layers)
+│   ├── cli/              ← unified entry point (works without any plugin)
+│   ├── orchestrate/      ← 5-layer orchestration (planning/execution/governance/state/core)
+│   ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Parliament
+│   ├── providers/        ← consensus protocol + trigger (13-factor) + router + evaluators + AST analyzer
+│   ├── core/             ← audit protocol (7 modules), templates, 22 MCP tools, harness contracts
+│   ├── skills/           ← 37 canonical skill definitions (protocol-neutral)
+│   └── adapters/
+│       ├── shared/       ← adapter-agnostic business logic (20 modules, incl. HookRunner, NDJSON, MuxAdapter)
+│       ├── claude-code/  ← Claude Code hooks (22) + agents (13) + skills (29) + commands (10)
+│       ├── gemini/       ← Gemini CLI hooks (11) + skills (29) + commands (4)
+│       ├── codex/        ← Codex CLI hooks (5) + skills (29)
+│       └── openai-compatible/ ← OpenAI-compatible agents (13) + skills (29)
+├── daemon/               ← Ink TUI dashboard + FitnessPanel (works standalone)
+├── languages/            ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
+└── agents/knowledge/     ← shared agent protocols (cross-adapter: implementer, scout, 11 specialist domains)
 ```
 
 The `platform/adapters/` layer is **optional**. Everything above it runs independently. Adding a new adapter requires only I/O wrappers — business logic is in `platform/adapters/shared/`.
@@ -315,7 +319,7 @@ Business Logic (platform/adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
       ↓ bridge.init() + bridge.checkHookGate()
 Core (platform/core/)
-  audit, tools (21 MCP), EventStore, bus, providers
+  audit, tools (22 MCP), EventStore, bus, providers
 ```
 
 Adding a new adapter requires ~280 lines (proven by the Codex adapter).
@@ -421,7 +425,7 @@ quorum is provider-agnostic. Bring your own auditor.
 | Provider | Mechanism | Hooks | Plugin needed? |
 |----------|-----------|-------|---------------|
 | Claude Code | 22 native hooks | SessionStart, PreToolUse, PostToolUse, Stop, PermissionRequest, Notification, ... | Optional (auto-triggers) |
-| Gemini CLI | 11 hooks + 8 skills | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, BeforeModel, ... | Optional (`gemini extensions install`) |
+| Gemini CLI | 11 hooks + 29 skills | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, BeforeModel, ... | Optional (`gemini extensions install`) |
 | Codex CLI | 5 hooks | SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse | Optional (`.codex/hooks.json`) |
 | Manual | `quorum audit` | — | No |
 
@@ -472,7 +476,7 @@ Full reference: [docs/TOOLS.md](docs/TOOLS.md) | [docs/ko-KR/TOOLS.md](docs/ko-K
 ## Tests
 
 ```bash
-npm test                # 1055 tests
+npm test                # 1590 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```

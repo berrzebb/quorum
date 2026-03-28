@@ -49,7 +49,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-22개 라이프사이클 훅, 19개 MCP 도구, 9개 스킬, 12개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
+22개 라이프사이클 훅, 22개 MCP 도구, 29개 스킬, 13개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
 
 ### Gemini CLI 확장
 
@@ -61,7 +61,7 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 gemini extensions link adapters/gemini
 ```
 
-11개 훅, 8개 스킬, 4개 명령어, 19개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
+11개 훅, 29개 스킬, 4개 명령어, 22개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
 
 ### Codex CLI 훅
 
@@ -155,18 +155,22 @@ quorum migrate --dry-run  # 미리보기
 
 ```
 quorum/
-├── cli/              ← 통합 진입점 (플러그인 없이 동작)
-├── daemon/           ← Ink TUI 대시보드 + FitnessPanel (독립 동작)
-├── bus/              ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + Claims + Orchestrator
-├── providers/        ← 합의 프로토콜 + 트리거 (12팩터) + 라우터 + 도메인 전문의원 + AST 분석기
-├── platform/core/    ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 19개
-├── languages/        ← 플러그 가능 언어 스펙 (프래그먼트 기반: spec.mjs + spec.{domain}.mjs)
-├── agents/knowledge/ ← 공유 에이전트 프로토콜 (구현자, 스카우트, 9 도메인)
-└── platform/adapters/
-    ├── shared/       ← 어댑터 공용 비즈니스 로직 (17 모듈: HookRunner, NDJSON, MuxAdapter 등)
-    ├── claude-code/  ← Claude Code 훅 (22) + 에이전트 (12) + 스킬 (9)
-    ├── gemini/       ← Gemini CLI 훅 (11) + 스킬 (8) + 명령어 (4)
-    └── codex/        ← Codex CLI 훅 (5)
+├── platform/             ← 모든 소스 코드 (7 레이어)
+│   ├── cli/              ← 통합 진입점 (플러그인 없이 동작)
+│   ├── orchestrate/      ← 5-레이어 오케스트레이션 (planning/execution/governance/state/core)
+│   ├── bus/              ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + Claims + Parliament
+│   ├── providers/        ← 합의 프로토콜 + 트리거 (13팩터) + 라우터 + 평가자 + AST 분석기
+│   ├── core/             ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 22개, 하네스 계약
+│   ├── skills/           ← 37개 정규 스킬 정의 (프로토콜 중립)
+│   └── adapters/
+│       ├── shared/       ← 어댑터 공용 비즈니스 로직 (20 모듈: HookRunner, NDJSON, MuxAdapter 등)
+│       ├── claude-code/  ← Claude Code 훅 (22) + 에이전트 (13) + 스킬 (29) + 명령어 (10)
+│       ├── gemini/       ← Gemini CLI 훅 (11) + 스킬 (29) + 명령어 (4)
+│       ├── codex/        ← Codex CLI 훅 (5) + 스킬 (29)
+│       └── openai-compatible/ ← OpenAI 호환 에이전트 (13) + 스킬 (29)
+├── daemon/               ← Ink TUI 대시보드 + FitnessPanel (독립 동작)
+├── languages/            ← 플러그 가능 언어 스펙 (프래그먼트 기반: spec.mjs + spec.{domain}.mjs)
+└── agents/knowledge/     ← 공유 에이전트 프로토콜 (구현자, 스카우트, 11 도메인)
 ```
 
 `platform/adapters/` 계층은 **선택 사항**. 그 위의 모든 것은 독립적으로 동작합니다. 새 어댑터 추가 = I/O 래퍼만 작성 (~280줄, Codex가 증명).
@@ -175,13 +179,18 @@ quorum/
 
 ### 강제 게이트
 
-진행을 차단하는 세 가지 게이트:
+진행을 차단하는 8가지 게이트 (문서가 아닌 코드가 강제):
 
 | 게이트 | 차단 조건 | 해제 조건 |
 |--------|----------|----------|
 | **감사** | 증거 제출됨 | 감사자 승인 |
 | **회고** | 감사 승인됨 | 회고 완료 |
 | **품질** | 린트/테스트 실패 | 모든 검사 통과 |
+| **수정안** | 미결 수정안 | 투표로 해결 |
+| **판정** | 마지막 판정 ≠ 승인 | 재감사 통과 |
+| **합류** | 무결성 검사 실패 | 4점 검증 통과 |
+| **설계** | 설계 산출물 누락 | Spec + Blueprint 존재 |
+| **회귀** | Normal Form 단계 후퇴 | 경고만 (비차단) |
 
 ### 숙의 합의 (Deliberative Consensus)
 
@@ -401,7 +410,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 1055 tests
+npm test                # 1590 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```

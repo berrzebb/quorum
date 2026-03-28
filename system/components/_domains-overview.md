@@ -101,9 +101,9 @@ quorum/
 │   ├── observability.md
 │   ├── migration.md
 │   └── security.md
-├── providers/domain-detect.ts    ← Zero-cost domain detection engine
-├── providers/domain-router.ts    ← Conditional specialist activation
-├── providers/specialist.ts       ← Specialist review orchestrator
+├── platform/providers/domain-detect.ts    ← Zero-cost domain detection engine
+├── platform/providers/domain-router.ts    ← Conditional specialist activation
+├── platform/providers/specialist.ts       ← Specialist review orchestrator
 └── languages/*/spec.{domain}.mjs ← Language-specific patterns (5 languages)
 ```
 

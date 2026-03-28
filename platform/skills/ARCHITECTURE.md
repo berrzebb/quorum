@@ -12,20 +12,22 @@ adapters/claude-code/skills/     ← Claude Code wrappers (Read/Write/Edit/Bash/
 adapters/gemini/skills/          ← Gemini wrappers (read_file/write_file/shell/glob/grep)
 adapters/codex/skills/           ← Codex wrappers (read_file/write_file/apply_diff/shell/find_files/search)
 
-agents/knowledge/                ← Cross-adapter protocols (business logic)
+agents/knowledge/                ← Retained shared protocol corpus (stable, adapter-neutral)
   ├── implementer-protocol.md    ← Execution flow, correction, completion gate
   ├── scout-protocol.md          ← RTM generation 8-phase
   ├── specialist-base.md         ← JSON output format, judgment criteria
   ├── ui-review-protocol.md      ← UI-1~8 checklist, report format
   ├── doc-sync-protocol.md       ← 3-layer sync, fact extraction
+  ├── parliament-rules.md        ← Standing rules for parliamentary deliberation
   ├── tool-inventory.md          ← 20-tool catalog
-  └── domains/*.md               ← Domain knowledge (perf, a11y, ...)
+  ├── domains/*.md               ← Domain knowledge (11 domains)
+  └── README.md                  ← Taxonomy, ownership rules, stability contract
 ```
 
 ## Inheritance Model
 
 ```
-agents/knowledge/ (protocols)     ← Business logic, adapter-independent
+agents/knowledge/ (protocols)     ← Stable protocol corpus, adapter-independent
         ↓ referenced by
 platform/skills/ (canonical)      ← Protocol-neutral definitions + references
         ↓ adapted by (all 4 adapters are equal peers)
@@ -33,6 +35,18 @@ adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
 adapters/gemini/skills/           ← Gemini tool names + adapter paths
 adapters/codex/skills/            ← Codex tool names + adapter paths
 ```
+
+### Why `agents/knowledge/` Lives at Root
+
+`agents/knowledge/` is a **retained shared protocol corpus**, not a residual source tree awaiting
+migration to `platform/`. It stays at root for the same reason `languages/` and `tests/` do:
+
+- **Not runtime source code.** These are Markdown protocol definitions consumed at prompt-construction
+  time by LLM agents. They are never compiled by `tsc` or executed by Node.js.
+- **Not adapter-specific.** They are referenced equally by all 4 adapters. Placing them under any
+  single adapter or under `platform/` would misrepresent their cross-cutting nature.
+- **Stability contract.** Changes require all-adapter verification. See `agents/knowledge/README.md`
+  for ownership rules and the full protocol index.
 
 ## Protocol Neutrality
 
@@ -157,4 +171,4 @@ Consistent across all 3 adapters — no special cases.
    - Protocol references (`agents/knowledge/`)
    - Shared reference paths (`platform/skills/*/references/`)
 3. Register tool names in `adapters/shared/tool-names.mjs`
-4. Create hooks in `adapters/{name}/hooks/hooks.json`
+4. Create hooks in `platform/adapters/{name}/hooks/hooks.json`

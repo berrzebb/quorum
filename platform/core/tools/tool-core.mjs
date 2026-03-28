@@ -26,7 +26,7 @@ try {
 let _langRegistry = null;
 let _getEndLineFinder = null;
 try {
-  const langMod = await import("../../../languages/registry.mjs");
+  const langMod = await import("../languages/registry.mjs");
   await langMod.loadAll();
   _langRegistry = langMod.registry;
   _getEndLineFinder = langMod.getEndLineFinder;
