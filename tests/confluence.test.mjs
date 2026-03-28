@@ -15,7 +15,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { verifyConfluence } = await import("../dist/bus/confluence.js");
+const { verifyConfluence } = await import("../dist/platform/bus/confluence.js");
 
 // ═══ 1. Law ↔ Code ═══════════════════════════════════════════════════════
 

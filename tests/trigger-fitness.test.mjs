@@ -12,8 +12,8 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { evaluateTrigger } = await import("../dist/providers/trigger.js");
-const { detectStagnation } = await import("../dist/bus/stagnation.js");
+const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
+const { detectStagnation } = await import("../dist/platform/bus/stagnation.js");
 
 // ═══ 1. Trigger: fitnessScore factor ═════════════════════════════════════
 

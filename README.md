@@ -173,7 +173,6 @@ quorum/
 │       ├── codex/        ← Codex CLI hooks (5) + skills (29)
 │       └── openai-compatible/ ← OpenAI-compatible agents (13) + skills (29)
 ├── daemon/               ← Ink TUI dashboard + FitnessPanel (works standalone)
-├── languages/            ← pluggable language specs (fragment-based: spec.mjs + spec.{domain}.mjs)
 └── agents/knowledge/     ← shared agent protocols (cross-adapter: implementer, scout, 11 specialist domains)
 ```
 
@@ -230,7 +229,7 @@ For complex changes (T3), a 3-role protocol runs:
 Quality patterns are defined per language in pluggable fragment files:
 
 ```
-languages/typescript/
+platform/core/languages/typescript/
   spec.mjs            ← core: id, name, extensions (3 lines)
   spec.symbols.mjs    ← symbol extraction patterns
   spec.imports.mjs    ← dependency parsing
@@ -241,7 +240,7 @@ languages/typescript/
   spec.doc.mjs        ← documentation coverage
 ```
 
-Adding a new language = `spec.mjs` (3 lines) + relevant fragments. Adding a domain to an existing language = one new fragment file. The registry (`languages/registry.mjs`) auto-discovers and merges fragments at load time.
+Adding a new language = `spec.mjs` (3 lines) + relevant fragments. Adding a domain to an existing language = one new fragment file. The registry (`platform/core/languages/registry.mjs`) auto-discovers and merges fragments at load time.
 
 ### Domain Specialists (v0.3.0)
 
@@ -476,7 +475,7 @@ Full reference: [docs/TOOLS.md](docs/TOOLS.md) | [docs/ko-KR/TOOLS.md](docs/ko-K
 ## Tests
 
 ```bash
-npm test                # 1590 tests
+npm test                # 1601 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```

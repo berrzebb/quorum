@@ -8,14 +8,14 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { createAuditor, createConsensusAuditors, parseSpec, listAuditorProviders } = await import("../dist/providers/auditors/factory.js");
-const { ClaudeAuditor } = await import("../dist/providers/auditors/claude.js");
-const { OpenAIAuditor } = await import("../dist/providers/auditors/openai.js");
-const { GeminiAuditor } = await import("../dist/providers/auditors/gemini.js");
-const { CodexAuditor } = await import("../dist/providers/codex/auditor.js");
-const { OpenAICompatibleAuditor } = await import("../dist/providers/auditors/openai-compatible.js");
-const { OllamaAuditor } = await import("../dist/providers/auditors/ollama.js");
-const { VllmAuditor } = await import("../dist/providers/auditors/vllm.js");
+const { createAuditor, createConsensusAuditors, parseSpec, listAuditorProviders } = await import("../dist/platform/providers/auditors/factory.js");
+const { ClaudeAuditor } = await import("../dist/platform/providers/auditors/claude.js");
+const { OpenAIAuditor } = await import("../dist/platform/providers/auditors/openai.js");
+const { GeminiAuditor } = await import("../dist/platform/providers/auditors/gemini.js");
+const { CodexAuditor } = await import("../dist/platform/providers/codex/auditor.js");
+const { OpenAICompatibleAuditor } = await import("../dist/platform/providers/auditors/openai-compatible.js");
+const { OllamaAuditor } = await import("../dist/platform/providers/auditors/ollama.js");
+const { VllmAuditor } = await import("../dist/platform/providers/auditors/vllm.js");
 
 // ═══ 1. parseSpec ═════════════════════════════════════════════════════
 

@@ -49,7 +49,7 @@ function listCanonicalSkills() {
 
 describe("adapter wrapper structure — directory existence", () => {
   for (const adapter of ADAPTER_NAMES) {
-    it(`adapters/${adapter}/skills/ directory should exist`, () => {
+    it(`platform/adapters/${adapter}/skills/ directory should exist`, () => {
       const skillsPath = resolve(ADAPTERS_DIR, adapter, "skills");
       assert.ok(existsSync(skillsPath), `${skillsPath} should exist`);
     });
@@ -180,15 +180,9 @@ describe("adapter wrapper structure — cross-reference coverage", () => {
 
 describe("adapter wrapper structure — shared modules", () => {
   const PLATFORM_SHARED_DIR = resolve(REPO_ROOT, "platform", "adapters", "shared");
-  const LEGACY_ADAPTERS_DIR = resolve(REPO_ROOT, "adapters");
 
   it("platform/adapters/shared/ directory should exist", () => {
     assert.ok(existsSync(PLATFORM_SHARED_DIR), "platform/adapters/shared/ should exist");
-  });
-
-  it("root adapters/ directory should have been removed", () => {
-    assert.ok(!existsSync(LEGACY_ADAPTERS_DIR),
-      "root adapters/ should have been removed — platform/adapters/ is the sole source");
   });
 
   const requiredFiles = [

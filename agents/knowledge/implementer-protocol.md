@@ -11,15 +11,15 @@ If running in a worktree (`git rev-parse --git-dir` contains `/worktrees/`):
 
 ### 1. Read Config
 
-Read config: `{ADAPTER_ROOT}/core/config.json`
+Read config: `{QUORUM_ROOT}/platform/core/config.json`
 - `audit_submit` MCP tool → evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` → status tags
 - `plugin.locale` → locale for i18n
 
 ### 2. Read References
 
-- Done criteria: `{ADAPTER_ROOT}/core/templates/references/{locale}/done-criteria.md`
-- Evidence format: `{ADAPTER_ROOT}/core/templates/references/{locale}/evidence-format.md`
+- Done criteria: `{QUORUM_ROOT}/platform/core/templates/references/{locale}/done-criteria.md`
+- Evidence format: `{QUORUM_ROOT}/platform/core/templates/references/{locale}/evidence-format.md`
 
 ## Input (provided by orchestrator)
 

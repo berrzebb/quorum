@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { AgentLoader } = await import("../dist/providers/agent-loader.js");
+const { AgentLoader } = await import("../dist/platform/providers/agent-loader.js");
 
 let tmpDir;
 

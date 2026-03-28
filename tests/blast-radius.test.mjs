@@ -23,7 +23,7 @@ const {
   toolBlastRadius,
 } = await import("../platform/core/tools/tool-core.mjs");
 
-const { evaluateTrigger } = await import("../dist/providers/trigger.js");
+const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
 
 // ═══ 1. computeBlastRadiusFromGraph — pure BFS ═══════════════════════════
 

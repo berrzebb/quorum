@@ -12,7 +12,7 @@ import { writeFileSync, readFileSync } from "node:fs";
 
 import { createTempStore, cleanup } from "./helpers.mjs";
 
-const { MarkdownProjector } = await import("../dist/bus/projector.js");
+const { MarkdownProjector } = await import("../dist/platform/bus/projector.js");
 
 const TEST_CONFIG = {
   triggerTag: "[REVIEW_NEEDED]",

@@ -13,7 +13,7 @@ Compute transitive impact of changed files via reverse import graph (BFS on inEd
 ## Example
 
 ```bash
-quorum tool blast_radius --changed "bus/store.ts,bus/lock.ts" --path src/
+quorum tool blast_radius --changed "platform/bus/store.ts,platform/bus/lock.ts" --path src/
 ```
 
 ## Output

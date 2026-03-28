@@ -18,14 +18,14 @@ runtime source code:
 - `agents/knowledge/` contains Markdown protocol definitions — referenced at prompt-construction
   time, never compiled or executed. They are instruction documents consumed by LLM agents.
 
-This is the same reasoning that keeps `languages/` and `tests/` at root: they are build-time
-or shared concerns, not part of the platform runtime source tree.
+This is the same reasoning that keeps `tests/` at root: they are shared concerns,
+not part of the platform runtime source tree. (`languages/` has since moved to `platform/core/languages/`.)
 
 ## Ownership Rules
 
 1. **All-adapter check required.** Any change to a protocol file here must be verified against
-   all adapter wrappers (`adapters/claude-code/`, `adapters/gemini/`, `adapters/codex/`,
-   `adapters/openai-compatible/`) to ensure no wrapper assumptions are broken.
+   all adapter wrappers (`platform/adapters/claude-code/`, `platform/adapters/gemini/`, `platform/adapters/codex/`,
+   `platform/adapters/openai-compatible/`) to ensure no wrapper assumptions are broken.
 
 2. **No adapter-specific content.** Protocol files must remain adapter-neutral. Tool names,
    env vars, and invocation paths belong in adapter wrappers, not here.

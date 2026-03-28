@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(__dirname, "..", "dist", "cli", "index.js");
+const CLI = resolve(__dirname, "..", "dist", "platform", "cli", "index.js");
 
 function runCli(args, opts = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {

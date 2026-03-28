@@ -8,13 +8,13 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-const { EventStore } = await import("../dist/bus/store.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
 const {
   proposeAmendment,
   voteOnAmendment,
   resolveAmendment,
   getAmendments,
-} = await import("../dist/bus/amendment.js");
+} = await import("../dist/platform/bus/amendment.js");
 
 /** Helper: fresh in-memory store per test. */
 function createStore() {

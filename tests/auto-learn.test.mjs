@@ -10,9 +10,9 @@ import { describe, it, beforeEach } from "node:test";
 
 import { createTempStore, cleanup } from "./helpers.mjs";
 
-const { MessageBus } = await import("../dist/bus/message-bus.js");
-const { detectRepeatPatterns, suggestRules, analyzeAndSuggest } = await import("../dist/bus/auto-learn.js");
-const { createEvent } = await import("../dist/bus/events.js");
+const { MessageBus } = await import("../dist/platform/bus/message-bus.js");
+const { detectRepeatPatterns, suggestRules, analyzeAndSuggest } = await import("../dist/platform/bus/auto-learn.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
 
 // Helper: submit N findings with same category
 function submitFindings(bus, category, count, severity = "major") {

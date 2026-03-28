@@ -30,7 +30,7 @@ Orchestrator distributes Forward RTM rows to implementers
    }
    ```
    Scout agent definition: `agents/scout.md`
-   RTM format: `${ADAPTER_ROOT}/core/templates/references/${locale}/traceability-matrix.md`
+   RTM format: `${QUORUM_ROOT}/platform/core/templates/references/${locale}/traceability-matrix.md`
 
 2. **Receive 3 matrices**:
    - **Forward RTM**: Req ID × File with Exists/Impl/Test Case/Connected columns

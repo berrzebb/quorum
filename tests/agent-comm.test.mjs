@@ -10,8 +10,8 @@ import { describe, it, beforeEach } from "node:test";
 
 import { createTempStore, cleanup } from "./helpers.mjs";
 
-const { MessageBus } = await import("../dist/bus/message-bus.js");
-const { detectMissingSpecialists } = await import("../dist/providers/specialist.js");
+const { MessageBus } = await import("../dist/platform/bus/message-bus.js");
+const { detectMissingSpecialists } = await import("../dist/platform/providers/specialist.js");
 
 // ═══ 1. Dynamic Specialist Spawn ═══════════════════════════════
 

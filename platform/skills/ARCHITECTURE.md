@@ -8,9 +8,9 @@ platform/skills/                 ← Protocol-neutral canonical definitions (sou
   ├── {skill}/references/        ← Progressive-disclosure references
   └── ARCHITECTURE.md            ← This file
 
-adapters/claude-code/skills/     ← Claude Code wrappers (Read/Write/Edit/Bash/Glob/Grep)
-adapters/gemini/skills/          ← Gemini wrappers (read_file/write_file/shell/glob/grep)
-adapters/codex/skills/           ← Codex wrappers (read_file/write_file/apply_diff/shell/find_files/search)
+platform/adapters/claude-code/skills/     ← Claude Code wrappers (Read/Write/Edit/Bash/Glob/Grep)
+platform/adapters/gemini/skills/          ← Gemini wrappers (read_file/write_file/shell/glob/grep)
+platform/adapters/codex/skills/           ← Codex wrappers (read_file/write_file/apply_diff/shell/find_files/search)
 
 agents/knowledge/                ← Retained shared protocol corpus (stable, adapter-neutral)
   ├── implementer-protocol.md    ← Execution flow, correction, completion gate
@@ -31,9 +31,9 @@ agents/knowledge/ (protocols)     ← Stable protocol corpus, adapter-independen
         ↓ referenced by
 platform/skills/ (canonical)      ← Protocol-neutral definitions + references
         ↓ adapted by (all 4 adapters are equal peers)
-adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
-adapters/gemini/skills/           ← Gemini tool names + adapter paths
-adapters/codex/skills/            ← Codex tool names + adapter paths
+platform/adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
+platform/adapters/gemini/skills/           ← Gemini tool names + adapter paths
+platform/adapters/codex/skills/            ← Codex tool names + adapter paths
 ```
 
 ### Why `agents/knowledge/` Lives at Root
@@ -72,7 +72,7 @@ Canonical skills (`platform/skills/**`) MUST NOT contain:
 | Adapter-specific env vars | `${CLAUDE_PLUGIN_ROOT}`, `${GEMINI_EXTENSION_ROOT}`, `${CODEX_PLUGIN_ROOT}` | `${ADAPTER_ROOT}` (wrapper only) |
 | Direct script paths | `node .../tool-runner.mjs` | `quorum tool <name>` |
 | Adapter-specific tool names | `Read` vs `read_file` vs `apply_diff` | Generic operation names |
-| Adapter directory references | `adapters/claude-code/...` | Allowed only in meta files (ARCHITECTURE.md, doc-sync, skill-authoring) |
+| Adapter directory references | `platform/adapters/claude-code/...` | Allowed only in meta files (ARCHITECTURE.md, doc-sync, skill-authoring) |
 
 Enforced by: `node --test tests/skill-neutrality.test.mjs`
 
@@ -156,19 +156,19 @@ Consistent across all 3 adapters — no special cases.
 1. Create `platform/skills/{name}/SKILL.md` with protocol-neutral content
 2. Create `platform/skills/{name}/references/` if progressive disclosure needed
 3. Create adapter wrappers (all 4) using the **Wrapper Template** above:
-   - `adapters/claude-code/skills/{name}/SKILL.md` (Read/Write/Edit/Bash/Glob/Grep)
-   - `adapters/codex/skills/{name}/SKILL.md` (read_file/write_file/apply_diff/shell/find_files/search)
-   - `adapters/gemini/skills/{name}/SKILL.md` (read_file/write_file/edit_file/shell/glob/grep)
-   - `adapters/openai-compatible/skills/{name}/SKILL.md` (read/write/edit/bash/glob/grep)
+   - `platform/adapters/claude-code/skills/{name}/SKILL.md` (Read/Write/Edit/Bash/Glob/Grep)
+   - `platform/adapters/codex/skills/{name}/SKILL.md` (read_file/write_file/apply_diff/shell/find_files/search)
+   - `platform/adapters/gemini/skills/{name}/SKILL.md` (read_file/write_file/edit_file/shell/glob/grep)
+   - `platform/adapters/openai-compatible/skills/{name}/SKILL.md` (read/write/edit/bash/glob/grep)
 4. Verify each wrapper is under 35 lines (excluding frontmatter)
 5. Update `CLAUDE.md` skill counts
 
 ## Adding a New Adapter
 
-1. Create `adapters/{name}/skills/` directory
+1. Create `platform/adapters/{name}/skills/` directory
 2. For each shared skill, create adapter version with:
-   - Adapter-native tool names (from `adapters/shared/tool-names.mjs`)
+   - Adapter-native tool names (from `platform/adapters/shared/tool-names.mjs`)
    - Protocol references (`agents/knowledge/`)
    - Shared reference paths (`platform/skills/*/references/`)
-3. Register tool names in `adapters/shared/tool-names.mjs`
+3. Register tool names in `platform/adapters/shared/tool-names.mjs`
 4. Create hooks in `platform/adapters/{name}/hooks/hooks.json`

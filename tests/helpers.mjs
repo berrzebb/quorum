@@ -7,7 +7,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
-const { EventStore } = await import("../dist/bus/store.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
 
 export function createTempStore() {
   const dir = resolve(tmpdir(), `quorum-test-${randomUUID()}`);

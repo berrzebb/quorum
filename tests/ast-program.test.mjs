@@ -16,7 +16,7 @@ import { describe, it, before, after } from "node:test";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const { ASTAnalyzer } = await import("../dist/providers/ast-analyzer.js");
+const { ASTAnalyzer } = await import("../dist/platform/providers/ast-analyzer.js");
 
 // ── Test fixture: a mini TypeScript project ─────────
 

@@ -11,8 +11,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-const { parseArgs } = await import("../dist/cli/commands/parliament.js");
-const { routeToCommittee, STANDING_COMMITTEES } = await import("../dist/bus/meeting-log.js");
+const { parseArgs } = await import("../dist/platform/cli/commands/parliament.js");
+const { routeToCommittee, STANDING_COMMITTEES } = await import("../dist/platform/bus/meeting-log.js");
 
 // ═══ 1. Arg Parsing ══════════════════════════════════════════════
 

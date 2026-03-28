@@ -48,15 +48,15 @@ Facts are extracted from code and compared against documentation values:
 | Category | Source | Tools |
 |----------|--------|-------|
 | Hook counts (per adapter) | `platform/adapters/*/hooks/hooks.json` | Read + count |
-| Shared module count | `adapters/shared/*.mjs` | Glob + count |
+| Shared module count | `platform/adapters/shared/*.mjs` | Glob + count |
 | MCP tool count | `platform/core/tools/mcp-server.mjs` TOOLS array | Grep |
 | Test count | `npm test` output | Shell |
-| Agent/Skill counts (per adapter) | `adapters/*/agents/`, `adapters/*/skills/` | Glob + count |
+| Agent/Skill counts (per adapter) | `platform/adapters/*/agents/`, `platform/adapters/*/skills/` | Glob + count |
 | Version | `package.json` | Read |
-| Trigger factor count | `providers/trigger.ts` | Grep |
-| Stagnation pattern count | `bus/stagnation.ts` | Grep |
-| Event type count | `bus/events.ts` | Grep |
-| Language count | `languages/*/spec.mjs` | Glob + count |
+| Trigger factor count | `platform/providers/trigger.ts` | Grep |
+| Stagnation pattern count | `platform/bus/stagnation.ts` | Grep |
+| Event type count | `platform/bus/events.ts` | Grep |
+| Language count | `platform/core/languages/*/spec.mjs` | Glob + count |
 
 ## Available Tools
 

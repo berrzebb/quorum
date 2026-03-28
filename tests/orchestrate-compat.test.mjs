@@ -1,6 +1,7 @@
 /**
- * Orchestrate compatibility tests — golden baseline for refactor.
- * Freezes public API surface + pure-function behavior of shared.ts, planner.ts, runner.ts.
+ * Orchestrate command surface tests.
+ * Freezes public API surface + pure-function behavior of the canonical
+ * `platform/cli` and `platform/orchestrate` modules.
  * Complements orchestrate-integration.test.mjs and wave-gates.test.mjs.
  * Run: node --test tests/orchestrate-compat.test.mjs
  */
@@ -10,9 +11,9 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const shared = await import("../dist/cli/commands/orchestrate/shared.js");
-const runner = await import("../dist/cli/commands/orchestrate/runner.js");
-const planner = await import("../dist/cli/commands/orchestrate/planner.js");
+const shared = await import("../dist/platform/cli/commands/orchestrate/shared.js");
+const runner = await import("../dist/platform/cli/commands/orchestrate/runner.js");
+const planner = await import("../dist/platform/cli/commands/orchestrate/planner.js");
 const { DIST, parseWorkBreakdown, reviewPlan, computeWaves, verifyDesignDiagrams } = shared;
 const { buildDepContextFromManifests, detectFixLoopStagnation } = runner;
 
@@ -211,11 +212,11 @@ describe("buildDepContextFromManifests format", () => {
 
 // ═══ 8. New orchestrate/ module barrel exports ══════════════════════
 
-const planning = await import("../dist/orchestrate/planning/index.js");
-const execution = await import("../dist/orchestrate/execution/index.js");
-const governance = await import("../dist/orchestrate/governance/index.js");
-const state = await import("../dist/orchestrate/state/index.js");
-const core = await import("../dist/orchestrate/core/index.js");
+const planning = await import("../dist/platform/orchestrate/planning/index.js");
+const execution = await import("../dist/platform/orchestrate/execution/index.js");
+const governance = await import("../dist/platform/orchestrate/governance/index.js");
+const state = await import("../dist/platform/orchestrate/state/index.js");
+const core = await import("../dist/platform/orchestrate/core/index.js");
 
 describe("orchestrate/planning barrel exports", () => {
   const expected = [
@@ -321,9 +322,9 @@ describe("orchestrate/core barrel exports", () => {
   });
 });
 
-// ═══ 9. Legacy compat shells re-export same symbols ═════════════════
+// ═══ 9. CLI orchestrate surfaces re-export the canonical symbols ═════════════════
 
-describe("legacy shared.ts is a compat shell", () => {
+describe("shared.ts re-exports planning symbols", () => {
   it("re-exports all planning symbols used by consumers", () => {
     const requiredFromShared = [
       "DIST", "loadBridge", "findTracks", "resolveTrack", "trackRef",
@@ -345,7 +346,7 @@ describe("legacy shared.ts is a compat shell", () => {
   });
 });
 
-describe("legacy planner.ts is a compat shell", () => {
+describe("planner.ts re-exports planning symbols", () => {
   it("re-exports planning symbols", () => {
     const requiredFromPlanner = ["interactivePlanner", "autoGenerateWBs", "autoFixDesignDiagrams"];
     for (const name of requiredFromPlanner) {
@@ -358,7 +359,7 @@ describe("legacy planner.ts is a compat shell", () => {
   });
 });
 
-describe("legacy runner.ts is a compat shell", () => {
+describe("runner.ts re-exports execution and governance symbols", () => {
   it("re-exports governance symbols", () => {
     const fromGovernance = [
       "collectFitnessSignals", "runFitnessGate",
@@ -405,9 +406,9 @@ describe("legacy runner.ts is a compat shell", () => {
   });
 });
 
-const lifecycle = await import("../dist/cli/commands/orchestrate/lifecycle.js");
+const lifecycle = await import("../dist/platform/cli/commands/orchestrate/lifecycle.js");
 
-describe("legacy lifecycle.ts is a compat shell", () => {
+describe("lifecycle.ts re-exports governance lifecycle symbols", () => {
   it("re-exports governance lifecycle symbols", () => {
     assert.ok("autoRetro" in lifecycle, "lifecycle missing autoRetro");
     assert.ok("autoMerge" in lifecycle, "lifecycle missing autoMerge");

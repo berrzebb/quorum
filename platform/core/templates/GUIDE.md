@@ -12,7 +12,7 @@ What are you doing?
 ├─► Planning a new feature?
 │   └─► /quorum:planner
 │       Generates: PRD, Design (Spec/Blueprint/Domain Model/Architecture), WB
-│       References: skills/planner/references/ (13 format specs)
+│       References: platform/skills/planner/references/ (13 format specs)
 │
 ├─► Running parliament deliberation?
 │   └─► quorum parliament "<topic>"
@@ -26,7 +26,7 @@ What are you doing?
 │
 ├─► Submitting evidence for review?
 │   └─► audit_submit MCP tool
-│       Format: core/templates/references/{locale}/evidence-format.md
+│       Format: platform/core/templates/references/{locale}/evidence-format.md
 │
 ├─► Verifying implementation?
 │   └─► /quorum:verify
@@ -34,14 +34,14 @@ What are you doing?
 │
 ├─► Running analysis?
 │   └─► /quorum:tools
-│       Output template: core/templates/artifacts/{locale}/analysis.md
+│       Output template: platform/core/templates/artifacts/{locale}/analysis.md
 │
 ├─► Writing project conventions?
-│   └─► Template: core/templates/artifacts/{locale}/convention.md
+│   └─► Template: platform/core/templates/artifacts/{locale}/convention.md
 │       Enforced by: quorum tool blueprint_lint
 │
 ├─► Writing completion report?
-│   └─► Template: core/templates/artifacts/{locale}/report.md
+│   └─► Template: platform/core/templates/artifacts/{locale}/report.md
 │       Skill: /quorum:retrospect
 │
 ├─► Syncing documentation?
@@ -63,8 +63,8 @@ Used internally by the audit pipeline. Variables (`{{VAR}}`) are substituted at 
 
 | Template | Used By | Purpose |
 |----------|---------|---------|
-| `audit-prompt.md` | `core/audit/index.mjs` | Auditor verification protocol |
-| `fix-prompt.md` | `core/respond.mjs` | Post-rejection correction prompt |
+| `audit-prompt.md` | `platform/core/audit/index.mjs` | Auditor verification protocol |
+| `fix-prompt.md` | `platform/core/respond.mjs` | Post-rejection correction prompt |
 | `retro-prompt.md` | retrospective skill | Retrospective facilitation |
 
 ### Reference Documents (read by auditor/implementer)
@@ -117,7 +117,7 @@ Detailed format specs for planning documents. Located in `platform/skills/planne
 Templates can be overridden per-project:
 
 1. Create `.claude/quorum/templates/` in your project
-2. Copy the file you want to customize from `core/templates/`
+2. Copy the file you want to customize from `platform/core/templates/`
 3. Edit to match your project's needs
 
 The `resolvePluginPath()` fallback chain checks project dir first, then plugin defaults.

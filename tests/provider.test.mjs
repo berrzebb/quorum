@@ -11,9 +11,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { registerProvider, getProvider, listProviders } = await import("../dist/providers/provider.js");
-const { ClaudeCodeProvider } = await import("../dist/providers/claude-code/adapter.js");
-const { QuorumBus } = await import("../dist/bus/bus.js");
+const { registerProvider, getProvider, listProviders } = await import("../dist/platform/providers/provider.js");
+const { ClaudeCodeProvider } = await import("../dist/platform/providers/claude-code/adapter.js");
+const { QuorumBus } = await import("../dist/platform/bus/bus.js");
 
 let tmpDir;
 

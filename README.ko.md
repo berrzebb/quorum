@@ -169,7 +169,6 @@ quorum/
 │       ├── codex/        ← Codex CLI 훅 (5) + 스킬 (29)
 │       └── openai-compatible/ ← OpenAI 호환 에이전트 (13) + 스킬 (29)
 ├── daemon/               ← Ink TUI 대시보드 + FitnessPanel (독립 동작)
-├── languages/            ← 플러그 가능 언어 스펙 (프래그먼트 기반: spec.mjs + spec.{domain}.mjs)
 └── agents/knowledge/     ← 공유 에이전트 프로토콜 (구현자, 스카우트, 11 도메인)
 ```
 
@@ -410,7 +409,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 1590 tests
+npm test                # 1601 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```

@@ -16,7 +16,7 @@ import { resolve, dirname } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const { AgentLoader } = await import("../dist/providers/agent-loader.js");
+const { AgentLoader } = await import("../dist/platform/providers/agent-loader.js");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUORUM_ROOT = resolve(__dirname, "..");

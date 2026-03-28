@@ -12,7 +12,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-const { EventStore } = await import("../dist/bus/store.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
 const {
   createMeetingLog,
   storeMeetingLog,
@@ -21,20 +21,20 @@ const {
   generateCPS,
   routeToCommittee,
   STANDING_COMMITTEES,
-} = await import("../dist/bus/meeting-log.js");
+} = await import("../dist/platform/bus/meeting-log.js");
 const {
   proposeAmendment,
   voteOnAmendment,
   resolveAmendment,
   getAmendments,
-} = await import("../dist/bus/amendment.js");
-const { verifyConfluence } = await import("../dist/bus/confluence.js");
+} = await import("../dist/platform/bus/amendment.js");
+const { verifyConfluence } = await import("../dist/platform/bus/confluence.js");
 const {
   classifyStage,
   computeConformance,
   trackProviderConvergence,
   generateConvergenceReport,
-} = await import("../dist/bus/normal-form.js");
+} = await import("../dist/platform/bus/normal-form.js");
 
 /** Fresh in-memory store. */
 function createStore() {
@@ -344,7 +344,7 @@ describe("E2E: CPS event persistence", () => {
     assert.ok(cps.context.length > 0);
 
     // Simulate what parliament-session.ts does
-    const { createEvent } = await import("../dist/bus/events.js");
+    const { createEvent } = await import("../dist/platform/bus/events.js");
     store.append(createEvent("parliament.cps.generated", "generic", {
       context: cps.context,
       problem: cps.problem,

@@ -10,9 +10,9 @@ import { describe, it, beforeEach } from "node:test";
 
 import { createTempStore, cleanup } from "./helpers.mjs";
 
-const { ClaimService } = await import("../dist/bus/claim.js");
-const { planParallel, validateAgainstClaims } = await import("../dist/bus/parallel.js");
-const { selectMode } = await import("../dist/bus/orchestrator.js");
+const { ClaimService } = await import("../dist/platform/bus/claim.js");
+const { planParallel, validateAgainstClaims } = await import("../dist/platform/bus/parallel.js");
+const { selectMode } = await import("../dist/platform/bus/orchestrator.js");
 
 // ═══ 1. ClaimService ═══════════════════════════════════════════════
 

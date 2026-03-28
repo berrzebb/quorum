@@ -11,7 +11,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it, after } from "node:test";
 
-const { ProcessMux } = await import("../dist/bus/mux.js");
+const { ProcessMux } = await import("../dist/platform/bus/mux.js");
 
 // ═══ 1. Backend detection ═════════════════════════════════════════════
 

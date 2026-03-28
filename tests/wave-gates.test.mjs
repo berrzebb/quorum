@@ -37,7 +37,7 @@ const {
   checkTestFileCreation,
   checkWBConstraints,
   detectFixLoopStagnation,
-} = await import("../dist/cli/commands/orchestrate/runner.js");
+} = await import("../dist/platform/cli/commands/orchestrate/runner.js");
 
 // ── Helpers ──────────────────────────────────
 

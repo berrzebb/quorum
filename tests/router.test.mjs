@@ -8,7 +8,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { TierRouter } = await import("../dist/providers/router.js");
+const { TierRouter } = await import("../dist/platform/providers/router.js");
 
 // ═══ 1. Complexity routing ════════════════════════════════════════════
 

@@ -160,7 +160,7 @@ platform/core/
       ├→ runtime-evaluation-spec.ts ← Runtime eval specifications
       └→ sprint-contract.ts      ← Sprint-level contract bindings
 
-languages/
+platform/core/languages/
   ├→ registry.mjs       ← LanguageRegistry (auto-discover + fragment merge, CORE_FIELDS enforcement)
   ├→ typescript/         ← spec.mjs (core + verify commands) + spec.{symbols,imports,perf,a11y,compat,observability,doc}.mjs
   ├→ go/                 ← spec.mjs + verify + 7 fragments (symbols, imports, perf, security, observability, compat, doc)
@@ -230,7 +230,7 @@ platform/adapters/openai-compatible/
 - **Blast Radius**: BFS on reverse import graph (`inEdges`) computes transitive dependents of changed files. `buildRawGraph()` extracted from `dependency_graph` for reuse. Trigger factor (ratio > 0.1 → score += up to 0.15). Pre-verify evidence includes blast radius section.
 - **3-Layer Adapter**: I/O (adapter-specific stdin/stdout) + Business logic (`platform/adapters/shared/`) + Bridge (`platform/core/`). New adapter = I/O wrappers only (~650 lines vs ~2,000).
 - **Shared Agent Knowledge**: `agents/knowledge/` is a retained shared protocol corpus (not a migration residual). Protocol definitions referenced by all 4 adapters. Protocol change → 1 file edit → all adapters reflect. Agents keep only tool-name bindings + path variables. Changes require all-adapter verification. See `agents/knowledge/README.md`.
-- **Fragment-Only Language Specs**: `languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
+- **Fragment-Only Language Specs**: `platform/core/languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
 - **Adapter Env Fallback**: `platform/core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
 - **Tool Name Mapping**: `platform/adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
 - **HookRunner Engine**: `platform/adapters/shared/hook-runner.mjs` — generic hook execution engine (ported from SoulFlow). command/http handlers, env interpolation, deny-first-break, async fire-and-forget, matcher filtering. `hook-loader.mjs` loads from HOOK.md YAML or JSON config. `hook-bridge.mjs` adapts to PreToolHook/PostToolHook/AuditGate interfaces.
@@ -282,7 +282,7 @@ platform/adapters/openai-compatible/
 ## Testing
 
 ```bash
-npm test                              # all (1590 tests)
+npm test                              # all (1601 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

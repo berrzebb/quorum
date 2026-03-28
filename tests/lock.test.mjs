@@ -12,9 +12,9 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { createTempStore, cleanup } from "./helpers.mjs";
 
-const { EventStore, TransactionalUnitOfWork } = await import("../dist/bus/store.js");
-const { LockService } = await import("../dist/bus/lock.js");
-const { createEvent } = await import("../dist/bus/events.js");
+const { EventStore, TransactionalUnitOfWork } = await import("../dist/platform/bus/store.js");
+const { LockService } = await import("../dist/platform/bus/lock.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
 
 // ═══ 1. LockService ═══════════════════════════════════════════════════
 

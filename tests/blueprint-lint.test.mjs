@@ -16,7 +16,7 @@ const {
   extractNamingRules,
   generateAlternatives,
   parseBlueprints,
-} = await import("../dist/bus/blueprint-parser.js");
+} = await import("../dist/platform/bus/blueprint-parser.js");
 
 // ═══ 1. extractNamingRules ═══════════════════════════════════════
 

@@ -3,8 +3,8 @@
  * Platform-Only Layout Contract Tests (PLT-20)
  *
  * Verifies that the platform/ directory is the single source of truth
- * for all runtime TypeScript modules, and that root facade directories
- * have been fully removed.
+ * for runtime modules, that root runtime directories have been removed,
+ * and that retained protocol docs stay outside the runtime tree.
  *
  * Run: node --test tests/platform-only-layout.test.mjs
  */
@@ -153,21 +153,34 @@ describe("platform/core/tools/ migrated runtime scripts", () => {
   }
 });
 
-// ═══ 6. Platform skills is canonical skill source ═══════════════════════
+// ═══ 6. platform/core/languages exists as canonical analysis registry ═══
+
+describe("platform/core/languages is canonical language registry", () => {
+  it("platform/core/languages/ should exist", () => {
+    const full = resolve(REPO_ROOT, "platform", "core", "languages");
+    assert.ok(existsSync(full), "platform/core/languages/ must exist as canonical language registry");
+    assert.ok(statSync(full).isDirectory(), "platform/core/languages/ must be a directory");
+  });
+
+  it("platform/core/languages/ should contain .mjs files", () => {
+    const full = resolve(REPO_ROOT, "platform", "core", "languages");
+    const mjsFiles = collectFiles(full, [".mjs"]);
+    assert.ok(mjsFiles.length > 0,
+      `platform/core/languages/ should contain language registry/spec files, found ${mjsFiles.length}`);
+  });
+});
+
+// ═══ 7. Platform skills is canonical skill source ═══════════════════════
 
 describe("platform/skills is canonical skill source", () => {
   it("platform/skills/ should exist", () => {
     const full = resolve(REPO_ROOT, "platform", "skills");
-    if (!existsSync(full)) {
-      // skills/ may not have been migrated yet — skip gracefully
-      assert.ok(true, "platform/skills/ not yet created (future PLT work)");
-      return;
-    }
+    assert.ok(existsSync(full), "platform/skills/ must exist as canonical skill source");
     assert.ok(statSync(full).isDirectory(), "platform/skills/ must be a directory");
   });
 });
 
-// ═══ 7. Platform adapters/shared is canonical shared adapter source ═════
+// ═══ 8. Platform adapters/shared is canonical shared adapter source ═════
 
 describe("platform/adapters/shared is canonical shared adapter source", () => {
   it("platform/adapters/shared/ should exist", () => {
@@ -185,7 +198,7 @@ describe("platform/adapters/shared is canonical shared adapter source", () => {
   });
 });
 
-// ═══ 8. Root runtime directories removed ═════════════════════════════════
+// ═══ 9. Root runtime directories removed ═════════════════════════════════
 
 describe("root runtime directories removed", () => {
   const dirs = ["cli", "bus", "orchestrate", "providers", "skills", "adapters", "languages", "hooks"];
@@ -198,22 +211,17 @@ describe("root runtime directories removed", () => {
   }
 });
 
-// ═══ 9. Root core/ fully removed (no data or code files remain) ══════════
+// ═══ 10. Retained protocol corpus is explicit and outside runtime tree ════
 
-describe("root core/ fully removed", () => {
-  it("core/ should NOT exist at all (migrated to platform/core/)", () => {
-    const full = resolve(REPO_ROOT, "core");
-    assert.ok(!existsSync(full),
-      "core/ should have been fully deleted — all data and code migrated to platform/core/");
+describe("retained protocol corpus", () => {
+  it("agents/knowledge/ should exist", () => {
+    const full = resolve(REPO_ROOT, "agents", "knowledge");
+    assert.ok(existsSync(full), "agents/knowledge/ must exist as retained protocol corpus");
+    assert.ok(statSync(full).isDirectory(), "agents/knowledge/ must be a directory");
   });
-});
 
-// ═══ 10. Root adapters/ directory removed ═════════════════════════════════
-
-describe("root adapters/ directory removed", () => {
-  it("adapters/ directory should NOT exist", () => {
-    const full = resolve(REPO_ROOT, "adapters");
-    assert.ok(!existsSync(full),
-      "adapters/ should have been removed — platform/adapters/ is the sole source");
+  it("agents/knowledge/README.md should exist", () => {
+    const full = resolve(REPO_ROOT, "agents", "knowledge", "README.md");
+    assert.ok(existsSync(full), "agents/knowledge/README.md must document retained protocol rules");
   });
 });

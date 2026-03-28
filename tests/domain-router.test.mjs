@@ -8,10 +8,10 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { detectDomains, formatDomainSummary } = await import("../dist/providers/domain-detect.js");
-const { selectReviewers, getActiveRejectionCodes, listDomainReviewers } = await import("../dist/providers/domain-router.js");
-const { evaluateTrigger } = await import("../dist/providers/trigger.js");
-const { enrichEvidence, buildSpecialistSection } = await import("../dist/providers/specialist.js");
+const { detectDomains, formatDomainSummary } = await import("../dist/platform/providers/domain-detect.js");
+const { selectReviewers, getActiveRejectionCodes, listDomainReviewers } = await import("../dist/platform/providers/domain-router.js");
+const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
+const { enrichEvidence, buildSpecialistSection } = await import("../dist/platform/providers/specialist.js");
 
 // ═══ 1. Domain Detection ══════════════════════════════════════════════
 

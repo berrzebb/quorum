@@ -20,13 +20,13 @@ import { tmpdir } from "node:os";
 
 // ── Load compiled modules ──────────────────────
 
-const { EventStore, TransactionalUnitOfWork } = await import("../dist/bus/store.js");
-const { LockService } = await import("../dist/bus/lock.js");
-const { MarkdownProjector } = await import("../dist/bus/projector.js");
+const { EventStore, TransactionalUnitOfWork } = await import("../dist/platform/bus/store.js");
+const { LockService } = await import("../dist/platform/bus/lock.js");
+const { MarkdownProjector } = await import("../dist/platform/bus/projector.js");
 const { StateReader } = await import("../dist/daemon/state-reader.js");
-const { detectDomains } = await import("../dist/providers/domain-detect.js");
-const { selectReviewers, listDomainReviewers } = await import("../dist/providers/domain-router.js");
-const { buildSpecialistSection, enrichEvidence } = await import("../dist/providers/specialist.js");
+const { detectDomains } = await import("../dist/platform/providers/domain-detect.js");
+const { selectReviewers, listDomainReviewers } = await import("../dist/platform/providers/domain-router.js");
+const { buildSpecialistSection, enrichEvidence } = await import("../dist/platform/providers/specialist.js");
 
 let tmpDir;
 let store;

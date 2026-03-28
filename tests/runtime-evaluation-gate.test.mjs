@@ -17,7 +17,7 @@ const {
 
 const {
   runRuntimeEvaluationGate,
-} = await import('../dist/orchestrate/governance/index.js');
+} = await import('../dist/platform/orchestrate/governance/index.js');
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

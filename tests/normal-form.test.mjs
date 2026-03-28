@@ -15,9 +15,9 @@ import { strict as assert } from "node:assert";
 import { describe, it, beforeEach } from "node:test";
 
 const { classifyStage, computeConformance, trackProviderConvergence, generateConvergenceReport } =
-  await import("../dist/bus/normal-form.js");
-const { EventStore } = await import("../dist/bus/store.js");
-const { createEvent } = await import("../dist/bus/events.js");
+  await import("../dist/platform/bus/normal-form.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
 
 // ═══ 1. classifyStage() ══════════════════════════════════════════════════
 

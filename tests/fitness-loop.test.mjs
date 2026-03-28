@@ -19,9 +19,9 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { EventStore } = await import("../dist/bus/store.js");
-const { FitnessLoop } = await import("../dist/bus/fitness-loop.js");
-const { computeFitness } = await import("../dist/bus/fitness.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
+const { FitnessLoop } = await import("../dist/platform/bus/fitness-loop.js");
+const { computeFitness } = await import("../dist/platform/bus/fitness.js");
 
 let tmpDir;
 

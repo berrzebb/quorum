@@ -3,8 +3,8 @@ import assert from "node:assert";
 import { resolve } from "node:path";
 import { mkdirSync, rmSync } from "node:fs";
 
-const { EventStore } = await import("../dist/bus/store.js");
-const { MessageBus } = await import("../dist/bus/message-bus.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
+const { MessageBus } = await import("../dist/platform/bus/message-bus.js");
 
 const TMP = resolve(import.meta.dirname, ".tmp-message-bus");
 

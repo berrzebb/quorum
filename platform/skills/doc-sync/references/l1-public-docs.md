@@ -11,7 +11,7 @@ node -e "const h=JSON.parse(require('fs').readFileSync('platform/adapters/gemini
 node -e "const h=JSON.parse(require('fs').readFileSync('platform/adapters/codex/hooks/hooks.json','utf8')).hooks; let c=0; for(const k in h) c+=h[k].length; console.log('codex:',c)"
 
 # Shared module count
-ls adapters/shared/*.mjs | wc -l
+ls platform/adapters/shared/*.mjs | wc -l
 
 # MCP tool count (name: entries in TOOLS array)
 grep -c '"name":' platform/core/tools/mcp-server.mjs
@@ -20,35 +20,35 @@ grep -c '"name":' platform/core/tools/mcp-server.mjs
 npm test 2>&1 | grep -oP 'tests \K\d+'
 
 # Agent count (per adapter)
-ls adapters/claude-code/agents/*.md 2>/dev/null | wc -l
-ls adapters/gemini/agents/*.md 2>/dev/null | wc -l
-ls adapters/codex/agents/*.md 2>/dev/null | wc -l
+ls platform/adapters/claude-code/agents/*.md 2>/dev/null | wc -l
+ls platform/adapters/gemini/agents/*.md 2>/dev/null | wc -l
+ls platform/adapters/codex/agents/*.md 2>/dev/null | wc -l
 
 # Skill count (per adapter + shared)
-ls skills/*/SKILL.md | wc -l
-ls adapters/claude-code/skills/*/SKILL.md | wc -l
-ls adapters/gemini/skills/*/SKILL.md | wc -l
-ls adapters/codex/skills/*/SKILL.md | wc -l
+ls platform/skills/*/SKILL.md | wc -l
+ls platform/adapters/claude-code/skills/*/SKILL.md | wc -l
+ls platform/adapters/gemini/skills/*/SKILL.md | wc -l
+ls platform/adapters/codex/skills/*/SKILL.md | wc -l
 
 # Command count (per adapter)
-ls adapters/claude-code/commands/*.md 2>/dev/null | wc -l
-ls adapters/gemini/commands/*.toml 2>/dev/null | wc -l
+ls platform/adapters/claude-code/commands/*.md 2>/dev/null | wc -l
+ls platform/adapters/gemini/commands/*.toml 2>/dev/null | wc -l
 
 # Version
 node -e "console.log(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)"
 
 # Trigger factor count
-grep -cP '^\s*//\s*\d+\.' providers/trigger.ts
+grep -cP '^\s*//\s*\d+\.' platform/providers/trigger.ts
 
 # Stagnation pattern count
-grep -c 'pattern:' bus/stagnation.ts 2>/dev/null
+grep -c 'pattern:' platform/bus/stagnation.ts 2>/dev/null
 
 # Event type count
-grep -cP "'" bus/events.ts
+grep -cP "'" platform/bus/events.ts
 
 # Language count + fragments
-ls -d languages/*/spec.mjs | wc -l
-for lang in languages/*/; do echo "$(basename $lang): $(ls $lang/spec.*.mjs 2>/dev/null | wc -l) fragments"; done
+ls -d platform/core/languages/*/spec.mjs | wc -l
+for lang in platform/core/languages/*/; do echo "$(basename $lang): $(ls $lang/spec.*.mjs 2>/dev/null | wc -l) fragments"; done
 ```
 
 ## Target Files

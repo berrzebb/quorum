@@ -8,8 +8,8 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { DeliberativeConsensus } = await import("../dist/providers/consensus.js");
-const { evaluateTrigger } = await import("../dist/providers/trigger.js");
+const { DeliberativeConsensus } = await import("../dist/platform/providers/consensus.js");
+const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
 
 // ═══ Mock auditors ════════════════════════════════════════════════════
 

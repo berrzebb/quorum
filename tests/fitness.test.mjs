@@ -15,7 +15,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { computeFitness, computeDelta, computeTrend } = await import("../dist/bus/fitness.js");
+const { computeFitness, computeDelta, computeTrend } = await import("../dist/platform/bus/fitness.js");
 
 // ═══ 1. Component normalization ══════════════════════════════════════════
 

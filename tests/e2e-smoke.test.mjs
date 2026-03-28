@@ -19,13 +19,13 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { EventStore, UnitOfWork } = await import("../dist/bus/store.js");
-const { QuorumBus } = await import("../dist/bus/bus.js");
-const { createEvent } = await import("../dist/bus/events.js");
-const { detectStagnation } = await import("../dist/bus/stagnation.js");
-const { DeliberativeConsensus } = await import("../dist/providers/consensus.js");
-const { evaluateTrigger } = await import("../dist/providers/trigger.js");
-const { TierRouter } = await import("../dist/providers/router.js");
+const { EventStore, UnitOfWork } = await import("../dist/platform/bus/store.js");
+const { QuorumBus } = await import("../dist/platform/bus/bus.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
+const { detectStagnation } = await import("../dist/platform/bus/stagnation.js");
+const { DeliberativeConsensus } = await import("../dist/platform/providers/consensus.js");
+const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
+const { TierRouter } = await import("../dist/platform/providers/router.js");
 
 let tmpDir;
 

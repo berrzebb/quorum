@@ -15,10 +15,10 @@ skills/{name}/                    ← Layer 1: Canonical (shared source of truth
   ├── SKILL.md                    ← Business logic, no adapter-specific content
   └── references/                 ← Progressive-disclosure docs (optional)
 
-adapters/{adapter}/skills/{name}/ ← Layer 2: Pointer Wrappers (per-adapter)
+platform/adapters/{adapter}/skills/{name}/ ← Layer 2: Pointer Wrappers (per-adapter)
   └── SKILL.md                    ← Frontmatter + tool mapping + pointer to canonical
 
-adapters/shared/tool-names.mjs    ← Layer 3: Tool name registry
+platform/adapters/shared/tool-names.mjs    ← Layer 3: Tool name registry
 ```
 
 **Principle**: Add once at `platform/skills/`, reference everywhere. Adapter wrappers contain only what differs per adapter.

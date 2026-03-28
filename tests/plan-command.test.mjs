@@ -29,7 +29,7 @@ function writePlan(trackName, wbContent, rtmContent) {
 
 describe("plan.ts module", () => {
   it("can be imported", async () => {
-    const plan = await import("../dist/cli/commands/plan.js");
+    const plan = await import("../dist/platform/cli/commands/plan.js");
     assert.ok(plan.run, "run function exists");
     assert.equal(typeof plan.run, "function");
   });
@@ -54,7 +54,7 @@ describe("quorum plan list", () => {
 **Verify**: npm test
 `);
 
-    const cliPath = resolve("dist/cli/index.js");
+    const cliPath = resolve("dist/platform/cli/index.js");
     const out = execFileSync("node", [cliPath, "plan", "list"], {
       cwd: TMP, encoding: "utf8", timeout: 10000,
       stdio: ["ignore", "pipe", "pipe"],
@@ -95,7 +95,7 @@ describe("quorum plan list hierarchical", () => {
 **Verify**: npm test
 `);
 
-    const cliPath = resolve("dist/cli/index.js");
+    const cliPath = resolve("dist/platform/cli/index.js");
     const out = execFileSync("node", [cliPath, "plan", "list"], {
       cwd: TMP, encoding: "utf8", timeout: 10000,
       stdio: ["ignore", "pipe", "pipe"],
@@ -113,7 +113,7 @@ describe("quorum plan list hierarchical", () => {
 
 describe("quorum plan show", () => {
   it("shows raw WB content for named track", () => {
-    const cliPath = resolve("dist/cli/index.js");
+    const cliPath = resolve("dist/platform/cli/index.js");
     const out = execFileSync("node", [cliPath, "plan", "show", "alpha"], {
       cwd: TMP, encoding: "utf8", timeout: 10000,
       stdio: ["ignore", "pipe", "pipe"],
@@ -124,7 +124,7 @@ describe("quorum plan show", () => {
   });
 
   it("reports not found for unknown track", () => {
-    const cliPath = resolve("dist/cli/index.js");
+    const cliPath = resolve("dist/platform/cli/index.js");
     const out = execFileSync("node", [cliPath, "plan", "show", "nonexistent"], {
       cwd: TMP, encoding: "utf8", timeout: 10000,
       stdio: ["ignore", "pipe", "pipe"],

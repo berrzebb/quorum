@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 
-const { EventStore } = await import("../dist/bus/store.js");
+const { EventStore } = await import("../dist/platform/bus/store.js");
 const {
   checkAmendmentGate,
   checkVerdictGate,
@@ -20,8 +20,8 @@ const {
   checkDesignGate,
   checkAllGates,
   detectRegression,
-} = await import("../dist/bus/parliament-gate.js");
-const { createEvent } = await import("../dist/bus/events.js");
+} = await import("../dist/platform/bus/parliament-gate.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
 
 function createStore() {
   return new EventStore({ dbPath: ":memory:" });

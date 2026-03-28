@@ -22,7 +22,7 @@ const {
 const {
   validateNegotiation,
   approveWithNegotiation,
-} = await import('../dist/orchestrate/planning/index.js');
+} = await import('../dist/platform/orchestrate/planning/index.js');
 
 // ═══ validateNegotiation ════════════════════════════════════════════════════
 

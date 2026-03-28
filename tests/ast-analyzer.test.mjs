@@ -18,7 +18,7 @@ import { writeFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { ASTAnalyzer } = await import("../dist/providers/ast-analyzer.js");
+const { ASTAnalyzer } = await import("../dist/platform/providers/ast-analyzer.js");
 
 let tmpDir;
 

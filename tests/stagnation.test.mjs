@@ -8,7 +8,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { detectStagnation } = await import("../dist/bus/stagnation.js");
+const { detectStagnation } = await import("../dist/platform/bus/stagnation.js");
 
 function verdict(v, codes = [], summary = "") {
   return {

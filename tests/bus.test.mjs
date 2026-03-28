@@ -11,8 +11,8 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "no
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { QuorumBus } = await import("../dist/bus/bus.js");
-const { createEvent } = await import("../dist/bus/events.js");
+const { QuorumBus } = await import("../dist/platform/bus/bus.js");
+const { createEvent } = await import("../dist/platform/bus/events.js");
 
 let tmpDir;
 

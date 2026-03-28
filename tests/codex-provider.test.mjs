@@ -11,9 +11,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, existsSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const { CodexProvider } = await import("../dist/providers/codex/adapter.js");
-const { CodexAuditor } = await import("../dist/providers/codex/auditor.js");
-const { QuorumBus } = await import("../dist/bus/bus.js");
+const { CodexProvider } = await import("../dist/platform/providers/codex/adapter.js");
+const { CodexAuditor } = await import("../dist/platform/providers/codex/auditor.js");
+const { QuorumBus } = await import("../dist/platform/bus/bus.js");
 
 let tmpDir;
 
@@ -159,8 +159,8 @@ describe("CodexAuditor", () => {
 
 describe("multi-provider coexistence", () => {
   it("CodexProvider and ClaudeCodeProvider register independently", async () => {
-    const { ClaudeCodeProvider } = await import("../dist/providers/claude-code/adapter.js");
-    const { registerProvider, listProviders, getProvider } = await import("../dist/providers/provider.js");
+    const { ClaudeCodeProvider } = await import("../dist/platform/providers/claude-code/adapter.js");
+    const { registerProvider, listProviders, getProvider } = await import("../dist/platform/providers/provider.js");
 
     const claude = new ClaudeCodeProvider();
     const codex = new CodexProvider();
