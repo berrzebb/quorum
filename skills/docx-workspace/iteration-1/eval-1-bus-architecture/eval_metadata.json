@@ -1,0 +1,43 @@
+{
+  "eval_id": 1,
+  "eval_name": "bus-architecture-docx",
+  "prompt": "quorum 프로젝트의 bus/ 디렉토리를 분석해서 아키텍처 보고서를 DOCX로 만들어줘.",
+  "assertions": [
+    {
+      "name": "docx_file_created",
+      "description": "DOCX 파일이 생성되었고 10KB 이상인가",
+      "type": "file_exists_and_size",
+      "check": "outputs/report.docx exists and > 10KB"
+    },
+    {
+      "name": "markdown_source_created",
+      "description": "중간 마크다운 파일이 생성되었는가",
+      "type": "file_exists",
+      "check": "outputs/report.md exists"
+    },
+    {
+      "name": "contains_architecture_diagram",
+      "description": "마크다운에 mermaid 아키텍처 다이어그램이 포함되었는가",
+      "type": "content_contains",
+      "check": "report.md contains ```mermaid block"
+    },
+    {
+      "name": "contains_module_table",
+      "description": "모듈별 역할 설명 테이블이 있는가",
+      "type": "content_contains",
+      "check": "report.md contains a markdown table with module names"
+    },
+    {
+      "name": "contains_code_example",
+      "description": "코드 예제가 포함되었는가",
+      "type": "content_contains",
+      "check": "report.md contains a TypeScript/JS code block"
+    },
+    {
+      "name": "mentions_key_modules",
+      "description": "EventStore, LockService, ClaimService 등 핵심 모듈이 언급되었는가",
+      "type": "content_contains",
+      "check": "report.md mentions EventStore, LockService, ClaimService"
+    }
+  ]
+}
