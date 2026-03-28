@@ -134,8 +134,8 @@ describe("audit.mjs worktree isolation invariants", () => {
   it("REFERENCES_DIR uses absolute path", () => {
     // Should NOT use relative(REPO_ROOT, ...) — absolute path required for worktree context
     assert.doesNotMatch(auditSource, /relative\(REPO_ROOT.*REFERENCES_DIR/);
-    // Should resolve() to absolute
-    assert.match(auditSource, /resolve\(HOOKS_DIR.*references.*safeLocale\)/);
+    // Should use resolveReferencesDir(safeLocale) which delegates to resolvePluginPath() for absolute paths
+    assert.match(auditSource, /resolveReferencesDir\(safeLocale\)/);
   });
 
   it("session path is runtime-resolved (not module-level constant)", () => {

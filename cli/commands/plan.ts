@@ -2,11 +2,14 @@
  * quorum plan — work breakdown planning with RTM status integration.
  *
  * Lists existing plans with completion status from RTM files.
+ * Parser logic delegated to orchestrate/planning module (single source of truth).
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { resolve, basename } from "node:path";
+import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+
+import { findTracks, parseWorkBreakdown } from '../../orchestrate/planning/index.js';
 
 interface TaskItem {
   id: string;
@@ -43,22 +46,28 @@ export async function run(args: string[]): Promise<void> {
   }
 }
 
-function listPlans(repoRoot: string): void {
-  const searchDirs = [resolve(repoRoot, "docs"), resolve(repoRoot, "plans")];
-  const tracks: Track[] = [];
+/**
+ * Convert discovered TrackInfo + parsed WorkItems into display Tracks.
+ * This is the bridge between the planning module (parsing) and plan CLI (presentation).
+ */
+function discoverTracks(repoRoot: string): Track[] {
+  const trackInfos = findTracks(repoRoot);
 
-  for (const dir of searchDirs) {
-    if (!existsSync(dir)) continue;
-    scanForBreakdowns(dir, tracks);
-  }
-
-  // Deduplicate by name
-  const seen = new Set<string>();
-  const unique = tracks.filter((t) => {
-    if (seen.has(t.name)) return false;
-    seen.add(t.name);
-    return true;
+  return trackInfos.map(info => {
+    const workItems = parseWorkBreakdown(info.path);
+    const items: TaskItem[] = workItems.map(wi => ({
+      id: wi.id,
+      title: wi.title ?? "",
+      status: "open" as TaskItem["status"],
+      ...(wi.parentId ? { parentId: wi.parentId } : {}),
+      ...(wi.isParent ? { isParent: true } : {}),
+    }));
+    return { name: info.name, path: info.path, items };
   });
+}
+
+function listPlans(repoRoot: string): void {
+  const unique = discoverTracks(repoRoot);
 
   if (unique.length === 0) {
     console.log("  No work breakdowns found.");
@@ -265,96 +274,13 @@ function resolveStatus(cell: string): TaskItem["status"] {
   return "open";
 }
 
-// ── Work breakdown scanner ────────────────────
-// Mirrors orchestrate/shared.ts parseWorkBreakdown() logic for hierarchy detection.
-// Supports: Phase/Step parents, multi-segment IDs (DAW-P2-01), bracket format ([ID]).
-
-function scanForBreakdowns(dir: string, tracks: Track[]): void {
-  try {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = resolve(dir, entry.name);
-      if (entry.isDirectory()) {
-        scanForBreakdowns(fullPath, tracks);
-      } else if (entry.name.includes("work-breakdown") && entry.name.endsWith(".md")) {
-        const content = readFileSync(fullPath, "utf8");
-        const items: TaskItem[] = [];
-
-        // ID pattern: WEB-1, DAW-P2-01, FEAT-3A, PROJECT-TRACK-42
-        const ID_RE = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?/;
-
-        // Detect Phase/Step parents (takes precedence over ID-based parents)
-        const hasPhaseParents = /^##\s+(?:Phase|Step|단계)\s*\d+[A-Za-z]?[:\s]/m.test(content);
-
-        // ID-based parents: h2=parent, h3=child (no Phase labels present)
-        const hasIdParents = !hasPhaseParents
-          && new RegExp(`^##\\s+(?:\\[)?${ID_RE.source}\\]?[:\\s]`, "m").test(content)
-          && new RegExp(`^###\\s+(?:\\[)?${ID_RE.source}\\]?[:\\s]`, "m").test(content);
-
-        const hasParents = hasPhaseParents || hasIdParents;
-
-        // Build entries from two-pass regex (same as shared.ts)
-        type Entry = { id: string; title: string; pos: number; isParent: boolean };
-        const entries2: Entry[] = [];
-
-        if (hasParents) {
-          // Pass 1: Phase/Step parents — "## Phase 0: Prerequisites"
-          const parentRe = /^#{2,3}\s+((?:Phase|Step|단계)\s*\d+[A-Za-z]?)\s*:\s*(.*)/gm;
-          let m: RegExpExecArray | null;
-          while ((m = parentRe.exec(content)) !== null) {
-            entries2.push({ id: m[1]!.replace(/\s+/g, "-"), title: m[2]!.trim(), pos: m.index, isParent: true });
-          }
-
-          // Pass 2: ID children — "## DAW-P2-01: Title" or "### [WEB-1] Title"
-          const childRe = new RegExp(`^#{2,3}\\s+(?:\\[)?(${ID_RE.source})\\]?\\s*[:\\s]\\s*(.*)`, "gm");
-          while ((m = childRe.exec(content)) !== null) {
-            entries2.push({ id: m[1]!, title: m[2]!.trim(), pos: m.index, isParent: false });
-          }
-
-          entries2.sort((a, b) => a.pos - b.pos);
-        } else {
-          // Flat: all h2/h3 with IDs are children
-          const flatRe = new RegExp(`^#{2,3}\\s+(?:\\[)?(${ID_RE.source})\\]?\\s*[:\\s]\\s*(.*)`, "gm");
-          let m: RegExpExecArray | null;
-          while ((m = flatRe.exec(content)) !== null) {
-            entries2.push({ id: m[1]!, title: m[2]!.trim(), pos: m.index, isParent: false });
-          }
-        }
-
-        // Convert entries to TaskItems with parent tracking
-        let currentParentId: string | undefined;
-        for (const e of entries2) {
-          const cleanTitle = e.title.replace(/\s*\((?:Size:)?\s*(?:XS|S|M)\)\s*$/, "").trim();
-          if (e.isParent) {
-            currentParentId = e.id;
-            items.push({ id: e.id, title: cleanTitle, status: "open", isParent: true });
-          } else {
-            items.push({
-              id: e.id, title: cleanTitle, status: "open",
-              ...(hasParents && currentParentId ? { parentId: currentParentId } : {}),
-            });
-          }
-        }
-
-        tracks.push({ name: basename(resolve(fullPath, "..")), path: fullPath, items });
-      }
-    }
-  } catch { /* skip */ }
-}
-
 function showPlan(repoRoot: string, trackName: string | undefined): void {
   if (!trackName) {
     console.log("  Usage: quorum plan show <track-name>\n");
     return;
   }
 
-  const tracks: Track[] = [];
-  const searchDirs = [resolve(repoRoot, "docs"), resolve(repoRoot, "plans")];
-  for (const dir of searchDirs) {
-    if (!existsSync(dir)) continue;
-    scanForBreakdowns(dir, tracks);
-  }
-
+  const tracks = discoverTracks(repoRoot);
   const track = tracks.find((t) => t.name === trackName);
   if (!track) {
     console.log(`  Track '${trackName}' not found.\n`);

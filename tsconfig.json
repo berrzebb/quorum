@@ -21,7 +21,8 @@
     "providers/**/*.ts",
     "daemon/**/*.ts",
     "daemon/**/*.tsx",
-    "cli/**/*.ts"
+    "cli/**/*.ts",
+    "orchestrate/**/*.ts"
   ],
   "exclude": [
     "node_modules",

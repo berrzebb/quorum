@@ -18,11 +18,75 @@ cli/index.ts           ← quorum <command> dispatcher
   ├→ commands/setup.ts      ← project initialization
   ├→ commands/status.ts     ← gate status (--attach/--capture for mux remote view)
   ├→ commands/audit.ts      ← manual audit trigger
-  ├→ commands/plan.ts       ← work breakdown listing
-  ├→ commands/orchestrate.ts ← track orchestration (WB parser + selectMode + claims + run loop)
+  ├→ commands/plan.ts       ← work breakdown listing (delegates to planning/ modules)
+  ├→ commands/orchestrate.ts ← track orchestration (thin dispatcher → orchestrate/ library)
+  ├→ commands/orchestrate/   ← compatibility shells (re-export from orchestrate/ library)
+  │   ├→ shared.ts          ← re-exports planning types + functions (DIST, loadBridge, parseWorkBreakdown, etc.)
+  │   ├→ planner.ts         ← re-exports auto-planner + CLI entry (interactivePlanner)
+  │   ├→ runner.ts          ← re-exports execution + governance gates + CLI entry (runImplementationLoop)
+  │   └→ lifecycle.ts       ← re-exports lifecycle hooks (autoRetro, autoMerge)
   ├→ commands/parliament.ts ← parliamentary deliberation CLI (topic → 3-role consensus → CPS)
   ├→ commands/ask.ts        ← provider direct query
   └→ commands/tool.ts       ← MCP tool CLI
+
+orchestrate/             ← Orchestration library (extracted from monolithic runner.ts/shared.ts/planner.ts)
+  ├→ index.ts             ← Root barrel (re-exports all 5 layers as namespaces)
+  ├→ planning/            ← Legislation/blueprint generation
+  │   ├→ index.ts          ← Barrel export
+  │   ├→ types.ts          ← WorkItem, Wave, TrackInfo, PlanReviewResult, HeadingInfo
+  │   ├→ track-catalog.ts  ← findTracks, resolveTrack, trackRef
+  │   ├→ wb-heading-parser.ts ← parseHeading, classifyHeading, scanHeadings
+  │   ├→ wb-field-parser.ts   ← parseFields, extractTargetFiles, extractDependsOn, etc.
+  │   ├→ work-breakdown-parser.ts ← parseWorkBreakdown (assembled from heading + field parsers)
+  │   ├→ plan-review.ts    ← reviewPlan (structural validation before execution)
+  │   ├→ wave-graph.ts     ← computeWaves (topological wave computation)
+  │   ├→ design-gates.ts   ← verifyDesignDiagrams (mermaid diagram verification)
+  │   ├→ cps-loader.ts     ← findCPSFiles, loadCPS, loadPlannerProtocol
+  │   ├→ planner-prompts.ts ← buildPlannerSystemPrompt, buildAutoPrompt, buildSocraticPrompt
+  │   ├→ planner-mode.ts   ← determinePlannerMode (auto/socratic/inline)
+  │   ├→ planner-session.ts ← runPlannerSession (high-level planner orchestration)
+  │   └→ auto-planner.ts   ← autoGenerateWBs, autoFixDesignDiagrams
+  ├→ execution/           ← Model routing, agent sessions, audit/fixer loops
+  │   ├→ index.ts          ← Barrel export
+  │   ├→ model-routing.ts  ← selectModelForTask (XS→haiku, S→sonnet, M→opus)
+  │   ├→ dependency-context.ts ← buildDepContextFromManifests
+  │   ├→ implementer-prompt.ts ← buildImplementerPrompt
+  │   ├→ preflight.ts      ← runPreflightCheck, walkSourceFiles
+  │   ├→ roster-builder.ts ← buildWaveRoster, canSpawnItem
+  │   ├→ session-state.ts  ← WaveSessionState, ActiveSession, FailedItem
+  │   ├→ agent-session.ts  ← spawnAgent, saveAgentState, captureAgentOutput, isAgentComplete
+  │   ├→ audit-loop.ts     ← runWaveAuditGates
+  │   ├→ fixer-loop.ts     ← runFixer, runFixCycle
+  │   ├→ wave-runner.ts    ← runWave (single wave execution)
+  │   ├→ wave-audit-llm.ts ← runWaveAuditLLM (LLM-based wave audit)
+  │   └→ snapshot.ts       ← captureSnapshot, recordWaveManifest, readPreviousManifests
+  ├→ governance/          ← RTM, phase gates, lifecycle, fitness, scope, confluence
+  │   ├→ index.ts          ← Barrel export
+  │   ├→ rtm-generator.ts  ← generateSkeletalRTM
+  │   ├→ rtm-updater.ts    ← updateRTM, updateRTMContent
+  │   ├→ phase-gates.ts    ← verifyPhaseCompletion, isWaveFullyCompleted, getRetryItems
+  │   ├→ lifecycle-hooks.ts ← waveCommit, autoRetro, autoMerge, shouldTriggerRetro
+  │   ├→ fitness-gates.ts  ← collectFitnessSignals, runFitnessGate, computeFitness
+  │   ├→ scope-gates.ts    ← scanLines, scanForStubs, detectFileScopeViolations, etc. (13 gate functions)
+  │   ├→ confluence-gates.ts ← runConfluenceCheck, proposeConfluenceAmendments
+  │   └→ e2e-verification.ts ← runE2EVerification
+  ├→ state/               ← State contracts + filesystem stores
+  │   ├→ index.ts          ← Barrel export
+  │   ├→ state-types.ts    ← WaveCheckpoint, AgentSessionState, RTMEntry, RTMState
+  │   ├→ state-port.ts     ← CheckpointPort, AgentStatePort, ManifestPort, RTMPort
+  │   └→ filesystem/       ← Filesystem implementations
+  │       ├→ checkpoint-store.ts ← FilesystemCheckpointStore
+  │       ├→ agent-state-store.ts ← FilesystemAgentStateStore
+  │       ├→ manifest-store.ts   ← FilesystemManifestStore
+  │       ├→ rtm-store.ts        ← FilesystemRTMStore
+  │       └→ track-file-store.ts ← resolveTrackDir, resolveDesignDir, resolveRTMPath, etc.
+  └→ core/                ← Provider binary, mux, prompt I/O
+      ├→ index.ts          ← Barrel export
+      ├→ provider-binary.ts ← resolveProviderBinary, buildProviderArgs
+      ├→ provider-cli.ts   ← runProviderCLI
+      ├→ mux-backend.ts    ← detectMuxBackend
+      ├→ mux-session.ts    ← spawnMuxSession, pollMuxCompletion, cleanupMuxSession
+      └→ prompt-files.ts   ← writePromptFile, writeScriptFile, cleanupPromptFiles
 
 daemon/index.ts         ← Ink TUI entry point (StateReader + LockService injection)
   ├→ app.tsx            ← GateStatus + AgentPanel + FitnessPanel + TrackProgress + AuditStream + ItemStates + Locks + Specialists
@@ -44,7 +108,7 @@ bus/
   ├→ fitness-loop.ts    ← Autonomous fitness gate (proceed/self-correct/auto-reject)
   ├→ stagnation.ts      ← 7-pattern detection (incl. fitness-plateau, expansion, consensus-divergence)
   ├→ meeting-log.ts     ← Meeting log accumulation, 3-path convergence (exact/no-new-items/relaxed), noise filter, CPS generation
-  ├→ amendment.ts       ← Amendment process (propose/vote/resolve, majority voting)
+  ├→ amendment.ts       ← Amendment process (propose/vote/resolve, tiered voting: WB 50%, PRD/Design 66%, Scope 100%)
   ├→ confluence.ts      ← Confluence verification (4-point post-audit integrity: law-code/part-whole/intent-result/law-law)
   ├→ normal-form.ts     ← Normal form convergence tracking (raw-output → autofix → manual-fix → normal-form)
   ├→ parliament-gate.ts ← Enforcement gates (5 gates: amendment, verdict, confluence, design, regression)
@@ -76,16 +140,16 @@ core/
 
 languages/
   ├→ registry.mjs       ← LanguageRegistry (auto-discover + fragment merge, CORE_FIELDS enforcement)
-  ├→ typescript/         ← spec.mjs (core) + spec.{symbols,imports,perf,a11y,compat,observability,doc}.mjs
-  ├→ go/                 ← spec.mjs + 7 fragments (symbols, imports, perf, security, observability, compat, doc)
-  ├→ python/             ← spec.mjs + 7 fragments
-  ├→ rust/               ← spec.mjs + 7 fragments
-  └→ java/               ← spec.mjs + 7 fragments
+  ├→ typescript/         ← spec.mjs (core + verify commands) + spec.{symbols,imports,perf,a11y,compat,observability,doc}.mjs
+  ├→ go/                 ← spec.mjs + verify + 7 fragments (symbols, imports, perf, security, observability, compat, doc)
+  ├→ python/             ← spec.mjs + verify + 7 fragments
+  ├→ rust/               ← spec.mjs + verify + 7 fragments
+  └→ java/               ← spec.mjs + verify + 7 fragments
 
 agents/knowledge/          ← Cross-adapter shared protocols
-  ├→ implementer-protocol.md  ← execution flow, correction round, completion gate, anti-patterns
-  ├→ scout-protocol.md        ← RTM generation 8-phase, output rules
-  ├→ specialist-base.md       ← JSON output format, judgment criteria
+  ├→ implementer-protocol.md  ← code-only execution (self-check → self-checker, correction → fixer delegation)
+  ├→ scout-protocol.md        ← Phase 5-8 RTM gap analyzer (upstream: wb-parser + rtm-scanner)
+  ├→ specialist-base.md       ← JSON output format, confidence ≥ 0.8 filter, max 10 findings
   ├→ ui-review-protocol.md    ← UI-1~8 verification checklist, report format, completion gate
   ├→ doc-sync-protocol.md     ← 3-layer fact extraction, numeric mismatch, section parity
   ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
@@ -172,15 +236,24 @@ adapters/codex/
 - **MuxAuditor**: `providers/auditors/mux.ts` — Auditor implementation backed by ProcessMux (tmux/psmux). `--mux` flag in parliament CLI spawns LLM sessions as mux panes. Sessions saved to `.claude/agents/` (daemon-discoverable). `createMuxConsensusAuditors()` creates 3 mux-backed auditors sharing one ProcessMux instance. Daemon TUI shows live sessions (role, backend, age).
 - **Parliament Session Observability**: Daemon `ParliamentPanel` shows: live mux sessions (LIVE section with role/backend/age), committee convergence, pending amendments, Normal Form conformance, session count.
 - **Blueprint Naming Lint**: `quorum tool blueprint_lint` — parses Blueprint "Naming Conventions" tables from `design/` markdown, generates violation patterns (PascalCase/camelCase/suffix alternatives), scans source files. `bus/blueprint-parser.ts` extracts rules. Violations are `high` severity. Enforces `impl(A, law) = impl(B, law)` by detecting non-compliant identifiers.
-- **Wave Execution**: `quorum orchestrate run <track> --provider claude [--concurrency N] [--resume]` — Wave-based implementation loop. `computeWaves()` groups WBs by Phase gates (topological sort on `dependsOn`). Each Wave runs up to N agents in parallel (default 3), then a single Wave-level audit. On audit failure, Fixer agent applies targeted fixes, then re-audit (max 3 rounds). `--resume` loads `.claude/quorum/wave-state-{track}.json` to skip completed waves and retry failed items. Events: agent.spawn, track.progress, track.complete.
+- **Wave Execution**: `quorum orchestrate run <track> --provider claude [--concurrency N] [--resume]` — Wave-based implementation loop with 21-gate chain. `computeWaves()` groups WBs by Phase gates (topological sort on `dependsOn`). Each Wave: implementer → self-checker (haiku) → 21 gates → audit. On audit failure, Fixer agent applies targeted fixes (max 3 rounds). `--resume` loads `.claude/quorum/wave-state-{track}.json` to skip completed waves and retry failed items. Post-audit: confluence check + project tests. Events: agent.spawn, track.progress, track.complete.
 - **MECE Planner Phase**: Planner Phase 1.5 inserts Actor→System→Domain decomposition before PRD. Catches missing actors/systems that users don't mention. Phase 5.5 adds FDE failure checklists per FR before WB generation.
 - **Stagnation FDE Loop**: 7-pattern detection (spinning, oscillation, no-drift, diminishing-returns, fitness-plateau, expansion, consensus-divergence). `auto-learn.ts` `learnFromStagnation()` feeds patterns back to `trigger.ts` (13 factors) for auto-escalation on future similar files.
 - **Plan Review Gate**: `reviewPlan()` validates WBs before `orchestrate run`. Action + Verify fields required — blocks execution if missing. Guards: >5 target files → split. GATE-N references resolved to Phase parent index (valid if index < parent count). Unknown external deps are warnings, not errors.
 - **Wave Grouping**: `computeWaves()` in `shared.ts` — Phase parents define gate boundaries (Phase N must complete before Phase N+1). Within a phase, `dependsOn` topological sort creates sub-waves. Items at the same depth run in parallel. `--concurrency` caps simultaneous agents.
-- **Fixer Role**: `runFixer()` in `runner.ts` — spawned when Wave audit fails. Receives specific audit findings + affected files. Applies targeted fixes without rewriting (different from Implementer). Single-turn `claude -p` with `--dangerously-skip-permissions`.
-- **Wave State Persistence**: `wave-state-{track}.json` saved after each Wave. Contains `completedIds`, `failedIds`, `lastCompletedWave`. `--resume` flag loads state, skips completed waves, retries failed items. Survives process crashes and computer restarts.
+- **Role Delegation**: Implementer writes code only. Self-checking delegated to `self-checker` (haiku, deterministic tools). Corrections delegated to `fixer` (sonnet). Orchestrator dispatches via `[DELEGATION]` hint. 9 roles total: wb-parser, rtm-scanner, scout, designer, fde-analyst, implementer, self-checker, fixer, gap-detector.
+- **Fixer Role**: `runFixer()` in `runner.ts` — spawned when Wave audit fails or self-checker fails. Receives specific audit findings + affected files + fitness context. Applies targeted fixes without rewriting (different from Implementer). Single-turn `claude -p` with `--dangerously-skip-permissions`.
+- **Self-Checker Role**: Haiku-tier deterministic-only verification: CQ, T, lint, scope, blast-radius. No LLM judgment — mechanical pass/fail. Spawned by orchestrator after implementer completes. On failure → fixer → re-check.
+- **Governance Modules**: `cli/commands/orchestrate/governance/` — 21-gate chain extracted from monolithic runner.ts. fitness-gates, scope-gates (10 functions), confluence-gates, lifecycle-hooks, phase-gates, rtm-updater, rtm-generator. Each gate is independently testable.
+- **Planning Modules**: `cli/commands/orchestrate/planning/` — track-catalog, work-breakdown-parser, cps-loader, planner-prompts, planner-session. Planner.ts is now a thin wrapper dispatching to `runPlannerSession()`.
+- **Wave State Persistence**: `wave-state-{track}.json` saved after each Wave. Contains `completedIds`, `failedIds`, `lastCompletedWave`, `totalItems`, `lastFitness`, `totalWaves`. `--resume` flag loads state, skips completed waves, retries failed items. Survives process crashes and computer restarts.
 - **Design Auto-Fix**: `autoFixDesignDiagrams()` in `planner.ts` — spawns fresh `claude -p` per attempt (not mux multi-turn). Includes exact file paths in prompt. Infinite retry loop for mermaid diagram generation.
-- **Model Tier Routing**: `selectModelForSize()` in `runner.ts` — XS→haiku, S→sonnet, M→opus. WB Size parsed from heading. `--model` flag auto-appended to CLI args.
+- **Model Tier Routing**: `selectModelForTask()` in `runner.ts` — XS→haiku, S→sonnet, M→opus. WB Size parsed from heading. Domain detection feeds into tier selection. `--model` flag auto-appended to CLI args.
+- **Language Verify Commands**: `languages/{lang}/spec.mjs` now exports `verify` field with CQ/T/TEST/DEP commands + `detect` arrays. Self-checker uses these instead of hardcoded commands. Example: TypeScript → `npx eslint`, `npx tsc --noEmit`, `npm test`, `npm audit`.
+- **Amendment Tiered Voting**: WB: 50% simple majority, PRD: 66% super-majority, Design: 66% super-majority, Scope: 100% unanimous. Prevents lightweight votes from changing project boundaries.
+- **Specialist Confidence Filter**: `specialist-base.md` — confidence ≥ 0.8 to report, max 10 findings per review, per-finding confidence scores. `findingsSummary` tracks filtered count. High-severity findings can mark `"escalation": "block"`.
+- **Parliamentary Checkpoints**: 5 decision gates during orchestration: requirement confirmation, design choice, implementation scope, quality verdict, convergence decision. Tier determines which are active (T1: skip all, T2: 2 checkpoints, T3: all 5).
+- **Consensus Checklist**: Advocate (5 items), Devil's Advocate (6 items), Judge (explicit decision procedure). All verdicts must include file:line evidence. Tie-breaking: both approved→approved, both rejected→rejected, split→check agreement, neither→reject (fail-safe).
 - **Trigger Interaction Multipliers**: Factor 13 — high-risk co-occurrence (security×blast-radius ×1.3, security×cross-layer ×1.2, cross-layer×API ×1.15, rejection×stagnation ×1.25). `Math.max` prevents multiplier explosion.
 - **Evidence via SQLite**: `audit_submit` MCP tool replaces watch_file markdown. Evidence stored in EventStore, trigger evaluated inline. Hooks read from `tool_input.content`, not file. `readWatchContent()` eliminated.
 
@@ -211,4 +284,5 @@ node --test tests/parliament-e2e.test.mjs          # Parliament E2E pipeline (13
 node --test tests/parliament-cli.test.mjs          # Parliament CLI arg parsing + routing (28 tests)
 node --test tests/parliament-gate.test.mjs         # Parliament enforcement gates (16 tests)
 node --test tests/blueprint-lint.test.mjs          # Blueprint naming convention lint (12 tests)
+node --test tests/wave-gates.test.mjs             # 21-gate chain (scope, blueprint, perf, dep, orphan, test-file)
 ```

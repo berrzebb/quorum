@@ -27,6 +27,16 @@ const {
   detectRegressions,
   runProjectTests,
   scanForStubs,
+  scanLines,
+  getChangedFiles,
+  detectFileScopeViolations,
+  scanBlueprintViolations,
+  detectOrphanFiles,
+  scanForPerfAntiPatterns,
+  auditNewDependencies,
+  checkTestFileCreation,
+  checkWBConstraints,
+  detectFixLoopStagnation,
 } = await import("../dist/cli/commands/orchestrate/runner.js");
 
 // ── Helpers ──────────────────────────────────
@@ -453,5 +463,429 @@ describe("scanForStubs", () => {
     const stubs = scanForStubs(repo, ["src/service.ts"]);
     assert.ok(stubs.length > 0);
     assert.ok(stubs[0].includes("not implemented"));
+  });
+});
+
+// ═══ 8. detectFileScopeViolations — out-of-scope file detection ═══════
+
+describe("detectFileScopeViolations", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("detects files changed outside targetFiles", () => {
+    // Create and commit baseline
+    writeFileSync(join(repo, "src/a.ts"), "const a = 1;\n");
+    writeFileSync(join(repo, "src/b.ts"), "const b = 1;\n");
+    writeFileSync(join(repo, "src/c.ts"), "const c = 1;\n");
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    // Modify b.ts and c.ts (only b.ts is in targetFiles)
+    writeFileSync(join(repo, "src/b.ts"), "const b = 2;\n");
+    writeFileSync(join(repo, "src/c.ts"), "const c = 2;\n");
+
+    const items = [{ id: "WB-1", targetFiles: ["src/b.ts"], dependsOn: [] }];
+    const violations = detectFileScopeViolations(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.ok(violations.length > 0, "Should detect src/c.ts as out-of-scope");
+    assert.ok(violations.some(v => v.includes("src/c.ts")), "Should mention src/c.ts");
+  });
+
+  it("allows .json and .md files (non-source)", () => {
+    writeFileSync(join(repo, "package.json"), '{"a": 1}\n');
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+    writeFileSync(join(repo, "package.json"), '{"a": 2}\n');
+
+    const items = [{ id: "WB-1", targetFiles: ["src/x.ts"], dependsOn: [] }];
+    const violations = detectFileScopeViolations(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.ok(!violations.some(v => v.includes("package.json")), "JSON files should be allowed");
+  });
+
+  it("returns empty when all changes are in scope", () => {
+    writeFileSync(join(repo, "src/a.ts"), "const a = 1;\n");
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+    writeFileSync(join(repo, "src/a.ts"), "const a = 2;\n");
+
+    const items = [{ id: "WB-1", targetFiles: ["src/a.ts"], dependsOn: [] }];
+    const violations = detectFileScopeViolations(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.strictEqual(violations.length, 0);
+  });
+});
+
+// ═══ 9. scanBlueprintViolations — naming rule enforcement ═══════════
+
+describe("scanBlueprintViolations", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("detects naming rule violations", () => {
+    writeFileSync(join(repo, "src/player.ts"), "class AudioPlayer {\n  play() {}\n}\n");
+
+    const rules = [{
+      concept: "Audio Engine",
+      name: "AudioEngine",
+      rationale: "Blueprint naming",
+      source: "design/blueprint.md",
+      violationPattern: /\bAudioPlayer\b/,
+      alternatives: ["AudioPlayer", "SoundPlayer"],
+    }];
+
+    const violations = scanBlueprintViolations(repo, ["src/player.ts"], rules);
+    assert.ok(violations.length > 0, "Should detect AudioPlayer as violation");
+    assert.ok(violations[0].includes("Audio Engine"), "Should mention concept");
+    assert.ok(violations[0].includes("AudioEngine"), "Should mention expected name");
+  });
+
+  it("returns empty when code is compliant", () => {
+    writeFileSync(join(repo, "src/engine.ts"), "class AudioEngine {\n  play() {}\n}\n");
+
+    const rules = [{
+      concept: "Audio Engine",
+      name: "AudioEngine",
+      rationale: "Blueprint naming",
+      source: "design/blueprint.md",
+      violationPattern: /\bAudioPlayer\b/,
+      alternatives: ["AudioPlayer"],
+    }];
+
+    const violations = scanBlueprintViolations(repo, ["src/engine.ts"], rules);
+    assert.strictEqual(violations.length, 0, "Compliant code should have no violations");
+  });
+
+  it("skips test files", () => {
+    writeFileSync(join(repo, "src/player.test.ts"), "const player = new AudioPlayer();\n");
+
+    const rules = [{
+      concept: "Audio Engine",
+      name: "AudioEngine",
+      rationale: "Blueprint naming",
+      source: "design/blueprint.md",
+      violationPattern: /\bAudioPlayer\b/,
+      alternatives: ["AudioPlayer"],
+    }];
+
+    const violations = scanBlueprintViolations(repo, ["src/player.test.ts"], rules);
+    assert.strictEqual(violations.length, 0, "Test files should be excluded");
+  });
+
+  it("skips scan-ignore lines", () => {
+    writeFileSync(join(repo, "src/legacy.ts"), "const player = new AudioPlayer(); // scan-ignore\n");
+
+    const rules = [{
+      concept: "Audio Engine",
+      name: "AudioEngine",
+      rationale: "Blueprint naming",
+      source: "design/blueprint.md",
+      violationPattern: /\bAudioPlayer\b/,
+      alternatives: ["AudioPlayer"],
+    }];
+
+    const violations = scanBlueprintViolations(repo, ["src/legacy.ts"], rules);
+    assert.strictEqual(violations.length, 0, "scan-ignore should suppress violations");
+  });
+});
+
+// ═══ 10. detectOrphanFiles — wiring verification ═══════════════════
+
+describe("detectOrphanFiles", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src", "utils"), { recursive: true });
+  });
+
+  it("detects files never imported", () => {
+    writeFileSync(join(repo, "src/app.ts"), 'import { helper } from "./utils/helper";\n');
+    writeFileSync(join(repo, "src/utils/helper.ts"), "export function helper() {}\n");
+    writeFileSync(join(repo, "src/utils/orphan.ts"), "export function orphan() {}\n");
+
+    const orphans = detectOrphanFiles(repo, ["src/utils/orphan.ts", "src/utils/helper.ts"]);
+    assert.ok(orphans.includes("src/utils/orphan.ts"), "orphan.ts should be detected");
+    assert.ok(!orphans.includes("src/utils/helper.ts"), "helper.ts is imported — not orphan");
+  });
+
+  it("excludes index/main/app entry points", () => {
+    writeFileSync(join(repo, "src/index.ts"), "console.log('entry');\n");
+
+    const orphans = detectOrphanFiles(repo, ["src/index.ts"]);
+    assert.strictEqual(orphans.length, 0, "index.ts is an entry point — not orphan");
+  });
+
+  it("excludes test files", () => {
+    writeFileSync(join(repo, "src/utils/helper.test.ts"), "// test\n");
+
+    const orphans = detectOrphanFiles(repo, ["src/utils/helper.test.ts"]);
+    assert.strictEqual(orphans.length, 0, "test files should be excluded");
+  });
+
+  it("returns empty when all files are imported", () => {
+    writeFileSync(join(repo, "src/app.ts"), [
+      'import { a } from "./utils/a";',
+      'import { b } from "./utils/b";',
+    ].join("\n") + "\n");
+    writeFileSync(join(repo, "src/utils/a.ts"), "export const a = 1;\n");
+    writeFileSync(join(repo, "src/utils/b.ts"), "export const b = 2;\n");
+
+    const orphans = detectOrphanFiles(repo, ["src/utils/a.ts", "src/utils/b.ts"]);
+    assert.strictEqual(orphans.length, 0, "All files are imported — no orphans");
+  });
+});
+
+// ═══ 11. scanForPerfAntiPatterns — performance anti-pattern detection ══
+
+describe("scanForPerfAntiPatterns", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("detects while(true) busy loop", () => {
+    writeFileSync(join(repo, "src/loop.ts"), "while (true) { doWork(); }\n");
+    const findings = scanForPerfAntiPatterns(repo, ["src/loop.ts"]);
+    assert.ok(findings.length > 0, "Should detect while(true)");
+    assert.ok(findings[0].includes("busy loop"), "Should mention busy loop");
+  });
+
+  it("detects unbounded findAll()", () => {
+    writeFileSync(join(repo, "src/db.ts"), "const all = db.findAll();\n");
+    const findings = scanForPerfAntiPatterns(repo, ["src/db.ts"]);
+    assert.ok(findings.length > 0, "Should detect findAll()");
+    assert.ok(findings[0].includes("pagination"), "Should mention pagination");
+  });
+
+  it("does not flag clean code", () => {
+    writeFileSync(join(repo, "src/clean.ts"), [
+      "const items = list.filter(x => x.active);",
+      "for (const item of items) { process(item); }",
+    ].join("\n"));
+    const findings = scanForPerfAntiPatterns(repo, ["src/clean.ts"]);
+    assert.strictEqual(findings.length, 0);
+  });
+
+  it("skips test files", () => {
+    writeFileSync(join(repo, "src/perf.test.ts"), "while (true) { break; }\n");
+    const findings = scanForPerfAntiPatterns(repo, ["src/perf.test.ts"]);
+    assert.strictEqual(findings.length, 0, "Test files should be excluded");
+  });
+
+  it("skips scan-ignore lines", () => {
+    writeFileSync(join(repo, "src/loop.ts"), "while (true) { await tick(); } // scan-ignore\n");
+    const findings = scanForPerfAntiPatterns(repo, ["src/loop.ts"]);
+    assert.strictEqual(findings.length, 0, "scan-ignore should suppress");
+  });
+});
+
+// ═══ 12. auditNewDependencies — license/security check ══════════════
+
+describe("auditNewDependencies", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+  });
+
+  it("detects newly added dependencies", () => {
+    // Baseline: empty deps
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: {},
+    }));
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    // Add a new dep
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: { "new-pkg": "^1.0.0" },
+    }));
+
+    const issues = auditNewDependencies(repo, "HEAD");
+    assert.ok(issues.length > 0, "Should detect new-pkg");
+    assert.ok(issues.some(i => i.includes("new-pkg")), "Should mention new-pkg");
+  });
+
+  it("returns empty when no deps changed", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: { "existing": "^1.0.0" },
+    }));
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    // No changes
+    const issues = auditNewDependencies(repo, "HEAD");
+    assert.strictEqual(issues.length, 0);
+  });
+
+  it("returns empty when no package.json exists", () => {
+    const issues = auditNewDependencies(repo, "HEAD");
+    assert.strictEqual(issues.length, 0);
+  });
+});
+
+// ═══ 13. checkTestFileCreation — test file creation verification ════
+
+describe("checkTestFileCreation", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("warns when verify has test runner but no test file created", () => {
+    // Baseline
+    writeFileSync(join(repo, "src/app.ts"), "const a = 1;\n");
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    // Agent modifies source but creates no test
+    writeFileSync(join(repo, "src/app.ts"), "const a = 2;\nexport function hello() { return 'hi'; }\n");
+
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+      verify: "npx vitest run", action: "implement hello",
+    }];
+    const warnings = checkTestFileCreation(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.ok(warnings.length > 0, "Should warn about missing test file");
+    assert.ok(warnings[0].includes("WB-1"), "Should mention WB-1");
+  });
+
+  it("does not warn when test file exists", () => {
+    writeFileSync(join(repo, "src/app.ts"), "const a = 1;\n");
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    writeFileSync(join(repo, "src/app.ts"), "const a = 2;\n");
+    writeFileSync(join(repo, "src/app.test.ts"), "import { hello } from './app';\n");
+
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+      verify: "npx vitest run",
+    }];
+    const warnings = checkTestFileCreation(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.strictEqual(warnings.length, 0, "Should not warn when test exists");
+  });
+
+  it("does not warn when no test runner in verify", () => {
+    writeFileSync(join(repo, "src/app.ts"), "const a = 1;\n");
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+    writeFileSync(join(repo, "src/app.ts"), "const a = 2;\n");
+
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+      verify: "npx tsc --noEmit",
+    }];
+    const warnings = checkTestFileCreation(repo, items, getChangedFiles(repo, "HEAD"));
+    assert.strictEqual(warnings.length, 0, "No test runner = no test requirement");
+  });
+});
+
+// ═══ 14. checkWBConstraints — constraint enforcement ════════════════
+
+describe("checkWBConstraints", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTmpGitRepo();
+    mkdirSync(join(repo, "src"), { recursive: true });
+  });
+
+  it("detects 'no new dependencies' violation", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: {},
+    }));
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: { "lodash": "^4.0.0" },
+    }));
+
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+      constraints: "No new dependencies allowed",
+    }];
+    const depIssues = auditNewDependencies(repo, "HEAD");
+    const violations = checkWBConstraints(repo, items, depIssues);
+    assert.ok(violations.length > 0, "Should detect dependency violation");
+    assert.ok(violations[0].includes("lodash"), "Should mention lodash");
+  });
+
+  it("returns empty when constraints are met", () => {
+    writeFileSync(join(repo, "package.json"), JSON.stringify({
+      name: "test", dependencies: { "existing": "^1.0.0" },
+    }));
+    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
+
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+      constraints: "No new dependencies allowed",
+    }];
+    const violations = checkWBConstraints(repo, items, auditNewDependencies(repo, "HEAD"));
+    assert.strictEqual(violations.length, 0);
+  });
+
+  it("returns empty when no constraints field", () => {
+    const items = [{
+      id: "WB-1", targetFiles: ["src/app.ts"], dependsOn: [],
+    }];
+    const violations = checkWBConstraints(repo, items, []);
+    assert.strictEqual(violations.length, 0);
+  });
+});
+
+// ═══ 15. detectFixLoopStagnation — fix loop stagnation detection ════
+
+describe("detectFixLoopStagnation", () => {
+  it("detects spinning (identical findings repeated)", () => {
+    const history = [
+      ["type error in foo.ts", "missing import"],
+      ["type error in foo.ts", "missing import"],
+    ];
+    const result = detectFixLoopStagnation(history);
+    assert.ok(result, "Should detect spinning");
+    assert.ok(result.includes("spinning"), "Should say spinning");
+  });
+
+  it("detects oscillation (A→B→A)", () => {
+    const history = [
+      ["error A"],
+      ["error B"],
+      ["error A"],
+    ];
+    const result = detectFixLoopStagnation(history);
+    assert.ok(result, "Should detect oscillation");
+    assert.ok(result.includes("oscillation"), "Should say oscillation");
+  });
+
+  it("detects no progress (count not decreasing)", () => {
+    const history = [
+      ["error 1", "error 2"],
+      ["error 1", "error 3"],
+    ];
+    const result = detectFixLoopStagnation(history);
+    assert.ok(result, "Should detect no progress");
+    assert.ok(result.includes("no progress"), "Should say no progress");
+  });
+
+  it("returns null when findings decrease", () => {
+    const history = [
+      ["error 1", "error 2", "error 3"],
+      ["error 1"],
+    ];
+    const result = detectFixLoopStagnation(history);
+    assert.strictEqual(result, null, "Decreasing findings = progress");
+  });
+
+  it("returns null for single attempt", () => {
+    const history = [["error 1"]];
+    const result = detectFixLoopStagnation(history);
+    assert.strictEqual(result, null, "Need at least 2 attempts");
+  });
+
+  it("returns null for empty history", () => {
+    assert.strictEqual(detectFixLoopStagnation([]), null);
   });
 });
