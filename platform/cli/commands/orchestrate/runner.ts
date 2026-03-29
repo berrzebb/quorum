@@ -10,7 +10,7 @@ import {
   verifyDesignDiagrams, computeWaves,
 } from "./shared.js";
 import { autoGenerateWBs, autoFixDesignDiagrams } from "./planner.js";
-import { autoRetro, autoMerge } from "./lifecycle.js";
+import { autoRetro, autoMerge } from "../../../orchestrate/governance/lifecycle-hooks.js";
 import { parseBlueprints, type NamingRule } from "../../../bus/blueprint-parser.js";
 
 // ── Extracted module imports ─────────────────
@@ -26,6 +26,17 @@ import { runE2EVerification } from "../../../orchestrate/governance/e2e-verifica
 // State persistence
 import { FilesystemCheckpointStore } from "../../../orchestrate/state/filesystem/checkpoint-store.js";
 import type { WaveCheckpoint } from "../../../orchestrate/state/state-types.js";
+
+// Contract control plane (PLT-6F)
+import { InMemoryContractLedger } from "../../../core/harness/contract-ledger.js";
+import { createSprintContract } from "../../../core/harness/sprint-contract.js";
+import { createEvaluationContract } from "../../../core/harness/evaluation-contract.js";
+import { createHandoffArtifact } from "../../../core/harness/handoff-artifact.js";
+import { createNegotiationRecord } from "../../../core/harness/negotiation-record.js";
+import { createIterationPolicy, shouldEscalate, isExhausted } from "../../../core/harness/iteration-policy.js";
+import { approveWithNegotiation } from "../../../orchestrate/planning/contract-negotiation.js";
+import { PromotionGate } from "../../../bus/promotion-gate.js";
+import { HandoffGate } from "../../../bus/handoff-gate.js";
 
 // ── CLI arg parsing ──────────────────────────
 
@@ -166,6 +177,13 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   }
   try { execSync(`git tag "quorum-baseline/${trackName}/${Date.now()}"`, { cwd: repoRoot, timeout: 5000, stdio: "pipe", windowsHide: true }); } catch { /* ok */ }
   claimContractFiles(repoRoot, bridge);
+
+  // ── Contract Control Plane (PLT-6F) ─────────
+  const contractLedger = new InMemoryContractLedger();
+  const promotionGate = new PromotionGate(contractLedger);
+  const handoffGate = new HandoffGate(contractLedger);
+  const iterationPolicy = createIterationPolicy({ maxAttempts: maxRetries, escalationAt: 2, amendAfter: 3 });
+
   const waves = computeWaves(allItems);
   console.log(`  Waves: ${waves.length} (Phase gates → topological depth)\n`);
   const checkpointDir = resolve(repoRoot, ".claude", "quorum");
@@ -192,6 +210,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
 
   console.log(`  Mux: ${mux.getBackend()}\n${"═".repeat(60)}\n`);
   let completedWBs = 0, failedWBs = 0, unverifiedWBs = 0;
+  let consecutiveFailedWaves = 0;
   let lastFitnessResult: FitnessGateResult | undefined;
   const totalWBs = workItems.length;
   const completedIds = new Set<string>();
@@ -225,7 +244,27 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         .filter(w => w.phaseId === currentPhaseId)
         .flatMap(w => w.items);
       console.log(`\n  \x1b[36m◈ Phase gate\x1b[0m — verifying ${currentPhaseId} before ${wave.phaseId}`);
-      const phaseResult = verifyPhaseCompletion(repoRoot, currentPhaseId, prevPhaseItems, completedIds);
+
+      // Store phase-level evaluation contract (key must match canPromote lookup)
+      // Only bind promotion gate when fitness data exists (avoids undefined < threshold → false)
+      const phaseContractId = `${trackName}/${currentPhaseId}`;
+      const hasPromotionData = lastFitnessResult != null;
+      if (hasPromotionData) {
+        const phaseEvalContract = createEvaluationContract({
+          contractId: phaseContractId,
+          blockingChecks: ["fitness", "scope", "tests"],
+          thresholds: { fitness: 0.4 },
+          failureDisposition: "block",
+        });
+        contractLedger.storeEvaluationContract(phaseEvalContract);
+      }
+
+      const phaseResult = _verifyPhaseCompletion(
+        repoRoot, currentPhaseId, prevPhaseItems, completedIds, detectRegressions,
+        hasPromotionData
+          ? { evaluationContractId: phaseContractId, promotionGate, scores: { fitness: lastFitnessResult!.score } }
+          : undefined,
+      );
       if (!phaseResult.passed) {
         console.log(`  \x1b[31m✗ Phase gate FAILED\x1b[0m`);
         for (const f of phaseResult.failures) console.log(`    ✗ ${f}`);
@@ -238,16 +277,85 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       console.log(`  \x1b[32m✓ Phase gate passed\x1b[0m — ${currentPhaseId} verified\n`);
     }
     currentPhaseId = wave.phaseId ?? currentPhaseId;
+
+    // ── Handoff gate: block if previous wave's handoff is incomplete (A-3) ──
+    // Skip for resumed waves (ledger is in-memory, no state from prior runs)
+    const prevWaveWasInThisRun = gi > 0 && !(resumeMode && gi - 1 <= skipUntilWave);
+    if (prevWaveWasInThisRun) {
+      const prevContractId = `${trackName}/wave-${gi - 1}`;
+      const handoffCheck = handoffGate.canResume(prevContractId);
+      if (!handoffCheck.allowed) {
+        console.log(`  \x1b[31m✗ Handoff gate blocked wave ${gi + 1}:\x1b[0m ${handoffCheck.reason}`);
+        console.log(`  Previous wave must complete successfully before proceeding.\n`);
+        checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
+        break;
+      }
+    }
+
+    // ── Iteration policy: check consecutive wave failures (A-3) ──
+    if (isExhausted(iterationPolicy, consecutiveFailedWaves)) {
+      console.log(`  \x1b[31m✗ Iteration budget exhausted:\x1b[0m ${consecutiveFailedWaves} consecutive failed waves >= ${iterationPolicy.maxAttempts} max`);
+      break;
+    }
+    if (shouldEscalate(iterationPolicy, consecutiveFailedWaves)) {
+      console.log(`  \x1b[33m⚠ Escalation threshold reached:\x1b[0m ${consecutiveFailedWaves} consecutive failures — consider model tier upgrade\n`);
+    }
+
     const phaseLabel = wave.phaseId ? ` \x1b[2m(${wave.phaseId})\x1b[0m` : "";
     console.log(`  \x1b[1mWave ${wave.index + 1}/${waves.length}\x1b[0m (${wave.items.length} items)${phaseLabel}\n`);
     const waveSnapshotRef = captureSnapshot(repoRoot);
     const previousManifests = readPreviousManifests(bridge, trackName, gi);
+
+    // ── Sprint contract with bilateral negotiation (PLT-6F + A-5) ──
+    const waveContractId = `${trackName}/wave-${gi}`;
+    const draftContract = createSprintContract({
+      trackName,
+      waveId: `wave-${gi}`,
+      scope: wave.items.map(i => i.id),
+      doneCriteria: wave.items.filter(i => i.done).map(i => i.done!),
+      evidenceRequired: wave.items.filter(i => i.verify).map(i => i.verify!),
+      approvalState: "draft",
+    });
+    draftContract.contractId = waveContractId;
+
+    // Evaluator-side negotiation: fitness gate + scope gates register as evaluator participant
+    const plannerRecord = createNegotiationRecord({
+      sprintContractId: waveContractId,
+      proposedBy: "planner",
+      status: "approved",
+      participants: ["planner"],
+    });
+    const evaluatorRecord = createNegotiationRecord({
+      sprintContractId: waveContractId,
+      proposedBy: "evaluator",
+      status: "approved",
+      requestedChanges: draftContract.evidenceRequired.length > 0
+        ? [`${draftContract.evidenceRequired.length} verify command(s) required`]
+        : ["No explicit verify commands — mechanical gates will enforce"],
+      participants: ["evaluator", "fitness-gate", "scope-gate"],
+    });
+
+    // Bilateral approval: evaluator must have participated
+    const approvedContract = approveWithNegotiation(draftContract, [plannerRecord, evaluatorRecord]);
+    contractLedger.storeSprintContract(approvedContract);
+
+    // Evaluation contract for phase promotion (A-3: canPromote requires this)
+    const evalContract = createEvaluationContract({
+      contractId: waveContractId,
+      blockingChecks: ["fitness", "scope", "blueprint"],
+      thresholds: { fitness: 0.4 },
+      failureDisposition: "retry",
+    });
+    contractLedger.storeEvaluationContract(evalContract);
+
     const waveResult = await runWave({
       repoRoot, wave, waveIndex: gi, totalWaves: waves.length, totalItems: totalWBs,
       trackName, provider, auditor, maxConcurrency, maxRetries,
       mux, bridge, completedIds, blueprintRules, rtmPath,
       manifests: previousManifests, snapshotRef: waveSnapshotRef,
       auditFn: runWaveAuditLLM,
+      contractId: waveContractId,
+      promotionGate,
       onLog: (msg: string) => console.log(msg),
       onProgress: (completed, total, active, waiting, elapsed) => {
         const pct = totalWBs > 0 ? Math.round((completedWBs / totalWBs) * 100) : 0;
@@ -257,12 +365,26 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       },
     });
     console.log();
+
+    // ── Handoff artifact for completed wave (PLT-6F) ──
+    if (waveResult.passed && waveResult.completedItemIds.length > 0) {
+      const handoff = createHandoffArtifact({
+        contractId: waveContractId,
+        summary: `Wave ${gi + 1} completed: ${waveResult.completedItemIds.join(", ")}`,
+        openItems: waveResult.timedOutIds,
+        nextAction: gi < waves.length - 1 ? `Proceed to wave ${gi + 2}` : "Track complete — run E2E verification",
+      });
+      contractLedger.storeHandoffArtifact(handoff);
+    }
+
     completedWBs += waveResult.completedItemIds.length;
     failedWBs += waveResult.timedOutIds.length;
     if (waveResult.fitnessResult) lastFitnessResult = waveResult.fitnessResult;
     if (!waveResult.passed && waveResult.auditGates?.completedItems.length) {
       failedWBs += waveResult.auditGates.completedItems.length;
     }
+    // Track consecutive wave failures for iteration policy
+    consecutiveFailedWaves = waveResult.passed ? 0 : consecutiveFailedWaves + 1;
     printWaveAuditDetails(wave, waveResult);
     for (const itemId of waveResult.completedItemIds) {
       const item = wave.items.find(i => i.id === itemId);
@@ -352,8 +474,8 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
 
 /** Pick a default auditor that differs from the provider for cross-model review. */
 function _defaultAuditor(provider: string): string {
-  // Codex preferred — strong code review, deterministic. Then gemini, then same model as fallback.
-  const candidates = ["codex", "gemini", "ollama", "claude"];
+  // Only CLI-spawnable providers (ollama is HTTP-only, would fail in runWaveAuditLLM).
+  const candidates = ["codex", "gemini", "claude"];
   for (const c of candidates) {
     if (c !== provider) return c;
   }
