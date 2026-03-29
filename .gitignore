@@ -4,13 +4,6 @@ dist/
 .session-state/
 test-harness/node_modules/
 retrospect-workspace/
-.claude/compaction-snapshot.json
-.claude/quorum-events.db
-.claude/quorum-events.db-wal
-.claude/quorum-events.db-shm
-.claude/agents/
-.claude/parliament/
-.claude/worktrees/
-.claude/quorum/
+.claude/
 docs/plan
 plans
