@@ -334,7 +334,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       const fixResult = await runFixCycle({
         repoRoot,
         files: waveFiles,
-        provider: auditor,
+        provider: auditor,          // auditor does the review
+        fixerProvider: provider,    // implementer does the fixing
         maxRounds: maxRetries,
         fitnessContext: auditGates.fitnessResult,
         auditFn,

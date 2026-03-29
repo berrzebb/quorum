@@ -37,7 +37,10 @@ export interface FixerResult {
 export interface FixCycleOptions {
   repoRoot: string;
   files: string[];
+  /** Auditor provider — used for re-audit between fix rounds. */
   provider: string;
+  /** Fixer provider — used for spawning fix agents. Defaults to provider if not set. */
+  fixerProvider?: string;
   maxRounds: number;
   fitnessContext?: FitnessGateResult;
   /** Function to run the LLM audit and return findings. */
@@ -110,14 +113,30 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     "5. Run any available tests to verify your fixes",
   ].join("\n");
 
-  spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
+  // Provider-aware CLI invocation
+  let finalArgs: string[];
+  let stdinInput: string | undefined;
+
+  if (provider === "codex") {
+    finalArgs = ["exec", "--full-auto", "-"];
+    stdinInput = prompt;
+  } else {
+    // claude / gemini / others
+    finalArgs = ["-p", prompt, "--dangerously-skip-permissions"];
+    stdinInput = undefined;
+  }
+
+  const result = spawnSync(bin, finalArgs, {
     cwd: repoRoot,
-    stdio: "inherit",
+    input: stdinInput,
+    stdio: [stdinInput ? "pipe" : "ignore", "inherit", "inherit"],
     env: { ...process.env },
-    timeout: 180_000,
+    timeout: 300_000,
+    shell: process.platform === "win32",
+    windowsHide: true,
   });
 
-  return { completed: true };
+  return { completed: result.status === 0 || result.status === null };
 }
 
 // ── Fix-Retry Cycle ─────────────────────────
@@ -133,6 +152,8 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
     repoRoot, files, provider, maxRounds,
     fitnessContext, auditFn, completedItems, detectStagnation,
   } = opts;
+  // Fixer uses implementer provider (separate from auditor provider).
+  const fixer = opts.fixerProvider ?? provider;
 
   const findingsHistory: string[][] = [];
   let attempts = 0;
@@ -141,6 +162,7 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
   while (true) {
     attempts++;
 
+    // Audit with auditor provider
     const auditResult = await auditFn(repoRoot, files, completedItems, provider);
 
     if (auditResult.passed) {
@@ -165,12 +187,12 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: false, attempts, stagnation, findingsHistory };
     }
 
-    // Spawn fixer for this round
+    // Spawn fixer with implementer provider (not auditor)
     await runFixer({
       repoRoot,
       findings: auditResult.findings,
       files,
-      provider,
+      provider: fixer,
       fitnessContext,
     });
   }
