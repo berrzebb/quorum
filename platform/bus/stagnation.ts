@@ -93,7 +93,7 @@ export function detectStagnation(
   if (oscillation) patterns.push(oscillation);
 
   // 3. No drift detection (verdict unchanged)
-  const noDrift = detectNoDrift(summaries, cfg.driftEpsilon);
+  const noDrift = detectNoDrift(summaries);
   if (noDrift) patterns.push(noDrift);
 
   // 4. Diminishing returns
@@ -183,7 +183,6 @@ function detectOscillation(
 
 function detectNoDrift(
   summaries: { verdict: string; codes: string }[],
-  _epsilon: number,
 ): DetectedPattern | null {
   if (summaries.length < 3) return null;
 

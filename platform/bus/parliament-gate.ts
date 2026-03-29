@@ -17,7 +17,7 @@ import { resolve } from "node:path";
 import type { EventStore } from "./store.js";
 import { AUDIT_VERDICT } from "./events.js";
 import { getPendingAmendmentCount } from "./amendment.js";
-import { STAGE_ORDER, type ConformanceStage } from "./normal-form.js";
+import { STAGE_ORDER, type ConformanceStage, generateConvergenceReport } from "./normal-form.js";
 
 // ── Gate result ─────────────────────────────
 
@@ -189,6 +189,20 @@ export function checkAllGates(
     const design = checkDesignGate(options.planningDir, options.trackName);
     if (!design.allowed) return design;
   }
+
+  // 5. Normal Form regression gate — block if any provider moved backward
+  try {
+    const report = generateConvergenceReport(store);
+    for (const p of report.providers) {
+      if (p.regressed) {
+        return {
+          allowed: false,
+          reason: `Normal Form regression: provider "${p.provider}" regressed from ${p.regressionFrom ?? "?"} to ${p.currentStage}.`,
+          details: { provider: p.provider, from: p.regressionFrom, to: p.currentStage },
+        };
+      }
+    }
+  } catch { /* fail-open: convergence data unavailable */ }
 
   return { allowed: true };
 }

@@ -12,9 +12,8 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { AuditRequest } from "./provider.js";
 import { DOMAIN_NAMES } from "./domain-detect.js";
-import type { SelectedReviewer, ReviewerSelection } from "./domain-router.js";
+import type { ReviewerSelection } from "./domain-router.js";
 import type { Finding, FindingSeverity } from "../bus/events.js";
 
 const execFileAsync = promisify(execFile);

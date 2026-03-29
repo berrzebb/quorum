@@ -13,7 +13,6 @@
 
 import type { EventStore } from "./store.js";
 import { AUDIT_VERDICT, type ProviderKind, type AuditVerdictPayload, type AuditVerdict } from "./events.js";
-import type { FitnessScore } from "./fitness.js";
 
 // ── Types ────────────────────────────────────
 

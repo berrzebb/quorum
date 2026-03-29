@@ -42,7 +42,7 @@ import {
   generateConvergenceReport,
   type ConvergenceReport,
 } from "./normal-form.js";
-import { createEvent, AMENDMENT_STATUS, type ProviderKind } from "./events.js";
+import { createEvent, AMENDMENT_STATUS } from "./events.js";
 
 // ── Types ────────────────────────────────────
 
@@ -233,7 +233,7 @@ export async function runParliamentSession(
     const allVoteEvents = store.query({ eventType: "parliament.amendment.vote" });
     for (const a of pending) {
       const votes = allVoteEvents.filter(e => e.payload.amendmentId === a.id);
-      const resolution = resolveAmendment(store, a.id, config.eligibleVoters, votes);
+      const resolution = resolveAmendment(store, a.id, config.eligibleVoters, votes, a.target);
       amendments.push(resolution);
     }
   } catch (err) {

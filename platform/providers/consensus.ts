@@ -10,7 +10,7 @@
  * Each role can use a different model via the Auditor interface.
  */
 
-import type { Auditor, AuditRequest, AuditResult } from "./provider.js";
+import type { Auditor, AuditRequest } from "./provider.js";
 import { extractJson } from "./auditors/parse.js";
 
 type Verdict = "approved" | "changes_requested" | "infra_failure";

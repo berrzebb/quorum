@@ -137,7 +137,6 @@ function isPipelineTopology(items: WorkItem[]): boolean {
 
   // Verify it forms a single chain (no branches)
   const itemIds = new Set(items.map(i => i.id));
-  const depTargets = new Set(nonHeads.map(i => i.dependsOn![0]!));
 
   // Every dep target must be in item set, and each item can be depended on by at most 1 other
   const depCountMap = new Map<string, number>();

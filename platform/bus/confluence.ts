@@ -11,7 +11,6 @@
  * Confluence checks system-wide coherence (total correctness).
  */
 
-import type { EventStore } from "./store.js";
 import type { CPS } from "./meeting-log.js";
 import { AUDIT_VERDICT, type AuditVerdict } from "./events.js";
 

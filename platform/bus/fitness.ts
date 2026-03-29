@@ -171,10 +171,11 @@ export function computeDelta(
   const componentDeltas: FitnessDelta["components"] = {};
   for (const [key, comp] of Object.entries(after.components)) {
     const prev = before.components[key as keyof FitnessScore["components"]];
+    const prevValue = prev?.value ?? 0;
     componentDeltas[key] = {
-      before: round(prev.value),
+      before: round(prevValue),
       after: round(comp.value),
-      delta: round(comp.value - prev.value),
+      delta: round(comp.value - prevValue),
     };
   }
 

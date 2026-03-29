@@ -256,9 +256,9 @@ export function getAmendments(store: EventStore): Amendment[] {
 
 /** Count amendments still in "proposed" status. Lightweight — skips vote queries. */
 export function getPendingAmendmentCount(store: EventStore): number {
-  const proposed = store.query({ eventType: "parliament.amendment.propose" });
+  const proposed = store.query({ eventType: "parliament.amendment.propose", limit: 500 });
   const resolved = new Set(
-    store.query({ eventType: "parliament.amendment.resolve" })
+    store.query({ eventType: "parliament.amendment.resolve", limit: 500 })
       .map(e => e.payload.amendmentId as string),
   );
   return proposed.filter(e => !resolved.has(e.payload.amendmentId as string)).length;
