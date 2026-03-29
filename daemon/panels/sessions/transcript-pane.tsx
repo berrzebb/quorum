@@ -26,54 +26,103 @@ const MAX_BUFFER_LINES = 200;
 /**
  * Parse NDJSON stream output into displayable message lines.
  *
- * Handles Claude streaming format:
- * - content_block_delta with delta.text
+ * Handles Claude/Codex streaming format — line by line:
+ * - content_block_start: detect thinking/text/tool_use block type
+ * - content_block_delta: text_delta, thinking_delta, input_json_delta
  * - message with role=user
  * - result with result text
+ * - tool_use / tool_result summaries
  *
- * Filters to assistant/user messages only (as per daemon chat filter feedback).
+ * Renders: [THINK] prefix for thinking, [TOOL] for tool use, plain text for chat.
  */
 export function parseStreamJson(rawLines: string[]): string[] {
-  const messageParts: string[] = [];
-  let lastRole: "assistant" | "user" | null = null;
+  const output: string[] = [];
+  let blockType: "text" | "thinking" | "tool_use" | null = null;
+  let toolName = "";
+  let lastSection: "user" | "assistant" | "thinking" | "tool" | null = null;
 
-  const joined = rawLines.map(l => l.trimEnd()).join("");
-  const entries = joined.split(/(?=\{"(?:type|role)":)/);
+  for (const raw of rawLines) {
+    const line = raw.trim();
+    if (!line.startsWith("{")) continue;
 
-  for (const entry of entries) {
-    const trimmed = entry.trim();
-    if (!trimmed.startsWith("{")) continue;
-    try {
-      const obj = JSON.parse(trimmed);
+    let obj: any;
+    try { obj = JSON.parse(line); } catch { continue; }
 
-      if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {
-        if (lastRole !== "user") messageParts.push("\n───");
-        lastRole = "user";
-        const content = typeof obj.content === "string"
-          ? obj.content
-          : Array.isArray(obj.content)
-            ? obj.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text : "").join("")
-            : "";
-        if (content) messageParts.push(`[USER] ${content}`);
-        continue;
+    // User message
+    if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {
+      if (lastSection !== "user") { output.push("", "─── USER ───"); lastSection = "user"; }
+      const content = typeof obj.content === "string"
+        ? obj.content
+        : Array.isArray(obj.content)
+          ? obj.content.map((c: any) => c.type === "text" ? c.text : "").join("")
+          : "";
+      if (content) output.push(content);
+      continue;
+    }
+
+    // Block start — detect type
+    if (obj.type === "content_block_start" && obj.content_block) {
+      blockType = obj.content_block.type ?? "text";
+      if (blockType === "thinking" && lastSection !== "thinking") {
+        output.push("", "─── THINKING ───");
+        lastSection = "thinking";
+      } else if (blockType === "tool_use") {
+        toolName = obj.content_block.name ?? "tool";
+        if (lastSection !== "tool") { output.push(""); lastSection = "tool"; }
+        output.push(`[TOOL] ${toolName}`);
+      } else if (blockType === "text" && lastSection !== "assistant") {
+        output.push("", "─── ASSISTANT ───");
+        lastSection = "assistant";
       }
+      continue;
+    }
 
-      if (obj.type === "content_block_delta" && obj.delta?.text) {
-        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
-        messageParts.push(obj.delta.text);
-        continue;
+    // Block delta — content
+    if (obj.type === "content_block_delta" && obj.delta) {
+      const d = obj.delta;
+      if (d.type === "thinking_delta" && d.thinking) {
+        if (lastSection !== "thinking") { output.push("", "─── THINKING ───"); lastSection = "thinking"; }
+        output.push(...d.thinking.split("\n"));
+      } else if (d.type === "text_delta" && d.text) {
+        if (lastSection !== "assistant") { output.push("", "─── ASSISTANT ───"); lastSection = "assistant"; }
+        output.push(...d.text.split("\n"));
+      } else if (d.type === "input_json_delta") {
+        // tool input — skip verbose JSON, already shown tool name
+      } else if (d.text) {
+        // Legacy format: delta.text without type prefix
+        if (lastSection !== "assistant") { output.push("", "─── ASSISTANT ───"); lastSection = "assistant"; }
+        output.push(...d.text.split("\n"));
       }
+      continue;
+    }
 
-      if (obj.type === "result" && obj.result) {
-        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
-        messageParts.push(obj.result);
-        continue;
+    // Tool result
+    if (obj.type === "tool_result" || (obj.type === "content_block_start" && obj.content_block?.type === "tool_result")) {
+      const text = obj.content ?? obj.output ?? "";
+      if (text) output.push(`[RESULT] ${typeof text === "string" ? text.slice(0, 80) : ""}`);
+      continue;
+    }
+
+    // Result (final)
+    if (obj.type === "result" && obj.result) {
+      if (lastSection !== "assistant") { output.push("", "─── ASSISTANT ───"); lastSection = "assistant"; }
+      output.push(...String(obj.result).split("\n"));
+      continue;
+    }
+
+    // Claude Code assistant chunk format
+    if (obj.type === "assistant" && obj.message?.content) {
+      if (lastSection !== "assistant") { output.push("", "─── ASSISTANT ───"); lastSection = "assistant"; }
+      for (const block of obj.message.content) {
+        if (block.type === "text" && block.text) output.push(...block.text.split("\n"));
+        if (block.type === "tool_use") output.push(`[TOOL] ${block.name ?? "tool"}`);
       }
-    } catch { /* not JSON — skip */ }
+      continue;
+    }
   }
 
-  if (messageParts.length === 0) return rawLines;
-  return messageParts.join("").split("\n").filter(Boolean).slice(-MAX_BUFFER_LINES);
+  if (output.length === 0) return rawLines;
+  return output.filter(l => l !== undefined).slice(-MAX_BUFFER_LINES);
 }
 
 // ── TranscriptPane Component ──────────────────────────────────────────

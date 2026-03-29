@@ -194,7 +194,7 @@ describe("DUX-10: parseStreamJson", () => {
     ];
     const result = parseStreamJson(raw);
     const joined = result.join("\n");
-    assert.ok(joined.includes("[USER]"), "Should mark user messages");
+    assert.ok(joined.includes("USER"), "Should mark user messages");
     assert.ok(joined.includes("hello"), "Should contain user text");
     assert.ok(joined.includes("response"), "Should contain assistant text");
   });
