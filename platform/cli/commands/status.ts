@@ -4,7 +4,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve, basename } from "node:path";
+import { resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { AUDIT_VERDICT } from "../../bus/events.js";
 

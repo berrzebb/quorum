@@ -6,8 +6,11 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export async function run(args: string[]): Promise<void> {
   const branch = args[0];
@@ -36,8 +39,7 @@ export async function run(args: string[]): Promise<void> {
     const dbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
     if (existsSync(dbPath)) {
       try {
-        // @ts-expect-error MJS bridge has no type declarations
-        const bridge = await import("../../../core/bridge.mjs");
+        const bridge = await import(pathToFileURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "bridge.mjs")).href);
         await bridge.init(process.cwd());
         const gate = bridge.checkParliamentGates();
         if (!gate.allowed) {

@@ -2264,13 +2264,13 @@ export async function toolContractDrift(params) {
   // Load AST analyzer (program mode)
   let ASTAnalyzer;
   try {
-    const astPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "dist", "providers", "ast-analyzer.js");
+    const astPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "dist", "platform", "providers", "ast-analyzer.js");
     const mod = await import(astPath);
     ASTAnalyzer = mod.ASTAnalyzer;
   } catch {
     try {
       // Fallback: try direct import
-      const mod = await import("../../../dist/providers/ast-analyzer.js");
+      const mod = await import("../../../dist/platform/providers/ast-analyzer.js");
       ASTAnalyzer = mod.ASTAnalyzer;
     } catch {
       return { error: "AST analyzer unavailable. Run: npm run build" };

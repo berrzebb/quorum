@@ -178,7 +178,7 @@ async function tryImportDefault(filePath) {
  */
 const CORE_FIELDS = new Set([
   "id", "name", "extensions", "endBlock", "commentPrefixes",
-  "jsxExtensions", "i18nHardcodedRe",
+  "jsxExtensions", "i18nHardcodedRe", "verify",
 ]);
 
 /**

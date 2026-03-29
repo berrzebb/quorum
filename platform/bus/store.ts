@@ -407,6 +407,8 @@ export class EventStore {
 
   /** Close the database connection. */
   close(): void {
+    this.queryCache.clear();
+    this.countCache.clear();
     this.db.close();
   }
 }

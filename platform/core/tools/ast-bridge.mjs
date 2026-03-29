@@ -1,7 +1,7 @@
 /**
  * ast-bridge.mjs — Fail-safe bridge from MJS tool layer to compiled AST analyzer.
  *
- * Eagerly loads dist/providers/ast-analyzer.js via top-level await.
+ * Eagerly loads dist/platform/providers/ast-analyzer.js via top-level await.
  * If unavailable (not compiled, missing dep), _analyzer stays null (fail-open).
  *
  * All exported functions are synchronous — safe to use from runPatternScan.
@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..", "..", "dist");
-const AST_PATH = resolve(DIST, "providers", "ast-analyzer.js");
+const AST_PATH = resolve(DIST, "platform", "providers", "ast-analyzer.js");
 
 let _analyzer = null;
 let _loadError = null;

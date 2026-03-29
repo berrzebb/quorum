@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync, statSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import type { QuorumBus } from "../../bus/bus.js";
 import { createEvent } from "../../bus/events.js";
 import type {
@@ -91,7 +91,6 @@ export class CodexProvider implements QuorumProvider {
       let bin = process.env.CODEX_BIN ?? "codex";
       try {
         // Sync dynamic import not possible — use same PATH scan inline
-        const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
         const result = execFileSync(bin, ["--version"], {
           encoding: "utf8", timeout: 5000, windowsHide: true,
           shell: process.platform === "win32",

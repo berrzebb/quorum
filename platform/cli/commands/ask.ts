@@ -7,7 +7,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { extname, join, isAbsolute, delimiter } from "node:path";
+import { join, delimiter } from "node:path";
 
 /** Resolve binary: on Windows, prefer .cmd/.exe/.bat over extensionless POSIX scripts. */
 function resolveWinBinary(command: string, envVar?: string): string {
