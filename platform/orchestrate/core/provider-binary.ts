@@ -76,7 +76,54 @@ export function buildProviderArgs(provider: string, opts: ProviderArgsOptions): 
   } else {
     // gemini, ollama, vllm, etc.
     if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt);
+    if (opts.prompt) args.push(opts.prompt);
   }
 
   return args;
+}
+
+/** Ready-to-spawn info returned by prepareProviderSpawn. */
+export interface ProviderSpawnInfo {
+  /** Binary to execute (on Windows, this is cmd.exe). */
+  bin: string;
+  /** Full args array (on Windows, includes /c <binary>). */
+  args: string[];
+  /** If set, pipe this to stdin instead of passing prompt as CLI arg. */
+  stdinInput?: string;
+}
+
+/**
+ * Resolve binary, build CLI args, and wrap for Windows in one call.
+ *
+ * Codex: pipes prompt via stdin (avoids shell escaping issues).
+ * Windows: wraps in `cmd /c <binary>` (shell:true corrupts multi-line args).
+ */
+export async function prepareProviderSpawn(
+  provider: string,
+  prompt: string,
+  opts?: { systemPrompt?: string; dangerouslySkipPermissions?: boolean },
+): Promise<ProviderSpawnInfo> {
+  const rawBin = await resolveProviderBinary(provider);
+
+  let finalArgs: string[];
+  let stdinInput: string | undefined;
+
+  if (provider === "codex") {
+    finalArgs = ["exec", "--full-auto", "-"];
+    stdinInput = prompt;
+  } else {
+    finalArgs = buildProviderArgs(provider, {
+      prompt,
+      systemPrompt: opts?.systemPrompt,
+      nonInteractive: true,
+      dangerouslySkipPermissions: opts?.dangerouslySkipPermissions ?? true,
+      fullAuto: true,
+    });
+  }
+
+  const isWin = process.platform === "win32";
+  const bin = isWin ? (process.env.ComSpec ?? "cmd.exe") : rawBin;
+  const args = isWin ? ["/c", rawBin, ...finalArgs] : finalArgs;
+
+  return { bin, args, stdinInput };
 }

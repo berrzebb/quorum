@@ -83,7 +83,7 @@ export function amendWaveCommit(repoRoot: string, rtmPath: string): void {
 
 // ── Post-track lifecycle ────────────────────
 
-type Bridge = Record<string, Function>;
+import type { Bridge } from "../planning/types.js";
 
 /** Clear retro marker and release session gate. */
 export async function autoRetro(repoRoot: string): Promise<void> {

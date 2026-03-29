@@ -11,7 +11,7 @@
  * Minimal own logic: orchestration glue only.
  */
 
-import type { WorkItem, Wave, Bridge } from "../../cli/commands/orchestrate/shared.js";
+import type { WorkItem, Wave, Bridge } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
 import type { WaveAuditResult } from "./audit-loop.js";
@@ -55,7 +55,7 @@ export interface WaveRunnerOptions {
   auditor: string;
   maxConcurrency: number;
   maxRetries: number;
-  mux: any;
+  mux: import("../planning/types.js").MuxHandle;
   bridge: Bridge | null;
   completedIds: Set<string>;
   blueprintRules: NamingRule[];
@@ -65,7 +65,7 @@ export interface WaveRunnerOptions {
   /** Snapshot ref captured before the wave started. */
   snapshotRef: string;
   /** LLM audit function (injected — kept in runner.ts to avoid moving CLI spawn logic). */
-  auditFn: (repoRoot: string, files: string[], items: any[], provider: string) => Promise<{ passed: boolean; findings: string[] }>;
+  auditFn: (repoRoot: string, files: string[], items: WorkItem[], provider: string) => Promise<{ passed: boolean; findings: string[] }>;
   /** Callback for console output / progress reporting. */
   onLog?: (msg: string) => void;
   /** Callback for progress ticker updates. */
@@ -321,7 +321,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       const fg = auditGates.fitnessResult;
       const fitnessFindings = [
         `Fitness score ${fg.score.toFixed(2)} below threshold: ${fg.reason}`,
-        ...(fg.components ?? []).filter((c: any) => c.score < 0.5).map((c: any) => `Component "${c.name}" = ${c.score.toFixed(2)} (below 0.5)`),
+        ...(fg.components ?? []).filter((c) => c.score < 0.5).map((c) => `Component "${c.name}" = ${c.score.toFixed(2)} (below 0.5)`),
       ];
       await runFixer({ repoRoot, findings: fitnessFindings, files: waveFiles, provider, fitnessContext: fg });
     }
@@ -395,8 +395,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       wavePassed = false;
     }
 
-    // ── 7. Project test gate ─────────────────
-    if (!testResult) testResult = runProjectTests(repoRoot);
+    // ── 7. Project test gate (skip if already run in audit-pass branch)
+    testResult ??= runProjectTests(repoRoot);
 
     return {
       passed: wavePassed,

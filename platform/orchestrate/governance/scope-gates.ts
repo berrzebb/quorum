@@ -5,11 +5,12 @@
  * No execution logic, no agent spawning, no LLM calls.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { execFileSync, execSync } from "node:child_process";
-import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
+import { walkSourceFiles } from "../execution/preflight.js";
 
 // ── Stub / Perf Pattern Definitions ──────────
 
@@ -138,23 +139,6 @@ export function scanBlueprintViolations(
 }
 
 // ── Orphan File Detection ────────────────────
-
-/** Walk a directory tree collecting source files matching a filter. */
-function walkSourceFiles(
-  dir: string, filter: (name: string) => boolean, maxDepth = 8, depth = 0,
-): string[] {
-  if (depth > maxDepth) return [];
-  const results: string[] = [];
-  try {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") continue;
-      const full = resolve(dir, entry.name);
-      if (entry.isDirectory()) results.push(...walkSourceFiles(full, filter, maxDepth, depth + 1));
-      else if (filter(entry.name)) results.push(full);
-    }
-  } catch { /* permission or access error */ }
-  return results;
-}
 
 /**
  * Detect orphan files: source files that exist but are never imported anywhere.
@@ -439,47 +423,57 @@ export function runProjectTests(repoRoot: string): ProjectTestResult {
  */
 export function detectRegressions(repoRoot: string, targetFiles: string[], snapshotRef = "HEAD"): string[] {
 
+  const uniqueFiles = [...new Set(targetFiles)];
+  if (uniqueFiles.length === 0) return [];
+
   const regressions: string[] = [];
 
-  for (const file of [...new Set(targetFiles)]) {
+  // Batch: single git diff for all files (O(1) subprocess instead of O(N))
+  let numstatOutput: string;
+  try {
+    numstatOutput = execFileSync("git", ["diff", "--numstat", snapshotRef, "--", ...uniqueFiles], {
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    }).trim();
+  } catch { return []; }
+
+  if (!numstatOutput) return [];
+
+  // Batch: single git ls-files to identify tracked files
+  let trackedOutput: string;
+  try {
+    trackedOutput = execFileSync("git", ["ls-files", "--", ...uniqueFiles], {
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    }).trim();
+  } catch { return []; }
+
+  const trackedSet = new Set(trackedOutput.split("\n").map(l => l.trim()).filter(Boolean));
+
+  for (const line of numstatOutput.split("\n")) {
+    const parts = line.split("\t");
+    if (parts.length < 3) continue;
+    const additions = parseInt(parts[0] ?? "0", 10);
+    const deletions = parseInt(parts[1] ?? "0", 10);
+    const file = parts[2]!;
+
+    if (deletions < 10) continue;
+    if (!trackedSet.has(file)) continue;
+
+    let currentLines = 0;
     try {
-      // Get numstat: additions \t deletions \t file
-      const stat = execFileSync("git", ["diff", "--numstat", snapshotRef, "--", file], {
-        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-        windowsHide: true,
-      }).trim();
-      if (!stat) continue;
+      const content = readFileSync(resolve(repoRoot, file), "utf8");
+      currentLines = content.split("\n").length;
+    } catch { continue; }
 
-      const parts = stat.split("\t");
-      const additions = parseInt(parts[0] ?? "0", 10);
-      const deletions = parseInt(parts[1] ?? "0", 10);
+    const originalLines = currentLines - additions + deletions;
+    if (originalLines <= 0) continue;
 
-      // Skip new files or trivial changes
-      if (deletions < 10) continue;
-
-      // Calculate original line count: current = original + additions - deletions
-      let currentLines = 0;
-      try {
-        const wc = execFileSync("git", ["ls-files", "--", file], {
-          cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-          windowsHide: true,
-        }).trim();
-        if (!wc) continue; // untracked, skip
-        const content = readFileSync(resolve(repoRoot, file), "utf8");
-        currentLines = content.split("\n").length;
-      } catch { continue; }
-
-      const originalLines = currentLines - additions + deletions;
-      if (originalLines <= 0) continue; // new file
-
-      const deleteRatio = deletions / originalLines;
-
-      // Overwrite: >50% of original lines deleted — file was replaced, not edited
-      if (deleteRatio > 0.5) {
-        const pct = Math.round(deleteRatio * 100);
-        regressions.push(`${file}: ${pct}% of original overwritten (+${additions} -${deletions}, was ${originalLines} lines) — agent used Write instead of Edit`);
-      }
-    } catch { /* untracked file, skip */ }
+    const deleteRatio = deletions / originalLines;
+    if (deleteRatio > 0.5) {
+      const pct = Math.round(deleteRatio * 100);
+      regressions.push(`${file}: ${pct}% of original overwritten (+${additions} -${deletions}, was ${originalLines} lines) — agent used Write instead of Edit`);
+    }
   }
 
   return regressions;

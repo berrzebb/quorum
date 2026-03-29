@@ -9,12 +9,9 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
-import { pathToFileURL, fileURLToPath } from "node:url";
-import { dirname } from "node:path";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import type { WorkItem } from "../planning/types.js";
+import { prepareProviderSpawn } from "../core/provider-binary.js";
 
 // ── Types ────────────────────────────────────
 
@@ -44,9 +41,9 @@ export interface FixCycleOptions {
   maxRounds: number;
   fitnessContext?: FitnessGateResult;
   /** Function to run the LLM audit and return findings. */
-  auditFn: (repoRoot: string, files: string[], items: any[], provider: string) => Promise<{ passed: boolean; findings: string[] }>;
+  auditFn: (repoRoot: string, files: string[], items: WorkItem[], provider: string) => Promise<{ passed: boolean; findings: string[] }>;
   /** Work items completed in this wave (passed to auditFn). */
-  completedItems: any[];
+  completedItems: WorkItem[];
   /** Stagnation detection function (injected from governance/scope-gates). */
   detectStagnation?: (history: string[][]) => string | null;
 }
@@ -73,24 +70,18 @@ export interface FixCycleResult {
 export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
   const { repoRoot, findings, files, provider, fitnessContext } = opts;
 
-  // At runtime: dist/platform/orchestrate/execution/ → up 4 → project root
-  const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
-  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "platform", "core", "cli-runner.mjs")).href);
-  const bin = resolveBinary(provider);
-
   const fileList = [...new Set(files)].slice(0, 15).map(f => `- ${f}`).join("\n");
   const findingList = findings.map(f => `- ${f}`).join("\n");
 
-  // Build fitness context section for fixer
   let fitnessSection = "";
   if (fitnessContext && fitnessContext.components) {
-    const weak = fitnessContext.components.filter((c: any) => c.score < 0.5);
+    const weak = fitnessContext.components.filter((c) => c.score < 0.5);
     if (weak.length > 0) {
       fitnessSection = [
         "",
         `## Fitness Score: ${fitnessContext.score.toFixed(2)} (${fitnessContext.decision})`,
         "Weak components (prioritize fixes here):",
-        ...weak.map((c: any) => `- **${c.name}**: ${c.score.toFixed(2)}`),
+        ...weak.map((c) => `- **${c.name}**: ${c.score.toFixed(2)}`),
       ].join("\n");
     }
   }
@@ -113,32 +104,12 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     "5. Run any available tests to verify your fixes",
   ].join("\n");
 
-  // Provider-aware CLI invocation.
-  // On Windows, .cmd wrappers need shell:true, but shell:true corrupts
-  // multi-line args. Solution: use cross-spawn behavior — Node.js spawnSync
-  // on Windows with shell:false can run .cmd files if we pass the full path.
-  // Alternative: use process.env.ComSpec to run cmd /c explicitly.
-  let finalArgs: string[];
-  let stdinInput: string | undefined;
+  const spawn = await prepareProviderSpawn(provider, prompt);
 
-  if (provider === "codex") {
-    finalArgs = ["exec", "--full-auto", "-"];
-    stdinInput = prompt;
-  } else {
-    finalArgs = ["-p", prompt, "--dangerously-skip-permissions"];
-    stdinInput = undefined;
-  }
-
-  // On Windows, wrap in cmd /c to handle .cmd files without shell:true
-  // (shell:true corrupts multi-line args). Direct execution preserves args.
-  const isWin = process.platform === "win32";
-  const spawnBin = isWin ? (process.env.ComSpec ?? "cmd.exe") : bin;
-  const spawnArgs = isWin ? ["/c", bin, ...finalArgs] : finalArgs;
-
-  const result = spawnSync(spawnBin, spawnArgs, {
+  const result = spawnSync(spawn.bin, spawn.args, {
     cwd: repoRoot,
-    input: stdinInput,
-    stdio: [stdinInput ? "pipe" : "ignore", "inherit", "inherit"],
+    input: spawn.stdinInput,
+    stdio: [spawn.stdinInput ? "pipe" : "ignore", "inherit", "inherit"],
     env: { ...process.env },
     timeout: 300_000,
     windowsHide: true,
@@ -160,7 +131,6 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
     repoRoot, files, provider, maxRounds,
     fitnessContext, auditFn, completedItems, detectStagnation,
   } = opts;
-  // Fixer uses implementer provider (separate from auditor provider).
   const fixer = opts.fixerProvider ?? provider;
 
   const findingsHistory: string[][] = [];
@@ -170,17 +140,14 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
   while (true) {
     attempts++;
 
-    // Audit with auditor provider
     const auditResult = await auditFn(repoRoot, files, completedItems, provider);
 
     if (auditResult.passed) {
       return { passed: true, attempts, findingsHistory };
     }
 
-    // Track findings for stagnation detection
     findingsHistory.push([...auditResult.findings]);
 
-    // Stagnation detection (mechanical: compare findings across fix attempts)
     if (attempts >= 2 && detectStagnation) {
       const stag = detectStagnation(findingsHistory);
       if (stag) {
@@ -195,7 +162,6 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: false, attempts, stagnation, findingsHistory };
     }
 
-    // Spawn fixer with implementer provider (not auditor)
     await runFixer({
       repoRoot,
       findings: auditResult.findings,

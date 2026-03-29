@@ -2,7 +2,7 @@
 // Modules will be added by ORC-3 through ORC-13
 
 // Re-export types
-export type { WorkItem, WBItem, TrackInfo, PlanReviewResult, Wave, WaveGroup, WBSize, HeadingInfo } from './types.js';
+export type { WorkItem, WBItem, TrackInfo, PlanReviewResult, Wave, WaveGroup, WBSize, HeadingInfo, Bridge, MuxHandle } from './types.js';
 
 // Track catalog — discovery and resolution
 export { findTracks, resolveTrack, trackRef } from './track-catalog.js';

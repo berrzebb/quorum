@@ -26,6 +26,10 @@ import {
   checkWBConstraints,
 } from "../governance/scope-gates.js";
 
+/** Pre-merged patterns + description set — module-level constants. */
+const STUB_PERF_PATTERNS = [...STUB_PATTERNS, ...PERF_PATTERNS];
+const PERF_DESCS = new Set(PERF_PATTERNS.map(([, d]) => d));
+
 // ── Types ────────────────────────────────────
 
 /** Structured result of all mechanical governance gates for a wave. */
@@ -137,11 +141,14 @@ export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
     };
   }
 
-  // 3. Stub scan
-  const stubs = scanLines(repoRoot, waveFiles, STUB_PATTERNS);
-
-  // 4. Perf anti-pattern scan
-  const perfFindings = scanLines(repoRoot, waveFiles, PERF_PATTERNS);
+  // 3-4. Combined stub + perf scan (single file read pass instead of two)
+  const stubPerfFindings = scanLines(repoRoot, waveFiles, STUB_PERF_PATTERNS);
+  const stubs: string[] = [];
+  const perfFindings: string[] = [];
+  for (const f of stubPerfFindings) {
+    const desc = f.slice(f.indexOf(" — ") + 3);
+    (PERF_DESCS.has(desc) ? perfFindings : stubs).push(f);
+  }
 
   // 5. Blueprint naming lint
   const blueprintViolations = blueprintRules.length > 0

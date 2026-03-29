@@ -23,7 +23,7 @@ export interface SpawnAgentOptions {
   item: WorkItem;
   trackName: string;
   provider: string;
-  mux: any;
+  mux: import("../planning/types.js").MuxHandle;
   tmpDir: string;
   roster?: RosterEntry[];
   manifests?: WaveManifest[];
@@ -138,7 +138,7 @@ export async function spawnAgent(opts: SpawnAgentOptions): Promise<AgentHandle |
  * @returns Output text, or empty string if nothing available.
  */
 export function captureAgentOutput(
-  outputFile: string | undefined, mux: any, sessionId: string,
+  outputFile: string | undefined, mux: import("../planning/types.js").MuxHandle, sessionId: string,
 ): string {
   // Primary: read from output file (reliable)
   if (outputFile && existsSync(outputFile)) {

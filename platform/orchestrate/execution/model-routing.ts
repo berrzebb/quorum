@@ -4,7 +4,7 @@
  * Pure function. No file I/O, no provider calls.
  */
 
-import type { WBSize } from "../../cli/commands/orchestrate/shared.js";
+import type { WBSize } from "../planning/types.js";
 
 // ── Domain risk tiers ────────────────────────
 const HIGH_RISK_DOMAINS = new Set(["security", "concurrency", "migration", "compliance"]);
@@ -39,7 +39,7 @@ export function selectModelForTask(
 
   switch (size) {
     case "XS": return { provider: "claude", model: hasHighRisk ? "sonnet" : "haiku", domains };
-    case "S":  return { provider: "claude", model: hasHighRisk ? "opus" : hasMediumRisk ? "sonnet" : "sonnet", domains };
+    case "S":  return { provider: "claude", model: hasHighRisk ? "opus" : "sonnet", domains };
     case "M":  return { provider: "claude", model: "opus", domains };
     default:   return { provider: "claude", model: hasHighRisk ? "opus" : undefined, domains };
   }

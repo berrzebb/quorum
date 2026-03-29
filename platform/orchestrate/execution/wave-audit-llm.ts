@@ -1,21 +1,13 @@
 /**
  * Wave-level LLM audit — spawns a provider CLI to review wave changes.
  *
- * Uses buildProviderArgs for provider-aware CLI invocation (claude/codex/gemini).
+ * Uses prepareProviderSpawn for provider-aware CLI invocation (claude/codex/gemini).
  * No mechanical gates, no fixer logic — pure LLM review.
  */
 
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { buildProviderArgs, resolveProviderBinary } from "../core/provider-binary.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-/** At runtime: dist/platform/orchestrate/execution/ → up 2 → dist/platform/ */
-const DIST = resolve(__dirname, "..", "..");
+import { prepareProviderSpawn } from "../core/provider-binary.js";
 
 interface WorkItemLike {
   id: string;
@@ -30,10 +22,8 @@ export async function runWaveAuditLLM(
   repoRoot: string, files: string[], items: WorkItemLike[], provider: string,
 ): Promise<{ passed: boolean; findings: string[] }> {
 
-  const bin = await resolveProviderBinary(provider);
-
   const fileList = [...new Set(files)].slice(0, 20).map(f => `- ${f}`).join("\n");
-  const itemList = items.map((i: any) => `- ${i.id}: ${i.title ?? "(no title)"}`).join("\n");
+  const itemList = items.map(i => `- ${i.id}: ${i.title ?? "(no title)"}`).join("\n");
 
   const prompt = [
     "# Wave Audit — Review Implementation Changes",
@@ -67,51 +57,28 @@ export async function runWaveAuditLLM(
     "Stubs are NOT acceptable — every function must have real implementation.",
   ].join("\n");
 
-  const args = buildProviderArgs(provider, {
-    prompt,
+  const spawn = await prepareProviderSpawn(provider, prompt, {
     systemPrompt: "You are a code auditor. Review code changes and output a JSON verdict.",
-    nonInteractive: true,
-    dangerouslySkipPermissions: true,
-    fullAuto: true,
   });
 
-  let finalArgs: string[];
-  let stdinInput: string | undefined;
-
-  if (provider === "codex") {
-    // codex exec --full-auto - : reads prompt from stdin (avoids shell escaping issues)
-    finalArgs = ["exec", "--full-auto", "-"];
-    stdinInput = prompt;
-  } else {
-    finalArgs = args;
-    stdinInput = undefined;
-  }
-
-  // On Windows, use cmd /c to handle .cmd wrappers without shell:true
-  // (shell:true corrupts multi-line args passed via buildProviderArgs).
-  const isWin = process.platform === "win32";
-  const spawnBin = isWin ? (process.env.ComSpec ?? "cmd.exe") : bin;
-  const spawnArgs = isWin ? ["/c", bin, ...finalArgs] : finalArgs;
-
-  const result = spawnSync(spawnBin, spawnArgs, {
+  const result = spawnSync(spawn.bin, spawn.args, {
     cwd: repoRoot,
-    input: stdinInput,
-    stdio: [stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
+    input: spawn.stdinInput,
+    stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
     env: { ...process.env },
     timeout: 300_000,
     encoding: "utf8",
     windowsHide: true,
   });
 
-  // Debug: log non-zero exit code
   if (result.status !== 0) {
-    const stderrSnippet = ((result.stderr ?? "") as string).slice(0, 300);
+    const stderrSnippet = (result.stderr ?? "").slice(0, 300);
     console.error(`  [audit-debug] ${provider} exit=${result.status} signal=${result.signal} stderr=${stderrSnippet}`);
   }
 
   const output = (result.stdout ?? "") as string;
 
-  // Parse verdict from output
+  // Parse verdict from output — fenced JSON (most reliable)
   const jsonMatch = output.match(/```json\s*\n({[\s\S]*?})\s*\n```/);
   if (jsonMatch) {
     try {
@@ -123,8 +90,8 @@ export async function runWaveAuditLLM(
     } catch { /* fall through */ }
   }
 
-  // Codex may output JSON without fences
-  const bareJsonMatch = output.match(/\{[\s\S]*"passed"\s*:\s*(true|false)[\s\S]*\}/);
+  // Bare JSON without fences — non-greedy to avoid spanning multiple objects
+  const bareJsonMatch = output.match(/\{[^{}]*"passed"\s*:\s*(true|false)[^{}]*\}/);
   if (bareJsonMatch) {
     try {
       const verdict = JSON.parse(bareJsonMatch[0]);

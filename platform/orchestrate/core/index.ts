@@ -1,7 +1,7 @@
 // Core layer — provider binary, mux, git, repo paths
 
-export { resolveProviderBinary, buildProviderArgs } from './provider-binary.js';
-export type { ProviderArgsOptions } from './provider-binary.js';
+export { resolveProviderBinary, buildProviderArgs, prepareProviderSpawn } from './provider-binary.js';
+export type { ProviderArgsOptions, ProviderSpawnInfo } from './provider-binary.js';
 export { runProviderCLI } from './provider-cli.js';
 export type { ProviderCLIOptions, ProviderCLIResult } from './provider-cli.js';
 

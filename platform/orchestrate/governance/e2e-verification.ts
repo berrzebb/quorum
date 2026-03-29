@@ -7,16 +7,19 @@
  */
 
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { execSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
 import type { NamingRule } from "../../bus/blueprint-parser.js";
+import type { Bridge } from "../planning/types.js";
 import { analyzeAndSuggest } from "../../bus/auto-learn.js";
 import { generateConvergenceReport } from "../../bus/normal-form.js";
 import { runFitnessGate } from "./fitness-gates.js";
+import { runRuntimeEvaluationGate } from "./runtime-evaluation-gate.js";
+import { createRuntimeEvaluationSpec, createEvaluationScenario } from "../../core/harness/runtime-evaluation-spec.js";
+import { CliSessionEvaluator } from "../../providers/evaluators/cli-session.js";
+import { ArtifactValidatorEvaluator } from "../../providers/evaluators/artifact-validator.js";
 import {
   STUB_PATTERNS, PERF_PATTERNS,
   scanLines, scanBlueprintViolations, detectOrphanFiles,
@@ -25,8 +28,6 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
-
-type Bridge = Record<string, Function>;
 
 interface WorkItemLike {
   id: string;
@@ -85,7 +86,33 @@ export async function runE2EVerification(
     }
   }
 
-  // 4-8: Final scans
+  // 4. Runtime evaluation gate (surface-matched, PLT-6H/A-4)
+  try {
+    const verifyItems = allItems.filter(i => i.verify);
+    const artifactFiles = allFiles.filter(f => f.endsWith(".ts") || f.endsWith(".tsx") || f.endsWith(".mjs"));
+    const scenarios = [
+      ...verifyItems.map(item => createEvaluationScenario({
+        surface: "cli", target: item.id, verifier: item.verify!, blocking: true,
+      })),
+      ...artifactFiles.slice(0, 20).map(f => createEvaluationScenario({
+        surface: "artifact", target: f, blocking: false,
+      })),
+    ];
+    if (scenarios.length > 0) {
+      const spec = createRuntimeEvaluationSpec({ scenarios });
+      const evaluators = [new CliSessionEvaluator(repoRoot), new ArtifactValidatorEvaluator(repoRoot)];
+      const rtResult = await runRuntimeEvaluationGate(spec, evaluators);
+      if (rtResult.passed) {
+        console.log(`    \x1b[32m✓ Runtime evaluation passed (${rtResult.surfaceResults.length} surface(s))\x1b[0m`);
+      } else {
+        console.log(`    \x1b[31m✗ Runtime evaluation failed\x1b[0m`);
+        for (const f of rtResult.blockingFailures.slice(0, 5)) console.log(`      ✗ ${f}`);
+        e2ePassed = false;
+      }
+    }
+  } catch { /* fail-open: evaluator infrastructure unavailable */ }
+
+  // 5-9: Final scans
   const e2eChecks: Array<{ name: string; items: string[]; blocker: boolean }> = [
     { name: "Stubs", items: scanLines(repoRoot, allFiles, STUB_PATTERNS), blocker: true },
     { name: "Perf anti-patterns", items: scanLines(repoRoot, allFiles, PERF_PATTERNS), blocker: false },

@@ -63,6 +63,18 @@ export interface Wave {
 /** Alias for Wave — used in task descriptions as WaveGroup. */
 export type WaveGroup = Wave;
 
+/** Loose bridge type — wraps dynamically loaded MJS bridge module. */
+export type Bridge = Record<string, Function>;
+
+/** Minimal mux interface — methods used by orchestrate execution modules. */
+export interface MuxHandle {
+  spawn(opts: Record<string, unknown>): Promise<{ id: string; name: string }>;
+  send(sessionId: string, input: string): boolean;
+  kill(sessionId: string): Promise<void>;
+  capture(sessionId: string, lines?: number): { output: string } | null;
+  getBackend(): string;
+}
+
 /** Parsed heading information from a WB markdown line. */
 export interface HeadingInfo {
   /** Markdown heading level (2 = ##, 3 = ###) */

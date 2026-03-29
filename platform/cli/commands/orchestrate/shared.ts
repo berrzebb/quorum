@@ -2,31 +2,13 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { Bridge } from '../../../orchestrate/planning/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** At runtime: dist/platform/cli/commands/orchestrate/ → up 3 → dist/platform/ */
 export const DIST = resolve(__dirname, "..", "..", "..");
 
-export type Bridge = Record<string, Function>;
-export type WBSize = "XS" | "S" | "M";
-
-export interface WorkItem {
-  id: string;
-  title?: string;
-  targetFiles: string[];
-  dependsOn?: string[];
-  size?: WBSize;
-  action?: string;
-  contextBudget?: { read: string[]; skip: string[] };
-  verify?: string;
-  constraints?: string;
-  done?: string;
-  parentId?: string;
-  isParent?: boolean;
-  integrationTarget?: string;
-}
-
-export interface TrackInfo { name: string; path: string; items: number; }
+export type { Bridge, WBSize, WorkItem, TrackInfo } from '../../../orchestrate/planning/types.js';
 
 export async function loadBridge(repoRoot: string): Promise<Bridge | null> {
   try {

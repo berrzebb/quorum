@@ -9,8 +9,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WaveManifest } from "./dependency-context.js";
-
-type Bridge = Record<string, Function>;
+import type { Bridge } from "../planning/types.js";
 
 interface WorkItemLike {
   id: string;

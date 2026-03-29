@@ -6,7 +6,7 @@
  */
 
 import { execSync } from "node:child_process";
-import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../planning/types.js";
 import type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
 
 /**

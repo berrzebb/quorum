@@ -5,7 +5,7 @@
  * No file I/O, no status updates, no lifecycle hooks.
  */
 
-import type { WorkItem } from "../../cli/commands/orchestrate/shared.js";
+import type { WorkItem } from "../planning/types.js";
 
 /**
  * Generate a skeletal RTM from work breakdown items.
