@@ -74,7 +74,7 @@ function MuxChatView({ mux, liveSessions, width, height }: {
 
   // Layout breakpoints
   const showSessionList = termSize.cols >= 60;
-  const showGitLog = termSize.cols >= 100;
+  const showGitLog = termSize.cols >= 80;
   const sessionListWidth = showSessionList ? 22 : 0;
   const gitLogWidth = showGitLog ? Math.min(35, Math.floor(termSize.cols * 0.25)) : 0;
   // Header(1) + separator(1) + bottom input(3) + borders(2) = 7
@@ -138,9 +138,8 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     return () => clearInterval(timer);
   }, [sessions.length, sessions.map(s => s.id).join()]);
 
-  // Poll git log (5s interval)
+  // Poll git log (5s interval) — always active, regardless of session count
   useEffect(() => {
-    if (!showGitLog) return;
     const pollGit = () => {
       try {
         const log = execSync("git log --oneline -30", {
@@ -153,7 +152,7 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     pollGit();
     const timer = setInterval(pollGit, 5000);
     return () => clearInterval(timer);
-  }, [showGitLog]);
+  }, []);
 
   // Current session + lines
   const safeIdx = Math.min(selectedIdx, Math.max(0, sessions.length - 1));
@@ -199,13 +198,21 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     }
   }, [inputMode, inputBuffer, selectedIdx, sessions.length, maxScroll]));
 
-  // Empty state
+  // Empty state — still show git log
   if (sessions.length === 0) {
     return (
-      <Box flexDirection="column" padding={1}>
-        <Text bold>Agent Chat</Text>
-        <Text dimColor>No active mux sessions.</Text>
-        <Text dimColor>quorum orchestrate run &lt;track&gt; or quorum agent spawn &lt;name&gt; claude</Text>
+      <Box flexDirection="row" padding={1}>
+        <Box flexDirection="column" flexGrow={1}>
+          <Text bold>Agent Chat</Text>
+          <Text dimColor>No active mux sessions.</Text>
+          <Text dimColor>quorum orchestrate run &lt;track&gt; or quorum agent spawn &lt;name&gt; claude</Text>
+        </Box>
+        <GitSidebar
+          gitLog={gitLog}
+          width={Math.min(40, Math.floor(termSize.cols * 0.4))}
+          commitScrollOffset={0}
+          filesScrollOffset={0}
+        />
       </Box>
     );
   }
