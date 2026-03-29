@@ -132,8 +132,13 @@ function deriveAgents(events: QuorumEvent[]): AgentState[] {
     }
   }
 
-  // Only show non-done agents, sorted by last update
+  // Show active agents. Auto-expire stale "running" after 30 min (no complete event).
+  const STALE_THRESHOLD = 30 * 60_000;
   return [...agents.values()]
-    .filter((a) => a.status !== "done" || Date.now() - a.lastUpdate < 60_000)
+    .filter((a) => {
+      if (a.status === "done") return Date.now() - a.lastUpdate < 60_000;
+      if (a.status === "running" && Date.now() - a.lastUpdate > STALE_THRESHOLD) return false;
+      return true;
+    })
     .sort((a, b) => b.lastUpdate - a.lastUpdate);
 }

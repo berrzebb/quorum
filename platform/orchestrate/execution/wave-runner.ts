@@ -240,6 +240,10 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       try { await mux.kill(s.sessionId); } catch {}
 
       if (bridge?.emitEvent) {
+        bridge.emitEvent("agent.complete", "generic", {
+          agentId: `impl-${s.item.id}`, role: "implementer",
+          trackId: trackName, wbId: s.item.id,
+        });
         bridge.emitEvent("track.progress", "generic", {
           trackId: trackName, completed: completedIds.size, pending: active.length,
           total: opts.totalItems ?? wave.items.length,
