@@ -23,8 +23,9 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
         <Text dimColor>No active tracks</Text>
       ) : (
         tracks.map((track) => {
-          const rawPct = track.total > 0 ? Math.round((track.completed / track.total) * 100) : 0;
-          const pct = Math.min(rawPct, 100);
+          // Guard: if completed > total (stale events), use completed as total
+          const displayTotal = Math.max(track.total, track.completed);
+          const pct = displayTotal > 0 ? Math.min(100, Math.round((track.completed / displayTotal) * 100)) : 0;
           const barWidth = 20;
           const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
 
@@ -40,7 +41,7 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
               <Box>
                 <Text color="green">{"█".repeat(filled)}</Text>
                 <Text dimColor>{"░".repeat(barWidth - filled)}</Text>
-                <Text dimColor> {track.completed}/{track.total}</Text>
+                <Text dimColor> {track.completed}/{displayTotal}</Text>
               </Box>
             </Box>
           );
