@@ -113,7 +113,11 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     "5. Run any available tests to verify your fixes",
   ].join("\n");
 
-  // Provider-aware CLI invocation
+  // Provider-aware CLI invocation.
+  // On Windows, .cmd wrappers need shell:true, but shell:true corrupts
+  // multi-line args. Solution: use cross-spawn behavior — Node.js spawnSync
+  // on Windows with shell:false can run .cmd files if we pass the full path.
+  // Alternative: use process.env.ComSpec to run cmd /c explicitly.
   let finalArgs: string[];
   let stdinInput: string | undefined;
 
@@ -121,18 +125,22 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     finalArgs = ["exec", "--full-auto", "-"];
     stdinInput = prompt;
   } else {
-    // claude / gemini / others
     finalArgs = ["-p", prompt, "--dangerously-skip-permissions"];
     stdinInput = undefined;
   }
 
-  const result = spawnSync(bin, finalArgs, {
+  // On Windows, wrap in cmd /c to handle .cmd files without shell:true
+  // (shell:true corrupts multi-line args). Direct execution preserves args.
+  const isWin = process.platform === "win32";
+  const spawnBin = isWin ? (process.env.ComSpec ?? "cmd.exe") : bin;
+  const spawnArgs = isWin ? ["/c", bin, ...finalArgs] : finalArgs;
+
+  const result = spawnSync(spawnBin, spawnArgs, {
     cwd: repoRoot,
     input: stdinInput,
     stdio: [stdinInput ? "pipe" : "ignore", "inherit", "inherit"],
     env: { ...process.env },
     timeout: 300_000,
-    shell: process.platform === "win32",
     windowsHide: true,
   });
 

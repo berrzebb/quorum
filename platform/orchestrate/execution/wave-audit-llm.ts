@@ -87,14 +87,19 @@ export async function runWaveAuditLLM(
     stdinInput = undefined;
   }
 
-  const result = spawnSync(bin, finalArgs, {
+  // On Windows, use cmd /c to handle .cmd wrappers without shell:true
+  // (shell:true corrupts multi-line args passed via buildProviderArgs).
+  const isWin = process.platform === "win32";
+  const spawnBin = isWin ? (process.env.ComSpec ?? "cmd.exe") : bin;
+  const spawnArgs = isWin ? ["/c", bin, ...finalArgs] : finalArgs;
+
+  const result = spawnSync(spawnBin, spawnArgs, {
     cwd: repoRoot,
     input: stdinInput,
     stdio: [stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
     env: { ...process.env },
-    timeout: 300_000,  // 5 minutes — codex with xhigh reasoning needs more time
+    timeout: 300_000,
     encoding: "utf8",
-    shell: process.platform === "win32",  // Windows needs shell for .cmd wrappers
     windowsHide: true,
   });
 
