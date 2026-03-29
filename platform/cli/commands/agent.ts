@@ -14,7 +14,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DIST = resolve(__dirname, "..", "..", "..");
+/** At runtime: dist/platform/cli/commands/ → up 2 → dist/platform/ */
+const DIST = resolve(__dirname, "..", "..");
 
 /** Persist agent state to a JSON file so daemon can read it. */
 function saveAgentState(repoRoot: string, id: string, data: Record<string, unknown>): void {
@@ -32,7 +33,9 @@ function removeAgentState(repoRoot: string, id: string): void {
 async function emitAgentEvent(repoRoot: string, type: string, payload: Record<string, unknown>): Promise<void> {
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    // Resolve from quorum package, not target project
+    const quorumPkgRoot = resolve(__dirname, "..", "..", "..", "..");
+    const bridge = await import(toURL(resolve(quorumPkgRoot, "platform", "core", "bridge.mjs")));
     await bridge.init(repoRoot);
     bridge.emitEvent(type, "claude-code", payload);
     bridge.close();

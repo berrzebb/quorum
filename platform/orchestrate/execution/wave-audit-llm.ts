@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+/** At runtime: dist/platform/orchestrate/execution/ → up 2 → dist/platform/ */
 const DIST = resolve(__dirname, "..", "..");
 
 interface WorkItemLike {
@@ -27,8 +28,9 @@ export async function runWaveAuditLLM(
   repoRoot: string, files: string[], items: WorkItemLike[], provider: string,
 ): Promise<{ passed: boolean; findings: string[] }> {
 
-  const quorumRoot = resolve(DIST, "..");
-  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  // DIST = dist/platform/, up 2 = project root
+  const quorumRoot = resolve(DIST, "..", "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "platform", "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
 
   const fileList = [...new Set(files)].slice(0, 20).map(f => `- ${f}`).join("\n");

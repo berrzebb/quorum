@@ -3,6 +3,7 @@ import { Box, Text } from "ink";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { VIEW_REGISTRY } from "../shell/app-shell.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -37,12 +38,25 @@ interface HeaderProps {
   providers: ProviderInfo[];
 }
 
-export function Header({ providers }: HeaderProps) {
+export function Header({ activeView, providers }: HeaderProps) {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box gap={1}>
         <Text bold color="cyan">QUORUM</Text>
         <Text dimColor>v{VERSION}</Text>
+        <Text> | </Text>
+        {VIEW_REGISTRY.map((v) => (
+          <React.Fragment key={v.id}>
+            <Text
+              color={activeView === v.id ? "cyan" : undefined}
+              bold={activeView === v.id}
+              dimColor={activeView !== v.id}
+            >
+              [{v.shortcut}] {v.title}
+            </Text>
+            <Text>  </Text>
+          </React.Fragment>
+        ))}
         <Text> | </Text>
         {providers.map((p, i) => (
           <React.Fragment key={p.name}>

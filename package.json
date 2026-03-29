@@ -57,7 +57,7 @@
     "mcp": "node platform/core/tools/mcp-server.mjs",
     "tool": "node platform/core/tools/tool-runner.mjs",
     "typecheck": "tsc --noEmit",
-    "version-sync": "node --input-type=module -e \"import{readFileSync as r,writeFileSync as w}from'fs';const v=JSON.parse(r('package.json','utf8')).version;const f='adapters/gemini/gemini-extension.json';const j=JSON.parse(r(f,'utf8'));j.version=v;w(f,JSON.stringify(j,null,2)+'\\n');console.log('Synced '+v+' → '+f)\""
+    "version-sync": "node --input-type=module -e \"import{readFileSync as r,writeFileSync as w}from'fs';const v=JSON.parse(r('package.json','utf8')).version;const f='platform/adapters/gemini/gemini-extension.json';const j=JSON.parse(r(f,'utf8'));j.version=v;w(f,JSON.stringify(j,null,2)+'\\n');console.log('Synced '+v+' → '+f)\""
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

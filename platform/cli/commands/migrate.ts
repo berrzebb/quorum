@@ -12,7 +12,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DIST = resolve(__dirname, "..", "..", "..");
+/** At runtime: dist/platform/cli/commands/ → up 2 → dist/platform/ */
+const DIST = resolve(__dirname, "..", "..");
 
 export async function run(args: string[]): Promise<void> {
   const repoRoot = process.cwd();

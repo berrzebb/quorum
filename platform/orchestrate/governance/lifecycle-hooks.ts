@@ -7,9 +7,11 @@
  */
 
 import { existsSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Determine if auto-retro should trigger after a wave result.
@@ -100,7 +102,9 @@ export async function autoRetro(repoRoot: string): Promise<void> {
 
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const bridge = await import(toURL(resolve(repoRoot, "core", "bridge.mjs")));
+    // dist/platform/orchestrate/governance/ → up 4 → quorum project root
+    const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
+    const bridge = await import(toURL(resolve(quorumRoot, "platform", "core", "bridge.mjs")));
     if (bridge?.emitEvent) {
       bridge.emitEvent("retro.complete", "generic", { auto: true, timestamp: Date.now() });
     }

@@ -198,7 +198,7 @@ async function runScopeCheck(repoRoot: string, baseBranch?: string): Promise<boo
   const toURL = (p: string) => pathToFileURL(p).href;
   let evidenceArg: string | null = null;  // content string OR file path
   try {
-    const bridge = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "core", "bridge.mjs")));
+    const bridge = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "bridge.mjs")));
     if (!bridge._store) await bridge.init(repoRoot);
     const evidence = bridge.getLatestEvidence?.();
     if (evidence?.content) {
@@ -332,8 +332,8 @@ async function runTemplateCheck(): Promise<void> {
   console.log("\n\x1b[36mquorum verify TEMPLATE\x1b[0m — template consistency check\n");
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT
-    ?? resolve(__dirname, "..", "..", "..");
-  const coreRoot = resolve(pluginRoot, "..", "..", "core");
+    ?? resolve(__dirname, "..", "..", "..", "..");
+  const coreRoot = resolve(pluginRoot, "platform", "core");
 
   const forbidden = [
     /npx\s+eslint/,

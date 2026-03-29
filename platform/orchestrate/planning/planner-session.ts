@@ -68,12 +68,14 @@ export async function runPlannerSession(opts: PlannerSessionOptions): Promise<Pl
   const initialPrompt = autoMode ? autoPrompt : socraticPrompt;
   const cliArgs = buildCLIArgs(provider, systemPrompt, initialPrompt, autoMode);
 
-  // Execute
+  // Execute — planner needs long timeout (8 files × ~2min each ≈ 16min)
+  const plannerTimeout = 20 * 60_000; // 20 minutes
+
   if (useMux) {
     if (provider === "claude") cliArgs.push("--dangerously-skip-permissions");
-    await executeMux(repoRoot, provider, cliArgs, trackName, autoMode);
+    await executeMux(repoRoot, provider, cliArgs, trackName, autoMode, plannerTimeout);
   } else {
-    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit" });
+    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout: plannerTimeout });
   }
 
   return { autoMode, provider, trackName };
@@ -108,12 +110,12 @@ function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: str
   return args;
 }
 
-async function executeMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string, autoMode: boolean): Promise<void> {
+async function executeMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string, autoMode: boolean, timeout?: number): Promise<void> {
   const result = await detectMuxBackend();
 
   if (!result) {
     console.log("  \x1b[33mMux unavailable, falling back to direct mode.\x1b[0m\n");
-    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit" });
+    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout });
     return;
   }
 
@@ -121,7 +123,7 @@ async function executeMux(repoRoot: string, provider: string, cliArgs: string[],
 
   if (backend === "raw") {
     console.log("  \x1b[33mNo mux backend (psmux/tmux). Falling back to direct mode.\x1b[0m\n");
-    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit" });
+    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout });
     return;
   }
 
@@ -132,7 +134,7 @@ async function executeMux(repoRoot: string, provider: string, cliArgs: string[],
   if (!handle) {
     console.log("  \x1b[31mMux spawn failed. Falling back to direct mode.\x1b[0m\n");
     try { await mux.cleanup(); } catch { /* ok */ }
-    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit" });
+    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout });
     return;
   }
 

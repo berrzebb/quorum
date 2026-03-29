@@ -4,7 +4,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const DIST = resolve(__dirname, "..", "..", "..", "..");
+/** At runtime: dist/platform/cli/commands/orchestrate/ → up 3 → dist/platform/ */
+export const DIST = resolve(__dirname, "..", "..", "..");
 
 export type Bridge = Record<string, Function>;
 export type WBSize = "XS" | "S" | "M";
@@ -30,8 +31,8 @@ export interface TrackInfo { name: string; path: string; items: number; }
 export async function loadBridge(repoRoot: string): Promise<Bridge | null> {
   try {
     const toURL = (p: string) => pathToFileURL(p).href;
-    const quorumRoot = resolve(DIST, "..");
-    const bridge = await import(toURL(resolve(quorumRoot, "core", "bridge.mjs")));
+    const quorumRoot = resolve(DIST, "..", "..");
+    const bridge = await import(toURL(resolve(quorumRoot, "platform", "core", "bridge.mjs")));
     await bridge.init(repoRoot);
     return bridge;
   } catch { return null; }

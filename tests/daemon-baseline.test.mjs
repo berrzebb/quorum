@@ -337,30 +337,42 @@ describe("StateReader with seeded data", () => {
 // ═══ 4. View mode baseline ═══════════════════════════════════════════
 
 describe("View mode baseline", () => {
-  it("app.tsx defines exactly 3 views: dashboard, log, chat", () => {
+  it("app.tsx uses shell reducer with 4 views: overview, review, chat, operations", () => {
     const appPath = resolve("daemon", "app.tsx");
     assert.ok(existsSync(appPath), "daemon/app.tsx should exist");
 
     const content = readFileSync(appPath, "utf8");
-    // The view type union is defined inline in useState
+    // Shell reducer replaces inline useState
     assert.ok(
-      content.includes('"dashboard"'),
-      "app.tsx should reference 'dashboard' view",
+      content.includes("shellReducer"),
+      "app.tsx should use shellReducer from app-shell",
     );
     assert.ok(
-      content.includes('"log"'),
-      "app.tsx should reference 'log' view",
+      content.includes("initialShellState"),
+      "app.tsx should use initialShellState from app-shell",
+    );
+    // All 4 views are rendered
+    assert.ok(
+      content.includes('"overview"'),
+      "app.tsx should reference 'overview' view",
+    );
+    assert.ok(
+      content.includes('"review"'),
+      "app.tsx should reference 'review' view",
     );
     assert.ok(
       content.includes('"chat"'),
       "app.tsx should reference 'chat' view",
     );
-
-    // Verify the type declaration constrains to exactly these 3
-    const viewTypeMatch = content.match(
-      /useState<"dashboard"\s*\|\s*"log"\s*\|\s*"chat">/
+    assert.ok(
+      content.includes('"operations"'),
+      "app.tsx should reference 'operations' view",
     );
-    assert.ok(viewTypeMatch, "activeView type should be exactly 'dashboard' | 'log' | 'chat'");
+    // View components are imported
+    assert.ok(content.includes("OverviewView"), "app.tsx should import OverviewView");
+    assert.ok(content.includes("ReviewView"), "app.tsx should import ReviewView");
+    assert.ok(content.includes("ChatView"), "app.tsx should import ChatView");
+    assert.ok(content.includes("OperationsView"), "app.tsx should import OperationsView");
   });
 });
 
@@ -469,14 +481,31 @@ describe("Line count baseline", () => {
     assert.ok(total > 700, `Query modules total ${total} lines, expected > 700`);
   });
 
-  it("app.tsx > 300 lines", () => {
+  it("app.tsx is a thin shell (< 200 lines, views extracted)", () => {
     const lines = lineCount("daemon/app.tsx");
-    assert.ok(lines > 300, `app.tsx has ${lines} lines, expected > 300`);
+    assert.ok(lines < 200, `app.tsx has ${lines} lines, expected < 200 (thin shell)`);
+    assert.ok(lines > 80, `app.tsx has ${lines} lines, expected > 80 (not empty)`);
   });
 
-  it("AgentChatPanel.tsx > 300 lines", () => {
-    const lines = lineCount("daemon/components/AgentChatPanel.tsx");
-    assert.ok(lines > 300, `AgentChatPanel.tsx has ${lines} lines, expected > 300`);
+  it("chat-view.tsx is the live chat path (> 200 lines, replaces AgentChatPanel)", () => {
+    const lines = lineCount("daemon/views/chat-view.tsx");
+    assert.ok(lines > 200, `chat-view.tsx has ${lines} lines, expected > 200 (full chat logic)`);
+  });
+
+  it("app.tsx does not import AgentChatPanel (cutover complete)", () => {
+    const content = readFileSync(resolve("daemon", "app.tsx"), "utf8");
+    assert.ok(
+      !content.includes("AgentChatPanel"),
+      "app.tsx should not import AgentChatPanel after cutover",
+    );
+  });
+
+  it("chat-view.tsx imports session panels (SessionList, TranscriptPane, Composer, GitSidebar)", () => {
+    const content = readFileSync(resolve("daemon", "views", "chat-view.tsx"), "utf8");
+    assert.ok(content.includes("SessionList"), "chat-view.tsx should import SessionList");
+    assert.ok(content.includes("TranscriptPane"), "chat-view.tsx should import TranscriptPane");
+    assert.ok(content.includes("Composer"), "chat-view.tsx should import Composer");
+    assert.ok(content.includes("GitSidebar"), "chat-view.tsx should import GitSidebar");
   });
 
   it("index.ts is a thin orchestrator (< 120 lines, services extracted)", () => {
@@ -504,6 +533,16 @@ describe("Line count baseline", () => {
 // ═══ 8. Polling baseline ═════════════════════════════════════════════
 
 describe("Polling baseline", () => {
+  it("app.tsx does not contain inline panel definitions (delegated to views)", () => {
+    const content = readFileSync(resolve("daemon", "app.tsx"), "utf8");
+    // These were inline in the old app.tsx, now live in panels/ or views/
+    assert.ok(!content.includes("function FindingStatsPanel"), "FindingStatsPanel should not be inline in app.tsx");
+    assert.ok(!content.includes("function OpenFindingsPanel"), "OpenFindingsPanel should not be inline in app.tsx");
+    assert.ok(!content.includes("function ReviewProgressPanel"), "ReviewProgressPanel should not be inline in app.tsx");
+    assert.ok(!content.includes("function ChatPanel"), "ChatPanel should not be inline in app.tsx");
+    assert.ok(!content.includes("function severityColor"), "severityColor should not be in app.tsx");
+  });
+
   it("stateFingerprint function exists in app.tsx (render optimization)", () => {
     const content = readFileSync(resolve("daemon", "app.tsx"), "utf8");
     assert.ok(
@@ -536,7 +575,50 @@ describe("Polling baseline", () => {
   });
 });
 
-// ═══ 9. FullState key names match readAll method names ═══════════════
+// ═══ 9. Cutover verification ══════════════════════════════════════════
+
+describe("Cutover verification", () => {
+  it("overview-view.tsx imports extracted panels (not inline)", () => {
+    const content = readFileSync(resolve("daemon", "views", "overview-view.tsx"), "utf8");
+    assert.ok(content.includes("ItemStatePanel"), "overview-view should import ItemStatePanel");
+    assert.ok(content.includes("LockPanel"), "overview-view should import LockPanel");
+    assert.ok(content.includes("SpecialistPanel"), "overview-view should import SpecialistPanel");
+    assert.ok(content.includes("GateStatus"), "overview-view should import GateStatus");
+    assert.ok(content.includes("TrackProgress"), "overview-view should import TrackProgress");
+  });
+
+  it("review-view.tsx imports review panels", () => {
+    const content = readFileSync(resolve("daemon", "views", "review-view.tsx"), "utf8");
+    assert.ok(content.includes("FindingStatsPanel"), "review-view should import FindingStatsPanel");
+    assert.ok(content.includes("OpenFindingsPanel"), "review-view should import OpenFindingsPanel");
+    assert.ok(content.includes("AuditStream"), "review-view should import AuditStream");
+  });
+
+  it("operations-view.tsx imports operational panels", () => {
+    const content = readFileSync(resolve("daemon", "views", "operations-view.tsx"), "utf8");
+    assert.ok(content.includes("AgentPanel"), "operations-view should import AgentPanel");
+    assert.ok(content.includes("FitnessPanel"), "operations-view should import FitnessPanel");
+    assert.ok(content.includes("LockPanel"), "operations-view should import LockPanel");
+  });
+
+  it("app.tsx imports view components, not individual panels", () => {
+    const content = readFileSync(resolve("daemon", "app.tsx"), "utf8");
+    // Should import views
+    assert.ok(content.includes("OverviewView"), "app.tsx should import OverviewView");
+    assert.ok(content.includes("ChatView"), "app.tsx should import ChatView");
+    // Should NOT import panels directly
+    assert.ok(!content.includes("GateStatus"), "app.tsx should not directly import GateStatus");
+    assert.ok(!content.includes("TrackProgress"), "app.tsx should not directly import TrackProgress");
+    assert.ok(!content.includes("FitnessPanel"), "app.tsx should not directly import FitnessPanel");
+  });
+
+  it("Header.tsx imports VIEW_REGISTRY for tab rendering", () => {
+    const content = readFileSync(resolve("daemon", "components", "Header.tsx"), "utf8");
+    assert.ok(content.includes("VIEW_REGISTRY"), "Header should import VIEW_REGISTRY");
+  });
+});
+
+// ═══ 10. FullState key names match readAll method names ═════════════
 
 describe("FullState-to-method mapping", () => {
   it("readAll keys correspond to individual query methods", () => {

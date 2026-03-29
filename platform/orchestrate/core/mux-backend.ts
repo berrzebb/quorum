@@ -12,7 +12,7 @@ import { dirname } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** At runtime: dist/orchestrate/core/ → dist/ */
+/** At runtime: dist/platform/orchestrate/core/ → up 2 → dist/platform/ */
 const DIST_ROOT = resolve(__dirname, "..", "..");
 
 export type MuxBackend = "tmux" | "psmux" | "raw";

@@ -140,11 +140,11 @@ Reference files in `references/en/` and `references/ko/` (bilingual).
 
 ## Directory Layout
 
-quorum source modules are consolidated under `platform/`. Root-level directories (`cli/`, `bus/`, `core/`, `orchestrate/`, `providers/`) still exist as thin re-export facades for backward compatibility.
+All source modules live under `platform/`. Root-level facade directories have been removed.
 
 ```
 quorum/
-  platform/              ← Canonical source (new)
+  platform/              ← All source code
     cli/                   CLI dispatcher + all commands
     bus/                   Event bus, SQLite store, parliament
     core/                 Bridge, context, enforcement, MCP tools
@@ -152,18 +152,12 @@ quorum/
     providers/            Consensus, trigger, AST, routing
     adapters/             Shared adapter logic + per-adapter I/O
     skills/               Skill definitions
-  cli/                   ← Facade → platform/cli/
-  bus/                   ← Facade → platform/bus/
-  core/                  ← Facade → platform/core/ (also hosts data: templates/, locales/)
-  orchestrate/           ← Facade → platform/orchestrate/
-  providers/             ← Facade → platform/providers/
-  adapters/              ← Facade → platform/adapters/
-  agents/knowledge/      ← Cross-adapter shared protocols (not moved)
-  languages/             ← Language specs + fragments (not moved)
-  daemon/                ← TUI dashboard (not moved)
+  agents/knowledge/      ← Cross-adapter shared protocols
+  languages/             ← Language specs + fragments
+  daemon/                ← TUI dashboard
 ```
 
-**Path resolution fallback**: `resolvePluginPath()` checks `PROJECT_CONFIG_DIR` first, then adapter env roots (`QUORUM_ADAPTER_ROOT`/`CLAUDE_PLUGIN_ROOT`/`GEMINI_EXTENSION_ROOT`), then the root `core/` directory. Both old and new layouts resolve correctly.
+**Path resolution**: `resolvePluginPath()` checks `PROJECT_CONFIG_DIR` first, then adapter env roots (`QUORUM_ADAPTER_ROOT`/`CLAUDE_PLUGIN_ROOT`/`GEMINI_EXTENSION_ROOT`).
 
 ---
 

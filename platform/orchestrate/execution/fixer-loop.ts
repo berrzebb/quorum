@@ -70,8 +70,9 @@ export interface FixCycleResult {
 export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
   const { repoRoot, findings, files, provider, fitnessContext } = opts;
 
-  const quorumRoot = resolve(__dirname, "..", "..", "..");
-  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  // At runtime: dist/platform/orchestrate/execution/ → up 4 → project root
+  const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
+  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "platform", "core", "cli-runner.mjs")).href);
   const bin = resolveBinary(provider);
 
   const fileList = [...new Set(files)].slice(0, 15).map(f => `- ${f}`).join("\n");

@@ -188,16 +188,23 @@ describe("Existing components untouched", () => {
   }
 });
 
-// ═══ 7. app.tsx not modified ══════════════════════════════════════════
+// ═══ 7. app.tsx uses shell + views ═══════════════════════════════════
 
-describe("app.tsx imports unchanged", () => {
-  it("app.tsx still imports from ./components/ (not panels/)", async () => {
+describe("app.tsx uses shell + views", () => {
+  it("app.tsx imports shell reducer and view components", async () => {
     const { readFileSync } = await import("node:fs");
     const content = readFileSync(resolve("daemon", "app.tsx"), "utf8");
-    // Verify original component imports are intact
-    assert.ok(content.includes("./components/GateStatus"), "GateStatus import should remain");
-    assert.ok(content.includes("./components/AuditStream"), "AuditStream import should remain");
-    assert.ok(content.includes("./components/AgentPanel"), "AgentPanel import should remain");
+    // Shell imports
+    assert.ok(content.includes("./shell/app-shell"), "app.tsx should import from shell/app-shell");
+    assert.ok(content.includes("./shell/navigation"), "app.tsx should import from shell/navigation");
+    assert.ok(content.includes("./shell/focus-regions"), "app.tsx should import from shell/focus-regions");
+    assert.ok(content.includes("./shell/shortcuts"), "app.tsx should import from shell/shortcuts");
+    // View imports
+    assert.ok(content.includes("./views/overview-view"), "app.tsx should import OverviewView");
+    assert.ok(content.includes("./views/review-view"), "app.tsx should import ReviewView");
+    assert.ok(content.includes("./views/chat-view"), "app.tsx should import ChatView");
+    assert.ok(content.includes("./views/operations-view"), "app.tsx should import OperationsView");
+    // Header still imported from components
     assert.ok(content.includes("./components/Header"), "Header import should remain");
   });
 });

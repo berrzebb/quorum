@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // Resolve quorum package root (not target project root)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// From dist/platform/cli/commands/ → dist/platform/ (3 levels up to dist/)
+/** At runtime: dist/platform/cli/commands/ → up 3 → dist/ (project root = DIST/..) */
 const DIST = resolve(__dirname, "..", "..", "..");
 
 export async function run(args: string[]): Promise<void> {

@@ -17,9 +17,9 @@ let _resolveBinary: ((cmd: string, envVar?: string) => string) | null = null;
 
 async function getResolveBinary(): Promise<(cmd: string, envVar?: string) => string> {
   if (_resolveBinary) return _resolveBinary;
-  // At runtime: dist/orchestrate/core/ → dist/orchestrate/ → dist/ → project root
-  const quorumRoot = resolve(__dirname, "..", "..", "..");
-  const mod = await import(pathToFileURL(resolve(quorumRoot, "core", "cli-runner.mjs")).href);
+  // At runtime: dist/platform/orchestrate/core/ → up 4 → project root
+  const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
+  const mod = await import(pathToFileURL(resolve(quorumRoot, "platform", "core", "cli-runner.mjs")).href);
   _resolveBinary = mod.resolveBinary;
   return _resolveBinary!;
 }
