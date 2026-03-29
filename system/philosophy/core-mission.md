@@ -24,7 +24,7 @@ It is about **making mistakes structurally hard** through process design.
 
 ### 1. Measurable things are never asked to the LLM
 
-Type safety, test coverage, pattern violations, build health, complexity, security vulnerabilities, dependency risks — these are **objective facts**. quorum measures them with deterministic tools (22 MCP tools, fitness score engine) before any LLM sees the code. If measurable quality drops, the submission is auto-rejected without spending audit tokens.
+Type safety, test coverage, pattern violations, build health, complexity, security vulnerabilities, dependency risks — these are **objective facts**. quorum measures them with deterministic tools (26 MCP tools, fitness score engine) before any LLM sees the code. If measurable quality drops, the submission is auto-rejected without spending audit tokens.
 
 ### 2. Deterministic tools establish facts first
 

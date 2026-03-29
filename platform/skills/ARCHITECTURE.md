@@ -19,7 +19,7 @@ agents/knowledge/                ← Retained shared protocol corpus (stable, ad
   ├── ui-review-protocol.md      ← UI-1~8 checklist, report format
   ├── doc-sync-protocol.md       ← 3-layer sync, fact extraction
   ├── parliament-rules.md        ← Standing rules for parliamentary deliberation
-  ├── tool-inventory.md          ← 20-tool catalog
+  ├── tool-inventory.md          ← 26-tool catalog
   ├── domains/*.md               ← Domain knowledge (11 domains)
   └── README.md                  ← Taxonomy, ownership rules, stability contract
 ```

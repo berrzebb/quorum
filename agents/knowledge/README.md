@@ -55,7 +55,7 @@ be treated as semi-frozen contracts:
 | `ui-review-protocol.md` | UI-1~8 verification checklist, report format, completion gate |
 | `doc-sync-protocol.md` | 3-layer fact extraction, numeric mismatch detection, section parity |
 | `parliament-rules.md` | Standing rules for parliamentary sessions: consensus, amendment voting, confluence |
-| `tool-inventory.md` | 20-tool catalog (codebase, domain, RTM/FVM, audit, guide) |
+| `tool-inventory.md` | 26-tool catalog (codebase, domain, RTM/FVM, audit, guide) |
 
 ### Domain Knowledge (`domains/`)
 

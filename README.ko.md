@@ -49,7 +49,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-22개 라이프사이클 훅, 22개 MCP 도구, 29개 스킬, 13개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
+22개 라이프사이클 훅, 26개 MCP 도구, 29개 스킬, 13개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
 
 ### Gemini CLI 확장
 
@@ -61,7 +61,7 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 gemini extensions link adapters/gemini
 ```
 
-11개 훅, 29개 스킬, 4개 명령어, 22개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
+11개 훅, 33개 스킬, 4개 명령어, 26개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
 
 ### Codex CLI 훅
 
@@ -161,13 +161,13 @@ quorum/
 │   ├── bus/              ← EventStore (SQLite) + pub/sub + 정체 감지 + LockService + Claims + Parliament
 │   ├── providers/        ← 합의 프로토콜 + 트리거 (13팩터) + 라우터 + 평가자 + AST 분석기
 │   ├── core/             ← 감사 프로토콜 (7 모듈), 템플릿, MCP 도구 22개, 하네스 계약
-│   ├── skills/           ← 37개 정규 스킬 정의 (프로토콜 중립)
+│   ├── skills/           ← 36개 정규 스킬 정의 (프로토콜 중립)
 │   └── adapters/
 │       ├── shared/       ← 어댑터 공용 비즈니스 로직 (20 모듈: HookRunner, NDJSON, MuxAdapter 등)
 │       ├── claude-code/  ← Claude Code 훅 (22) + 에이전트 (13) + 스킬 (29) + 명령어 (10)
-│       ├── gemini/       ← Gemini CLI 훅 (11) + 스킬 (29) + 명령어 (4)
-│       ├── codex/        ← Codex CLI 훅 (5) + 스킬 (29)
-│       └── openai-compatible/ ← OpenAI 호환 에이전트 (13) + 스킬 (29)
+│       ├── gemini/       ← Gemini CLI 훅 (11) + 스킬 (33) + 명령어 (4)
+│       ├── codex/        ← Codex CLI 훅 (5) + 스킬 (33)
+│       └── openai-compatible/ ← OpenAI 호환 에이전트 (13) + 스킬 (33)
 ├── daemon/               ← Ink TUI 대시보드 + FitnessPanel (독립 동작)
 └── agents/knowledge/     ← 공유 에이전트 프로토콜 (구현자, 스카우트, 11 도메인)
 ```
@@ -293,7 +293,7 @@ Business Logic (platform/adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, ...
       ↓ bridge.init() + checkHookGate()
 Core (platform/core/)
-  audit, tools (22 MCP), EventStore, bus
+  audit, tools (26 MCP), EventStore, bus
 ```
 
 새 어댑터 추가: ~280줄 (Codex 어댑터 기준).
@@ -409,7 +409,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 1601 tests
+npm test                # 2401 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```

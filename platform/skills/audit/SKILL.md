@@ -15,7 +15,7 @@ quorum audit {{ arguments }}
 
 ## Setup
 
-Read config at `{ADAPTER_ROOT}/core/config.json`:
+Read config at `{ADAPTER_ROOT}/../../core/config.json`:
 - `audit_submit` MCP tool — evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` — tag values
 - `consensus.roles` — provider-per-role mapping (advocate, devil, judge)

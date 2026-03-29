@@ -73,7 +73,7 @@ Compare extracted patterns against the current skill inventory:
 
 ### Phase 3: Match Against Tool Catalog
 
-Check which of the 22 MCP tools are relevant:
+Check which of the 26 MCP tools are relevant:
 
 ```
 quorum tool code_map        → always relevant

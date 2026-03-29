@@ -1,9 +1,9 @@
 # Skills Overview
 
-> 25 canonical skills defined in quorum (v0.4.5)
+> 36 canonical skills defined in quorum (v0.4.5)
 >
 > **v0.3.0**: audit, implementer, scout, planner, status — core workflow
-> **v0.4.0**: consensus-tools (22 MCP tool references), verify-implementation
+> **v0.4.0**: consensus-tools (26 MCP tool references), verify-implementation
 > **v0.4.2**: orchestrator, retrospect, doc-sync, merge-worktree
 > **v0.4.5**: commit-convention, guide, mcp-builder, skill-authoring, mermaid, pdf, pptx
 
@@ -57,7 +57,7 @@ Skills providing domain knowledge. Complement LLM reasoning with structured refe
 
 | Skill | Purpose | References |
 |-------|---------|------------|
-| **consensus-tools** | 22 MCP tool catalog + usage examples | 21 reference files |
+| **consensus-tools** | 26 MCP tool catalog + usage examples | 21 reference files |
 | **implementer** | Code implementation protocol | — |
 | **scout** | RTM generation protocol | — |
 | **ui-review** | UI verification checklist (UI-1~8) | — |
@@ -82,7 +82,7 @@ Skills for producing artifacts beyond code.
 
 ## Progressive Disclosure
 
-14 of 25 skills (56%) have `references/` subdirectories containing detailed documentation that loads only when needed:
+14 of 36 skills (39%) have `references/` subdirectories containing detailed documentation that loads only when needed:
 
 | Skill | Reference Count | Topics |
 |-------|-----------------|--------|

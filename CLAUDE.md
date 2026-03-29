@@ -7,7 +7,7 @@ Cross-model audit gate with structural enforcement. Edit → audit → agree →
 ```bash
 npm run build          # tsc compile
 npm run typecheck      # tsc --noEmit
-npm test               # node --test tests/*.test.mjs
+npm test               # node tests/run-suite.mjs all
 npm run dev            # tsx daemon/index.ts
 ```
 
@@ -27,13 +27,19 @@ platform/cli/index.ts   ← quorum <command> dispatcher
   │   └→ lifecycle.ts       ← re-exports lifecycle hooks (autoRetro, autoMerge)
   ├→ commands/parliament.ts ← parliamentary deliberation CLI (topic → 3-role consensus → CPS)
   ├→ commands/ask.ts        ← provider direct query
-  └→ commands/tool.ts       ← MCP tool CLI
+  ├→ commands/tool.ts       ← MCP tool CLI
+  ├→ commands/agent.ts      ← agent session management
+  ├→ commands/merge.ts      ← squash-merge worktree branch into main
+  ├→ commands/verify.ts     ← done-criteria checks (CQ, T, SEC, LEAK, DEP, SCOPE)
+  ├→ commands/retro.ts      ← retrospective trigger
+  ├→ commands/migrate.ts    ← legacy config migration
+  └→ commands/doctor.ts     ← health check diagnostics
 
 platform/orchestrate/    ← Orchestration library (extracted from monolithic runner.ts/shared.ts/planner.ts)
   ├→ index.ts             ← Root barrel (re-exports all 5 layers as namespaces)
   ├→ planning/            ← Legislation/blueprint generation (15 modules)
   │   ├→ index.ts          ← Barrel export
-  │   ├→ types.ts          ← WorkItem, Wave, TrackInfo, PlanReviewResult, HeadingInfo
+  │   ├→ types.ts          ← WorkItem, Wave, TrackInfo, PlanReviewResult, HeadingInfo, Bridge, MuxHandle
   │   ├→ track-catalog.ts  ← findTracks, resolveTrack, trackRef
   │   ├→ wb-heading-parser.ts ← parseHeading, classifyHeading, scanHeadings
   │   ├→ wb-field-parser.ts   ← parseFields, extractTargetFiles, extractDependsOn, etc.
@@ -46,7 +52,7 @@ platform/orchestrate/    ← Orchestration library (extracted from monolithic ru
   │   ├→ planner-mode.ts   ← determinePlannerMode (auto/socratic/inline)
   │   ├→ planner-session.ts ← runPlannerSession (high-level planner orchestration)
   │   ├→ auto-planner.ts   ← autoGenerateWBs, autoFixDesignDiagrams
-  │   └→ contract-negotiation.ts ← negotiateContracts (pre-execution contract binding)
+  │   └→ contract-negotiation.ts ← validateNegotiation, approveWithNegotiation (pre-execution contract binding)
   ├→ execution/           ← Model routing, agent sessions, audit/fixer loops (13 modules)
   │   ├→ index.ts          ← Barrel export
   │   ├→ model-routing.ts  ← selectModelForTask (XS→haiku, S→sonnet, M→opus)
@@ -86,7 +92,7 @@ platform/orchestrate/    ← Orchestration library (extracted from monolithic ru
   │       └→ track-file-store.ts ← resolveTrackDir, resolveDesignDir, resolveRTMPath, etc.
   └→ core/                ← Provider binary, mux, prompt I/O
       ├→ index.ts          ← Barrel export
-      ├→ provider-binary.ts ← resolveProviderBinary, buildProviderArgs
+      ├→ provider-binary.ts ← resolveProviderBinary, buildProviderArgs, prepareProviderSpawn
       ├→ provider-cli.ts   ← runProviderCLI
       ├→ mux-backend.ts    ← detectMuxBackend
       ├→ mux-session.ts    ← spawnMuxSession, pollMuxCompletion, cleanupMuxSession
@@ -95,6 +101,12 @@ platform/orchestrate/    ← Orchestration library (extracted from monolithic ru
 daemon/index.ts         ← Ink TUI entry point (StateReader + LockService injection)
   ├→ app.tsx            ← GateStatus + AgentPanel + FitnessPanel + TrackProgress + AuditStream + ItemStates + Locks + Specialists
   ├→ state-reader.ts    ← SQLite-only state reader (gates, items, locks, specialists, tracks, fitness)
+  ├→ lib/               ← Shared utilities (progress-bar.ts, time.ts)
+  ├→ shell/             ← App shell (density, focus-regions, navigation, shortcuts)
+  ├→ panels/            ← overview/, review/, sessions/ panel components
+  ├→ views/             ← chat-view, overview-view, operations-view, review-view
+  ├→ services/          ← daemon-bootstrap, mux-lifecycle, provider-lifecycle
+  ├→ state/             ← poller, render-control, snapshot, queries/
   └→ components/        ← GateStatus, AgentPanel, FitnessPanel, ParliamentPanel, AuditStream, TrackProgress, Header
 
 platform/bus/
@@ -148,7 +160,7 @@ platform/core/
   ├→ audit/             ← split audit modules (args, session, scope, pre-verify, codex-runner, solo-verdict, index)
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
-  ├→ tools/             ← 22 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, audit_submit, ...)
+  ├→ tools/             ← 26 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, audit_submit, ...)
   ├→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
   └→ harness/           ← Execution contracts (8 modules)
       ├→ contract-ledger.ts      ← Contract lifecycle tracking
@@ -175,10 +187,10 @@ agents/knowledge/          ← Retained shared protocol corpus (stable, adapter-
   ├→ ui-review-protocol.md    ← UI-1~8 verification checklist, report format, completion gate
   ├→ doc-sync-protocol.md     ← 3-layer fact extraction, numeric mismatch, section parity
   ├→ parliament-rules.md      ← Standing rules for parliamentary sessions (consensus, amendment, confluence)
-  ├→ tool-inventory.md        ← 20-tool catalog (codebase, domain, RTM/FVM, audit, guide)
+  ├→ tool-inventory.md        ← 26-tool catalog (codebase, domain, RTM/FVM, audit, guide)
   └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
 
-platform/skills/          ← Canonical skill definitions (37 skills)
+platform/skills/          ← Canonical skill definitions (36 skills)
   ├→ ARCHITECTURE.md     ← Skill inheritance: agents/knowledge/ → platform/skills/ → 4 adapter wrappers
   └→ {skill}/            ← SKILL.md + references/ + scripts/ per skill
 
@@ -195,16 +207,16 @@ platform/adapters/claude-code/
 platform/adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
   ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
-  ├→ skills/               ← 29 skills (shared wrappers)
+  ├→ skills/               ← 33 skills (shared wrappers)
   └→ commands/             ← 4 TOML commands
 
 platform/adapters/codex/
   ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
-  └→ skills/               ← 29 skills (shared wrappers)
+  └→ skills/               ← 33 skills (shared wrappers)
 
 platform/adapters/openai-compatible/
   ├→ agents/               ← 13 agents (mirror of claude-code agents)
-  └→ skills/               ← 29 skills (shared wrappers)
+  └→ skills/               ← 33 skills (shared wrappers)
 ```
 
 ## Key Patterns
@@ -282,7 +294,7 @@ platform/adapters/openai-compatible/
 ## Testing
 
 ```bash
-npm test                              # all (1601 tests)
+npm test                              # all (2401 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

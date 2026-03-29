@@ -304,6 +304,39 @@ quorum tool ai_guide --topic roles
 
 ---
 
+## contract_drift
+
+Detect contract drift: type/interface re-declarations, signature mismatches, and missing members between contract directories and implementations. Uses AST program mode.
+
+```bash
+quorum tool contract_drift
+quorum tool contract_drift --contract_dirs types,interfaces
+```
+
+---
+
+## skill_sync
+
+Detect and fix mismatches between canonical skills (`platform/skills/`) and adapter wrappers (`platform/adapters/*/skills/`). Reports missing wrappers, stale references, and count discrepancies.
+
+```bash
+quorum tool skill_sync
+quorum tool skill_sync --fix
+```
+
+---
+
+## track_archive
+
+Archive completed track planning artifacts to an archive directory. Moves WB, PRD, design, and RTM files.
+
+```bash
+quorum tool track_archive --track mytrack
+quorum tool track_archive --track mytrack --dry_run
+```
+
+---
+
 ## Verification Pipeline
 
 ```bash

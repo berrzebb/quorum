@@ -9,7 +9,7 @@ Help the user write a proper evidence package for the quorum audit process.
 
 ## Setup
 
-Read `{ADAPTER_ROOT}/core/config.json` to determine the tag values:
+Read `{ADAPTER_ROOT}/../../core/config.json` to determine the tag values:
 - `audit_submit` MCP tool — evidence submission
 - `consensus.trigger_tag` / `agree_tag` / `pending_tag` — actual tag values
 - `plugin.locale` — locale for templates

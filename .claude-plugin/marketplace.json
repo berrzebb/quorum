@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "quorum",
-      "description": "Cross-model audit gate — 3-adapter (Claude Code + Gemini CLI + Codex), parliament protocol, 5 enforcement gates, 22 MCP tools, 1077 tests.",
+      "description": "Cross-model audit gate — 3-adapter (Claude Code + Gemini CLI + Codex), parliament protocol, 5 enforcement gates, 26 MCP tools, 2401 tests.",
       "version": "0.4.5",
       "author": {
         "name": "berrzebb",

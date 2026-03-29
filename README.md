@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 22 MCP tools, 29 skills, and 13 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 26 MCP tools, 29 skills, and 13 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -62,6 +62,8 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 # or for development:
 gemini extensions link adapters/gemini
 ```
+
+This registers 11 hooks, 33 skills, 4 commands, and 26 MCP tools. Same audit engine as Claude Code.
 
 ### As a Codex CLI hook
 
@@ -75,8 +77,6 @@ codex -c features.codex_hooks=true
 ```
 
 This registers 5 hooks (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse). Same audit engine as Claude Code and Gemini.
-
-This registers 11 hooks, 29 skills, 4 commands, and 22 MCP tools. Same audit engine as Claude Code.
 
 ### From source
 
@@ -164,14 +164,14 @@ quorum/
 │   ├── orchestrate/      ← 5-layer orchestration (planning/execution/governance/state/core)
 │   ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Parliament
 │   ├── providers/        ← consensus protocol + trigger (13-factor) + router + evaluators + AST analyzer
-│   ├── core/             ← audit protocol (7 modules), templates, 22 MCP tools, harness contracts
-│   ├── skills/           ← 37 canonical skill definitions (protocol-neutral)
+│   ├── core/             ← audit protocol (7 modules), templates, 26 MCP tools, harness contracts
+│   ├── skills/           ← 36 canonical skill definitions (protocol-neutral)
 │   └── adapters/
 │       ├── shared/       ← adapter-agnostic business logic (20 modules, incl. HookRunner, NDJSON, MuxAdapter)
 │       ├── claude-code/  ← Claude Code hooks (22) + agents (13) + skills (29) + commands (10)
-│       ├── gemini/       ← Gemini CLI hooks (11) + skills (29) + commands (4)
-│       ├── codex/        ← Codex CLI hooks (5) + skills (29)
-│       └── openai-compatible/ ← OpenAI-compatible agents (13) + skills (29)
+│       ├── gemini/       ← Gemini CLI hooks (11) + skills (33) + commands (4)
+│       ├── codex/        ← Codex CLI hooks (5) + skills (33)
+│       └── openai-compatible/ ← OpenAI-compatible agents (13) + skills (33)
 ├── daemon/               ← Ink TUI dashboard + FitnessPanel (works standalone)
 └── agents/knowledge/     ← shared agent protocols (cross-adapter: implementer, scout, 11 specialist domains)
 ```
@@ -318,7 +318,7 @@ Business Logic (platform/adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
       ↓ bridge.init() + bridge.checkHookGate()
 Core (platform/core/)
-  audit, tools (22 MCP), EventStore, bus, providers
+  audit, tools (26 MCP), EventStore, bus, providers
 ```
 
 Adding a new adapter requires ~280 lines (proven by the Codex adapter).
@@ -424,7 +424,7 @@ quorum is provider-agnostic. Bring your own auditor.
 | Provider | Mechanism | Hooks | Plugin needed? |
 |----------|-----------|-------|---------------|
 | Claude Code | 22 native hooks | SessionStart, PreToolUse, PostToolUse, Stop, PermissionRequest, Notification, ... | Optional (auto-triggers) |
-| Gemini CLI | 11 hooks + 29 skills | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, BeforeModel, ... | Optional (`gemini extensions install`) |
+| Gemini CLI | 11 hooks + 33 skills | SessionStart, BeforeAgent, AfterAgent, BeforeTool, AfterTool, BeforeModel, ... | Optional (`gemini extensions install`) |
 | Codex CLI | 5 hooks | SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse | Optional (`.codex/hooks.json`) |
 | Manual | `quorum audit` | — | No |
 
@@ -475,7 +475,7 @@ Full reference: [docs/TOOLS.md](docs/TOOLS.md) | [docs/ko-KR/TOOLS.md](docs/ko-K
 ## Tests
 
 ```bash
-npm test                # 1601 tests
+npm test                # 2401 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```

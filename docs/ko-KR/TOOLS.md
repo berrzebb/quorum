@@ -304,6 +304,39 @@ quorum tool ai_guide --topic roles
 
 ---
 
+## contract_drift
+
+계약 드리프트 감지: 타입/인터페이스 재선언, 시그니처 불일치, 계약 디렉토리와 구현 간 누락 멤버. AST 프로그램 모드 사용.
+
+```bash
+quorum tool contract_drift
+quorum tool contract_drift --contract_dirs types,interfaces
+```
+
+---
+
+## skill_sync
+
+정규 스킬(`platform/skills/`)과 어댑터 래퍼(`platform/adapters/*/skills/`) 간 불일치 감지 및 수정. 누락 래퍼, 오래된 참조, 개수 불일치 리포트.
+
+```bash
+quorum tool skill_sync
+quorum tool skill_sync --fix
+```
+
+---
+
+## track_archive
+
+완료된 트랙 계획 산출물을 아카이브 디렉토리로 이동. WB, PRD, 설계, RTM 파일 포함.
+
+```bash
+quorum tool track_archive --track mytrack
+quorum tool track_archive --track mytrack --dry_run
+```
+
+---
+
 ## 검증 파이프라인
 
 ```bash
