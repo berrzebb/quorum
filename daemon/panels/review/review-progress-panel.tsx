@@ -20,7 +20,7 @@ export function ReviewProgressPanel({ progress }: ReviewProgressPanelProps) {
       {progress.map((r) => {
         const pct = Math.round(r.progress * 100);
         const barWidth = 16;
-        const filled = Math.round((pct / 100) * barWidth);
+        const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
         return (
           <Box key={r.reviewerId} flexDirection="column">
             <Text>

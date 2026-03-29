@@ -324,7 +324,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
         {showGitLog && (
           <Box flexDirection="column" width={gitLogWidth} borderStyle="single" paddingX={1}>
             <Text bold>Git Log</Text>
-            <Text dimColor>{"─".repeat(gitLogWidth - 4)}</Text>
+            <Text dimColor>{"─".repeat(Math.max(0, gitLogWidth - 4))}</Text>
             {gitLog.slice(0, visibleLines).map((line, i) => {
               const isWIP = line.includes("WIP(");
               return (

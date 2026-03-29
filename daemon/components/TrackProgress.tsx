@@ -25,7 +25,7 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
         tracks.map((track) => {
           const pct = track.total > 0 ? Math.round((track.completed / track.total) * 100) : 0;
           const barWidth = 20;
-          const filled = Math.round((pct / 100) * barWidth);
+          const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
 
           return (
             <Box key={track.trackId} flexDirection="column">
