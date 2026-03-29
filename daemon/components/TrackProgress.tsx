@@ -23,7 +23,8 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
         <Text dimColor>No active tracks</Text>
       ) : (
         tracks.map((track) => {
-          const pct = track.total > 0 ? Math.round((track.completed / track.total) * 100) : 0;
+          const rawPct = track.total > 0 ? Math.round((track.completed / track.total) * 100) : 0;
+          const pct = Math.min(rawPct, 100);
           const barWidth = 20;
           const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
 

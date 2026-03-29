@@ -36,14 +36,17 @@ export function AuditStream({ events, fullScreen }: AuditStreamProps) {
         <Text dimColor>Waiting for events...</Text>
       ) : (
         visible.map((event, i) => (
-          <Box key={`${event.timestamp}-${i}`} gap={1}>
+          <Text key={`${event.timestamp}-${i}`} wrap="truncate">
             <Text dimColor>{formatTime(event.timestamp)}</Text>
-            <Text color={sourceColor(event.source)}>{event.source.slice(0, 6).padEnd(6)}</Text>
+            {" "}
+            <Text color={sourceColor(event.source)}>{event.source.slice(0, 7).padEnd(7)}</Text>
+            {" "}
             <Text color={eventColor(event.type)} bold={isGateEvent(event.type)}>
-              {event.type.padEnd(18)}
+              {event.type.padEnd(20)}
             </Text>
-            <Text wrap="truncate">{summarize(event)}</Text>
-          </Box>
+            {" "}
+            <Text>{summarize(event)}</Text>
+          </Text>
         ))
       )}
     </Box>
@@ -97,7 +100,7 @@ function summarize(event: QuorumEvent): string {
     case "audit.submit":
       return `evidence → ${(p.file as string)?.split("/").pop() ?? ""}`;
     case "agent.spawn":
-      return `${p.name} (${p.role})`;
+      return `${p.name ?? p.agentId ?? p.wbId ?? "agent"} (${p.role ?? "impl"})`;
     case "agent.complete":
       return `${p.name ?? event.agentId} finished`;
     case "quality.fail":
