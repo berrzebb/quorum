@@ -243,7 +243,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     const waveSnapshotRef = captureSnapshot(repoRoot);
     const previousManifests = readPreviousManifests(bridge, trackName, gi);
     const waveResult = await runWave({
-      repoRoot, wave, waveIndex: gi, totalWaves: waves.length,
+      repoRoot, wave, waveIndex: gi, totalWaves: waves.length, totalItems: totalWBs,
       trackName, provider, auditor, maxConcurrency, maxRetries,
       mux, bridge, completedIds, blueprintRules, rtmPath,
       manifests: previousManifests, snapshotRef: waveSnapshotRef,

@@ -48,6 +48,8 @@ export interface WaveRunnerOptions {
   wave: Wave;
   waveIndex: number;
   totalWaves: number;
+  /** Total work items across ALL waves (for accurate progress %). */
+  totalItems?: number;
   trackName: string;
   provider: string;
   auditor: string;
@@ -240,7 +242,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       if (bridge?.emitEvent) {
         bridge.emitEvent("track.progress", "generic", {
           trackId: trackName, completed: completedIds.size, pending: active.length,
-          total: wave.items.length, blocked: 0, failed: 0,
+          total: opts.totalItems ?? wave.items.length,
+          blocked: 0, failed: 0,
         });
       }
     }
