@@ -32,7 +32,10 @@ import type { WaveCheckpoint } from "../../../orchestrate/state/state-types.js";
 function parseRunArgs(args: string[]) {
   const opt = (flag: string) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
   const provider = opt("--provider") ?? "claude";
-  const auditor = opt("--auditor") ?? provider;
+  // Auditor MUST differ from provider for meaningful review.
+  // Default fallback order: gemini → codex → provider (last resort).
+  const explicitAuditor = opt("--auditor");
+  const auditor = explicitAuditor ?? _defaultAuditor(provider);
   const maxConcurrency = parseInt(opt("--concurrency") ?? "3", 10) || 3;
   const optValues = new Set([opt("--provider"), opt("--auditor"), opt("--concurrency")].filter(Boolean));
   const trackInput = args.find(a => !a.startsWith("--") && !optValues.has(a));
@@ -64,6 +67,9 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   const trackName = resolved.name;
   console.log(`\n\x1b[36mquorum orchestrate run\x1b[0m — implementation loop\n`);
   console.log(`  Track: ${trackName}  Provider: ${provider}  Auditor: ${auditor}  Concurrency: ${maxConcurrency}`);
+  if (provider === auditor) {
+    console.log(`  \x1b[33m⚠ Auditor = Provider (same model). Use --auditor <model> for cross-model review.\x1b[0m`);
+  }
   if (resumeMode) console.log(`  Mode:  \x1b[33mresume\x1b[0m`);
   console.log();
 
@@ -342,6 +348,16 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
       else console.log(`  \x1b[36m🔒 ${contractFiles.length} contract file(s) protected\x1b[0m`);
     }
   } catch { /* fail-open */ }
+}
+
+/** Pick a default auditor that differs from the provider for cross-model review. */
+function _defaultAuditor(provider: string): string {
+  // Codex preferred — strong code review, deterministic. Then gemini, then same model as fallback.
+  const candidates = ["codex", "gemini", "ollama", "claude"];
+  for (const c of candidates) {
+    if (c !== provider) return c;
+  }
+  return provider;
 }
 
 function printWaveAuditDetails(wave: Wave, wr: WaveResult): void {

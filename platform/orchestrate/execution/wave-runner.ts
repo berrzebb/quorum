@@ -322,12 +322,15 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     // ── 5. RTM + WIP Commit ──────────────────
     updateRTM(rtmPath, completedItems, "implemented");
     const committed = waveCommit(repoRoot, [...waveFiles, rtmPath], wave.index + 1, trackName);
+    if (committed) log(`  \x1b[36m◈ WIP commit created\x1b[0m`);
 
     // ── 6. LLM Audit + Fix Cycle ─────────────
     let wavePassed = fitnessDecision !== "auto-reject";
     let testResult: { ran: boolean; passed: boolean; summary: string } | undefined;
 
     if (completedItems.length > 0 && fitnessDecision !== "auto-reject") {
+      log(`  \x1b[36m◈ LLM audit\x1b[0m (auditor: ${auditor}, max retries: ${maxRetries})`);
+      const auditStart = Date.now();
       const fixResult = await runFixCycle({
         repoRoot,
         files: waveFiles,
@@ -338,10 +341,12 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         completedItems,
         detectStagnation: detectFixLoopStagnation,
       });
+      const auditSec = Math.round((Date.now() - auditStart) / 1000);
 
       wavePassed = fixResult.passed;
 
       if (fixResult.passed) {
+        log(`  \x1b[32m✓ LLM audit passed\x1b[0m (${fixResult.attempts} round(s), ${auditSec}s)`);
         // Confluence verification
         testResult = runProjectTests(repoRoot);
         const confluenceResult = runConfluenceCheck(true, testResult);
@@ -353,6 +358,12 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         updateRTM(rtmPath, completedItems, "passed");
         amendWaveCommit(repoRoot, rtmPath);
       } else {
+        log(`  \x1b[31m✗ LLM audit FAILED\x1b[0m (${fixResult.attempts} round(s), ${auditSec}s)`);
+        if (fixResult.stagnation) log(`    stagnation: ${fixResult.stagnation}`);
+        for (const round of fixResult.findingsHistory) {
+          for (const f of round.slice(0, 3)) log(`    - ${f}`);
+          if (round.length > 3) log(`    ... and ${round.length - 3} more`);
+        }
         // Rollback or mark failed
         const { execSync } = await import("node:child_process");
         try {

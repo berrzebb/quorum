@@ -1,15 +1,17 @@
 /**
  * Wave-level LLM audit — spawns a provider CLI to review wave changes.
  *
- * Single-turn `provider -p` invocation with structured JSON verdict output.
+ * Uses buildProviderArgs for provider-aware CLI invocation (claude/codex/gemini).
  * No mechanical gates, no fixer logic — pure LLM review.
  */
 
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { buildProviderArgs, resolveProviderBinary } from "../core/provider-binary.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** At runtime: dist/platform/orchestrate/execution/ → up 2 → dist/platform/ */
@@ -22,16 +24,13 @@ interface WorkItemLike {
 
 /**
  * Run a single LLM audit for all changes in a wave.
- * Uses `provider -p` with auditor instructions to review the wave's files.
+ * Uses provider-aware CLI args (claude -p / codex exec / gemini).
  */
 export async function runWaveAuditLLM(
   repoRoot: string, files: string[], items: WorkItemLike[], provider: string,
 ): Promise<{ passed: boolean; findings: string[] }> {
 
-  // DIST = dist/platform/, up 2 = project root
-  const quorumRoot = resolve(DIST, "..", "..");
-  const { resolveBinary } = await import(pathToFileURL(resolve(quorumRoot, "platform", "core", "cli-runner.mjs")).href);
-  const bin = resolveBinary(provider);
+  const bin = await resolveProviderBinary(provider);
 
   const fileList = [...new Set(files)].slice(0, 20).map(f => `- ${f}`).join("\n");
   const itemList = items.map((i: any) => `- ${i.id}: ${i.title ?? "(no title)"}`).join("\n");
@@ -46,18 +45,21 @@ export async function runWaveAuditLLM(
     fileList,
     "",
     "## Instructions:",
+    "**IMPORTANT: Do NOT run any shell commands (npm test, tsc, etc). Only READ files and review code.**",
+    "Mechanical verification (build, tests, lint) is already handled by the orchestrator.",
+    "Your role is CODE REVIEW ONLY.",
+    "",
     "1. Read each file listed above",
-    "2. Check: does the code compile? Are types correct? Are there obvious bugs?",
-    "3. Run the verify commands from the work breakdown if available",
-    "4. Run existing tests — if any fail, flag as finding",
-    "5. **Substantiveness check** — for EACH file, verify:",
+    "2. Check: are types correct? Are there obvious bugs or logic errors?",
+    "3. Check: is error handling appropriate? Are edge cases considered?",
+    "4. **Substantiveness check** — for EACH file, verify:",
     "   a. NO stub indicators: TODO, FIXME, placeholder, 'not implemented', empty function bodies",
     "   b. NO hardcoded mock data where real logic is expected (return [], return null, return {})",
     "   c. Functions have REAL logic, not just type signatures or pass-through",
     "   d. Event handlers do actual work, not just console.log",
     "   e. API calls return real data flows, not static fixtures",
     "   If ANY stub is found, output passed: false with the specific stub location.",
-    "6. Output a JSON verdict at the END of your response in this exact format:",
+    "5. Output a JSON verdict at the END of your response in this exact format:",
     '```json',
     '{"passed": true|false, "findings": ["issue 1", "issue 2"]}',
     '```',
@@ -66,13 +68,42 @@ export async function runWaveAuditLLM(
     "Stubs are NOT acceptable — every function must have real implementation.",
   ].join("\n");
 
-  const result = spawnSync(bin, ["-p", prompt, "--dangerously-skip-permissions"], {
-    cwd: repoRoot,
-    stdio: ["pipe", "pipe", "inherit"],
-    env: { ...process.env },
-    timeout: 180_000,
-    encoding: "utf8",
+  const args = buildProviderArgs(provider, {
+    prompt,
+    systemPrompt: "You are a code auditor. Review code changes and output a JSON verdict.",
+    nonInteractive: true,
+    dangerouslySkipPermissions: true,
+    fullAuto: true,
   });
+
+  let finalArgs: string[];
+  let stdinInput: string | undefined;
+
+  if (provider === "codex") {
+    // codex exec --full-auto - : reads prompt from stdin (avoids shell escaping issues)
+    finalArgs = ["exec", "--full-auto", "-"];
+    stdinInput = prompt;
+  } else {
+    finalArgs = args;
+    stdinInput = undefined;
+  }
+
+  const result = spawnSync(bin, finalArgs, {
+    cwd: repoRoot,
+    input: stdinInput,
+    stdio: [stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
+    env: { ...process.env },
+    timeout: 300_000,  // 5 minutes — codex with xhigh reasoning needs more time
+    encoding: "utf8",
+    shell: process.platform === "win32",  // Windows needs shell for .cmd wrappers
+    windowsHide: true,
+  });
+
+  // Debug: log non-zero exit code
+  if (result.status !== 0) {
+    const stderrSnippet = ((result.stderr ?? "") as string).slice(0, 300);
+    console.error(`  [audit-debug] ${provider} exit=${result.status} signal=${result.signal} stderr=${stderrSnippet}`);
+  }
 
   const output = (result.stdout ?? "") as string;
 
@@ -81,6 +112,18 @@ export async function runWaveAuditLLM(
   if (jsonMatch) {
     try {
       const verdict = JSON.parse(jsonMatch[1]!);
+      return {
+        passed: !!verdict.passed,
+        findings: Array.isArray(verdict.findings) ? verdict.findings : [],
+      };
+    } catch { /* fall through */ }
+  }
+
+  // Codex may output JSON without fences
+  const bareJsonMatch = output.match(/\{[\s\S]*"passed"\s*:\s*(true|false)[\s\S]*\}/);
+  if (bareJsonMatch) {
+    try {
+      const verdict = JSON.parse(bareJsonMatch[0]);
       return {
         passed: !!verdict.passed,
         findings: Array.isArray(verdict.findings) ? verdict.findings : [],

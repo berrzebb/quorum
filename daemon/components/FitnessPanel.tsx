@@ -112,7 +112,7 @@ function sparkline(values: number[]): string {
 }
 
 function bar(value: number, width: number): string {
-  const filled = Math.round(value * width);
+  const filled = Math.max(0, Math.min(width, Math.round(value * width)));
   return "█".repeat(filled) + "░".repeat(width - filled);
 }
 
