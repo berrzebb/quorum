@@ -56,9 +56,11 @@ export function queryFitnessInfo(store: EventStore): FitnessInfo {
     let trend: FitnessInfo["trend"] = null;
     if (trendEvents.length > 0) {
       const p = trendEvents[0].payload;
+      const ma = p.movingAverage as number;
+      const sl = p.slope as number;
       trend = {
-        movingAverage: (p.movingAverage as number) ?? 0,
-        slope: (p.slope as number) ?? 0,
+        movingAverage: Number.isFinite(ma) ? ma : 0,
+        slope: Number.isFinite(sl) ? sl : 0,
       };
     }
 
@@ -81,7 +83,7 @@ export function queryFitnessInfo(store: EventStore): FitnessInfo {
 
     return {
       baseline: baseline?.total ?? null,
-      current: current ?? (history.length > 0 ? history[history.length - 1] : null),
+      current: current ?? (history.length > 0 ? (Number.isFinite(history[history.length - 1]) ? history[history.length - 1] : null) : null),
       gate,
       history,
       trend,

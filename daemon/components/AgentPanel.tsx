@@ -8,6 +8,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { QuorumEvent } from "../../platform/bus/events.js";
+import { elapsed } from "../lib/time.js";
 
 interface AgentPanelProps {
   events: QuorumEvent[];
@@ -57,12 +58,6 @@ function statusIcon(status: AgentState["status"]): string {
   }
 }
 
-function elapsed(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  return `${Math.floor(diff / 3600)}h ago`;
-}
 
 function deriveAgents(events: QuorumEvent[]): AgentState[] {
   const agents = new Map<string, AgentState>();

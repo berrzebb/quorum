@@ -12,6 +12,7 @@
 
 import { resolve } from "node:path";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { QuorumBus } from "../../platform/bus/bus.js";
 import { EventStore } from "../../platform/bus/store.js";
 import { createEvent } from "../../platform/bus/events.js";
@@ -123,7 +124,6 @@ export function bootstrapFromState(repoRoot: string, config: ProviderConfig, bus
  */
 function bootstrapWorktrees(repoRoot: string, bus: QuorumBus): void {
   try {
-    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const wtOutput = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });

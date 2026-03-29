@@ -115,13 +115,15 @@ export function queryReviewProgress(store: EventStore): ReviewProgressInfo[] {
     const progressEvents = store.query({
       eventType: "review.progress",
       limit: 100,
+      descending: true,
     });
 
-    // Latest per reviewer
+    // First seen per reviewer (descending = newest first, so keep first occurrence)
     const reviewerMap = new Map<string, ReviewProgressInfo>();
     for (const evt of progressEvents) {
       const p = evt.payload as unknown as ReviewProgressPayload;
       const reviewerId = p.reviewerId ?? "unknown";
+      if (reviewerMap.has(reviewerId)) continue;
       reviewerMap.set(reviewerId, {
         reviewerId,
         provider: p.provider ?? "unknown",
@@ -161,8 +163,8 @@ function fetchFindingEvents(store: EventStore) {
     return { detectEvents, ackEvents: [] as ReturnType<typeof store.query>, resolveEvents: [] as ReturnType<typeof store.query> };
   }
   const since = detectEvents[detectEvents.length - 1]!.timestamp;
-  const ackEvents = store.query({ eventType: "finding.ack", since });
-  const resolveEvents = store.query({ eventType: "finding.resolve", since });
+  const ackEvents = store.query({ eventType: "finding.ack", since, limit: 1000 });
+  const resolveEvents = store.query({ eventType: "finding.resolve", since, limit: 1000 });
   return { detectEvents, ackEvents, resolveEvents };
 }
 
@@ -307,6 +309,16 @@ function findingThreadsFallback(store: EventStore): FileThread[] {
     });
   }
 
+  // Pre-index action messages by finding ID for O(1) lookup per thread
+  const actionsByFindingId = new Map<string, ThreadMessage[]>();
+  for (const am of actionMessages) {
+    if (am.id) {
+      const arr = actionsByFindingId.get(am.id) ?? [];
+      arr.push(am);
+      actionsByFindingId.set(am.id, arr);
+    }
+  }
+
   const roots = allFindings.filter(f => !f.replyTo);
   const replyMap = new Map<string, typeof allFindings>();
   for (const f of allFindings) {
@@ -332,8 +344,9 @@ function findingThreadsFallback(store: EventStore): FileThread[] {
       });
     }
     const threadIds = new Set([root.id, ...replies.map(r => r.id)]);
-    for (const am of actionMessages) {
-      if (am.id && threadIds.has(am.id)) messages.push(am);
+    for (const id of threadIds) {
+      const actions = actionsByFindingId.get(id);
+      if (actions) messages.push(...actions);
     }
     messages.sort((a, b) => a.timestamp - b.timestamp);
     const threads = fileMap.get(file) ?? [];

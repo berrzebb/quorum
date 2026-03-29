@@ -27,7 +27,6 @@ export function AuditStream({ events, fullScreen }: AuditStreamProps) {
       borderStyle="single"
       paddingX={1}
       flexGrow={fullScreen ? 1 : undefined}
-      width={fullScreen ? undefined : undefined}
     >
       <Text bold>Event Stream</Text>
       <Text dimColor>{"─".repeat(50)}</Text>

@@ -28,6 +28,7 @@ import { existsSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
 import { execSync } from "node:child_process";
 import type { ProcessMux, MuxSession } from "../../platform/bus/mux.js";
 import type { ParliamentLiveSession } from "../state-reader.js";
+import { ageSeconds } from "../lib/time.js";
 
 interface Props {
   mux: ProcessMux;
@@ -268,7 +269,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
             <Text dimColor>{"─".repeat(18)}</Text>
             {sessions.map((s, i) => {
               const isSel = i === safeIdx;
-              const age = Math.round((Date.now() - s.startedAt) / 1000);
+              const age = ageSeconds(s.startedAt);
               const liveInfo = liveSessions.find(ls => ls.id === s.id);
               const role = liveInfo?.role ?? s.name.split("-").slice(-2, -1)[0] ?? "agent";
               const color = role === "advocate" ? "green"

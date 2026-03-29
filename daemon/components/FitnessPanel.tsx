@@ -11,6 +11,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { FitnessInfo } from "../state-reader.js";
+import { bar } from "../lib/progress-bar.js";
 
 interface FitnessPanelProps {
   fitness: FitnessInfo;
@@ -82,7 +83,7 @@ export function FitnessPanel({ fitness }: FitnessPanelProps) {
                   <Text color={scoreColor(comp.value)}>
                     {bar(comp.value, 10)}
                   </Text>
-                  <Text dimColor> {(comp.value * 100).toFixed(0).padStart(3)}%</Text>
+                  <Text dimColor> {(Number.isFinite(comp.value) ? (comp.value * 100).toFixed(0) : "?").padStart(3)}%</Text>
                   <Text dimColor> w:{comp.weight}</Text>
                 </Box>
               ))}
@@ -111,12 +112,8 @@ function sparkline(values: number[]): string {
   }).join("");
 }
 
-function bar(value: number, width: number): string {
-  const filled = Math.max(0, Math.min(width, Math.round(value * width)));
-  return "█".repeat(filled) + "░".repeat(width - filled);
-}
-
 function scoreColor(score: number): string {
+  if (!Number.isFinite(score)) return "red";
   if (score < 0.3) return "red";
   if (score < 0.6) return "yellow";
   return "green";

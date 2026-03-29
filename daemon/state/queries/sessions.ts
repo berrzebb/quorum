@@ -35,10 +35,12 @@ export function queryActiveSpecialists(store: EventStore): SpecialistInfo[] {
     const recentTool = store.query({
       eventType: "specialist.tool",
       limit: 20,
+      descending: true,
     });
     const recentReview = store.query({
       eventType: "specialist.review",
       limit: 20,
+      descending: true,
     });
 
     // Build a map of domain -> latest info

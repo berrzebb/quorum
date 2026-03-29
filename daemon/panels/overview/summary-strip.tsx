@@ -15,8 +15,11 @@ interface SummaryStripProps {
 }
 
 export function SummaryStrip({ items, lockCount, specialistCount }: SummaryStripProps) {
-  const approved = items.filter(i => i.currentState === "approved").length;
-  const rejected = items.filter(i => i.currentState === "changes_requested").length;
+  let approved = 0, rejected = 0;
+  for (const i of items) {
+    if (i.currentState === "approved") approved++;
+    else if (i.currentState === "changes_requested") rejected++;
+  }
   const pending = items.length - approved - rejected;
 
   return (

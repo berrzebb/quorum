@@ -7,8 +7,11 @@
  * - ProcessMux initialization for agent session management
  */
 
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ProcessMux, ensureMuxBackend } from "../../platform/bus/mux.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import type { MuxBackend } from "../../platform/bus/mux.js";
 
 // ── Constants ────────────────────────────────────────────────────────

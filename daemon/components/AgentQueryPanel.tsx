@@ -5,6 +5,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { AgentQueryInfo } from "../state-reader.js";
+import { ageSeconds } from "../lib/time.js";
 
 interface Props {
   queries: AgentQueryInfo[];
@@ -18,7 +19,7 @@ export function AgentQueryPanel({ queries }: Props) {
       <Text bold>Agent Queries</Text>
       <Text dimColor>{"─".repeat(46)}</Text>
       {queries.slice(0, 8).map((q) => {
-        const age = Math.round((Date.now() - q.timestamp) / 1000);
+        const age = ageSeconds(q.timestamp);
         const target = q.toAgent ? ` → ${q.toAgent}` : " (broadcast)";
         const answered = q.responseCount > 0;
         return (

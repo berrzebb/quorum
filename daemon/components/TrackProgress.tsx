@@ -8,6 +8,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { TrackInfo } from "../state-reader.js";
+import { bar } from "../lib/progress-bar.js";
 
 interface TrackProgressProps {
   tracks: TrackInfo[];
@@ -27,7 +28,6 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
           const displayTotal = Math.max(track.total, track.completed);
           const pct = displayTotal > 0 ? Math.min(100, Math.round((track.completed / displayTotal) * 100)) : 0;
           const barWidth = 20;
-          const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
 
           return (
             <Box key={track.trackId} flexDirection="column">
@@ -39,8 +39,7 @@ export function TrackProgress({ tracks }: TrackProgressProps) {
                 )}
               </Box>
               <Box>
-                <Text color="green">{"█".repeat(filled)}</Text>
-                <Text dimColor>{"░".repeat(barWidth - filled)}</Text>
+                <Text>{bar(pct / 100, barWidth)}</Text>
                 <Text dimColor> {track.completed}/{displayTotal}</Text>
               </Box>
             </Box>

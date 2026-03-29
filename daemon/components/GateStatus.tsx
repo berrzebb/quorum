@@ -69,8 +69,6 @@ function deriveGates(events: QuorumEvent[]): Gate[] {
   const lastAuditVerdict = findLast(events, "audit.verdict");
   const lastRetroStart = findLast(events, "retro.start");
   const lastRetroComplete = findLast(events, "retro.complete");
-  const lastQualityFail = findLast(events, "quality.fail");
-
   // Audit gate
   let auditGate: Gate;
   if (!lastAuditSubmit) {

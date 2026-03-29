@@ -59,17 +59,23 @@ export function queryGateStatus(store: EventStore): GateInfo[] {
 
 // ── Private helpers ──────────────────────────
 
+const transitionStmtCache = new WeakMap<Database.Database, Database.Statement>();
+
 function latestTransition(db: Database.Database, entityType: string, entityId: string): {
   to_state: string;
   created_at: number;
 } | null {
   try {
-    const stmt = db.prepare(`
-      SELECT to_state, created_at FROM state_transitions
-      WHERE entity_type = ? AND entity_id = ?
-      ORDER BY created_at DESC, rowid DESC
-      LIMIT 1
-    `);
+    let stmt = transitionStmtCache.get(db);
+    if (!stmt) {
+      stmt = db.prepare(`
+        SELECT to_state, created_at FROM state_transitions
+        WHERE entity_type = ? AND entity_id = ?
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT 1
+      `);
+      transitionStmtCache.set(db, stmt);
+    }
     return stmt.get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
   } catch {
     return null;

@@ -7,6 +7,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { LockInfo } from "../../../platform/bus/lock.js";
+import { ageSeconds } from "../../lib/time.js";
 
 interface LockPanelProps {
   locks: LockInfo[];
@@ -17,7 +18,7 @@ export function LockPanel({ locks }: LockPanelProps) {
     <Box flexDirection="column" borderStyle="single" paddingX={1} width={30}>
       <Text bold>Active Locks</Text>
       {locks.map((lock) => {
-        const age = Math.round((Date.now() - (lock.acquiredAt ?? 0)) / 60000);
+        const age = Math.round(ageSeconds(lock.acquiredAt ?? 0) / 60);
         return (
           <Text key={lock.lockName}>
             <Text color="red">{lock.lockName}</Text>

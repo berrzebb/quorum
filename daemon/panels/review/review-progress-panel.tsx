@@ -7,6 +7,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ReviewProgressInfo } from "../../state-reader.js";
+import { bar } from "../../lib/progress-bar.js";
 
 interface ReviewProgressPanelProps {
   progress: ReviewProgressInfo[];
@@ -20,7 +21,6 @@ export function ReviewProgressPanel({ progress }: ReviewProgressPanelProps) {
       {progress.map((r) => {
         const pct = Math.round(r.progress * 100);
         const barWidth = 16;
-        const filled = Math.max(0, Math.min(barWidth, Math.round((pct / 100) * barWidth)));
         return (
           <Box key={r.reviewerId} flexDirection="column">
             <Text>
@@ -29,8 +29,7 @@ export function ReviewProgressPanel({ progress }: ReviewProgressPanelProps) {
               <Text dimColor>{r.provider}</Text>
             </Text>
             <Box>
-              <Text color="green">{"█".repeat(filled)}</Text>
-              <Text dimColor>{"░".repeat(barWidth - filled)}</Text>
+              <Text>{bar(r.progress, barWidth)}</Text>
               <Text dimColor> {pct}% </Text>
               <Text color="cyan">{r.phase}</Text>
             </Box>

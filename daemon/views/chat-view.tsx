@@ -17,10 +17,10 @@
  *   Bottom: Composer
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { existsSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { ProcessMux } from "../../platform/bus/mux.js";
 import type { FullState, ParliamentLiveSession, FileThread } from "../state-reader.js";
 import { SessionList } from "../panels/sessions/session-list.js";
@@ -138,16 +138,19 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     return () => clearInterval(timer);
   }, [sessions.length, sessions.map(s => s.id).join()]);
 
-  // Poll git log (5s interval) — always active, regardless of session count
+  // Poll git log (5s interval) — async, skips re-render if unchanged
+  const lastGitRef = useRef("");
   useEffect(() => {
     const pollGit = () => {
-      try {
-        const log = execSync("git log --oneline -30", {
-          encoding: "utf8", timeout: 3000,
-          stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-        }).trim();
-        setGitLog(log ? log.split("\n") : []);
-      } catch { setGitLog(["(no git repo)"]); }
+      execFile("git", ["log", "--oneline", "-30"], {
+        encoding: "utf8", timeout: 3000, windowsHide: true,
+      }, (err, stdout) => {
+        if (err) { setGitLog(["(no git repo)"]); return; }
+        const trimmed = stdout.trim();
+        if (trimmed === lastGitRef.current) return;
+        lastGitRef.current = trimmed;
+        setGitLog(trimmed ? trimmed.split("\n") : []);
+      });
     };
     pollGit();
     const timer = setInterval(pollGit, 5000);

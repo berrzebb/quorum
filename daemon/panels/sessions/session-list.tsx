@@ -7,6 +7,7 @@
 
 import React from "react";
 import { Box, Text } from "ink";
+import { ageSeconds } from "../../lib/time.js";
 
 export interface SessionInfo {
   id: string;
@@ -35,9 +36,8 @@ function roleColor(role: string): string {
   }
 }
 
-/** Format age as human-readable (e.g. "42s", "3m"). */
 function formatAge(startedAt: number): string {
-  const age = Math.round((Date.now() - startedAt) / 1000);
+  const age = ageSeconds(startedAt);
   return age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`;
 }
 

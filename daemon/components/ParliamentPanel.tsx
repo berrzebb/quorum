@@ -12,6 +12,8 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ParliamentInfo } from "../state-reader.js";
 import { STANDING_COMMITTEES, type StandingCommittee } from "../../platform/bus/meeting-log.js";
+import { ageSeconds } from "../lib/time.js";
+import { bar } from "../lib/progress-bar.js";
 
 interface ParliamentPanelProps {
   parliament: ParliamentInfo;
@@ -35,7 +37,7 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
             <Box flexDirection="column">
               <Text color="cyan" bold>LIVE ({liveSessions.length})</Text>
               {liveSessions.map((s) => {
-                const age = Math.round((Date.now() - s.startedAt) / 1000);
+                const age = ageSeconds(s.startedAt);
                 const roleColor = s.role === "advocate" ? "green" : s.role === "devil" ? "red" : "blue";
                 return (
                   <Text key={s.id}>
@@ -97,11 +99,6 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
 }
 
 // ── Helpers ──────────────────────────────────
-
-function bar(value: number, width: number): string {
-  const filled = Math.max(0, Math.min(width, Math.round(value * width)));
-  return "█".repeat(filled) + "░".repeat(width - filled);
-}
 
 function padRight(str: string, len: number): string {
   return str.length >= len ? str.slice(0, len) : str + " ".repeat(len - str.length);

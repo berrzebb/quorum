@@ -37,8 +37,6 @@ const MAX_BUFFER_LINES = 200;
  */
 export function parseStreamJson(rawLines: string[]): string[] {
   const output: string[] = [];
-  let blockType: "text" | "thinking" | "tool_use" | null = null;
-  let toolName = "";
   let lastSection: "user" | "assistant" | "thinking" | "tool" | null = null;
 
   for (const raw of rawLines) {
@@ -62,15 +60,14 @@ export function parseStreamJson(rawLines: string[]): string[] {
 
     // Block start — detect type
     if (obj.type === "content_block_start" && obj.content_block) {
-      blockType = obj.content_block.type ?? "text";
-      if (blockType === "thinking" && lastSection !== "thinking") {
+      const btype = obj.content_block.type ?? "text";
+      if (btype === "thinking" && lastSection !== "thinking") {
         output.push("", "─── THINKING ───");
         lastSection = "thinking";
-      } else if (blockType === "tool_use") {
-        toolName = obj.content_block.name ?? "tool";
+      } else if (btype === "tool_use") {
         if (lastSection !== "tool") { output.push(""); lastSection = "tool"; }
-        output.push(`[TOOL] ${toolName}`);
-      } else if (blockType === "text" && lastSection !== "assistant") {
+        output.push(`[TOOL] ${obj.content_block.name ?? "tool"}`);
+      } else if (btype === "text" && lastSection !== "assistant") {
         output.push("", "─── ASSISTANT ───");
         lastSection = "assistant";
       }
@@ -122,7 +119,7 @@ export function parseStreamJson(rawLines: string[]): string[] {
   }
 
   if (output.length === 0) return rawLines;
-  return output.filter(l => l !== undefined).slice(-MAX_BUFFER_LINES);
+  return output.slice(-MAX_BUFFER_LINES);
 }
 
 // ── TranscriptPane Component ──────────────────────────────────────────
