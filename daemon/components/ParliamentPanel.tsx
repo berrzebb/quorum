@@ -13,6 +13,7 @@ import { Box, Text } from "ink";
 import type { ParliamentInfo } from "../state-reader.js";
 import { STANDING_COMMITTEES, type StandingCommittee } from "../../platform/bus/meeting-log.js";
 import { ageSeconds } from "../lib/time.js";
+import { padRight } from "../lib/format.js";
 import { bar } from "../lib/progress-bar.js";
 
 interface ParliamentPanelProps {
@@ -100,9 +101,7 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
 
 // ── Helpers ──────────────────────────────────
 
-function padRight(str: string, len: number): string {
-  return str.length >= len ? str.slice(0, len) : str + " ".repeat(len - str.length);
-}
+// padRight imported from lib/format.ts
 
 function shortName(committee: string): string {
   const entry = STANDING_COMMITTEES[committee as StandingCommittee];

@@ -28,6 +28,7 @@ import type { SessionInfo } from "../panels/sessions/session-list.js";
 import { TranscriptPane, parseStreamJson } from "../panels/sessions/transcript-pane.js";
 import { Composer } from "../panels/sessions/composer.js";
 import { GitSidebar } from "../panels/sessions/git-sidebar.js";
+import { severityColor } from "../lib/format.js";
 
 interface ChatViewProps {
   state: FullState | null;
@@ -288,15 +289,6 @@ function MuxChatView({ mux, liveSessions, width, height }: {
 }
 
 // ── Fallback: file-based review threads (no mux) ────────────────────
-
-function severityColor(severity: string): string {
-  switch (severity) {
-    case "critical": return "red";
-    case "major": return "yellow";
-    case "minor": return "green";
-    default: return "gray";
-  }
-}
 
 function msgTypeIcon(type: string): string {
   switch (type) {

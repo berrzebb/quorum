@@ -5,6 +5,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffToMemory } from "./handoff-writer.mjs";
 import { resolveRepoRoot } from "../shared/repo-resolver.mjs";

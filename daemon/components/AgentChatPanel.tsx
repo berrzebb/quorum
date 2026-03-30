@@ -29,6 +29,7 @@ import { execSync } from "node:child_process";
 import type { ProcessMux, MuxSession } from "../../platform/bus/mux.js";
 import type { ParliamentLiveSession } from "../state-reader.js";
 import { ageSeconds } from "../lib/time.js";
+import { parseStreamJson } from "../panels/sessions/transcript-pane.js";
 
 interface Props {
   mux: ProcessMux;
@@ -38,50 +39,7 @@ interface Props {
 const MAX_BUFFER_LINES = 200;
 const SCROLL_STEP = 3;
 
-// ── NDJSON parser ────────────────────────────
-
-function parseStreamJson(rawLines: string[]): string[] {
-  const messageParts: string[] = [];
-  let lastRole: "assistant" | "user" | null = null;
-
-  const joined = rawLines.map(l => l.trimEnd()).join("");
-  const entries = joined.split(/(?=\{"(?:type|role)":)/);
-
-  for (const entry of entries) {
-    const trimmed = entry.trim();
-    if (!trimmed.startsWith("{")) continue;
-    try {
-      const obj = JSON.parse(trimmed);
-
-      if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {
-        if (lastRole !== "user") messageParts.push("\n───");
-        lastRole = "user";
-        const content = typeof obj.content === "string"
-          ? obj.content
-          : Array.isArray(obj.content)
-            ? obj.content.map((c: { type?: string; text?: string }) => c.type === "text" ? c.text : "").join("")
-            : "";
-        if (content) messageParts.push(`[USER] ${content}`);
-        continue;
-      }
-
-      if (obj.type === "content_block_delta" && obj.delta?.text) {
-        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
-        messageParts.push(obj.delta.text);
-        continue;
-      }
-
-      if (obj.type === "result" && obj.result) {
-        if (lastRole !== "assistant") { messageParts.push("\n───"); lastRole = "assistant"; }
-        messageParts.push(obj.result);
-        continue;
-      }
-    } catch (err) { console.warn(`[agent-chat] JSON parse failed: ${(err as Error).message}`); }
-  }
-
-  if (messageParts.length === 0) return rawLines;
-  return messageParts.join("").split("\n").filter(Boolean).slice(-MAX_BUFFER_LINES);
-}
+// parseStreamJson imported from panels/sessions/transcript-pane.tsx
 
 // ── Main Component ───────────────────────────
 

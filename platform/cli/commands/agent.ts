@@ -11,22 +11,15 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { FilesystemAgentStateStore } from "../../orchestrate/state/filesystem/agent-state-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** At runtime: dist/platform/cli/commands/ → up 2 → dist/platform/ */
 const DIST = resolve(__dirname, "..", "..");
 
-/** Persist agent state to a JSON file so daemon can read it. */
-function saveAgentState(repoRoot: string, id: string, data: Record<string, unknown>): void {
-  const dir = resolve(repoRoot, ".claude", "agents");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, `${id}.json`), JSON.stringify(data, null, 2));
-}
-
-function removeAgentState(repoRoot: string, id: string): void {
-  const path = resolve(repoRoot, ".claude", "agents", `${id}.json`);
-  try { if (existsSync(path)) rmSync(path); } catch (err) { console.warn(`[agent] failed to remove agent state ${path}: ${(err as Error).message}`); }
+function agentStore(repoRoot: string): FilesystemAgentStateStore {
+  return new FilesystemAgentStateStore(resolve(repoRoot, ".claude", "agents"));
 }
 
 /** Emit agent event to EventStore via bridge. */
@@ -77,13 +70,11 @@ export async function run(args: string[]): Promise<void> {
 
       // Persist state for daemon visibility
       const repoRoot = process.cwd();
-      saveAgentState(repoRoot, session.id, {
+      agentStore(repoRoot).save({
         id: session.id,
         name: session.name,
-        pid: session.pid,
-        backend: session.backend,
-        command,
-        args: cmdArgs,
+        backend: session.backend as string,
+        role: "worker",
         startedAt: session.startedAt,
         status: "running",
       });
@@ -105,7 +96,7 @@ export async function run(args: string[]): Promise<void> {
       if (session.backend === "raw") {
         console.log("  \x1b[2m(Process running in background. Use 'quorum agent kill' to stop.)\x1b[0m\n");
         mux.on("exit", (s: { id: string }) => {
-          removeAgentState(repoRoot, s.id);
+          agentStore(repoRoot).remove(s.id);
           emitAgentEvent(repoRoot, "agent.complete", { name: session.name });
         });
         await new Promise(() => {});
@@ -194,7 +185,7 @@ export async function run(args: string[]): Promise<void> {
 
       if (killed) {
         const repoRoot = process.cwd();
-        removeAgentState(repoRoot, sessionId);
+        agentStore(repoRoot).remove(sessionId);
         await emitAgentEvent(repoRoot, "agent.complete", { name: sessionId });
         console.log(`\x1b[32m✓\x1b[0m Killed: ${sessionId}\n`);
       } else {

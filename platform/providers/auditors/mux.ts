@@ -17,7 +17,8 @@
  */
 
 import { resolve, join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { FilesystemAgentStateStore } from "../../orchestrate/state/filesystem/agent-state-store.js";
 import { tmpdir } from "node:os";
 import { platform } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -50,30 +51,8 @@ export interface MuxAuditorConfig {
 
 // ── Agent state persistence ─────────────────
 
-function agentsDir(cwd: string): string {
-  const dir = resolve(cwd, ".claude", "agents");
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function saveAgentState(cwd: string, session: MuxSession, role: string, outputFile?: string): void {
-  const dir = agentsDir(cwd);
-  const state: Record<string, unknown> = {
-    id: session.id,
-    name: session.name,
-    pid: session.pid,
-    backend: session.backend,
-    role,
-    type: "parliament",
-    startedAt: session.startedAt,
-    status: session.status,
-  };
-  if (outputFile) state.outputFile = outputFile;
-  writeFileSync(resolve(dir, `${session.id}.json`), JSON.stringify(state, null, 2), "utf8");
-}
-
-function removeAgentState(cwd: string, sessionId: string): void {
-  try { rmSync(resolve(agentsDir(cwd), `${sessionId}.json`), { force: true }); } catch (err) { console.warn(`[mux-auditor] agent state removal failed: ${(err as Error).message}`); }
+function agentStore(cwd: string): FilesystemAgentStateStore {
+  return new FilesystemAgentStateStore(resolve(cwd, ".claude", "agents"));
 }
 
 // ── CLI argument builders ───────────────────
@@ -172,14 +151,23 @@ export class MuxAuditor implements Auditor {
     const outputFile = promptFile?.replace(/\.txt$/, ".out");
 
     // 3. Save agent state (daemon-discoverable — includes outputFile)
-    saveAgentState(cwd, session, role, outputFile);
+    agentStore(cwd).save({
+      id: session.id,
+      name: session.name,
+      backend: session.backend,
+      role,
+      type: "parliament",
+      startedAt: session.startedAt,
+      status: session.status,
+      outputFile,
+    });
 
     // 4. Send prompt
     if (backend === "raw") {
       // Raw: direct stdin pipe
       const sent = mux.send(session.id, request.prompt);
       if (!sent) {
-        removeAgentState(cwd, session.id);
+        agentStore(cwd).remove(session.id);
         return infraFailure(`Failed to send prompt to ${role}`, start);
       }
     } else {
@@ -239,7 +227,7 @@ export class MuxAuditor implements Auditor {
     }
 
     // 5. Cleanup
-    removeAgentState(cwd, session.id);
+    agentStore(cwd).remove(session.id);
     if (promptFile) {
       cleanupPromptFile(promptFile);
       cleanupPromptFile(promptFile.replace(/\.txt$/, platform() === "win32" ? ".cmd" : ".sh"));

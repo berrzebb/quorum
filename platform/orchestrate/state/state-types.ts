@@ -31,9 +31,9 @@ export interface AgentSessionState {
   name: string;
   backend: string;
   role: string;
-  type: string;
-  trackName: string;
-  wbId: string;
+  type?: string;
+  trackName?: string;
+  wbId?: string;
   startedAt: number;
   status: string;
   outputFile?: string;

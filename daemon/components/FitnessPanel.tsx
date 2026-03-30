@@ -12,6 +12,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { FitnessInfo } from "../state-reader.js";
 import { bar } from "../lib/progress-bar.js";
+import { padRight } from "../lib/format.js";
 
 interface FitnessPanelProps {
   fitness: FitnessInfo;
@@ -145,6 +146,4 @@ function trendArrow(slope: number): string {
   return "→";
 }
 
-function padRight(str: string, len: number): string {
-  return str.length >= len ? str.slice(0, len) : str + " ".repeat(len - str.length);
-}
+// padRight imported from lib/format.ts
