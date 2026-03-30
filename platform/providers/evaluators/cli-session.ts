@@ -1,29 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { RuntimeEvaluator, EvaluatorResult } from './evaluator-port.js';
 import type { RuntimeEvaluationSpec } from '../../core/harness/runtime-evaluation-spec.js';
-
-/**
- * Allowed verifier command prefixes (allowlist).
- * Only commands from trusted language specs and WB verify fields are permitted.
- */
-const ALLOWED_PREFIXES = [
-  "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
-  "go ", "cargo ", "python ", "pytest ", "pip ",
-  "java ", "javac ", "mvn ", "gradle ",
-];
-
-/** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
-const SHELL_META = /[;&|`$><\r\n%]/;
-
-/** Interpreter inline execution patterns (space or = delimited). -p/--print is also inline eval. */
-const INTERPRETER_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--command[\s=]|\s--print[\s=]/;
-
-function isAllowedVerifier(cmd: string): boolean {
-  const trimmed = cmd.trim();
-  if (SHELL_META.test(trimmed)) return false;
-  if (INTERPRETER_RE.test(` ${trimmed}`)) return false;
-  return ALLOWED_PREFIXES.some(p => trimmed.startsWith(p));
-}
+import { isAllowedVerifier } from '../../core/verify-filter.js';
 
 export class CliSessionEvaluator implements RuntimeEvaluator {
   name = 'cli-session';
@@ -41,7 +19,10 @@ export class CliSessionEvaluator implements RuntimeEvaluator {
     const evidence: string[] = [];
 
     for (const scenario of cliScenarios) {
-      if (!scenario.verifier) continue;
+      if (!scenario.verifier) {
+        evidence.push(`${scenario.target}: SKIP (no verifier command)`);
+        continue;
+      }
       if (!isAllowedVerifier(scenario.verifier)) {
         findings.push(`${scenario.target}: BLOCKED — verifier not in allowlist: ${scenario.verifier}`);
         continue;

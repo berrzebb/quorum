@@ -268,7 +268,8 @@ export function gitleaksScan(repoRoot) {
         })),
         engine: "gitleaks",
       };
-    } catch {
+    } catch (err) {
+      console.error("[security-scan] gitleaks failed:", err?.message ?? err);
       return { findings: [], engine: "gitleaks (error)" };
     }
   }
@@ -300,9 +301,9 @@ export function gitleaksScan(repoRoot) {
             });
           }
         }
-      } catch { /* skip binary files */ }
+      } catch (err) { console.warn("[security-scan] file read skipped:", err?.message ?? err); }
     }
-  } catch { /* not a git repo */ }
+  } catch (err) { console.warn("[security-scan] git staged files failed:", err?.message ?? err); }
 
   return { findings, engine: "built-in (secret patterns)" };
 }
@@ -333,7 +334,8 @@ function duplicateScan(targetPath) {
     }));
 
     return { findings, engine: "jscpd" };
-  } catch {
+  } catch (err) {
+    console.error("[security-scan] jscpd failed:", err?.message ?? err);
     return { findings: [], engine: "jscpd (error)" };
   }
 }
@@ -362,7 +364,8 @@ export function depAuditScan(repoRoot) {
     }));
 
     return { findings, engine: "npm audit" };
-  } catch {
+  } catch (err) {
+    console.error("[security-scan] npm audit failed:", err?.message ?? err);
     return { findings: [], engine: "npm audit (error)" };
   }
 }
@@ -391,7 +394,8 @@ function cycleScan(targetPath) {
     }));
 
     return { findings, engine: "dependency_graph" };
-  } catch {
+  } catch (err) {
+    console.error("[security-scan] cycleScan failed:", err?.message ?? err);
     return { findings: [], engine: "dependency_graph (error)" };
   }
 }
@@ -406,7 +410,8 @@ function isToolAvailable(name) {
       windowsHide: true,
     });
     return result.status === 0;
-  } catch {
+  } catch (err) {
+    console.warn("[security-scan] isToolAvailable check failed for " + name + ":", err?.message ?? err);
     return false;
   }
 }

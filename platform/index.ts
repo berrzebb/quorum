@@ -1,4 +1,4 @@
-// Placeholder — real exports will be added as modules are moved here
+// Platform root barrel — re-exports all 7 platform layers
 export * as skills from './skills/index.js';
 export * as cli from './cli/index.js';
 export * as orchestrate from './orchestrate/index.js';

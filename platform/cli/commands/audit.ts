@@ -42,7 +42,7 @@ export async function run(args: string[]): Promise<void> {
     try {
       const cfg = JSON.parse(readFileSync(configPath, "utf8"));
       triggerTag = cfg.consensus?.trigger_tag ?? triggerTag;
-    } catch { /* use default */ }
+    } catch (err) { console.warn(`[audit] config parse failed: ${(err as Error).message}`); }
   }
 
   // Try bridge-based audit (SQLite EventStore)
@@ -58,7 +58,8 @@ export async function run(args: string[]): Promise<void> {
   try {
     bridge = await import(toURL(resolveMod("core", "bridge.mjs")));
     if (!bridge._store) await bridge.init(repoRoot);
-  } catch {
+  } catch (err) {
+    console.warn(`[audit] bridge init failed: ${(err as Error).message}`);
     bridge = null;
   }
 
@@ -112,7 +113,7 @@ export async function run(args: string[]): Promise<void> {
     try {
       const status = JSON.parse(readFileSync(statusPath, "utf8"));
       hasPending = status.status === "changes_requested" || status.status === "submitted";
-    } catch { /* no status file */ }
+    } catch (err) { console.warn(`[audit] audit-status.json read failed: ${(err as Error).message}`); }
 
     if (!hasPending) {
       console.log("  \x1b[32m✓ No pending items to audit\x1b[0m\n");

@@ -127,7 +127,8 @@ export function parseToolFindings(
       line: typeof f.line === "number" ? f.line : undefined,
       suggestion: f.suggestion ? String(f.suggestion) : undefined,
     }));
-  } catch {
+  } catch (err) {
+    console.warn(`[specialist] parseToolFindings JSON parse failed: ${(err as Error).message}`);
     return [];
   }
 }

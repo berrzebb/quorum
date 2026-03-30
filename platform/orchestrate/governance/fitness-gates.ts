@@ -22,51 +22,81 @@ export interface FitnessGateResult {
   components?: Array<{ name: string; score: number }>;
 }
 
-// ── Signal Collection ────────────────────────
+// ── TSC Result Cache ────────────────────────
+
+/** Cached tsc --noEmit result (shared across waves within a track). */
+export interface TscCacheEntry { exitCode: number; errorCount: number; ts: number }
+let _tscCache: TscCacheEntry | null = null;
+const TSC_CACHE_TTL = 120_000; // 2 minutes — covers a full wave cycle
 
 /**
- * Collect fitness signals mechanically from the project.
- * tsc, stub count, pattern findings — all deterministic, no LLM.
+ * Run tsc --noEmit with caching. Within a single track run (~2min per wave),
+ * tsc result is stable unless source files change. Avoids re-running the
+ * most expensive gate operation (5-30s) on every wave.
  */
-export function collectFitnessSignals(repoRoot: string, changedFiles: string[]): FitnessSignals {
-  // 1. tsc --noEmit
-  let tscExitCode = 0;
-  let tscErrorCount = 0;
+export function runTscCached(repoRoot: string): TscCacheEntry {
+  if (_tscCache && Date.now() - _tscCache.ts < TSC_CACHE_TTL) return _tscCache;
+  let exitCode = 0;
+  let errorCount = 0;
   try {
     execSync("npx tsc --noEmit 2>&1", { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
   } catch (e: any) {
-    tscExitCode = 1;
+    exitCode = 1;
     const stderr = (e?.stdout?.toString?.() ?? "") + (e?.stderr?.toString?.() ?? "");
-    tscErrorCount = (stderr.match(/error TS/g) ?? []).length;
+    errorCount = (stderr.match(/error TS/g) ?? []).length;
+    console.warn(`[fitness-gates] tsc --noEmit failed: ${errorCount} error(s)`);
   }
+  _tscCache = { exitCode, errorCount, ts: Date.now() };
+  return _tscCache;
+}
 
-  // 2. Stub scan → treat as HIGH findings
-  const stubs = scanForStubs(repoRoot, changedFiles);
+/** Invalidate tsc cache (call after fixer modifies code). */
+export function invalidateTscCache(): void { _tscCache = null; }
 
-  // 3. Effective lines (rough count of changed files)
-  let effectiveLines = 0;
-  for (const f of changedFiles) {
-    const abs = resolve(repoRoot, f);
-    if (existsSync(abs)) {
-      try {
-        effectiveLines += readFileSync(abs, "utf8").split("\n").length;
-      } catch { /* skip */ }
+// ── Signal Collection ────────────────────────
+
+/**
+ * Pre-computed signals that callers can inject to avoid redundant file I/O.
+ * audit-loop already scans files for stubs + counts lines — pass those here.
+ */
+export interface PrecomputedSignals {
+  stubCount?: number;
+  effectiveLines?: number;
+}
+
+/**
+ * Collect fitness signals mechanically from the project.
+ * tsc (cached), stub count, pattern findings — all deterministic, no LLM.
+ * Accepts optional precomputed signals to avoid redundant file reads.
+ */
+export function collectFitnessSignals(repoRoot: string, changedFiles: string[], precomputed?: PrecomputedSignals): FitnessSignals {
+  // 1. tsc --noEmit (cached within track run)
+  const tsc = runTscCached(repoRoot);
+
+  // 2. Stub count — use precomputed if available (audit-loop already scanned)
+  const stubCount = precomputed?.stubCount ?? scanForStubs(repoRoot, changedFiles).length;
+
+  // 3. Effective lines — use precomputed if available
+  let effectiveLines = precomputed?.effectiveLines ?? 0;
+  if (precomputed?.effectiveLines === undefined) {
+    for (const f of changedFiles) {
+      const abs = resolve(repoRoot, f);
+      if (existsSync(abs)) {
+        try {
+          effectiveLines += readFileSync(abs, "utf8").split("\n").length;
+        } catch (err) { console.warn(`[fitness-gates] could not read ${f} for line count: ${(err as Error).message}`); }
+      }
     }
   }
 
-  // 4. Test coverage — skipped for per-wave gate (too slow).
-  // Rely on runProjectTests() running tests separately.
-  const lineCoverage = 0;
-  const branchCoverage = 0;
-
   return {
-    tscExitCode,
-    tscErrorCount,
-    highFindings: stubs.length,
-    totalFindings: stubs.length,
+    tscExitCode: tsc.exitCode,
+    tscErrorCount: tsc.errorCount,
+    highFindings: stubCount,
+    totalFindings: stubCount,
     effectiveLines,
-    lineCoverage,
-    branchCoverage,
+    lineCoverage: 0,
+    branchCoverage: 0,
   };
 }
 
@@ -76,8 +106,8 @@ export function collectFitnessSignals(repoRoot: string, changedFiles: string[]):
  * Run fitness gate on wave changes.
  * Returns decision: proceed (continue to LLM audit), self-correct (warn), auto-reject (skip audit, fix).
  */
-export function runFitnessGate(repoRoot: string, changedFiles: string[], store: any): FitnessGateResult {
-  const signals = collectFitnessSignals(repoRoot, changedFiles);
+export function runFitnessGate(repoRoot: string, changedFiles: string[], store: any, precomputed?: PrecomputedSignals): FitnessGateResult {
+  const signals = collectFitnessSignals(repoRoot, changedFiles, precomputed);
   const score = computeFitness(signals);
   const loop = new FitnessLoop(store ?? null);
   const result = loop.evaluate(score);

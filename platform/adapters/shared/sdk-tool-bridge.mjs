@@ -51,7 +51,8 @@ export async function createSdkToolServer(name, tools) {
     );
 
     return createServer({ name, tools: sdkTools });
-  } catch {
+  } catch (err) {
+    console.warn(`[sdk-tool-bridge] SDK tool server creation failed: ${err?.message}`);
     return null;
   }
 }

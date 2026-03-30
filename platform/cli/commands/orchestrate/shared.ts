@@ -17,7 +17,7 @@ export async function loadBridge(repoRoot: string): Promise<Bridge | null> {
     const bridge = await import(toURL(resolve(quorumRoot, "platform", "core", "bridge.mjs")));
     await bridge.init(repoRoot);
     return bridge;
-  } catch { return null; }
+  } catch (err) { console.warn(`[shared] loadBridge failed: ${(err as Error).message}`); return null; }
 }
 
 export { findTracks, resolveTrack, trackRef } from '../../../orchestrate/planning/track-catalog.js';

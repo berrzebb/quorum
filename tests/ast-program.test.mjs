@@ -87,7 +87,7 @@ before(() => {
 
 after(() => {
   // Clean up fixture directory
-  try { rmSync(FIXTURE_DIR, { recursive: true, force: true }); } catch { /* ok */ }
+  try { rmSync(FIXTURE_DIR, { recursive: true, force: true }); } catch (err) { console.warn("ast-program fixture cleanup failed:", err?.message ?? err); }
 });
 
 // ═══ 1. initProgram ═══════════════════════════════════

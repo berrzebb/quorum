@@ -77,7 +77,8 @@ export async function buildAuthTokenMap(baseUrl, credentials, timeoutMs) {
       clearTimeout(timer);
       const setCookie = res.headers.get("set-cookie");
       tokens[role] = extractCookie(setCookie);
-    } catch (_err) {
+    } catch (err) {
+      console.warn(`[fvm-validator] auth token extraction failed for ${role}: ${err.message}`);
       tokens[role] = null;
     }
   }
@@ -239,7 +240,8 @@ export async function runFvmValidation(params) {
   let content;
   try {
     content = readFileSync(fullPath, "utf8");
-  } catch (_err) {
+  } catch (err) {
+    console.error(`[fvm-validator] FVM file not found: ${fvm_path}: ${err.message}`);
     return { error: "FVM file not found: " + fvm_path };
   }
 

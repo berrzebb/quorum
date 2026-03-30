@@ -112,9 +112,10 @@ export class ClaimService {
 
     try {
       claimAll();
-    } catch {
+    } catch (err) {
       // Race condition: another agent claimed between check and claim
       // Re-check to return accurate conflicts
+      console.warn(`[claim] race condition during claimFiles: ${(err as Error).message}`);
       return this.checkConflicts(agentId, files);
     }
 

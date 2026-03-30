@@ -37,7 +37,7 @@ export class CodexAuditor implements Auditor {
         try {
           const r = spawnSync("where", [`codex${ext}`], { encoding: "utf8", timeout: 3000, windowsHide: true });
           if (r.status === 0) { defaultBin = r.stdout.trim().split("\n")[0]!; break; }
-        } catch { /* skip */ }
+        } catch (err) { console.warn(`[codex-auditor] binary resolution failed for codex${ext}: ${(err as Error).message}`); }
       }
     }
     this.bin = config.bin ?? process.env.CODEX_BIN ?? defaultBin;
@@ -107,7 +107,8 @@ export class CodexAuditor implements Auditor {
         windowsHide: true,
       });
       return result.status === 0;
-    } catch {
+    } catch (err) {
+      console.warn(`[codex-auditor] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }

@@ -1,11 +1,11 @@
 /**
  * Claude SDK Session Runtime — implements SessionRuntime for in-process SDK sessions.
  *
- * Falls back gracefully when the Claude Agent SDK is not installed.
+ * When SDK IS installed and exposes session APIs, delegates to real SDK calls.
+ * When SDK is NOT installed or lacks session APIs, start() throws — no silent no-ops.
+ *
  * Manages session lifecycle (start/resume/send/stop/poll/status) and
  * exposes pushEvent/complete/fail for SDK callback integration.
- *
- * @module providers/claude-sdk/runtime
  */
 
 import type {
@@ -16,39 +16,65 @@ import type {
   ProviderExecutionMode,
 } from "../session-runtime.js";
 import { ClaudeSdkSessionApi } from "./session-api.js";
+import { loadClaudeSdk } from "./tool-bridge.js";
 
-/**
- * Internal session state tracked by the runtime.
- */
 interface SessionState {
   ref: ProviderSessionRef;
   status: "running" | "completed" | "failed" | "detached";
   events: ProviderRuntimeEvent[];
+  /** SDK-native session handle (when SDK is available and functional). */
+  sdkSession: unknown;
+  /** Inputs sent during session (for traceability/diagnostics). */
+  inputs: string[];
 }
 
-/**
- * Claude Agent SDK session runtime.
- * Implements SessionRuntime for in-process SDK-based sessions.
- *
- * Falls back gracefully when SDK is not installed.
- */
+/** Minimum SDK shape required for session management. */
+interface SdkSessionMethods {
+  createSession: (opts: Record<string, unknown>) => Promise<unknown>;
+  sendMessage: (session: unknown, input: string) => Promise<void>;
+  stopSession?: (session: unknown) => Promise<void>;
+}
+
 export class ClaudeSdkRuntime implements SessionRuntime {
   readonly provider = "claude" as const;
   readonly mode: ProviderExecutionMode = "agent_sdk";
 
   private sessionApi = new ClaudeSdkSessionApi();
   private sessions = new Map<string, SessionState>();
+  protected sdkMethods: SdkSessionMethods | null = null;
+  protected sdkChecked = false;
 
-  /**
-   * Check if Claude SDK runtime is available.
-   */
   async isAvailable(): Promise<boolean> {
     return this.sessionApi.isAvailable();
   }
 
   /**
-   * Start a new SDK session.
+   * Resolve SDK session methods. Returns null if SDK is not installed
+   * or does not expose the required createSession/sendMessage APIs.
+   * Protected so test subclasses can inject mock SDK methods.
    */
+  protected async resolveSdkMethods(): Promise<SdkSessionMethods | null> {
+    if (this.sdkChecked) return this.sdkMethods;
+    this.sdkChecked = true;
+
+    const result = await loadClaudeSdk();
+    if (!result.available || !result.sdk) return null;
+
+    const sdk = result.sdk as Record<string, unknown>;
+    if (typeof sdk.createSession !== "function" || typeof sdk.sendMessage !== "function") {
+      return null;
+    }
+
+    this.sdkMethods = {
+      createSession: sdk.createSession as SdkSessionMethods["createSession"],
+      sendMessage: sdk.sendMessage as SdkSessionMethods["sendMessage"],
+      stopSession: typeof sdk.stopSession === "function"
+        ? sdk.stopSession as SdkSessionMethods["stopSession"]
+        : undefined,
+    };
+    return this.sdkMethods;
+  }
+
   async start(request: SessionRuntimeRequest): Promise<ProviderSessionRef> {
     const available = await this.isAvailable();
     if (!available) {
@@ -56,6 +82,20 @@ export class ClaudeSdkRuntime implements SessionRuntime {
         "Claude Agent SDK is not available. Install @anthropic-ai/claude-agent-sdk or use cli_exec mode."
       );
     }
+
+    const methods = await this.resolveSdkMethods();
+    if (!methods) {
+      throw new Error(
+        "Claude Agent SDK is installed but does not expose createSession/sendMessage. " +
+        "Upgrade the SDK or use cli_exec mode."
+      );
+    }
+
+    const sdkSession = await methods.createSession({
+      prompt: request.prompt,
+      cwd: request.cwd,
+      metadata: request.metadata,
+    });
 
     const ref: ProviderSessionRef = {
       provider: "claude",
@@ -67,15 +107,14 @@ export class ClaudeSdkRuntime implements SessionRuntime {
       ref,
       status: "running",
       events: [],
+      sdkSession,
+      inputs: [request.prompt],
     });
 
     return ref;
   }
 
-  /**
-   * Resume an existing SDK session.
-   */
-  async resume(ref: ProviderSessionRef, _request?: Partial<SessionRuntimeRequest>): Promise<void> {
+  async resume(ref: ProviderSessionRef, request?: Partial<SessionRuntimeRequest>): Promise<void> {
     const session = this.sessions.get(ref.providerSessionId);
     if (!session) {
       throw new Error(`Session not found: ${ref.providerSessionId}`);
@@ -84,12 +123,15 @@ export class ClaudeSdkRuntime implements SessionRuntime {
       throw new Error(`Cannot resume ${session.status} session: ${ref.providerSessionId}`);
     }
     session.status = "running";
+
+    // Forward prompt to SDK session if provided
+    if (request?.prompt && session.sdkSession && this.sdkMethods) {
+      session.inputs.push(request.prompt);
+      await this.sdkMethods.sendMessage(session.sdkSession, request.prompt);
+    }
   }
 
-  /**
-   * Send input to an active SDK session.
-   */
-  async send(ref: ProviderSessionRef, _input: string): Promise<void> {
+  async send(ref: ProviderSessionRef, input: string): Promise<void> {
     const session = this.sessions.get(ref.providerSessionId);
     if (!session) {
       throw new Error(`Session not found: ${ref.providerSessionId}`);
@@ -97,43 +139,40 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     if (session.status !== "running") {
       throw new Error(`Cannot send to ${session.status} session: ${ref.providerSessionId}`);
     }
-    // Actual SDK send would go here
+    if (!this.sdkMethods) {
+      throw new Error("SDK session methods not available — cannot send");
+    }
+
+    session.inputs.push(input);
+    await this.sdkMethods.sendMessage(session.sdkSession, input);
   }
 
-  /**
-   * Stop an active SDK session.
-   */
   async stop(ref: ProviderSessionRef): Promise<void> {
     const session = this.sessions.get(ref.providerSessionId);
-    if (!session) return; // idempotent
+    if (!session) return;
+
+    if (session.sdkSession && this.sdkMethods?.stopSession) {
+      try { await this.sdkMethods.stopSession(session.sdkSession); } catch (err) { console.warn(`[claude-sdk] stopSession failed: ${(err as Error).message}`); }
+    }
+
     session.status = "detached";
   }
 
-  /**
-   * Poll for new events from the SDK session.
-   */
   async poll(ref: ProviderSessionRef): Promise<ProviderRuntimeEvent[]> {
     const session = this.sessions.get(ref.providerSessionId);
     if (!session) return [];
 
-    // Drain accumulated events
     const events = [...session.events];
     session.events = [];
     return events;
   }
 
-  /**
-   * Get session status.
-   */
   async status(ref: ProviderSessionRef): Promise<"running" | "completed" | "failed" | "detached"> {
     const session = this.sessions.get(ref.providerSessionId);
     if (!session) return "detached";
     return session.status;
   }
 
-  /**
-   * Push an event to a session's event queue (used by SDK callbacks).
-   */
   pushEvent(providerSessionId: string, event: ProviderRuntimeEvent): void {
     const session = this.sessions.get(providerSessionId);
     if (session) {
@@ -141,9 +180,6 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     }
   }
 
-  /**
-   * Mark a session as completed.
-   */
   complete(providerSessionId: string): void {
     const session = this.sessions.get(providerSessionId);
     if (session) {
@@ -151,9 +187,6 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     }
   }
 
-  /**
-   * Mark a session as failed.
-   */
   fail(providerSessionId: string): void {
     const session = this.sessions.get(providerSessionId);
     if (session) {

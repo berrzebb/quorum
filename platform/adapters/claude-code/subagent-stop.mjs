@@ -22,7 +22,7 @@ for await (const chunk of process.stdin) chunks.push(chunk);
 const raw = Buffer.concat(chunks).toString("utf8").trim();
 
 let payload = {};
-try { payload = JSON.parse(raw); } catch { /* no valid payload */ }
+try { payload = JSON.parse(raw); } catch (err) { console.warn(`[subagent-stop] payload parse error: ${err?.message}`); }
 
 const agentName = payload.agent_name || "unknown";
 
@@ -53,7 +53,7 @@ try {
       }, null, 2), "utf8");
     }
   }
-} catch { /* marker read/write error — non-fatal */ }
+} catch (err) { console.warn(`[subagent-stop] marker read/write error: ${err?.message}`); }
 
 // ── Build output ─────────────────────────────────────────
 const lines = [];
@@ -86,7 +86,7 @@ try {
     process.stderr.write(`[quorum] Released ${released} file claim(s) for ${agentName}\n`);
   }
   bridge.close();
-} catch { /* bridge non-critical */ }
+} catch (err) { console.warn(`[subagent-stop] bridge event/claim release failed: ${err?.message}`); }
 
 // ── Auto-update RTM statuses based on current file state ──
 try {

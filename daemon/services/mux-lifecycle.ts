@@ -81,8 +81,9 @@ export async function initializeMux(): Promise<ProcessMux | null> {
   try {
     const backend = await ensureMuxBackend();
     return new ProcessMux(backend);
-  } catch {
+  } catch (err) {
     // Non-critical — chat view will be unavailable
+    console.warn(`[mux-lifecycle] mux initialization failed: ${(err as Error).message}`);
     return null;
   }
 }

@@ -220,13 +220,15 @@ async function loadToolCore(): Promise<Record<string, Function>> {
   try {
     _toolCore = await import(toolCorePath);
     return _toolCore!;
-  } catch {
+  } catch (err) {
     // Fallback: try relative path from source location
+    console.warn(`[openai-compatible] tool-core load failed at ${toolCorePath}: ${(err as Error).message}`);
     try {
       // @ts-expect-error — MJS module without type declarations
       _toolCore = await import("../../core/tools/tool-core.mjs");
       return _toolCore!;
-    } catch {
+    } catch (err2) {
+      console.warn(`[openai-compatible] tool-core fallback load also failed: ${(err2 as Error).message}`);
       _toolCore = {};
       return _toolCore;
     }
@@ -356,7 +358,7 @@ export class OpenAICompatibleAuditor implements Auditor {
         let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(toolCall.function.arguments);
-        } catch { /* empty args */ }
+        } catch (err) { console.warn(`[openai-compatible] tool call args parse failed: ${(err as Error).message}`); }
 
         const result = await this.toolExecutor(toolCall.function.name, args);
 
@@ -449,7 +451,8 @@ export class OpenAICompatibleAuditor implements Auditor {
       });
       clearTimeout(timer);
       return res.ok;
-    } catch {
+    } catch (err) {
+      console.warn(`[openai-compatible] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }

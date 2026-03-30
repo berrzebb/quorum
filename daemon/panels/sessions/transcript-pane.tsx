@@ -44,7 +44,7 @@ export function parseStreamJson(rawLines: string[]): string[] {
     if (!line.startsWith("{")) continue;
 
     let obj: any;
-    try { obj = JSON.parse(line); } catch { continue; }
+    try { obj = JSON.parse(line); } catch (err) { console.warn(`[transcript-pane] NDJSON parse failed: ${(err as Error).message}`); continue; }
 
     // User message
     if ((obj.type === "message" && obj.role === "user") || (obj.role === "user" && obj.content)) {

@@ -66,7 +66,8 @@ export class CodexAppServerRuntime implements SessionRuntime {
         stdio: "pipe",
       });
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(`[codex-runtime] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }
@@ -157,8 +158,8 @@ export class CodexAppServerRuntime implements SessionRuntime {
     if (ref.threadId) {
       try {
         await this.client.stopThread({ threadId: ref.threadId });
-      } catch {
-        // best-effort stop
+      } catch (err) {
+        console.warn(`[codex-runtime] best-effort thread stop failed: ${(err as Error).message}`);
       }
     }
 

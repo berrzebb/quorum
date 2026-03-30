@@ -20,7 +20,7 @@ let _createAstRefine = null;
 try {
   const astBridge = await import("./ast-bridge.mjs");
   _createAstRefine = astBridge.createAstRefineCallback;
-} catch { /* AST bridge unavailable — regex-only mode */ }
+} catch (err) { console.warn("[tool-core] AST bridge unavailable:", err?.message ?? err); }
 
 // Language registry — fail-safe dynamic spec loading
 let _langRegistry = null;
@@ -30,7 +30,7 @@ try {
   await langMod.loadAll();
   _langRegistry = langMod.registry;
   _getEndLineFinder = langMod.getEndLineFinder;
-} catch { /* Language registry unavailable — legacy hardcoded mode */ }
+} catch (err) { console.warn("[tool-core] language registry unavailable:", err?.message ?? err); }
 
 /**
  * Gather quality patterns for a domain across all registered languages.
@@ -118,7 +118,7 @@ function getLatestMtime(target) {
       const t = e.isDirectory() ? getLatestMtime(full) : statSync(full).mtimeMs;
       if (t > latest) latest = t;
     }
-  } catch { /* permission error */ }
+  } catch (err) { console.warn("[tool-core] getLatestMtime failed:", err?.message ?? err); }
   return latest;
 }
 
@@ -269,7 +269,7 @@ export function runPatternScan(opts) {
 
   for (const file of files) {
     let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    try { content = readFileSync(file, "utf8"); } catch (err) { console.warn("[tool-core] runPatternScan file read failed:", err?.message ?? err); continue; }
     const lines = content.split(/\r?\n/);
     const relPath = relative(cwd, file).replace(/\\/g, "/");
 
@@ -293,7 +293,7 @@ export function runPatternScan(opts) {
 
   // AST refinement: remove false positives detected by AST analysis
   if (astRefine && findings.length > 0) {
-    try { astRefine(findings); } catch { /* fail-open */ }
+    try { astRefine(findings); } catch (err) { console.warn("[tool-core] astRefine failed:", err?.message ?? err); }
   }
 
   if (findings.length === 0) {
@@ -356,7 +356,7 @@ function formatOverviewMatrix(fileSymbols, cwd) {
       const buf = readFileSync(file);
       lineCount = 1;
       for (let i = 0; i < buf.length; i++) { if (buf[i] === 0x0A) lineCount++; }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
 
     const counts = { fn: 0, method: 0, class: 0, iface: 0, type: 0, enum: 0 };
     for (const s of symbols) {
@@ -472,7 +472,7 @@ export function toolCoverageMap(params) {
   let projectRoot = process.cwd();
   if (targetPath) {
     const p = resolve(targetPath);
-    try { if (statSync(p).isDirectory()) projectRoot = p; } catch { /* use cwd */ }
+    try { if (statSync(p).isDirectory()) projectRoot = p; } catch (err) { console.warn(`[tool-core] coverage_map: target path ${targetPath} not found, using cwd:`, err.message); }
   }
   const coverageMap = loadCoverageSummary(resolve(projectRoot, covDir));
   if (!coverageMap) return { error: `No coverage data at ${resolve(projectRoot, covDir, "coverage-summary.json")}. Run: npm run test:coverage` };
@@ -1582,7 +1582,7 @@ export function toolCompatCheck(params) {
               findings.push({ file: "package.json", line: 0, severity: "high", label: "wildcard-dep", msg: `Wildcard version for ${name}: ${ver}` });
             }
           }
-        } catch { /* skip */ }
+        } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
       }
     },
   });
@@ -1673,9 +1673,9 @@ export function toolLicenseScan(params) {
           } else if (!PERMISSIVE.test(lic) && lic) {
             findings.push({ file: `node_modules/${depName}`, line: 0, severity: "low", label: "unknown-license", msg: `Non-standard license: ${lic}` });
           }
-        } catch { /* skip */ }
+        } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
   }
 
   // 2. Scan source for PII patterns
@@ -1685,7 +1685,7 @@ export function toolLicenseScan(params) {
 
   for (const file of files) {
     let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    try { content = readFileSync(file, "utf8"); } catch (err) { console.warn("[tool-core] file read failed:", err?.message ?? err); continue; }
     const lines = content.split(/\r?\n/);
     const spec = _langRegistry?.forFile(file);
     const cPrefixes = spec?.commentPrefixes ?? ["//", "*"];
@@ -1768,10 +1768,10 @@ export function toolI18nValidate(params) {
                 localeFiles.push({ path: resolve(nested, f), name: `${e.name}/${f}` });
               }
             }
-          } catch { /* skip */ }
+          } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
   }
 
   if (localeFiles.length >= 2) {
@@ -1795,7 +1795,8 @@ export function toolI18nValidate(params) {
       try {
         const data = JSON.parse(readFileSync(lf.path, "utf8"));
         keysByFile.set(lf.name, new Set(flattenKeys(data)));
-      } catch {
+      } catch (err) {
+        console.warn("[tool-core] locale file parse failed:", err?.message ?? err);
         findings.push({ file: lf.name, line: 0, severity: "medium", label: "parse-error", msg: "Failed to parse locale file" });
       }
     }
@@ -1829,7 +1830,7 @@ export function toolI18nValidate(params) {
 
   for (const file of jsxFiles) {
     let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    try { content = readFileSync(file, "utf8"); } catch (err) { console.warn("[tool-core] file read failed:", err?.message ?? err); continue; }
     const lines = content.split(/\r?\n/);
 
     for (let i = 0; i < lines.length; i++) {
@@ -1915,7 +1916,7 @@ export function toolInfraScan(params) {
         for (const e of readdirSync(p, { withFileTypes: true })) {
           if (e.isFile()) infraFiles.push(resolve(p, e.name));
         }
-      } catch { /* skip */ }
+      } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
     }
   }
 
@@ -1927,7 +1928,7 @@ export function toolInfraScan(params) {
           infraFiles.push(resolve(target, e));
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
   }
 
   if (infraFiles.length === 0) {
@@ -1936,7 +1937,7 @@ export function toolInfraScan(params) {
 
   for (const file of infraFiles) {
     let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    try { content = readFileSync(file, "utf8"); } catch (err) { console.warn("[tool-core] file read failed:", err?.message ?? err); continue; }
     const lines = content.split(/\r?\n/);
 
     for (let i = 0; i < lines.length; i++) {
@@ -2032,7 +2033,7 @@ export function toolDocCoverage(params) {
 
   for (const file of files) {
     let content;
-    try { content = readFileSync(file, "utf8"); } catch { continue; }
+    try { content = readFileSync(file, "utf8"); } catch (err) { console.warn("[tool-core] file read failed:", err?.message ?? err); continue; }
     const lines = content.split(/\r?\n/);
 
     // Use language-specific doc patterns when available
@@ -2124,7 +2125,7 @@ export function toolBlueprintLint(params) {
         const content = readFileSync(file, "utf8");
         rules.push(..._extractNamingRulesInline(content, file));
       }
-    } catch { /* ok */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
     return { rules, sources: [] };
   };
 
@@ -2267,12 +2268,14 @@ export async function toolContractDrift(params) {
     const astPath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "dist", "platform", "providers", "ast-analyzer.js");
     const mod = await import(astPath);
     ASTAnalyzer = mod.ASTAnalyzer;
-  } catch {
+  } catch (err) {
+    console.warn("[tool-core] AST analyzer import failed:", err?.message ?? err);
     try {
       // Fallback: try direct import
       const mod = await import("../../../dist/platform/providers/ast-analyzer.js");
       ASTAnalyzer = mod.ASTAnalyzer;
-    } catch {
+    } catch (err2) {
+      console.error("[tool-core] AST analyzer fallback also failed:", err2?.message ?? err2);
       return { error: "AST analyzer unavailable. Run: npm run build" };
     }
   }
@@ -2357,7 +2360,7 @@ export function toolAiGuide(params) {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
     if (pkg.name) projectName = pkg.name;
     if (pkg.scripts) scripts = pkg.scripts;
-  } catch { /* no package.json or invalid — skip */ }
+  } catch (err) { console.warn("[tool-core] package.json read failed:", err?.message ?? err); }
 
   // ── Gather tool outputs ──
   const codeMapResult = toolCodeMap({ path: target, depth: 3 });
@@ -2563,7 +2566,7 @@ async function _getCommBridge() {
     _commBridge = await import("../bridge.mjs");
     if (!_commBridge._store) await _commBridge.init(process.cwd());
     return _commBridge;
-  } catch { return null; }
+  } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); return null; }
 }
 
 export async function toolAgentComm(params) {
@@ -2846,7 +2849,7 @@ export function toolSkillSync(params) {
   // Scan canonical skills
   let skillDirs;
   try { skillDirs = readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory()); }
-  catch { return { error: `Cannot read platform/skills/ directory` }; }
+  catch (err) { console.error("[tool-core] skills readdir failed:", err?.message ?? err); return { error: `Cannot read platform/skills/ directory` }; }
 
   for (const dir of skillDirs) {
     const skillName = dir.name;
@@ -2854,7 +2857,7 @@ export function toolSkillSync(params) {
     if (!existsSync(canonPath)) continue;
 
     let canonContent;
-    try { canonContent = readFileSync(canonPath, "utf8"); } catch { continue; }
+    try { canonContent = readFileSync(canonPath, "utf8"); } catch (err) { console.warn("[tool-core] SKILL.md read failed:", err?.message ?? err); continue; }
     const canonical = parseSkillFrontmatter(canonContent);
     if (!canonical || !canonical.name) continue;
 
@@ -2877,7 +2880,7 @@ export function toolSkillSync(params) {
 
       // Check description mismatch
       let wrapperContent;
-      try { wrapperContent = readFileSync(wrapperPath, "utf8"); } catch { continue; }
+      try { wrapperContent = readFileSync(wrapperPath, "utf8"); } catch (err) { console.warn("[tool-core] wrapper SKILL.md read failed:", err?.message ?? err); continue; }
       const wrapper = parseSkillFrontmatter(wrapperContent);
       if (!wrapper) continue;
 
@@ -2984,7 +2987,7 @@ export function toolTrackArchive(params) {
           });
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
   }
 
   // 2. Design docs (design/{track}/ or .claude/quorum/design/{track}/)
@@ -3006,7 +3009,7 @@ export function toolTrackArchive(params) {
           });
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[tool-core] operation failed:", err?.message ?? err); }
   }
 
   // 3. Wave state

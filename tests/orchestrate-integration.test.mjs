@@ -33,7 +33,7 @@ before(() => {
 });
 
 after(() => {
-  try { rmSync(TEST_ROOT, { recursive: true, force: true }); } catch {}
+  try { rmSync(TEST_ROOT, { recursive: true, force: true }); } catch (err) { console.warn("orchestrate-integration cleanup failed:", err?.message ?? err); }
 });
 
 // ── resolveTrack ─────────────────────────────
@@ -311,7 +311,7 @@ describe("empty convergence guard", () => {
     assert.equal(result.converged, false, "Empty classifications should NOT converge");
 
     store.close();
-    try { rmSync(dbPath, { force: true }); } catch {}
+    try { rmSync(dbPath, { force: true }); } catch (err) { console.warn("convergence db cleanup failed:", err?.message ?? err); }
   });
 
   it("DOES converge when classifications have content", () => {
@@ -334,7 +334,7 @@ describe("empty convergence guard", () => {
     assert.equal(result.converged, true, "Stable non-empty classifications should converge");
 
     store.close();
-    try { rmSync(dbPath, { force: true }); } catch {}
+    try { rmSync(dbPath, { force: true }); } catch (err) { console.warn("convergence db cleanup failed:", err?.message ?? err); }
   });
 });
 

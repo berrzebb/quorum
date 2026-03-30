@@ -5,7 +5,8 @@ export { generateSkeletalRTM } from "./rtm-generator.js";
 export { updateRTM, updateRTMContent } from "./rtm-updater.js";
 export { verifyPhaseCompletion, isWaveFullyCompleted, getRetryItems } from "./phase-gates.js";
 export { shouldTriggerRetro, buildWaveCommitMessage, waveCommit, amendWaveCommit, autoRetro, autoMerge } from "./lifecycle-hooks.js";
-export { collectFitnessSignals, runFitnessGate, computeFitness } from "./fitness-gates.js";
+export { collectFitnessSignals, runFitnessGate, computeFitness, runTscCached, invalidateTscCache } from "./fitness-gates.js";
+export type { TscCacheEntry } from "./fitness-gates.js";
 export type { FitnessGateResult } from "./fitness-gates.js";
 export {
   STUB_PATTERNS, PERF_PATTERNS,
@@ -20,6 +21,8 @@ export {
   detectFixLoopStagnation,
   runProjectTests,
   detectRegressions,
+  isAllowedVerifier,
+  ALLOWED_VERIFY_PREFIXES, VERIFY_SHELL_META, VERIFY_INTERPRETER_RE,
 } from "./scope-gates.js";
 export { runConfluenceCheck, proposeConfluenceAmendments } from "./confluence-gates.js";
 export type { ConfluenceInput, ConfluenceResult } from "./confluence-gates.js";

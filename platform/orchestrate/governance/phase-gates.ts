@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import type { WorkItem } from "../planning/types.js";
 import type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
+import { isAllowedVerifier } from "./scope-gates.js";
 
 /**
  * Verify Phase N is complete before allowing Phase N+1.
@@ -46,18 +47,11 @@ export function verifyPhaseCompletion(
     failures.push(`${incomplete.length} item(s) incomplete: ${incomplete.map(i => i.id).join(", ")}`);
   }
 
-  // 2. Re-run verify commands (integration check — allowlist + metachar filter)
-  const ALLOWED_VERIFY = [
-    "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
-    "go ", "cargo ", "python ", "pytest ", "pip ",
-    "java ", "javac ", "mvn ", "gradle ",
-  ];
-  const SHELL_META = /[;&|`$><\r\n%]/;
+  // 2. Re-run verify commands (shared security filter from scope-gates)
   for (const item of phaseItems) {
     if (!item.verify || !completedIds.has(item.id)) continue;
     const trimmed = item.verify.trim();
-    const INTERP_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--command[\s=]|\s--print[\s=]/;
-    if (SHELL_META.test(trimmed) || INTERP_RE.test(` ${trimmed}`) || !ALLOWED_VERIFY.some(p => trimmed.startsWith(p))) {
+    if (!isAllowedVerifier(trimmed)) {
       failures.push(`${item.id} verify blocked (not in allowlist): ${item.verify}`);
       continue;
     }

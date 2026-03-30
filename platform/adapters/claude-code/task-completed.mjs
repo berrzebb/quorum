@@ -25,7 +25,8 @@ try {
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) process.exit(0);
   input = JSON.parse(raw);
-} catch {
+} catch (err) {
+  console.warn(`[task-completed] stdin parse error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -38,7 +39,8 @@ console.error(`[task-completed] Verifying: "${taskSubject}" by ${teammateName}`)
 let REPO_ROOT;
 try {
   REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
-} catch {
+} catch (err) {
+  console.warn(`[task-completed] git rev-parse failed: ${err?.message}`);
   REPO_ROOT = process.cwd();
 }
 
@@ -56,13 +58,13 @@ try {
     committed = execSync("git diff --name-only HEAD~5..HEAD", {
       cwd: REPO_ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
     }).trim();
-  } catch { /* shallow repo or <5 commits — skip */ }
+  } catch (err) { console.warn(`[task-completed] git diff HEAD~5 failed: ${err?.message}`); }
 
   const all = `${uncommitted}\n${committed}`.trim();
   if (all) {
     changedFiles = [...new Set(all.split(/\r?\n/).filter(Boolean))];
   }
-} catch { /* no changes */ }
+} catch (err) { console.warn(`[task-completed] git diff failed: ${err?.message}`); }
 
 if (changedFiles.length === 0) {
   console.error("[task-completed] No changed files detected — passing through");
@@ -81,7 +83,7 @@ try {
     quorumConfig = JSON.parse(readFileSync(configPath, "utf8"));
     presets = quorumConfig.quality_rules?.presets ?? [];
   }
-} catch { /* config read error — fall through to empty presets */ }
+} catch (err) { console.warn(`[task-completed] config read error: ${err?.message}`); }
 
 // Run quality checks via shared helper
 const qcFailures = runQualityChecks({ config: quorumConfig, repoRoot: REPO_ROOT, changedFiles });
@@ -104,7 +106,7 @@ try {
         if (status.status === "approved" || status.status === "changes_requested" || status.status === "infra_failure") {
           hasEvidence = true;
         }
-      } catch { /* corrupted marker — fall through */ }
+      } catch (err) { console.warn(`[task-completed] audit status parse error: ${err?.message}`); }
     }
 
     // 2. No file fallback — evidence is in SQLite only
@@ -113,7 +115,7 @@ try {
       failures.push("[NO-ABANDON] No audit evidence found. Submit evidence and run audit before completing task.");
     }
   }
-} catch { /* config read error — skip gate */ }
+} catch (err) { console.warn(`[task-completed] no-abandon gate error: ${err?.message}`); }
 
 // ── Verdict ──────────────────────────────────────────────────
 if (failures.length > 0) {
@@ -138,7 +140,7 @@ try {
     task: taskSubject,
   });
   bridge.close();
-} catch { /* bridge non-critical */ }
+} catch (err) { console.warn(`[task-completed] bridge event emit failed: ${err?.message}`); }
 
 console.error(`[task-completed] All checks passed for: "${taskSubject}"`);
 process.exit(0);

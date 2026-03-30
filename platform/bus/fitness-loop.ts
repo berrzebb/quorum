@@ -70,7 +70,8 @@ export class FitnessLoop {
     if (!this.store) return null;
     try {
       return this.store.getKV(KV_BASELINE) as FitnessScore | null;
-    } catch {
+    } catch (err) {
+      console.warn(`[fitness-loop] getBaseline failed: ${(err as Error).message}`);
       return null;
     }
   }
@@ -80,7 +81,7 @@ export class FitnessLoop {
     if (!this.store) return;
     try {
       this.store.setKV(KV_BASELINE, score);
-    } catch { /* fail-open */ }
+    } catch (err) { console.warn(`[fitness-loop] setBaseline failed: ${(err as Error).message}`); }
   }
 
   /**
@@ -173,7 +174,7 @@ export class FitnessLoop {
       // Keep last 50 data points
       if (history.length > 50) history.splice(0, history.length - 50);
       this.store.setKV(KV_HISTORY, history);
-    } catch { /* fail-open */ }
+    } catch (err) { console.warn(`[fitness-loop] record failed: ${(err as Error).message}`); }
   }
 
   /** Compute trend from stored history. */
@@ -193,7 +194,8 @@ export class FitnessLoop {
     if (!this.store) return [];
     try {
       return (this.store.getKV(KV_HISTORY) as number[]) ?? [];
-    } catch {
+    } catch (err) {
+      console.warn(`[fitness-loop] getHistory failed: ${(err as Error).message}`);
       return [];
     }
   }
@@ -204,6 +206,6 @@ export class FitnessLoop {
     try {
       this.store.setKV(KV_BASELINE, null);
       this.store.setKV(KV_HISTORY, []);
-    } catch { /* fail-open */ }
+    } catch (err) { console.warn(`[fitness-loop] reset failed: ${(err as Error).message}`); }
   }
 }

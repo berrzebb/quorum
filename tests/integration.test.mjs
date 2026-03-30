@@ -38,8 +38,8 @@ before(() => {
 });
 
 after(() => {
-  try { if (store) store.close(); } catch {}
-  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  try { if (store) store.close(); } catch (err) { console.warn("integration store close failed:", err?.message ?? err); }
+  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("integration cleanup failed:", err?.message ?? err); }
 });
 
 // ═══ 1. Specialist Pipeline E2E ════════════════════════════════════════

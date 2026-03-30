@@ -152,7 +152,8 @@ export class JsonRpcClient extends EventEmitter {
       if (!trimmed) continue;
       try {
         this.#dispatch(JSON.parse(trimmed));
-      } catch {
+      } catch (err) {
+        console.warn(`[jsonrpc-client] NDJSON parse error: ${err?.message}`);
         this.emit("parse_error", trimmed);
       }
     }

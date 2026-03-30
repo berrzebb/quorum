@@ -206,7 +206,8 @@ export class CodexAppServerClient extends EventEmitter {
       try {
         const msg = JSON.parse(trimmed);
         this.dispatch(msg);
-      } catch {
+      } catch (err) {
+        console.warn(`[codex-client] JSON-RPC parse error: ${(err as Error).message}`);
         this.emit("parse_error", trimmed);
       }
     }

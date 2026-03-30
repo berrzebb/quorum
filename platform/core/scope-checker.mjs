@@ -85,7 +85,8 @@ function getDiffFiles(repoRoot, baseBranch) {
       windowsHide: true,
     });
     return output.trim().split("\n").filter(Boolean);
-  } catch {
+  } catch (err) {
+    console.warn("[scope-checker] git diff range failed:", err?.message ?? err);
     // Fallback: staged + unstaged
     try {
       const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
@@ -96,7 +97,8 @@ function getDiffFiles(repoRoot, baseBranch) {
       }).trim();
       const all = new Set([...staged.split("\n"), ...unstaged.split("\n")].filter(Boolean));
       return [...all];
-    } catch {
+    } catch (err) {
+      console.error("[scope-checker] git diff fallback failed:", err?.message ?? err);
       return [];
     }
   }

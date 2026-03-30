@@ -42,8 +42,8 @@ let _hasPlanDoc = null;
 /** Pre-validate evidence package format — regex-based, zero tokens. */
 // validate_evidence_format removed — migrated to audit_submit MCP tool (platform/core/tools/tool-core.mjs)
 
-function get_mtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
-function read_ack()   { try { return Number(readFileSync(ackFile, "utf8").trim()) || 0; } catch { return 0; } }
+function get_mtime(p) { try { return statSync(p).mtimeMs; } catch (err) { console.warn(`[index] get_mtime failed: ${err?.message}`); return 0; } }
+function read_ack()   { try { return Number(readFileSync(ackFile, "utf8").trim()) || 0; } catch (err) { console.warn(`[index] read_ack failed: ${err?.message}`); return 0; } }
 function write_ack(ms) { writeFileSync(ackFile, String(ms), "utf8"); }
 
 // has_trigger removed — evidence via audit_submit MCP tool
@@ -157,8 +157,8 @@ async function main() {
   if (!raw.trim()) { log("EXIT: empty stdin"); return; }
 
   let payload;
-  try { payload = JSON.parse(raw); } catch {
-    log("EXIT: JSON parse error");
+  try { payload = JSON.parse(raw); } catch (err) {
+    log(`EXIT: JSON parse error: ${err?.message}`);
     check_pending_response();
     return;
   }

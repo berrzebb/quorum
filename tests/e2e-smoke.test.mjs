@@ -30,7 +30,7 @@ const { TierRouter } = await import("../dist/platform/providers/router.js");
 let tmpDir;
 
 before(() => { tmpDir = mkdtempSync(join(tmpdir(), "e2e-smoke-")); });
-after(() => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+after(() => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("e2e-smoke cleanup failed:", err?.message ?? err); } });
 
 function mockAuditor(verdict, summary = "", codes = []) {
   return {

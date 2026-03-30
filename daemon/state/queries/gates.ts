@@ -77,7 +77,8 @@ function latestTransition(db: Database.Database, entityType: string, entityId: s
       transitionStmtCache.set(db, stmt);
     }
     return stmt.get(entityType, entityId) as { to_state: string; created_at: number } | undefined ?? null;
-  } catch {
+  } catch (err) {
+    console.warn(`[gates] latestTransition query failed: ${(err as Error).message}`);
     return null;
   }
 }

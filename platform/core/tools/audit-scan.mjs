@@ -14,7 +14,8 @@ import { execSync } from "node:child_process";
 function getRepoRoot() {
   try {
     return execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
-  } catch {
+  } catch (err) {
+    console.warn("[audit-scan] git rev-parse failed:", err?.message ?? err);
     return process.cwd();
   }
 }
@@ -38,12 +39,12 @@ function walkFiles(dir, files = []) {
         files.push(full);
       }
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn("[audit-scan] walkFiles failed:", err?.message ?? err); }
   return files;
 }
 
 function scanFile(filePath) {
-  try { return readFileSync(filePath, "utf8"); } catch { return ""; }
+  try { return readFileSync(filePath, "utf8"); } catch (err) { console.warn("[audit-scan] scanFile read failed:", err?.message ?? err); return ""; }
 }
 
 // Resolve target: single file or directory
@@ -51,7 +52,8 @@ let files;
 try {
   const st = statSync(targetPath);
   files = st.isDirectory() ? walkFiles(targetPath) : CODE_EXTS.has(extname(targetPath)) ? [targetPath] : [];
-} catch {
+} catch (err) {
+  console.warn("[audit-scan] target stat failed:", err?.message ?? err);
   files = [];
 }
 

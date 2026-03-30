@@ -76,7 +76,7 @@ function parseStreamJson(rawLines: string[]): string[] {
         messageParts.push(obj.result);
         continue;
       }
-    } catch { /* not JSON — skip */ }
+    } catch (err) { console.warn(`[agent-chat] JSON parse failed: ${(err as Error).message}`); }
   }
 
   if (messageParts.length === 0) return rawLines;
@@ -148,7 +148,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
             readSync(fd, buf, 0, buf.length, start);
             closeSync(fd);
             raw = buf.toString("utf8");
-          } catch { /* ok */ }
+          } catch (err) { console.warn(`[agent-chat] output file read failed: ${(err as Error).message}`); }
         }
         if (!raw) {
           const cap = mux.capture(s.id, 120);
@@ -177,7 +177,7 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
           stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
         }).trim();
         setGitLog(log ? log.split("\n") : []);
-      } catch { setGitLog(["(no git repo)"]); }
+      } catch (err) { console.warn(`[AgentChatPanel] git log failed: ${(err as Error).message}`); setGitLog(["(no git repo)"]); }
     };
     pollGit();
     const timer = setInterval(pollGit, 5000);

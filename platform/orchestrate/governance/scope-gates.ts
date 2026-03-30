@@ -12,6 +12,12 @@ import type { WorkItem } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import { walkSourceFiles } from "../execution/preflight.js";
 
+// Re-export verify filter from canonical location (platform/core/verify-filter.ts)
+export {
+  isAllowedVerifier,
+  ALLOWED_VERIFY_PREFIXES, VERIFY_SHELL_META, VERIFY_INTERPRETER_RE,
+} from "../../core/verify-filter.js";
+
 // ── Stub / Perf Pattern Definitions ──────────
 
 /**
@@ -57,13 +63,22 @@ export function scanLines(repoRoot: string, targetFiles: string[], patterns: [Re
     const absPath = resolve(repoRoot, relPath);
     if (!existsSync(absPath)) continue;
     let content: string;
-    try { content = readFileSync(absPath, "utf8"); } catch { continue; }
+    try { content = readFileSync(absPath, "utf8"); } catch (err) { console.error(`[scope-gates] could not read ${relPath}: ${(err as Error).message}`); continue; }
     const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
       const trimmed = line.trim();
-      if (trimmed.startsWith("//") && !trimmed.includes("TODO") && !trimmed.includes("FIXME")) continue;
       if (trimmed.includes("scan-ignore")) continue;
+      // Comments are scanned — stubs like "// placeholder" or "// not implemented" must be caught.
+      // Pure comment lines only skip patterns that are NOT in STUB_PATTERNS
+      // (e.g., perf patterns in comments are benign and should be ignored).
+      const isComment = trimmed.startsWith("//") || trimmed.startsWith("*");
+      if (isComment) {
+        // Only check stub-specific patterns in comments (TODO, FIXME, placeholder, not implemented, etc.)
+        // Perf/blueprint patterns in comments are false positives — skip them.
+        const hasStubMatch = STUB_PATTERNS.some(([re]) => re.test(line));
+        if (!hasStubMatch) continue;
+      }
       for (const [pattern, desc] of patterns) {
         if (pattern.test(line)) {
           findings.push(`${relPath}:${i + 1} — ${desc}`);
@@ -102,7 +117,10 @@ export function getChangedFiles(repoRoot: string, snapshotRef = "HEAD"): string[
     }).trim();
     const newFiles = untracked ? untracked.split("\n").filter(Boolean) : [];
     return [...new Set([...tracked, ...newFiles])];
-  } catch { return []; }
+  } catch (err) {
+    console.error(`[scope-gates] getChangedFiles failed: ${(err as Error).message}`);
+    return [];
+  }
 }
 
 // ── File Scope Enforcement ───────────────────
@@ -156,10 +174,8 @@ export function detectOrphanFiles(repoRoot: string, targetFiles: string[]): stri
     targetBases.set(base, f);
   }
 
-  const srcDir = resolve(repoRoot, "src");
-  const allSourceFiles = existsSync(srcDir)
-    ? walkSourceFiles(srcDir, n => /\.[jt]sx?$/.test(n))
-    : [];
+  // Scan from repo root (not just src/) — projects may use platform/, daemon/, lib/, etc.
+  const allSourceFiles = walkSourceFiles(repoRoot, n => /\.[jt]sx?$/.test(n));
 
   // Scan all source files for imports
   const importedBases = new Set<string>();
@@ -189,7 +205,7 @@ export function detectOrphanFiles(repoRoot: string, targetFiles: string[]): stri
           importedBases.add(importPath);
         }
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn(`[scope-gates] detectOrphanFiles could not read ${absFile}: ${(err as Error).message}`); }
   }
 
   // Check which target files are never imported
@@ -230,7 +246,7 @@ export function auditNewDependencies(repoRoot: string, snapshotRef = "HEAD"): st
       });
       const prevPkg = JSON.parse(prevContent);
       prevDeps = { ...prevPkg.dependencies, ...prevPkg.devDependencies };
-    } catch { /* new project or file not in git */ }
+    } catch (err) { console.warn(`[scope-gates] could not read previous package.json from git: ${(err as Error).message}`); }
 
     // Get current dependencies
     const curContent = readFileSync(pkgPath, "utf8");
@@ -258,11 +274,12 @@ export function auditNewDependencies(repoRoot: string, snapshotRef = "HEAD"): st
         } else {
           issues.push(`${dep}@${curDeps[dep]} — new dependency (license: ${license})`);
         }
-      } catch {
+      } catch (err) {
+        console.warn(`[scope-gates] could not read license for ${dep}: ${(err as Error).message}`);
         issues.push(`${dep} — could not read license`);
       }
     }
-  } catch { /* fail-open */ }
+  } catch (err) { console.error(`[scope-gates] auditNewDependencies failed: ${(err as Error).message}`); }
 
   return issues;
 }
@@ -293,8 +310,8 @@ export function checkTestFileCreation(
         });
       });
 
-      if (itemTestFiles.length === 0 && testFiles.length === 0) {
-        warnings.push(`${item.id} — verify uses test runner but no test file was created`);
+      if (itemTestFiles.length === 0) {
+        warnings.push(`${item.id} — verify uses test runner but no test file was created/modified`);
       }
     }
   }
@@ -391,10 +408,11 @@ export function runProjectTests(repoRoot: string): ProjectTestResult {
           return { ran: true, passed: true, summary: "npm test passed" };
         } catch (e: any) {
           const stderr = e?.stderr?.toString?.()?.slice(0, 200) ?? "";
+          console.error(`[scope-gates] npm test failed: ${stderr || "exit non-zero"}`);
           return { ran: true, passed: false, summary: stderr || "npm test failed" };
         }
       }
-    } catch { /* invalid package.json */ }
+    } catch (err) { console.warn(`[scope-gates] invalid package.json: ${(err as Error).message}`); }
   }
 
   // Vitest config without package.json test script
@@ -406,7 +424,9 @@ export function runProjectTests(repoRoot: string): ProjectTestResult {
       execSync("npx vitest run", { cwd: repoRoot, timeout: 120_000, stdio: "pipe", windowsHide: true });
       return { ran: true, passed: true, summary: "vitest passed" };
     } catch (e: any) {
-      return { ran: true, passed: false, summary: e?.stderr?.toString?.()?.slice(0, 200) ?? "vitest failed" };
+      const summary = e?.stderr?.toString?.()?.slice(0, 200) ?? "vitest failed";
+      console.error(`[scope-gates] vitest failed: ${summary}`);
+      return { ran: true, passed: false, summary };
     }
   }
 
@@ -435,7 +455,7 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
     }).trim();
-  } catch { return []; }
+  } catch (err) { console.error(`[scope-gates] git diff --numstat failed: ${(err as Error).message}`); return []; }
 
   if (!numstatOutput) return [];
 
@@ -446,7 +466,7 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
     }).trim();
-  } catch { return []; }
+  } catch (err) { console.error(`[scope-gates] git ls-files failed: ${(err as Error).message}`); return []; }
 
   const trackedSet = new Set(trackedOutput.split("\n").map(l => l.trim()).filter(Boolean));
 
@@ -464,7 +484,7 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
     try {
       const content = readFileSync(resolve(repoRoot, file), "utf8");
       currentLines = content.split("\n").length;
-    } catch { continue; }
+    } catch (err) { console.warn(`[scope-gates] could not read ${file} for regression check: ${(err as Error).message}`); continue; }
 
     const originalLines = currentLines - additions + deletions;
     if (originalLines <= 0) continue;

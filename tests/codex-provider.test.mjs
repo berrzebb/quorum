@@ -18,7 +18,7 @@ const { QuorumBus } = await import("../dist/platform/bus/bus.js");
 let tmpDir;
 
 before(() => { tmpDir = mkdtempSync(join(tmpdir(), "codex-test-")); });
-after(() => { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+after(() => { try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("codex-provider cleanup failed:", err?.message ?? err); } });
 
 // ═══ 1. CodexProvider ═════════════════════════════════════════════════
 

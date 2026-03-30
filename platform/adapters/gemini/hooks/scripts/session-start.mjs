@@ -50,14 +50,14 @@ try {
     cwd: REPO_ROOT, encoding: "utf8", windowsHide: true,
   }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
-} catch { /* git unavailable */ }
+} catch (err) { console.warn(`[gemini-session-start] git log failed: ${err?.message}`); }
 
 // ── 2. Resume detection ─────────────────────────────────────
 const handoffFile = cfg.plugin?.handoff_file ?? ".claude/session-handoff.md";
 const handoffPath = resolve(REPO_ROOT, handoffFile);
 let handoffContent = "";
 if (existsSync(handoffPath)) {
-  try { handoffContent = readFileSync(handoffPath, "utf8").trim(); } catch { /* */ }
+  try { handoffContent = readFileSync(handoffPath, "utf8").trim(); } catch (err) { console.warn(`[gemini-session-start] handoff read failed: ${err?.message}`); }
   if (handoffContent) context += `Session Handoff:\n${handoffContent}\n\n`;
 }
 

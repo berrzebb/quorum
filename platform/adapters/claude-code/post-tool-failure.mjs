@@ -25,6 +25,7 @@ try {
       metadata: { error },
     });
   });
-} catch {
-  // Hook must never block — fail silently
+} catch (err) {
+  // Hook must never block — fail open
+  console.warn(`[post-tool-failure] hook error: ${err?.message}`);
 }

@@ -61,11 +61,11 @@ export async function autoGenerateWBs(repoRoot: string, trackName: string, provi
  * Each attempt spawns a FRESH `claude -p` process (single-turn, exits after response).
  * Prompt includes exact file paths so Claude knows where to edit.
  */
-export async function autoFixDesignDiagrams(repoRoot: string, designDir: string, violations: string[], provider: string): Promise<boolean> {
+export async function autoFixDesignDiagrams(repoRoot: string, designDir: string, violations: string[], provider: string, maxAttempts = 10): Promise<boolean> {
   const relDesignDir = designDir.replace(repoRoot, "").replace(/^[\\/]+/, "").replace(/\\/g, "/");
   let attempt = 0;
 
-  while (true) {
+  while (attempt < maxAttempts) {
     attempt++;
 
     const currentViolations = verifyDesignDiagrams(designDir);
@@ -117,4 +117,7 @@ export async function autoFixDesignDiagrams(repoRoot: string, designDir: string,
     console.log(`  \x1b[33m↻ Design fix incomplete (attempt ${attempt})\x1b[0m`);
     for (const v of remaining) console.log(`    ✗ ${v}`);
   }
+
+  console.log(`  \x1b[31m✗ Design fix failed after ${maxAttempts} attempts\x1b[0m`);
+  return false;
 }

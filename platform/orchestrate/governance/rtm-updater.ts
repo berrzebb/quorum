@@ -53,5 +53,5 @@ export function updateRTM(
     const content = readFileSync(rtmPath, "utf8");
     const updated = updateRTMContent(content, items, status);
     writeFileSync(rtmPath, updated, "utf8");
-  } catch { /* fail-open */ }
+  } catch (err) { console.error(`[rtm-updater] updateRTM failed for ${rtmPath}: ${(err as Error).message}`); }
 }

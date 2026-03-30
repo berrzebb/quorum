@@ -66,7 +66,7 @@ function checkRetroMarkers(repoRoot, issues) {
           fix: `rm "${markerPath}" — or complete retro with "echo session-self-improvement-complete"`,
         });
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[health-check] retro marker parse failed:", err?.message ?? err); }
   }
 }
 
@@ -83,7 +83,7 @@ function checkAuditStagnation(repoRoot, issues) {
       try {
         const e = JSON.parse(l);
         return `${e.verdict}|${(e.rejection_codes ?? []).sort().join(",")}`;
-      } catch { return ""; }
+      } catch (err) { console.warn("[health-check] audit history parse failed:", err?.message ?? err); return ""; }
     }).filter(Boolean);
 
     const last3 = verdicts.slice(-3);
@@ -105,7 +105,7 @@ function checkWorktrees(repoRoot, issues) {
     output = execFileSync("git", ["worktree", "list", "--porcelain"], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
-  } catch { return; /* not a git repo */ }
+  } catch (err) { console.warn("[health-check] git worktree list failed:", err?.message ?? err); return; }
 
   let wtPath = "";
   for (const line of output.split("\n")) {
@@ -159,7 +159,8 @@ function checkConfig(repoRoot, issues) {
     }
 
     // Watch file check removed — evidence is in SQLite via audit_submit tool
-  } catch {
+  } catch (err) {
+    console.error("[health-check] config.json parse failed:", err?.message ?? err);
     issues.push({
       severity: "critical",
       category: "config",
@@ -182,7 +183,7 @@ function findFiles(root, filename, maxDepth) {
         if (entry.isDirectory()) scan(full, depth + 1);
         else if (entry.name === filename) results.push(full);
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[health-check] findFiles scan failed:", err?.message ?? err); }
   }
   scan(root, 0);
   return results;

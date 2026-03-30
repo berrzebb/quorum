@@ -77,7 +77,8 @@ export function loadConfig({ repoRoot, adapterDir }) {
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
     return { cfg, configPath, configMissing: false };
-  } catch {
+  } catch (err) {
+    console.warn(`[config-resolver] config parse error: ${err?.message}`);
     return { cfg: DEFAULT_CONFIG, configPath, configMissing: true };
   }
 }

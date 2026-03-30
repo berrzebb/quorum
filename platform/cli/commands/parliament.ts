@@ -109,7 +109,7 @@ function loadConfig(): Record<string, unknown> {
     ...(process.env.GEMINI_EXTENSION_ROOT ? [resolve(process.env.GEMINI_EXTENSION_ROOT, "config.json")] : []),
   ];
   for (const p of candidates) {
-    try { return JSON.parse(readFileSync(p, "utf8")); } catch { continue; }
+    try { return JSON.parse(readFileSync(p, "utf8")); } catch (err) { console.warn(`[parliament] config parse failed for ${p}: ${(err as Error).message}`); continue; }
   }
   return {};
 }
@@ -321,7 +321,7 @@ export async function run(args: string[]): Promise<void> {
     if (interrupted) process.exit(1);  // second Ctrl+C = force kill
     interrupted = true;
     console.log(`\n${C.yellow}Interrupted. Cleaning up...${C.reset}`);
-    if (mux) { try { mux.cleanup(); } catch {} }
+    if (mux) { try { mux.cleanup(); } catch (err) { console.warn(`[parliament] mux cleanup on interrupt failed: ${(err as Error).message}`); } }
     store.close();
     process.exit(0);
   };
@@ -437,7 +437,7 @@ export async function run(args: string[]): Promise<void> {
         if (!parsed.noPlan) {
           // Release parliament mux sessions BEFORE planner creates its own
           if (mux) {
-            try { await mux.cleanup(); } catch { /* ok */ }
+            try { await mux.cleanup(); } catch (err) { console.warn(`[parliament] mux cleanup before planner failed: ${(err as Error).message}`); }
             mux = null as unknown as typeof mux;
           }
           console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
@@ -491,7 +491,7 @@ export async function run(args: string[]): Promise<void> {
           if (!parsed.noPlan) {
             // Release parliament mux sessions BEFORE planner creates its own
             if (mux) {
-              try { await mux.cleanup(); } catch { /* ok */ }
+              try { await mux.cleanup(); } catch (err) { console.warn(`[parliament] mux cleanup before best-effort planner failed: ${(err as Error).message}`); }
               mux = null as unknown as typeof mux;
             }
             console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
@@ -511,7 +511,7 @@ export async function run(args: string[]): Promise<void> {
     process.removeListener("SIGINT", onInterrupt);
     process.removeListener("SIGTERM", onInterrupt);
     if (mux) {
-      try { await mux.cleanup(); } catch { /* ok */ }
+      try { await mux.cleanup(); } catch (err) { console.warn(`[parliament] mux cleanup in finally failed: ${(err as Error).message}`); }
     }
     store.close();
   }
@@ -664,8 +664,8 @@ Generated: ${new Date(cps.generatedAt).toISOString()}
 
     writeFileSync(filePath, content, "utf8");
     console.log(`\n${C.green}CPS saved:${C.reset} ${filePath}`);
-  } catch {
-    // Fail-open: file output is non-critical
+  } catch (err) {
+    console.warn(`[parliament] CPS file write failed: ${(err as Error).message}`);
   }
 }
 

@@ -38,7 +38,8 @@ export async function detectMuxBackend(): Promise<MuxBackendResult | null> {
   try {
     const muxMod = await import(toURL(resolve(DIST_ROOT, "bus", "mux.js")));
     ProcessMux = muxMod.ProcessMux;
-  } catch {
+  } catch (err) {
+    console.warn(`[mux-backend] ProcessMux load failed: ${(err as Error).message}`);
     return null;
   }
 

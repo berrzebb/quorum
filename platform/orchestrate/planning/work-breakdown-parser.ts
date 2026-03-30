@@ -27,7 +27,8 @@ export function parseWorkBreakdown(wbPath: string): WorkItem[] {
   let content: string;
   try {
     content = readFileSync(wbPath, 'utf8');
-  } catch {
+  } catch (err) {
+    console.warn(`[work-breakdown-parser] file read failed for ${wbPath}: ${(err as Error).message}`);
     return [];
   }
 

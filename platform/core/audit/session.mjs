@@ -31,7 +31,7 @@ export function readSavedSession() {
     const kv = bridge.getState(sessionKVKey());
     if (kv && typeof kv === "object" && kv.id) return kv.id;
     if (typeof kv === "string" && kv) return kv;
-  } catch { /* fall through */ }
+  } catch (err) { console.warn("[session] KV read failed:", err?.message ?? err); }
 
   // Fallback: JSON file
   const sp = getSessionPath();
@@ -40,7 +40,8 @@ export function readSavedSession() {
     const stored = JSON.parse(readFileSync(sp, "utf8"));
     if (!stored.id) return null;
     return stored.id;
-  } catch {
+  } catch (err) {
+    console.warn("[session] session file parse failed:", err?.message ?? err);
     return null;
   }
 }
@@ -49,7 +50,7 @@ export function writeSavedSession(sessionId) {
   // Write to SQLite KV (primary, worktree-isolated)
   try {
     bridge.setState(sessionKVKey(), { id: sessionId });
-  } catch { /* fall through */ }
+  } catch (err) { console.warn("[session] KV write failed:", err?.message ?? err); }
 
   // Also write to JSON file (backward compatibility)
   const sp = getSessionPath();
@@ -61,7 +62,7 @@ export function deleteSavedSessionId() {
   // Delete from SQLite KV
   try {
     bridge.setState(sessionKVKey(), null);
-  } catch { /* fall through */ }
+  } catch (err) { console.warn("[session] KV delete failed:", err?.message ?? err); }
 
   // Also delete JSON file
   const sp = getSessionPath();

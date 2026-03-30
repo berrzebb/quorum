@@ -63,7 +63,8 @@ export class VllmAuditor extends OpenAICompatibleAuditor {
       const data = await res.json() as { data?: Array<{ id: string }> };
       if (!data.data?.length) return true; // Can't verify, assume ok
       return data.data.some(m => m.id === this.model || m.id.includes(this.model));
-    } catch {
+    } catch (err) {
+      console.warn(`[vllm-auditor] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }

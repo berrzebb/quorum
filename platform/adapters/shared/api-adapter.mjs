@@ -104,7 +104,7 @@ export class OpenAIApiAdapter {
 
     const jsonStr = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed;
     let parsed;
-    try { parsed = JSON.parse(jsonStr); } catch { return null; }
+    try { parsed = JSON.parse(jsonStr); } catch (err) { console.warn(`[api-adapter] SSE JSON parse error: ${err?.message}`); return null; }
 
     const choice = parsed.choices?.[0];
     if (!choice) return null;
@@ -205,7 +205,7 @@ export class OpenAIApiAdapter {
       for (const toolCall of msg.tool_calls) {
         const fnName = toolCall.function?.name || "unknown";
         let fnArgs = {};
-        try { fnArgs = JSON.parse(toolCall.function?.arguments || "{}"); } catch { /* empty */ }
+        try { fnArgs = JSON.parse(toolCall.function?.arguments || "{}"); } catch (err) { console.warn(`[api-adapter] tool args parse error: ${err?.message}`); }
 
         allMessages.push({ type: "tool_use", tool: fnName, input: fnArgs });
 
@@ -266,7 +266,8 @@ export class OpenAIApiAdapter {
       const res = await fetch(`${this.#config.baseUrl}/models`, { headers, signal: controller.signal });
       clearTimeout(timer);
       return res.ok;
-    } catch {
+    } catch (err) {
+      console.warn(`[api-adapter] availability check failed: ${err?.message}`);
       return false;
     }
   }

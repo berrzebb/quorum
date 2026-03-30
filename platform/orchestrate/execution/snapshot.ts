@@ -26,7 +26,7 @@ export function captureSnapshot(repoRoot: string): string {
       windowsHide: true,
     }).trim();
     return ref || "HEAD";
-  } catch { return "HEAD"; }
+  } catch (err) { console.warn(`[snapshot] git stash create failed, using HEAD: ${(err as Error).message}`); return "HEAD"; }
 }
 
 /**
@@ -53,7 +53,7 @@ export function recordWaveManifest(
           .filter(line => /^export\s/.test(line))
           .slice(0, 15);
         if (exports.length > 0) fileExports[file] = exports;
-      } catch { /* skip */ }
+      } catch (err) { console.warn(`[snapshot] could not read exports from ${file}: ${(err as Error).message}`); }
     }
 
     bridge.setState(`wave:manifest:${trackName}:${waveIndex}`, {
@@ -61,7 +61,7 @@ export function recordWaveManifest(
       completedItems: completedItems.map(i => i.id),
       changedFiles, fileExports, recordedAt: Date.now(),
     });
-  } catch { /* fail-open */ }
+  } catch (err) { console.warn(`[snapshot] recordWaveManifest failed: ${(err as Error).message}`); }
 }
 
 /**
@@ -77,7 +77,7 @@ export function readPreviousManifests(
     try {
       const m = bridge.getState(`wave:manifest:${trackName}:${i}`);
       if (m) manifests.push(m as WaveManifest);
-    } catch { /* skip */ }
+    } catch (err) { console.warn(`[snapshot] readPreviousManifests failed for wave ${i}: ${(err as Error).message}`); }
   }
   return manifests;
 }

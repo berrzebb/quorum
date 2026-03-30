@@ -119,12 +119,34 @@ describe("ClaudeSdkRuntime", () => {
 // ── ClaudeSdkRuntime (with mocked availability) ─────────
 
 /**
- * Subclass that overrides isAvailable() to return true,
+ * Subclass that mocks SDK availability AND SDK session methods,
  * allowing us to test session lifecycle without the actual SDK.
+ * The mock SDK records calls for verification.
  */
 class TestableClaudeSdkRuntime extends ClaudeSdkRuntime {
+  mockSdkCalls = [];
+
   async isAvailable() {
     return true;
+  }
+
+  async resolveSdkMethods() {
+    if (this.sdkMethods) return this.sdkMethods;
+    const self = this;
+    this.sdkMethods = {
+      createSession: async (opts) => {
+        self.mockSdkCalls.push({ method: "createSession", opts });
+        return { id: `mock-session-${Date.now()}` };
+      },
+      sendMessage: async (session, input) => {
+        self.mockSdkCalls.push({ method: "sendMessage", session, input });
+      },
+      stopSession: async (session) => {
+        self.mockSdkCalls.push({ method: "stopSession", session });
+      },
+    };
+    this.sdkChecked = true;
+    return this.sdkMethods;
   }
 }
 

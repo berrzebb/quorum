@@ -30,7 +30,7 @@ before(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "specialist-tools-"));
 });
 after(() => {
-  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("specialist-tools cleanup failed:", err?.message ?? err); }
 });
 
 // ═══ 0. Registry ═══════════════════════════════════════════════════════

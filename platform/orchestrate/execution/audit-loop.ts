@@ -6,8 +6,7 @@
  * audit invocation, no console output — pure gate orchestration.
  */
 
-import type { WorkItem } from "../planning/types.js";
-import type { Wave } from "../planning/types.js";
+import type { WorkItem, Wave, Bridge } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import {
   runFitnessGate,
@@ -82,7 +81,7 @@ export interface WaveAuditOptions {
   /** Blueprint naming rules from design docs (empty if none). */
   blueprintRules: NamingRule[];
   /** Bridge instance (for EventStore access). */
-  bridge: Record<string, Function> | null;
+  bridge: Bridge | null;
 }
 
 // ── Main Entry Point ────────────────────────
@@ -158,9 +157,9 @@ export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
   // 6. File scope enforcement
   const scopeViolations = detectFileScopeViolations(repoRoot, completedItems, changedFiles);
 
-  // 7. Fitness gate
+  // 7. Fitness gate (pass precomputed stub count to avoid re-scanning files)
   const store = bridge?.store ?? null;
-  const fg = runFitnessGate(repoRoot, waveFiles, store);
+  const fg = runFitnessGate(repoRoot, waveFiles, store, { stubCount: stubs.length });
   const blueprintBlocked = blueprintViolations.length > 0;
   const fitnessDecision = blueprintBlocked ? "auto-reject" as const : fg.decision;
 

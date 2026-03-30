@@ -25,7 +25,8 @@ export function createT(locale = "en") {
     try {
       const path = existsSync(targetPath) ? targetPath : fallbackPath;
       return JSON.parse(readFileSync(path, "utf8"));
-    } catch {
+    } catch (err) {
+      console.warn("[i18n] locale file load failed:", err?.message ?? err);
       return {};
     }
   })();

@@ -28,7 +28,8 @@ export async function run(args: string[]): Promise<void> {
   let marker;
   try {
     marker = JSON.parse(readFileSync(markerPath, "utf8"));
-  } catch {
+  } catch (err) {
+    console.warn(`[retro] retro marker parse failed: ${(err as Error).message}`);
     marker = {};
   }
 
@@ -48,7 +49,7 @@ export async function run(args: string[]): Promise<void> {
         const verdict = entry.verdict === "agree" ? "\x1b[32mapproved\x1b[0m" : "\x1b[31mrejected\x1b[0m";
         const codes = entry.rejection_codes?.length > 0 ? ` [${entry.rejection_codes.join(", ")}]` : "";
         console.log(`    ${entry.timestamp?.slice(0, 19) ?? "?"} ${verdict}${codes} ${entry.track ?? ""}`);
-      } catch { /* skip */ }
+      } catch (err) { console.warn(`[retro] audit history line parse failed: ${(err as Error).message}`); }
     }
     console.log();
   }

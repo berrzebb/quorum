@@ -87,7 +87,8 @@ export class GeminiAuditor implements Auditor {
       // execSync handles Windows npm shims (.cmd) correctly
       execSync(`${this.bin} --version`, { encoding: "utf8", timeout: 10000, windowsHide: true, stdio: "pipe" });
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(`[gemini-auditor] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }

@@ -55,7 +55,7 @@ export function proposeConfluenceAmendments(
         justification: sa.justification,
       });
       proposed++;
-    } catch { /* fail-open */ }
+    } catch (err) { console.warn(`[confluence-gates] proposeAmendment failed for target ${sa.target}: ${(err as Error).message}`); }
   }
   return proposed;
 }

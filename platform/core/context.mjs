@@ -53,7 +53,7 @@ function resolveRepoRoot() {
     }).trim();
     process.env.QUORUM_REPO_ROOT = root;
     return root;
-  } catch { /* git not available or not in a repo */ }
+  } catch (err) { console.warn("[context] git rev-parse failed:", err?.message ?? err); }
 
   // 2. Adapter layout fallback: adapter installed under .claude/hooks/ or similar
   //    quorum root is 2 levels above adapter dir, target repo is 3 more levels up
@@ -147,7 +147,8 @@ export function refreshConfigIfChanged() {
     Object.assign(consensus, newCfg.consensus ?? DEFAULT_CONFIG.consensus);
     _emptyMarkerRe = null; // force recompile on next isEmptyMarker() call
     return true;
-  } catch {
+  } catch (err) {
+    console.warn("[context] refreshConfigIfChanged failed:", err?.message ?? err);
     return false;
   }
 }
@@ -249,7 +250,7 @@ export function createT(locale) {
 
   const localePath = resolve(findLocalesDir(), `${locale}.json`);
   let messages = {};
-  try { messages = JSON.parse(readFileSync(localePath, "utf8")); } catch { /* fallback */ }
+  try { messages = JSON.parse(readFileSync(localePath, "utf8")); } catch (err) { console.warn("[context] locale load failed:", err?.message ?? err); }
 
   const t = (key, vars) => {
     let msg = messages[key] ?? key;
@@ -439,11 +440,11 @@ export function mergeIdSets(...sets) {
 export function readJsonlFile(filePath) {
   if (!existsSync(filePath)) return [];
   let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  try { content = readFileSync(filePath, "utf8"); } catch (err) { console.warn("[context] readJsonlFile failed:", err?.message ?? err); return []; }
   const entries = [];
   for (const line of content.split(/\r?\n/)) {
     if (!line.trim()) continue;
-    try { entries.push(JSON.parse(line)); } catch { /* skip malformed */ }
+    try { entries.push(JSON.parse(line)); } catch (err) { console.warn("[context] readJsonlFile malformed line:", err?.message ?? err); }
   }
   return entries;
 }

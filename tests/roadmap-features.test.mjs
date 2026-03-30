@@ -36,7 +36,7 @@ function countTrackPendings(historyPath, track) {
     try {
       const entry = JSON.parse(line);
       if (entry.track === track && entry.verdict === "pending") count++;
-    } catch { /* skip malformed */ }
+    } catch (err) { console.warn("JSON parse skipped (malformed):", err?.message ?? err); }
   }
   return count;
 }
@@ -126,7 +126,7 @@ function checkFalsePositiveRate(historyPath, track, minRounds = 5) {
     try {
       const entry = JSON.parse(line);
       if (entry.track === track) entries.push(entry);
-    } catch { /* skip */ }
+    } catch (err) { console.warn("JSON parse skipped:", err?.message ?? err); }
   }
 
   if (entries.length < minRounds) return { needsReview: false, codes: [] };

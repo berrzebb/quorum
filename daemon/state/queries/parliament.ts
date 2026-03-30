@@ -103,10 +103,11 @@ export function queryParliamentInfo(store: EventStore, liveSessionsCache: { ts: 
     }
 
     // Live sessions (cached, 5s TTL -- filesystem I/O)
-    empty.liveSessions = readLiveParliamentSessions(liveSessionsCache);
+    empty.liveSessions = readLiveParliamentSessions(liveSessionsCache, store);
 
     return empty;
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament] queryParliamentInfo failed: ${(err as Error).message}`);
     return empty;
   }
 }
@@ -115,12 +116,21 @@ export function queryParliamentInfo(store: EventStore, liveSessionsCache: { ts: 
  * Read active parliament mux sessions from .claude/agents/ directory.
  * Cached with 5-second TTL to avoid sync filesystem I/O on every 1s poll.
  */
-export function readLiveParliamentSessions(cache: { ts: number; data: ParliamentLiveSession[] }): ParliamentLiveSession[] {
+export function readLiveParliamentSessions(cache: { ts: number; data: ParliamentLiveSession[] }, store?: EventStore): ParliamentLiveSession[] {
   const now = Date.now();
   if (now - cache.ts < 5000) return cache.data;
 
   try {
-    const agentsDir = resolve(process.cwd(), ".claude", "agents");
+    // Derive repo root from store db path (.claude/quorum/state.db → up 3 → repo root)
+    // Falls back to process.cwd() if db path is unavailable
+    let repoRoot = process.cwd();
+    try {
+      const dbName: string = store?.getDb?.()?.name ?? "";
+      if (dbName && !dbName.startsWith(":")) {
+        repoRoot = resolve(dbName, "..", "..", "..");
+      }
+    } catch (err) { console.warn(`[parliament] db path resolution failed, using cwd: ${(err as Error).message}`); }
+    const agentsDir = resolve(repoRoot, ".claude", "agents");
     if (!existsSync(agentsDir)) {
       cache.ts = now;
       cache.data = [];
@@ -143,13 +153,14 @@ export function readLiveParliamentSessions(cache: { ts: number; data: Parliament
             ...(data.outputFile ? { outputFile: data.outputFile } : {}),
           });
         }
-      } catch { /* skip corrupt files */ }
+      } catch (err) { console.warn(`[parliament] corrupt agent file ${f}: ${(err as Error).message}`); }
     }
 
     cache.ts = now;
     cache.data = sessions;
     return sessions;
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament] readLiveParliamentSessions failed: ${(err as Error).message}`);
     cache.ts = now;
     cache.data = [];
     return [];

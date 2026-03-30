@@ -22,7 +22,8 @@ try {
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) process.exit(0);
   input = JSON.parse(raw);
-} catch {
+} catch (err) {
+  console.warn(`[subagent-start] stdin parse error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -45,7 +46,7 @@ try {
       contextParts.push(`⚠️ Retrospective is pending. Agreed items: ${marker.agreed_items || "none"}`);
     }
   }
-} catch { /* marker read error — skip */ }
+} catch (err) { console.warn(`[subagent-start] marker read error: ${err?.message}`); }
 
 // 2. Audit status
 try {
@@ -71,7 +72,7 @@ try {
       contextParts.push(`🔄 Active tracks:\n${inProgress.join("\n")}`);
     }
   }
-} catch { /* context.mjs import error — skip, fail-open */ }
+} catch (err) { console.warn(`[subagent-start] context import error: ${err?.message}`); }
 
 // 5. CC-2 diff basis reminder
 contextParts.push(
@@ -90,7 +91,7 @@ try {
     sessionId: input.session_id,
   });
   bridge.close();
-} catch { /* bridge non-critical */ }
+} catch (err) { console.warn(`[subagent-start] bridge event emit failed: ${err?.message}`); }
 
 // ── Output additional context ─────────────────────────────────
 if (contextParts.length > 0) {

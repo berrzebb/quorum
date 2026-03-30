@@ -17,6 +17,7 @@ import {
   queryFindingStats,
   queryReviewProgress,
   queryFindingThreads,
+  fetchFindingEvents,
   queryParliamentInfo,
   queryActiveSpecialists,
   queryAgentQueries,
@@ -78,16 +79,18 @@ export class SnapshotAssembler {
    */
   readAll(eventLimit = 20): FullState {
     const db = this.store.getDb();
+    // Pre-fetch finding events once for all 3 finding queries (avoids 9→3 SQLite queries when MessageBus is null)
+    const findingCache = !this.messageBus ? fetchFindingEvents(this.store) : undefined;
     return {
       gates: queryGateStatus(this.store),
       items: queryItemStates(db),
       locks: queryActiveLocks(db),
       specialists: queryActiveSpecialists(this.store),
       tracks: queryTrackProgress(this.store),
-      findings: queryOpenFindings(this.store, this.messageBus),
-      findingStats: queryFindingStats(this.store, this.messageBus),
+      findings: queryOpenFindings(this.store, this.messageBus, findingCache),
+      findingStats: queryFindingStats(this.store, this.messageBus, findingCache),
       reviewProgress: queryReviewProgress(this.store),
-      fileThreads: queryFindingThreads(this.store, this.messageBus),
+      fileThreads: queryFindingThreads(this.store, this.messageBus, findingCache),
       recentEvents: this.store.recent(eventLimit),
       fitness: queryFitnessInfo(this.store),
       parliament: queryParliamentInfo(this.store, this._liveSessionsCache),

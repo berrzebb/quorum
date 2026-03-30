@@ -219,7 +219,7 @@ export class EventStore {
                 AND st2.entity_id = st1.entity_id
             );
       `);
-    } catch { /* view already exists */ }
+    } catch (err) { console.warn(`[store] v_current_item_states view creation failed: ${(err as Error).message}`); }
 
     try {
       this.db.exec(`
@@ -227,7 +227,7 @@ export class EventStore {
           SELECT * FROM locks
           WHERE acquired_at + ttl_ms > (CAST(strftime('%s', 'now') AS INTEGER) * 1000);
       `);
-    } catch { /* view already exists */ }
+    } catch (err) { console.warn(`[store] v_active_locks view creation failed: ${(err as Error).message}`); }
   }
 
   /** Build the parameter tuple for stmtAppend. */
@@ -397,7 +397,7 @@ export class EventStore {
   getKV(key: string): unknown | null {
     const row = this.stmtGetKV.get(key) as { value: string } | undefined;
     if (!row) return null;
-    try { return JSON.parse(row.value); } catch { return null; }
+    try { return JSON.parse(row.value); } catch (err) { console.warn(`[store] getKV JSON parse failed for key '${key}': ${(err as Error).message}`); return null; }
   }
 
   /** Write a KV entry. */
@@ -505,7 +505,7 @@ export class TransactionalUnitOfWork {
     } catch (err) {
       // Rollback: clean temp files
       for (const { tmp } of tempPaths) {
-        try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+        try { rmSync(tmp, { force: true }); } catch (err) { console.warn(`[store] failed to clean temp file ${tmp}: ${(err as Error).message}`); }
       }
       throw err;
     }
@@ -514,8 +514,9 @@ export class TransactionalUnitOfWork {
     for (const { tmp, target } of tempPaths) {
       try {
         renameSync(tmp, target);
-      } catch {
+      } catch (err) {
         // Non-fatal: SQLite is truth, projection will regenerate
+        console.warn(`[store] rename ${tmp} → ${target} failed: ${(err as Error).message}`);
       }
     }
 

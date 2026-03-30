@@ -49,7 +49,7 @@ export async function run(args: string[]): Promise<void> {
           process.exit(1);
         }
         bridge.close();
-      } catch { /* fail-open */ }
+      } catch (err) { console.warn(`[merge] parliament gate check failed: ${(err as Error).message}`); }
     }
   }
 

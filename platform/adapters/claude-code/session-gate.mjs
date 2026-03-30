@@ -27,7 +27,8 @@ async function getBridge() {
   try {
     _bridge = await import("../../core/bridge.mjs");
     return _bridge;
-  } catch {
+  } catch (err) {
+    console.warn(`[session-gate] bridge import failed: ${err?.message}`);
     return null;
   }
 }
@@ -39,12 +40,13 @@ function read_marker() {
       const kv = _bridge.getState(KV_MARKER_KEY);
       if (kv !== null) return kv;
     }
-  } catch { /* fall through to file */ }
+  } catch (err) { console.warn(`[session-gate] KV read failed, falling through to file: ${err?.message}`); }
 
   // Fallback: JSON file
   try {
     return JSON.parse(readFileSync(MARKER_PATH, "utf8"));
-  } catch {
+  } catch (err) {
+    console.warn(`[session-gate] marker file read failed: ${err?.message}`);
     return null;
   }
 }
@@ -55,7 +57,7 @@ function write_marker(data) {
     if (_bridge) {
       _bridge.setState(KV_MARKER_KEY, data);
     }
-  } catch { /* fall through to file */ }
+  } catch (err) { console.warn(`[session-gate] KV write failed, falling through to file: ${err?.message}`); }
 
   // Always write to JSON file too (backward compatibility + fallback)
   if (!existsSync(MARKER_DIR)) mkdirSync(MARKER_DIR, { recursive: true });
@@ -72,7 +74,7 @@ if (!fileMarker || !fileMarker.retro_pending) {
 try {
   const b = await getBridge();
   if (b) await b.init(process.cwd());
-} catch { /* bridge optional */ }
+} catch (err) { console.warn(`[session-gate] bridge init failed: ${err?.message}`); }
 
 // Re-read marker with bridge available (SQLite may have more recent state)
 const marker = read_marker();
@@ -89,7 +91,7 @@ try {
   })();
   const c = JSON.parse(readFileSync(cfgPath, "utf8"));
   if (c.plugin?.hooks_enabled?.session_gate === false) process.exit(0);
-} catch { /* config read error — default: enabled */ }
+} catch (err) { console.warn(`[session-gate] config read error — default: enabled: ${err?.message}`); }
 
 // Load i18n only when retro is pending (avoid overhead on every tool call)
 const { t } = await import("../../core/context.mjs");
@@ -100,14 +102,15 @@ try {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   raw = Buffer.concat(chunks).toString("utf8").trim();
-} catch {
+} catch (err) {
   // stdin read error (e.g. closed unexpectedly) — fail open
+  console.warn(`[session-gate] stdin read error: ${err?.message}`);
   process.exit(0);
 }
 if (!raw) { process.exit(0); }
 
 let input;
-try { input = JSON.parse(raw); } catch { process.exit(0); }
+try { input = JSON.parse(raw); } catch (err) { console.warn(`[session-gate] JSON parse error: ${err?.message}`); process.exit(0); }
 
 // Session isolation: pass through if marker's session_id differs from current
 const current_session = input.session_id || "";

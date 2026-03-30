@@ -25,7 +25,7 @@ after(() => {
   // Allow SQLite WAL files to be released
   try {
     if (tmpDir && existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  } catch { /* Windows may hold file locks briefly */ }
+  } catch (err) { console.warn("store cleanup failed:", err?.message ?? err); }
 });
 
 // ═══ 1. EventStore basics ═════════════════════════════════════════════

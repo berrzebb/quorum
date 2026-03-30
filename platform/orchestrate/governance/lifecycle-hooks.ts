@@ -47,7 +47,7 @@ export function waveCommit(
       try {
         const p = f.startsWith("/") || f.includes(":\\") ? f : resolve(repoRoot, f);
         return existsSync(p);
-      } catch { return false; }
+      } catch (err) { console.warn(`[lifecycle] existsSync check failed for ${f}: ${(err as Error).message}`); return false; }
     });
     if (existingFiles.length === 0) return false;
 
@@ -65,7 +65,7 @@ export function waveCommit(
       cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: "pipe",
     });
     return true;
-  } catch { return false; }
+  } catch (err) { console.error(`[lifecycle] waveCommit failed: ${(err as Error).message}`); return false; }
 }
 
 /**
@@ -78,7 +78,7 @@ export function amendWaveCommit(repoRoot: string, rtmPath: string): void {
     execFileSync("git", ["commit", "--amend", "--no-edit"], {
       cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: "pipe",
     });
-  } catch { /* fail-open: amend is best-effort */ }
+  } catch (err) { console.warn(`[lifecycle] amendWaveCommit failed (best-effort): ${(err as Error).message}`); }
 }
 
 // ── Post-track lifecycle ────────────────────
@@ -108,7 +108,7 @@ export async function autoRetro(repoRoot: string): Promise<void> {
     if (bridge?.emitEvent) {
       bridge.emitEvent("retro.complete", "generic", { auto: true, timestamp: Date.now() });
     }
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn(`[lifecycle] autoRetro event emission skipped: ${(err as Error).message}`); }
 }
 
 /** Squash-merge if in worktree, with parliament gate check. */

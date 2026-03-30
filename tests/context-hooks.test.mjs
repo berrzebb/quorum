@@ -403,7 +403,7 @@ describe("pre-compact snapshot", () => {
     const snapshot = {};
 
     if (existsSync(markerPath)) {
-      try { snapshot.retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch { /* skip */ }
+      try { snapshot.retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch (err) { console.warn("retro marker parse failed:", err?.message ?? err); }
     }
     snapshot.timestamp = new Date().toISOString();
     return snapshot;

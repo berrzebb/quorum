@@ -76,7 +76,8 @@ export function queryActiveSpecialists(store: EventStore): SpecialistInfo[] {
     }
 
     return [...domainMap.values()].sort((a, b) => b.timestamp - a.timestamp);
-  } catch {
+  } catch (err) {
+    console.warn(`[sessions] queryActiveSpecialists failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -104,7 +105,8 @@ export function queryAgentQueries(store: EventStore): AgentQueryInfo[] {
       responseCount: responseCounts.get(e.payload.queryId as string) ?? 0,
       timestamp: e.timestamp,
     }));
-  } catch {
+  } catch (err) {
+    console.warn(`[sessions] queryAgentQueries failed: ${(err as Error).message}`);
     return [];
   }
 }

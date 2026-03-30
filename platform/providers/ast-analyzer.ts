@@ -243,8 +243,9 @@ export class ASTAnalyzer {
           },
           duration: Date.now() - start,
         });
-      } catch {
+      } catch (err) {
         // Fail-open: skip files that can't be parsed
+        console.warn(`[ast-analyzer] file parse failed for ${filePath}: ${(err as Error).message}`);
         results.push({
           file: filePath,
           findings: [],
@@ -273,7 +274,7 @@ export class ASTAnalyzer {
 
     for (const [filePath, fileCandidates] of byFile) {
       let content: string;
-      try { content = readFileSync(filePath, "utf8"); } catch { continue; }
+      try { content = readFileSync(filePath, "utf8"); } catch (err) { console.warn(`[ast-analyzer] file read failed for ${filePath}: ${(err as Error).message}`); continue; }
 
       const sourceFile = ts.createSourceFile(
         filePath,
@@ -361,7 +362,8 @@ export class ASTAnalyzer {
       this.program = ts.createProgram(parsed.fileNames, parsed.options);
       this.checker = this.program.getTypeChecker();
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(`[ast-analyzer] initProgram failed: ${(err as Error).message}`);
       return false;
     }
   }
@@ -869,7 +871,7 @@ function resolveModulePath(fromFile: string, specifier: string, program: ts.Prog
     if (resolved.resolvedModule) {
       return resolved.resolvedModule.resolvedFileName.replace(/\\/g, "/");
     }
-  } catch { /* fail-open */ }
+  } catch (err) { console.warn(`[ast-analyzer] module resolution failed for ${specifier}: ${(err as Error).message}`); }
   return null;
 }
 

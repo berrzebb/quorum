@@ -190,7 +190,8 @@ export function loadHooksFromFile(workspace, filename = "HOOK.md") {
     const fm = extractFrontmatter(content);
     if (!fm) return { hooks: {} };
     return parseHooksYaml(fm);
-  } catch {
+  } catch (err) {
+    console.warn(`[hook-loader] failed to load hooks from ${path}: ${err?.message ?? err}`);
     return { hooks: {} };
   }
 }

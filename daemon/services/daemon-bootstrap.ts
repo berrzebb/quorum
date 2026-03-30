@@ -50,7 +50,7 @@ export function loadConfig(repoRoot: string): DaemonConfig {
       if (cfg.consensus?.roles && typeof cfg.consensus.roles === "object") {
         roles = cfg.consensus.roles;
       }
-    } catch { /* use defaults */ }
+    } catch (err) { console.warn(`[daemon-bootstrap] config parse failed, using defaults: ${(err as Error).message}`); }
   }
 
   return {
@@ -97,7 +97,7 @@ export function bootstrapFromState(repoRoot: string, config: ProviderConfig, bus
         codes: status.rejectionCodes ?? [],
         bootstrap: true,
       }));
-    } catch { /* skip */ }
+    } catch (err) { console.warn(`[daemon-bootstrap] audit-status.json parse failed: ${(err as Error).message}`); }
   }
 
   // 2. Retro marker — gate status
@@ -109,7 +109,7 @@ export function bootstrapFromState(repoRoot: string, config: ProviderConfig, bus
         sessionId: marker.session_id,
         bootstrap: true,
       }));
-    } catch { /* skip */ }
+    } catch (err) { console.warn(`[daemon-bootstrap] retro marker parse failed: ${(err as Error).message}`); }
   }
 
   // 3. Active worktrees — git worktree list + per-worktree audit-status.json
@@ -144,7 +144,7 @@ function bootstrapWorktrees(repoRoot: string, bus: QuorumBus): void {
             const ws = JSON.parse(readFileSync(wtStatusPath, "utf8"));
             verdictStatus = ws.status ?? "pending";
             if (ws.track) trackName = ws.track;
-          } catch { /* skip */ }
+          } catch (err) { console.warn(`[daemon-bootstrap] worktree audit-status.json parse failed: ${(err as Error).message}`); }
         }
 
         bus.emit(createEvent("agent.spawn", "claude-code", {
@@ -167,7 +167,7 @@ function bootstrapWorktrees(repoRoot: string, bus: QuorumBus): void {
         wtPath = "";
       }
     }
-  } catch { /* git worktree not available */ }
+  } catch (err) { console.warn(`[daemon-bootstrap] git worktree list failed: ${(err as Error).message}`); }
 }
 
 /**
@@ -220,7 +220,7 @@ function bootstrapRTMProgress(repoRoot: string, bus: QuorumBus): void {
         }));
       }
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn(`[daemon-bootstrap] RTM progress scan failed: ${(err as Error).message}`); }
 }
 
 function findRtmFiles(dir: string, results: string[]): void {
@@ -230,7 +230,7 @@ function findRtmFiles(dir: string, results: string[]): void {
       if (entry.isDirectory()) findRtmFiles(full, results);
       else if (entry.name.startsWith("rtm") && entry.name.endsWith(".md")) results.push(full);
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn(`[daemon-bootstrap] findRtmFiles scan failed for ${dir}: ${(err as Error).message}`); }
 }
 
 // ── Config Refresh Loop ──────────────────────────────────────────────
@@ -245,10 +245,10 @@ export async function startConfigRefresh(intervalMs = 10_000): Promise<() => voi
   try {
     const mod = await import("../../platform/core/context.mjs" as any);
     _refreshConfig = mod.refreshConfigIfChanged;
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn(`[daemon-bootstrap] config refresh module load failed: ${(err as Error).message}`); }
 
   const configInterval = setInterval(() => {
-    try { _refreshConfig?.(); } catch { /* non-critical */ }
+    try { _refreshConfig?.(); } catch (err) { console.warn(`[daemon-bootstrap] config refresh failed: ${(err as Error).message}`); }
   }, intervalMs);
 
   return () => clearInterval(configInterval);

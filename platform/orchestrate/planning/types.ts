@@ -63,8 +63,20 @@ export interface Wave {
 /** Alias for Wave — used in task descriptions as WaveGroup. */
 export type WaveGroup = Wave;
 
-/** Loose bridge type — wraps dynamically loaded MJS bridge module. */
-export type Bridge = Record<string, Function>;
+/**
+ * Bridge type — wraps dynamically loaded MJS bridge module.
+ * Named methods for type safety; index signature retained for backward compat.
+ */
+export interface Bridge {
+  [key: string]: Function | undefined;
+  setState: (key: string, value: unknown) => void;
+  getState: (key: string) => unknown;
+  emitEvent: (type: string, subType: string, payload: Record<string, unknown>) => void;
+  store?: any;
+  claimFiles?: (ownerId: string, files: string[], owner?: string, ttlMs?: number) => Array<{ filePath: string; heldBy: string }>;
+  releaseFiles?: (ownerId: string) => void;
+  checkParliamentGates?: () => { allowed: boolean; reason?: string };
+}
 
 /** Minimal mux interface — methods used by orchestrate execution modules. */
 export interface MuxHandle {

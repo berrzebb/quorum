@@ -45,7 +45,8 @@ export function checkAmendmentGate(store: EventStore): GateResult {
       };
     }
     return { allowed: true };
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament-gate] amendment gate check failed: ${(err as Error).message}`);
     return { allowed: true }; // Fail-open
   }
 }
@@ -73,7 +74,8 @@ export function checkVerdictGate(store: EventStore): GateResult {
       };
     }
     return { allowed: true };
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament-gate] verdict gate check failed: ${(err as Error).message}`);
     return { allowed: true }; // Fail-open
   }
 }
@@ -101,7 +103,8 @@ export function checkConfluenceGate(store: EventStore): GateResult {
       }
     }
     return { allowed: true }; // No confluence data
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament-gate] confluence gate check failed: ${(err as Error).message}`);
     return { allowed: true }; // Fail-open
   }
 }
@@ -133,7 +136,8 @@ export function checkDesignGate(planningDir: string, trackName: string): GateRes
       };
     }
     return { allowed: true, details: { designDir, files } };
-  } catch {
+  } catch (err) {
+    console.warn(`[parliament-gate] design gate check failed: ${(err as Error).message}`);
     return { allowed: true }; // Fail-open
   }
 }
@@ -202,7 +206,7 @@ export function checkAllGates(
         };
       }
     }
-  } catch { /* fail-open: convergence data unavailable */ }
+  } catch (err) { console.warn(`[parliament-gate] convergence data unavailable: ${(err as Error).message}`); }
 
   return { allowed: true };
 }

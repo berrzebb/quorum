@@ -38,7 +38,8 @@ const name = input.name || `agent-${Date.now().toString(36)}`;
 let REPO_ROOT;
 try {
   REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
-} catch {
+} catch (err) {
+  console.warn(`[worktree-create] git rev-parse failed: ${err?.message}`);
   REPO_ROOT = process.cwd();
 }
 
@@ -53,7 +54,7 @@ try {
     MAIN_ROOT = resolve(REPO_ROOT, commonDir, "..");
     console.error(`[worktree-create] Detected nested context — resolving to main repo: ${MAIN_ROOT}`);
   }
-} catch { /* not a worktree — MAIN_ROOT stays as REPO_ROOT */ }
+} catch (err) { console.warn(`[worktree-create] worktree detection failed: ${err?.message}`); }
 
 const worktreeDir = resolve(MAIN_ROOT, ".claude", "worktrees", name);
 const branchName = `worktree/${name}`;

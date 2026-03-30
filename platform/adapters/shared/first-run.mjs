@@ -29,7 +29,7 @@ export function firstRunSetup({ adapterRoot, projectConfigDir }) {
       mkdirSync(projectConfigDir, { recursive: true });
       cpSync(exampleConfig, configDest);
       copied.push("config.json");
-    } catch { /* write permission error */ }
+    } catch (err) { console.warn(`[first-run] config copy failed: ${err?.message}`); }
   }
 
   // If examples/ directory is missing entirely

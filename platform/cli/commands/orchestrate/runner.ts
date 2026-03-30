@@ -153,7 +153,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       if (bp.rules.length > 0) {
         console.log(`  \x1b[36m✓ ${bp.rules.length} naming rule(s) loaded\x1b[0m from ${bp.sources.length} blueprint(s)\n`);
       }
-    } catch { /* fail-open */ }
+    } catch (err) { console.warn(`[runner] blueprint parsing failed: ${(err as Error).message}`); }
   }
   const rtmDir = dirname(track.path);
   const rtmPath = resolve(rtmDir, "rtm.md");
@@ -175,7 +175,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       return;
     }
   }
-  try { execSync(`git tag "quorum-baseline/${trackName}/${Date.now()}"`, { cwd: repoRoot, timeout: 5000, stdio: "pipe", windowsHide: true }); } catch { /* ok */ }
+  try { execSync(`git tag "quorum-baseline/${trackName}/${Date.now()}"`, { cwd: repoRoot, timeout: 5000, stdio: "pipe", windowsHide: true }); } catch (err) { console.warn(`[runner] git tag baseline failed: ${(err as Error).message}`); }
   claimContractFiles(repoRoot, bridge);
 
   // ── Contract Control Plane (PLT-6F) ─────────
@@ -461,7 +461,7 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
             else scan(full, depth + 1);
           }
         }
-      } catch { /* skip */ }
+      } catch (err) { console.warn(`[runner] scan directory failed for ${dir}: ${(err as Error).message}`); }
     };
     scan(repoRoot);
     if (contractFiles.length > 0) {
@@ -469,7 +469,7 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
       if (conflicts.length > 0) console.log(`  \x1b[33m⚠ ${conflicts.length} contract file(s) held by other agents\x1b[0m`);
       else console.log(`  \x1b[36m🔒 ${contractFiles.length} contract file(s) protected\x1b[0m`);
     }
-  } catch { /* fail-open */ }
+  } catch (err) { console.warn(`[runner] claimContractFiles failed: ${(err as Error).message}`); }
 }
 
 /** Pick a default auditor that differs from the provider for cross-model review. */

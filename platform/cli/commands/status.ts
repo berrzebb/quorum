@@ -33,7 +33,7 @@ export async function run(args: string[]): Promise<void> {
   try {
     const status = JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8")) as { status?: string };
     auditGateLabel = GATE_LABELS[status.status ?? ""] ?? auditGateLabel;
-  } catch { /* no status file — default to OPEN */ }
+  } catch (err) { console.warn(`[status] audit-status.json read failed: ${(err as Error).message}`); }
   console.log(`  Audit gate:  ${auditGateLabel}`);
 
   try {
@@ -60,7 +60,7 @@ export async function run(args: string[]): Promise<void> {
       if (cfg.consensus?.roles && typeof cfg.consensus.roles === "object") {
         roles = cfg.consensus.roles;
       }
-    } catch { /* default */ }
+    } catch (err) { console.warn(`[status] config parse failed: ${(err as Error).message}`); }
   }
 
   // ── Auditor config ────────────────────────
@@ -108,7 +108,7 @@ export async function run(args: string[]): Promise<void> {
         evidenceDisplayed = true;
       }
       eStore.close();
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn(`[status] evidence query failed: ${(err as Error).message}`); }
   }
   if (!evidenceDisplayed) {
     console.log(`  Evidence:    \x1b[2mnone\x1b[0m`);
@@ -133,7 +133,7 @@ export async function run(args: string[]): Promise<void> {
           const agent = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
           let alive = false;
           if (agent.pid) {
-            try { process.kill(agent.pid, 0); alive = true; } catch { /* dead */ }
+            try { process.kill(agent.pid, 0); alive = true; } catch (err) { console.warn(`[status] agent pid ${agent.pid} not running: ${(err as Error).message}`); }
           } else if (agent.backend === "psmux" || agent.backend === "tmux") {
             // Mux sessions: check if session still exists in backend
             try {
@@ -141,13 +141,13 @@ export async function run(args: string[]): Promise<void> {
               const listArgs = ["list-sessions", "-F", "#{session_name}"];
               const result = spawnSync(cmd, listArgs, { encoding: "utf8", timeout: 3000, windowsHide: true });
               alive = (result.stdout ?? "").includes(agent.name);
-            } catch { /* assume dead */ }
+            } catch (err) { console.warn(`[status] mux session check failed: ${(err as Error).message}`); }
           }
           const icon = alive ? "\x1b[32m●\x1b[0m" : "\x1b[2m○\x1b[0m";
           const role = agent.role ? ` (${agent.role})` : "";
           const be = agent.backend ? ` [${agent.backend}]` : "";
           console.log(`    ${icon} ${agent.name ?? f}${be}${role} ${alive ? "\x1b[32mrunning\x1b[0m" : "\x1b[2mdead\x1b[0m"}`);
-        } catch { /* skip */ }
+        } catch (err) { console.warn(`[status] agent state parse failed for ${f}: ${(err as Error).message}`); }
       }
     }
   }
@@ -164,7 +164,7 @@ export async function run(args: string[]): Promise<void> {
         console.log(`    \x1b[2m${c}\x1b[0m`);
       }
     }
-  } catch { /* not a git repo */ }
+  } catch (err) { console.warn(`[status] git log failed: ${(err as Error).message}`); }
 
   // ── Event log ───────────────────────────────
   const logPath = resolve(repoRoot, ".claude", "quorum-events.jsonl");
@@ -202,7 +202,7 @@ export async function run(args: string[]): Promise<void> {
         if (cpsLatest) console.log(`  CPS:         \x1b[32mavailable\x1b[0m`);
       }
       store.close();
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn(`[status] parliament data query failed: ${(err as Error).message}`); }
   }
 
   console.log(`\n  \x1b[2mRun 'quorum daemon' for real-time TUI dashboard\x1b[0m\n`);
@@ -242,7 +242,8 @@ function getActiveWorktrees(repoRoot: string): Worktree[] {
     }
 
     return worktrees;
-  } catch {
+  } catch (err) {
+    console.warn(`[status] getActiveWorktrees failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -257,13 +258,13 @@ function detectMuxBackend(): "tmux" | "psmux" | null {
       const r = spawnSync("psmux", ["--version"], { stdio: "ignore", timeout: 3000, windowsHide: true });
       if (r.status === 0) return "psmux";
       return null;
-    } catch { return null; }
+    } catch (err) { console.warn(`[status] psmux detection failed: ${(err as Error).message}`); return null; }
   }
   try {
     const r = spawnSync("tmux", ["-V"], { stdio: "ignore", timeout: 3000 });
     if (r.status === 0) return "tmux";
     return null;
-  } catch { return null; }
+  } catch (err) { console.warn(`[status] tmux detection failed: ${(err as Error).message}`); return null; }
 }
 
 function attachToDashboard(): void {

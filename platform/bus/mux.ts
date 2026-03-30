@@ -144,7 +144,7 @@ export class ProcessMux extends EventEmitter {
           if (platform() === "win32" && proc.pid) {
             try {
               execSync(`taskkill /pid ${proc.pid} /t /f`, { stdio: "ignore", windowsHide: true });
-            } catch { proc.kill("SIGKILL"); }
+            } catch (err) { console.warn(`[mux] taskkill failed, falling back to SIGKILL: ${(err as Error).message}`); proc.kill("SIGKILL"); }
           } else {
             proc.kill();
           }
@@ -391,12 +391,12 @@ function detectBackend(): MuxBackend {
     try {
       const result = spawnSync("psmux", ["version"], { encoding: "utf8", timeout: 3000, windowsHide: true });
       if (result.status === 0) return "psmux";
-    } catch { /* not available */ }
+    } catch (err) { console.warn(`[mux] psmux detection failed: ${(err as Error).message}`); }
   } else {
     try {
       const result = spawnSync("tmux", ["-V"], { encoding: "utf8", timeout: 3000, windowsHide: true });
       if (result.status === 0) return "tmux";
-    } catch { /* not available */ }
+    } catch (err) { console.warn(`[mux] tmux detection failed: ${(err as Error).message}`); }
   }
 
   return "raw";
@@ -461,8 +461,8 @@ export async function ensureMuxBackend(): Promise<MuxBackend> {
     execSync(info.install, { stdio: "inherit", windowsHide: true });
     console.log(`\x1b[32m✓ ${info.name} installed successfully.\x1b[0m\n`);
     return detectBackend();
-  } catch {
-    console.error(`\x1b[31m✗ Installation failed. Continuing with raw backend.\x1b[0m\n`);
+  } catch (err) {
+    console.error(`\x1b[31m✗ Installation failed: ${(err as Error).message}. Continuing with raw backend.\x1b[0m\n`);
     return "raw";
   }
 }

@@ -70,7 +70,7 @@ export function queryItemStates(db: Database.Database): ItemStateInfo[] {
     return rows.map(r => {
       let label: string | undefined;
       if (r.metadata) {
-        try { label = JSON.parse(r.metadata).label; } catch { /* malformed row */ }
+        try { label = JSON.parse(r.metadata).label; } catch (err) { console.warn(`[operations] malformed metadata JSON: ${(err as Error).message}`); }
       }
       return {
         entityId: r.entity_id,
@@ -80,7 +80,8 @@ export function queryItemStates(db: Database.Database): ItemStateInfo[] {
         updatedAt: r.created_at,
       };
     });
-  } catch {
+  } catch (err) {
+    console.warn(`[operations] queryItemStates failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -107,7 +108,8 @@ export function queryActiveLocks(db: Database.Database): LockInfo[] {
       acquiredAt: r.acquired_at,
       ttlMs: r.ttl_ms,
     }));
-  } catch {
+  } catch (err) {
+    console.warn(`[operations] queryActiveLocks failed: ${(err as Error).message}`);
     return [];
   }
 }

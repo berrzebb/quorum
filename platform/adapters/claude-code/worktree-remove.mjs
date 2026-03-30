@@ -24,7 +24,8 @@ try {
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) process.exit(0);
   input = JSON.parse(raw);
-} catch {
+} catch (err) {
+  console.warn(`[worktree-remove] stdin parse error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -38,7 +39,8 @@ let REPO_ROOT;
 try {
   // WorktreeRemove fires from main session, so cwd is the main repo
   REPO_ROOT = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
-} catch {
+} catch (err) {
+  console.warn(`[worktree-remove] git rev-parse failed: ${err?.message}`);
   REPO_ROOT = process.cwd();
 }
 
@@ -58,7 +60,7 @@ try {
     meta = JSON.parse(readFileSync(metaPath, "utf8"));
     console.error(`[worktree-remove] Worktree meta: branch=${meta.branch}, created=${meta.created_at}`);
   }
-} catch { /* metadata read failure — non-fatal */ }
+} catch (err) { console.warn(`[worktree-remove] metadata read failure: ${err?.message}`); }
 
 // ── 3. Clean up git worktree ─────────────────────────────────
 try {
@@ -97,6 +99,6 @@ try {
       console.error(`[worktree-remove] Branch ${meta.branch} has ${log.split("\n").length} commit(s) — preserved`);
     }
   }
-} catch { /* branch cleanup failure — non-fatal */ }
+} catch (err) { console.warn(`[worktree-remove] branch cleanup failure: ${err?.message}`); }
 
 process.exit(0);

@@ -1,5 +1,4 @@
-// Planning layer — legislation/blueprint generation
-// Modules will be added by ORC-3 through ORC-13
+// Planning layer — legislation/blueprint generation (15 modules)
 
 // Re-export types
 export type { WorkItem, WBItem, TrackInfo, PlanReviewResult, Wave, WaveGroup, WBSize, HeadingInfo, Bridge, MuxHandle } from './types.js';

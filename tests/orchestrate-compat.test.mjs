@@ -19,7 +19,7 @@ const { buildDepContextFromManifests, detectFixLoopStagnation } = runner;
 
 const TMP = resolve(tmpdir(), `quorum-compat-${Date.now()}`);
 before(() => mkdirSync(TMP, { recursive: true }));
-after(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch {} });
+after(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch (err) { console.warn("orchestrate-compat cleanup failed:", err?.message ?? err); } });
 
 function writeTempWB(name, content) {
   const dir = resolve(TMP, "docs", "plan", name);

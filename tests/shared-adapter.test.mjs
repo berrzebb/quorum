@@ -32,7 +32,7 @@ function setup() {
 }
 
 function cleanup() {
-  try { rmSync(TEST_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(TEST_DIR, { recursive: true, force: true }); } catch (err) { console.warn("shared-adapter cleanup failed:", err?.message ?? err); }
   // Clean env vars that tests might set
   delete process.env.QUORUM_REPO_ROOT;
   delete process.env.QUORUM_ADAPTER_ROOT;

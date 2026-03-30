@@ -24,7 +24,8 @@ function git(args, cwd) {
       cwd: cwd ?? REPO_ROOT, encoding: "utf8", stdio: "pipe", windowsHide: true,
     });
     return r.status === 0 ? (r.stdout || "").trim() : null;
-  } catch {
+  } catch (err) {
+    console.warn(`[gemini-session-end] git command failed: ${err?.message}`);
     return null;
   }
 }
@@ -51,4 +52,4 @@ try {
     const { updateAllRtms } = await import(rtmUpdater);
     updateAllRtms(REPO_ROOT);
   }
-} catch { /* non-fatal */ }
+} catch (err) { console.warn(`[gemini-session-end] RTM update failed: ${err?.message}`); }

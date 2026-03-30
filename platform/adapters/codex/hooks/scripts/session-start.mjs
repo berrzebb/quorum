@@ -33,7 +33,7 @@ try {
     cwd: REPO_ROOT, encoding: "utf8", windowsHide: true,
   }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
-} catch { /* git unavailable */ }
+} catch (err) { console.warn(`[codex-session-start] git log failed: ${err?.message}`); }
 
 // ── 2. Resume detection ─────────────────────────────────────
 const { resumeActions, contextLines } = buildResumeState({

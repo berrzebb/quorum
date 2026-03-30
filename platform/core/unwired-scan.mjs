@@ -26,7 +26,7 @@ export function unwiredScan(targetPath, options = {}) {
   const sourceFiles = collectSourceFiles(targetPath);
   const contentMap = new Map();
   for (const file of sourceFiles) {
-    try { contentMap.set(file, readFileSync(file, "utf8")); } catch { /* skip */ }
+    try { contentMap.set(file, readFileSync(file, "utf8")); } catch (err) { console.warn("[unwired-scan] file read failed:", err?.message ?? err); }
   }
 
   const exports = collectExports(targetPath, contentMap);
@@ -251,7 +251,7 @@ function collectSourceFiles(targetPath, maxDepth = 10) {
         if (entry.isDirectory()) scan(full, depth + 1);
         else if (exts.has(extname(entry.name))) files.push(full);
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn("[unwired-scan] scan failed:", err?.message ?? err); }
   }
 
   scan(targetPath, 0);

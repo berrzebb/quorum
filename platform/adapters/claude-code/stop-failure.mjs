@@ -21,6 +21,7 @@ try {
   });
 
   console.error(`[quorum] StopFailure: ${error}`);
-} catch {
-  // Hook must never block shutdown — fail silently
+} catch (err) {
+  // Hook must never block shutdown — fail open
+  console.warn(`[stop-failure] hook error: ${err?.message}`);
 }

@@ -74,8 +74,8 @@ export async function run(args: string[]): Promise<void> {
               },
             });
             imported++;
-          } catch {
-            // skip malformed lines
+          } catch (err) {
+            console.warn(`[migrate] skip malformed audit history line: ${(err as Error).message}`);
           }
         }
 
@@ -127,7 +127,8 @@ export async function run(args: string[]): Promise<void> {
       } else {
         steps.push({ label: "MCP server", status: "skip", detail: "no consensus-loop MCP entry" });
       }
-    } catch {
+    } catch (err) {
+      console.warn(`[migrate] .mcp.json parse failed: ${(err as Error).message}`);
       steps.push({ label: "MCP server", status: "skip", detail: ".mcp.json parse error" });
     }
   }

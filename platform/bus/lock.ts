@@ -77,7 +77,8 @@ export class LockService {
       this.stmtUpsert.run(lockName, pid, sessionId ?? null, now, ttlMs, pid, now);
       const row = this.stmtVerifyOwner.get(lockName) as { owner_pid: number } | undefined;
       return row?.owner_pid === pid;
-    } catch {
+    } catch (err) {
+      console.warn(`[lock] acquire failed for '${lockName}': ${(err as Error).message}`);
       return false;
     }
   }

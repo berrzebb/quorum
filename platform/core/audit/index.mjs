@@ -38,7 +38,7 @@ function writeAuditStatus(statusDir, status, pendingCount, rejectionCodes, track
     track: track ?? "",
     timestamp: Date.now(),
   };
-  try { writeFileSync(statusPath, JSON.stringify(marker, null, 2), "utf8"); } catch { /* non-critical */ }
+  try { writeFileSync(statusPath, JSON.stringify(marker, null, 2), "utf8"); } catch (err) { console.warn(`[audit] could not write audit-status.json: ${err?.message ?? err}`); }
 }
 
 /** Parse verdict text for status and rejection codes. */
@@ -127,8 +127,6 @@ async function main() {
   const auditCwd = REPO_ROOT;
   const statusDir = resolve(auditCwd, ".claude");
   const auditStatusPath = resolve(statusDir, "audit-status.json");
-  // Session files go to the worktree too (prevents cross-worktree state corruption)
-  if (auditCwd !== REPO_ROOT) initSessionDir(resolve(auditCwd, ".claude"));
 
   if (args.resetSession) {
     deleteSavedSessionId();
@@ -141,7 +139,7 @@ async function main() {
     if (evidence?.content) {
       claudeMd = evidence.content;
     }
-  } catch { /* bridge non-critical */ }
+  } catch (err) { console.error(`[audit] bridge error: ${err?.message ?? err}`); }
 
   if (!claudeMd) {
     throw new Error("No evidence found in EventStore. Submit evidence via audit_submit tool first.");
@@ -184,7 +182,7 @@ async function main() {
         "system",
         { mode: "solo", preVerified: true, verdictText },
       );
-    } catch { /* bridge non-critical */ }
+    } catch (err) { console.error(`[audit] bridge error: ${err?.message ?? err}`); }
     writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
     runRespond(args);
     return;
@@ -256,7 +254,7 @@ async function main() {
           "system",
           { mode: "auto-fallback-solo", exitCode, verdictText: fallbackText },
         );
-      } catch { /* bridge non-critical */ }
+      } catch (err) { console.error(`[audit] bridge error: ${err?.message ?? err}`); }
       writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
       runRespond(args);
       return;
@@ -270,7 +268,7 @@ async function main() {
         "system",
         { exitCode, mode: "infra_failure" },
       );
-    } catch { /* bridge non-critical */ }
+    } catch (err) { console.error(`[audit] bridge error: ${err?.message ?? err}`); }
     writeAuditStatus(statusDir, "infra_failure", 0, []);
     console.error(`[audit] Codex exited with code ${exitCode} \u2014 recorded infra_failure to SQLite`);
   } else {
@@ -283,7 +281,7 @@ async function main() {
         "system",
         { mode: "external", verdictText },
       );
-    } catch { /* bridge non-critical */ }
+    } catch (err) { console.error(`[audit] bridge error: ${err?.message ?? err}`); }
     writeAuditStatus(statusDir, parsed.status, parsed.pendingCount, parsed.rejectionCodes);
     console.log(`[audit] Verdict recorded to SQLite: ${parsed.status} (pending: ${parsed.pendingCount})`);
   }

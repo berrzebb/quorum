@@ -83,7 +83,8 @@ export class ClaudeAuditor implements Auditor {
     try {
       execSync(`${this.bin} --version`, { encoding: "utf8", timeout: 10000, windowsHide: true, stdio: "pipe" });
       return true;
-    } catch {
+    } catch (err) {
+      console.warn(`[claude-auditor] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }

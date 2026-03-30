@@ -119,7 +119,7 @@ function MuxChatView({ mux, liveSessions, width, height }: {
             readSync(fd, buf, 0, buf.length, start);
             closeSync(fd);
             raw = buf.toString("utf8");
-          } catch { /* ok */ }
+          } catch (err) { console.warn(`[chat-view] output file read failed: ${(err as Error).message}`); }
         }
         if (!raw) {
           const cap = mux.capture(s.id, 120);

@@ -133,7 +133,7 @@ async function executeMux(repoRoot: string, provider: string, cliArgs: string[],
 
   if (!handle) {
     console.log("  \x1b[31mMux spawn failed. Falling back to direct mode.\x1b[0m\n");
-    try { await mux.cleanup(); } catch { /* ok */ }
+    try { await mux.cleanup(); } catch (err) { console.warn(`[planner-session] mux cleanup failed: ${(err as Error).message}`); }
     await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout });
     return;
   }

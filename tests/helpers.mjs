@@ -18,5 +18,5 @@ export function createTempStore() {
 }
 
 export function cleanup(dir) {
-  try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  try { rmSync(dir, { recursive: true, force: true }); } catch (err) { console.warn("helpers cleanup failed:", err?.message ?? err); }
 }

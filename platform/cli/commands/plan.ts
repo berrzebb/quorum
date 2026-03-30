@@ -195,7 +195,7 @@ function loadRtmStatus(repoRoot: string): Map<string, TaskItem["status"]> {
         wtPath = "";
       }
     }
-  } catch { /* git worktree not available */ }
+  } catch (err) { console.warn(`[plan] git worktree list failed: ${(err as Error).message}`); }
 
   return status;
 }
@@ -211,7 +211,7 @@ function scanForRtm(dir: string, status: Map<string, TaskItem["status"]>): void 
         parseRtmFile(fullPath, status);
       }
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn(`[plan] scanForRtm failed for ${dir}: ${(err as Error).message}`); }
 }
 
 function parseRtmFile(path: string, status: Map<string, TaskItem["status"]>): void {

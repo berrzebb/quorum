@@ -32,7 +32,7 @@ export function determineResumeTarget(args, auditStatusPath) {
           console.log(t("audit.session.reset_pending"));
           return null;
         }
-      } catch { /* marker read failed — keep existing session */ }
+      } catch (err) { console.warn("[codex-runner] audit-status read failed:", err?.message ?? err); }
     }
     return { type: "session", value: saved };
   }
@@ -111,7 +111,8 @@ export function streamCodexOutput(child, rawJson) {
           verdictParts.push(event.item.text);
           console.log(event.item.text);
         }
-      } catch {
+      } catch (err) {
+        console.warn("[codex-runner] JSON parse failed:", err?.message ?? err);
         console.log(line);
       }
     }
@@ -145,7 +146,7 @@ export function streamCodexOutput(child, rawJson) {
         appendFileSync(codexLogPath, `\n=== [${ts}] Codex session output ===\n`);
         if (stdout) appendFileSync(codexLogPath, `[stdout]\n${stdout.slice(0, 5000)}\n`);
         if (stderr) appendFileSync(codexLogPath, `[stderr]\n${stderr.slice(0, 2000)}\n`);
-      } catch { /* ignore logging failures */ }
+      } catch (err) { console.warn("[codex-runner] log write failed:", err?.message ?? err); }
 
       resolvePromise({ stdout, stderr, threadId, exitCode: code, verdictText: verdictParts.join("\n") });
     });

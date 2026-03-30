@@ -25,7 +25,8 @@ try {
   const raw = Buffer.concat(chunks).toString("utf8").trim();
   if (!raw) process.exit(0);
   input = JSON.parse(raw);
-} catch {
+} catch (err) {
+  console.warn(`[teammate-idle] stdin parse error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -40,7 +41,8 @@ if (!teammateName.includes("implementer")) {
 let REPO_ROOT;
 try {
   REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", windowsHide: true }).trim();
-} catch {
+} catch (err) {
+  console.warn(`[teammate-idle] git rev-parse failed: ${err?.message}`);
   REPO_ROOT = process.cwd();
 }
 
@@ -53,7 +55,7 @@ try {
   if (combined) {
     changedFiles = [...new Set(combined.split(/\r?\n/).filter(Boolean))];
   }
-} catch { /* no changes — pass */ }
+} catch (err) { console.warn(`[teammate-idle] git diff failed: ${err?.message}`); }
 
 if (changedFiles.length === 0) {
   // No changes to validate — allow idle
@@ -67,7 +69,7 @@ try {
   if (existsSync(configPath)) {
     quorumConfig = JSON.parse(readFileSync(configPath, "utf8"));
   }
-} catch { /* config read error */ }
+} catch (err) { console.warn(`[teammate-idle] config read error: ${err?.message}`); }
 
 const failures = runQualityChecks({ config: quorumConfig, repoRoot: REPO_ROOT, changedFiles });
 

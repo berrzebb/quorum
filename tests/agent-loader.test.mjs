@@ -22,7 +22,7 @@ before(() => {
 after(() => {
   try {
     if (tmpDir && existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  } catch { /* Windows file locks */ }
+  } catch (err) { console.warn("agent-loader cleanup failed:", err?.message ?? err); }
 });
 
 function writeAgent(dir, name, content) {

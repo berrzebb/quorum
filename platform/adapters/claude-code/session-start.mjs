@@ -53,7 +53,7 @@ const resumeActions = [];
 const handoffFile = cfg.plugin?.handoff_file ?? ".claude/session-handoff.md";
 try {
   syncHandoffFromMemory(REPO_ROOT, handoffFile);
-} catch { /* non-fatal */ }
+} catch (err) { console.warn(`[session-start] handoff sync failed: ${err?.message}`); }
 
 // ── 1. Session handoff ──────────────────────────────────────
 const handoff = resolve(REPO_ROOT, handoffFile);
@@ -67,7 +67,7 @@ if (existsSync(handoff)) {
 try {
   const commits = execFileSync("git", ["log", "--oneline", "-10"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true }).trim();
   if (commits) context += `Recent commits:\n${commits}\n\n`;
-} catch { /* git unavailable */ }
+} catch (err) { console.warn(`[session-start] git log failed: ${err?.message}`); }
 
 // ── 3. Resume detection ─────────────────────────────────────
 // 3a. Audit status
@@ -130,7 +130,7 @@ if (existsSync(snapshotPath)) {
     if (parts.length > 0) {
       context += `[Pre-compaction state — ${snapshot.saved_at}] ${parts.join(", ")}\n`;
     }
-  } catch { /* snapshot parse error */ }
+  } catch (err) { console.warn(`[session-start] snapshot parse error: ${err?.message}`); }
 }
 
 // ── 3f. Orchestrate track dashboard ──────────────────────────
@@ -173,7 +173,7 @@ try {
               `Track "${ws.trackName}" has ${failed} failed item(s). Run: quorum orchestrate run ${ws.trackName} --resume`
             );
           }
-        } catch { /* corrupt wave-state */ }
+        } catch (err) { console.warn(`[session-start] corrupt wave-state ${wf}: ${err?.message}`); }
       }
 
       if (trackLines.length > 0) {
@@ -181,7 +181,7 @@ try {
       }
     }
   }
-} catch { /* non-fatal */ }
+} catch (err) { console.warn(`[session-start] track dashboard error: ${err?.message}`); }
 
 // ── 4. Build resume context ─────────────────────────────────
 if (resumeActions.length > 0) {
@@ -222,7 +222,7 @@ if (guideDir) {
       context += `\nRun /quorum:verify before evidence submission. Self-promotion (${agreeTag}) is strictly forbidden.\n`;
       context += `</CONTEXT-REINFORCEMENT>\n`;
     }
-  } catch { /* AGENTS.md read error — non-fatal */ }
+  } catch (err) { console.warn(`[session-start] AGENTS.md read error: ${err?.message}`); }
 }
 
 // ── Output ──────────────────────────────────────────────────

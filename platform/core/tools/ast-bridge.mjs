@@ -26,7 +26,7 @@ try {
   }
 } catch (err) {
   _loadError = err;
-  /* fail-open: AST unavailable */
+  console.warn("[ast-bridge] AST analyzer unavailable:", err?.message ?? err);
 }
 
 /** Check if AST analyzer is available (for diagnostics/testing). */
@@ -59,7 +59,8 @@ export function createAstRefineCallback(cwd) {
     let astFindings;
     try {
       astFindings = _analyzer.refineCandidates(candidates);
-    } catch {
+    } catch (err) {
+      console.warn("[ast-bridge] refineCandidates failed:", err?.message ?? err);
       return; // fail-open: keep regex findings as-is
     }
 
@@ -92,7 +93,8 @@ export function analyzeFiles(filePaths) {
   if (!_analyzer) return null;
   try {
     return _analyzer.analyzeFiles(filePaths);
-  } catch {
+  } catch (err) {
+    console.warn("[ast-bridge] analyzeFiles failed:", err?.message ?? err);
     return null;
   }
 }
@@ -106,7 +108,8 @@ export function getAggregateMetrics(results) {
   if (!_analyzer) return null;
   try {
     return _analyzer.getAggregateMetrics(results);
-  } catch {
+  } catch (err) {
+    console.warn("[ast-bridge] getAggregateMetrics failed:", err?.message ?? err);
     return null;
   }
 }

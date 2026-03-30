@@ -341,7 +341,7 @@ describe("TransactionalUnitOfWork", () => {
   });
 
   it("cleanup", () => {
-    try { store.close(); } catch {}
+    try { store.close(); } catch (err) { console.warn("lock store close failed:", err?.message ?? err); }
     cleanup(dir);
   });
 });

@@ -42,7 +42,7 @@ export function resolveRepoRoot(opts = {}) {
       if (cache) process.env.QUORUM_REPO_ROOT = root;
       return root;
     }
-  } catch { /* git not available */ }
+  } catch (err) { console.warn(`[repo-resolver] git rev-parse failed: ${err?.message}`); }
 
   // 2. Adapter layout fallback: adapter dir is typically inside the repo
   //    claude-code: platform/adapters/claude-code/ → 4 levels up = repo root

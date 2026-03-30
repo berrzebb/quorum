@@ -28,11 +28,12 @@ function getVersion(): string {
   try {
     // Try QUORUM_ROOT first, then one level up (dist/platform/cli/.. → dist/platform/, need dist/../package.json)
     const candidates = [resolve(QUORUM_ROOT, "package.json"), resolve(QUORUM_ROOT, "..", "package.json")];
-    const pkgPath = candidates.find(p => { try { readFileSync(p); return true; } catch { return false; } });
+    const pkgPath = candidates.find(p => { try { readFileSync(p); return true; } catch (err) { console.warn(`[cli] package.json read failed for ${p}: ${(err as Error).message}`); return false; } });
     if (!pkgPath) return "unknown";
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
     return pkg.version ?? "unknown";
-  } catch {
+  } catch (err) {
+    console.warn(`[cli] version detection failed: ${(err as Error).message}`);
     return "unknown";
   }
 }

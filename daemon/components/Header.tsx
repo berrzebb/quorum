@@ -17,9 +17,9 @@ function getVersion(): string {
     for (const p of candidates) {
       try {
         return JSON.parse(readFileSync(p, "utf8")).version ?? "unknown";
-      } catch { /* next */ }
+      } catch (err) { console.warn(`[header] package.json read failed at ${p}: ${(err as Error).message}`); }
     }
-  } catch { /* fallback */ }
+  } catch (err) { console.warn(`[header] version detection failed: ${(err as Error).message}`); }
   return "unknown";
 }
 

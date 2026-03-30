@@ -66,11 +66,14 @@ export interface FileThread {
 
 // ── Queries ──────────────────────────────────
 
+/** Cached finding events for fallback path — avoids triple SQLite query per poll tick. */
+export type FindingEventCache = ReturnType<typeof fetchFindingEvents>;
+
 /**
  * Open findings — detected but not yet dismissed or resolved.
  * Delegates to MessageBus when available (uses its cache + dedup logic).
  */
-export function queryOpenFindings(store: EventStore, messageBus?: MessageBus | null): FindingInfo[] {
+export function queryOpenFindings(store: EventStore, messageBus?: MessageBus | null, cachedEvents?: FindingEventCache): FindingInfo[] {
   try {
     if (messageBus) {
       const open = messageBus.getOpenFindings();
@@ -86,8 +89,9 @@ export function queryOpenFindings(store: EventStore, messageBus?: MessageBus | n
         timestamp: 0,
       }));
     }
-    return openFindingsFallback(store);
-  } catch {
+    return openFindingsFallback(store, cachedEvents);
+  } catch (err) {
+    console.warn(`[findings] queryOpenFindings failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -96,13 +100,14 @@ export function queryOpenFindings(store: EventStore, messageBus?: MessageBus | n
  * Finding statistics — counts by status across all findings.
  * Delegates to MessageBus when available (single source of truth).
  */
-export function queryFindingStats(store: EventStore, messageBus?: MessageBus | null): FindingStats {
+export function queryFindingStats(store: EventStore, messageBus?: MessageBus | null, cachedEvents?: FindingEventCache): FindingStats {
   try {
     if (messageBus) {
       return messageBus.getStats();
     }
-    return findingStatsFallback(store);
-  } catch {
+    return findingStatsFallback(store, cachedEvents);
+  } catch (err) {
+    console.warn(`[findings] queryFindingStats failed: ${(err as Error).message}`);
     return { total: 0, open: 0, confirmed: 0, dismissed: 0, fixed: 0 };
   }
 }
@@ -134,7 +139,8 @@ export function queryReviewProgress(store: EventStore): ReviewProgressInfo[] {
     }
 
     return [...reviewerMap.values()].sort((a, b) => b.timestamp - a.timestamp);
-  } catch {
+  } catch (err) {
+    console.warn(`[findings] queryReviewProgress failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -143,13 +149,14 @@ export function queryReviewProgress(store: EventStore): ReviewProgressInfo[] {
  * Review threads grouped by file — for chat view.
  * Delegates to MessageBus.getThreadsByFile() when available.
  */
-export function queryFindingThreads(store: EventStore, messageBus?: MessageBus | null): FileThread[] {
+export function queryFindingThreads(store: EventStore, messageBus?: MessageBus | null, cachedEvents?: FindingEventCache): FileThread[] {
   try {
     if (messageBus) {
       return threadsFromMessageBus(messageBus);
     }
-    return findingThreadsFallback(store);
-  } catch {
+    return findingThreadsFallback(store, cachedEvents);
+  } catch (err) {
+    console.warn(`[findings] queryFindingThreads failed: ${(err as Error).message}`);
     return [];
   }
 }
@@ -157,7 +164,7 @@ export function queryFindingThreads(store: EventStore, messageBus?: MessageBus |
 // ── Private helpers ──────────────────────────
 
 /** Fetch finding events with time-bounded ack/resolve scoped to detect window. */
-function fetchFindingEvents(store: EventStore) {
+export function fetchFindingEvents(store: EventStore) {
   const detectEvents = store.query({ eventType: "finding.detect", limit: 500, descending: true });
   if (detectEvents.length === 0) {
     return { detectEvents, ackEvents: [] as ReturnType<typeof store.query>, resolveEvents: [] as ReturnType<typeof store.query> };
@@ -169,8 +176,8 @@ function fetchFindingEvents(store: EventStore) {
 }
 
 /** Fallback when MessageBus is not injected. */
-function openFindingsFallback(store: EventStore): FindingInfo[] {
-  const { detectEvents, ackEvents, resolveEvents } = fetchFindingEvents(store);
+function openFindingsFallback(store: EventStore, cached?: FindingEventCache): FindingInfo[] {
+  const { detectEvents, ackEvents, resolveEvents } = cached ?? fetchFindingEvents(store);
 
   const closedIds = new Set<string>();
   for (const e of ackEvents) {
@@ -201,8 +208,8 @@ function openFindingsFallback(store: EventStore): FindingInfo[] {
   return findings.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-function findingStatsFallback(store: EventStore): FindingStats {
-  const { detectEvents, ackEvents, resolveEvents } = fetchFindingEvents(store);
+function findingStatsFallback(store: EventStore, cached?: FindingEventCache): FindingStats {
+  const { detectEvents, ackEvents, resolveEvents } = cached ?? fetchFindingEvents(store);
 
   const findingState = new Map<string, string>();
   let total = 0;
@@ -273,8 +280,8 @@ function threadsFromMessageBus(messageBus: MessageBus): FileThread[] {
 }
 
 /** Fallback when MessageBus is not injected. */
-function findingThreadsFallback(store: EventStore): FileThread[] {
-  const { detectEvents, ackEvents, resolveEvents } = fetchFindingEvents(store);
+function findingThreadsFallback(store: EventStore, cached?: FindingEventCache): FileThread[] {
+  const { detectEvents, ackEvents, resolveEvents } = cached ?? fetchFindingEvents(store);
 
   const allFindings: Array<Finding & { timestamp: number }> = [];
   for (const evt of detectEvents) {

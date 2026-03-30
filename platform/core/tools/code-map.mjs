@@ -29,7 +29,7 @@ try {
   const { loadAll } = await import("../languages/registry.mjs");
   const reg = await loadAll();
   if (reg.size > 0) _defaultExt = reg.allExtensions();
-} catch { /* fallback to legacy extensions */ }
+} catch (err) { console.warn("[code-map] language registry load failed:", err?.message ?? err); }
 
 const DEFAULTS = {
   extensions: _defaultExt,

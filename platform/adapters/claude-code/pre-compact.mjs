@@ -51,8 +51,9 @@ try {
     retro_marker: retroMarker,
     last_audit_status: lastAuditStatus,
   }, null, 2), "utf8");
-} catch {
+} catch (err) {
   // Fail-open: on error (including toggle disabled) do nothing
+  console.warn(`[pre-compact] snapshot save failed: ${err?.message}`);
 }
 
 // stdin pass-through

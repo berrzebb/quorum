@@ -21,7 +21,7 @@ export interface IterationState {
   policy: IterationPolicy;
   history: Array<{
     attempt: number;
-    action: 'retry' | 'escalate' | 'amend';
+    action: 'retry' | 'escalate' | 'amend' | 'exhausted';
     reason: string;
   }>;
 }
@@ -95,7 +95,7 @@ export function recordIteration(
       ...state.history,
       {
         attempt: state.currentAttempt + 1,
-        action: decision.action === 'exhausted' ? 'amend' : decision.action,
+        action: decision.action,
         reason: 'reason' in decision ? decision.reason : '',
       },
     ],

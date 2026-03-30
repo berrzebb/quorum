@@ -59,7 +59,8 @@ export function buildContextReinforcement({ adapterRoot, locale = "en", agreeTag
       `</CONTEXT-REINFORCEMENT>`,
     ];
     return lines.join("\n");
-  } catch {
+  } catch (err) {
+    console.warn(`[context-reinforcement] AGENTS.md read error: ${err?.message}`);
     return null;
   }
 }

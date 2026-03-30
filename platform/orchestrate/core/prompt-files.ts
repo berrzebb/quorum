@@ -46,7 +46,7 @@ export function cleanupPromptFiles(dir: string): void {
   if (!existsSync(dir)) return;
   try {
     for (const entry of readdirSync(dir)) {
-      try { rmSync(resolve(dir, entry), { force: true }); } catch { /* ok */ }
+      try { rmSync(resolve(dir, entry), { force: true }); } catch (err) { console.warn(`[prompt-files] file removal failed for ${entry}: ${(err as Error).message}`); }
     }
-  } catch { /* ok */ }
+  } catch (err) { console.warn(`[prompt-files] cleanup failed for ${dir}: ${(err as Error).message}`); }
 }

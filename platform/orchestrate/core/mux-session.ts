@@ -51,7 +51,8 @@ export async function spawnMuxSession(opts: MuxSpawnOptions): Promise<MuxSession
       cwd: repoRoot,
       env: { FEEDBACK_LOOP_ACTIVE: "1" },
     });
-  } catch {
+  } catch (err) {
+    console.warn(`[mux-session] spawn failed: ${(err as Error).message}`);
     return null;
   }
 
@@ -109,7 +110,7 @@ export async function cleanupMuxSession(
   sessionId: string,
   stateFile: string,
 ): Promise<void> {
-  try { rmSync(stateFile, { force: true }); } catch { /* ok */ }
-  try { await mux.kill(sessionId); } catch { /* ok */ }
+  try { rmSync(stateFile, { force: true }); } catch (err) { console.warn(`[mux-session] state file removal failed: ${(err as Error).message}`); }
+  try { await mux.kill(sessionId); } catch (err) { console.warn(`[mux-session] session kill failed: ${(err as Error).message}`); }
   await mux.cleanup();
 }

@@ -29,7 +29,7 @@ before(() => {
 after(() => {
   try {
     if (tmpDir && existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  } catch { /* Windows may hold file locks briefly */ }
+  } catch (err) { console.warn("ast-analyzer cleanup failed:", err?.message ?? err); }
 });
 
 /** Write a temp .ts file and return its path. */

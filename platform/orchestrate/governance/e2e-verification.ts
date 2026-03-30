@@ -23,20 +23,11 @@ import { ArtifactValidatorEvaluator } from "../../providers/evaluators/artifact-
 import {
   STUB_PATTERNS, PERF_PATTERNS,
   scanLines, scanBlueprintViolations, detectOrphanFiles,
-  runProjectTests,
+  runProjectTests, isAllowedVerifier,
 } from "./scope-gates.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
-
-const ALLOWED_VERIFY_PREFIXES = [
-  "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
-  "go ", "cargo ", "python ", "pytest ", "pip ",
-  "java ", "javac ", "mvn ", "gradle ",
-];
-
-/** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
-const SHELL_META = /[;&|`$><\r\n%]/;
 
 interface WorkItemLike {
   id: string;
@@ -55,7 +46,7 @@ interface WaveLike {
 export async function runE2EVerification(
   repoRoot: string, waves: WaveLike[], blueprintRules: NamingRule[],
   bridge: Bridge | null, trackName: string, totalWBs: number,
-): Promise<void> {
+): Promise<boolean> {
   console.log("\n  \x1b[36m◈ E2E Verification — track-level final gate\x1b[0m");
   let e2ePassed = true;
 
@@ -65,8 +56,7 @@ export async function runE2EVerification(
   for (const item of allItems) {
     if (!item.verify) continue;
     const trimmed = item.verify.trim();
-    const INTERP_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--command[\s=]|\s--print[\s=]/;
-    if (SHELL_META.test(trimmed) || INTERP_RE.test(` ${trimmed}`) || !ALLOWED_VERIFY_PREFIXES.some(p => trimmed.startsWith(p))) {
+    if (!isAllowedVerifier(trimmed)) {
       console.log(`    \x1b[31m✗ ${item.id} verify blocked (not in allowlist or contains shell metacharacters): ${item.verify}\x1b[0m`);
       verifyFails++;
       e2ePassed = false;
@@ -78,7 +68,8 @@ export async function runE2EVerification(
         cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true,
         shell: process.platform === "win32",
       });
-    } catch {
+    } catch (err) {
+      console.error(`[e2e-verification] ${item.id} verify command error: ${(err as Error).message}`);
       console.log(`    \x1b[31m✗ ${item.id} verify failed: ${item.verify}\x1b[0m`);
       verifyFails++;
       e2ePassed = false;
@@ -131,7 +122,7 @@ export async function runE2EVerification(
         e2ePassed = false;
       }
     }
-  } catch { /* fail-open: evaluator infrastructure unavailable */ }
+  } catch (err) { console.log(`    \x1b[33m⚠ Runtime evaluation skipped: ${(err as Error).message}\x1b[0m`); }
 
   // 5-9: Final scans
   const e2eChecks: Array<{ name: string; items: string[]; blocker: boolean }> = [
@@ -183,7 +174,7 @@ export async function runE2EVerification(
           for (const u of relevant.slice(0, 5)) console.log(`      ⚠ ${(u as any).file}:${(u as any).line} — ${(u as any).name}`);
         }
       }
-    } catch { /* fail-open */ }
+    } catch (err) { console.log(`    \x1b[33m⚠ AST analysis skipped: ${(err as Error).message}\x1b[0m`); }
   }
 
   if (e2ePassed) {
@@ -210,7 +201,7 @@ export async function runE2EVerification(
       if (learning.stagnationLearnings.length > 0) {
         console.log(`  \x1b[35m◈ Stagnation learnings: ${learning.stagnationLearnings.length} trigger boost(s)\x1b[0m`);
       }
-    } catch { /* fail-open */ }
+    } catch (err) { console.log(`  \x1b[33m⚠ Auto-learn skipped: ${(err as Error).message}\x1b[0m`); }
   }
 
   // Normal Form convergence report
@@ -228,6 +219,8 @@ export async function runE2EVerification(
           console.log(`  \x1b[32m✓ All providers converged to Normal Form\x1b[0m`);
         }
       }
-    } catch { /* fail-open */ }
+    } catch (err) { console.log(`  \x1b[33m⚠ Post-track analysis skipped: ${(err as Error).message}\x1b[0m`); }
   }
+
+  return e2ePassed;
 }

@@ -23,7 +23,8 @@ try {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   raw = Buffer.concat(chunks).toString("utf8");
-} catch {
+} catch (err) {
+  console.warn(`[post-compact] stdin read error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -35,7 +36,8 @@ let REPO_ROOT;
 try {
   const ctx = await import("../../core/context.mjs");
   REPO_ROOT = ctx.REPO_ROOT;
-} catch {
+} catch (err) {
+  console.warn(`[post-compact] context.mjs import error: ${err?.message}`);
   process.exit(0);
 }
 
@@ -76,7 +78,7 @@ try {
   }
 
   // Clean up snapshot after restoring — it's a one-shot artifact
-  try { unlinkSync(snapshotPath); } catch { /* already removed */ }
+  try { unlinkSync(snapshotPath); } catch (err) { console.warn(`[post-compact] snapshot cleanup failed: ${err?.message}`); }
 
   // Note: PostCompact cannot inject additionalContext like SessionStart.
   // The restoration is informational — SessionStart handles full context reinject on next session.

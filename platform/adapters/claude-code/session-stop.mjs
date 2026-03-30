@@ -16,7 +16,7 @@ function resolveRepoRoot() {
   try {
     const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
     if (r.status === 0) return r.stdout.trim();
-  } catch { /* git unavailable */ }
+  } catch (err) { console.warn(`[session-stop] git rev-parse failed: ${err?.message}`); }
   const legacy = resolve(__dirname, "..", "..", "..");
   if (existsSync(resolve(legacy, ".git"))) return legacy;
   return process.cwd();
@@ -40,7 +40,8 @@ function git(args, cwd) {
   try {
     const r = spawnSync("git", args, { cwd: cwd ?? REPO_ROOT, encoding: "utf8", stdio: "pipe", windowsHide: true });
     return r.status === 0 ? (r.stdout || "").trim() : null;
-  } catch {
+  } catch (err) {
+    console.warn(`[session-stop] git command failed: ${err?.message}`);
     return null;
   }
 }
@@ -49,7 +50,7 @@ function git(args, cwd) {
 const locale = cfg.plugin?.locale ?? "en";
 try {
   syncHandoffToMemory(REPO_ROOT, handoffFile, { locale });
-} catch { /* non-fatal — writeFileSync failure must not crash the hook */ }
+} catch (err) { console.warn(`[session-stop] handoff sync failed: ${err?.message}`); }
 
 // 2. quorum repo: auto-commit if changes exist
 const clDir = __dirname;

@@ -510,7 +510,7 @@ describe("Live process → NDJSON → CliAdapter pipeline", () => {
   });
 
   after(() => {
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("multi-model cleanup failed:", err?.message ?? err); }
   });
 
   /**

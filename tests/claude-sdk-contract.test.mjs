@@ -68,12 +68,23 @@ function registerSession(ledger, ref, opts = {}) {
 }
 
 /**
- * Subclass that overrides isAvailable() to return true,
+ * Subclass that mocks SDK availability AND session methods,
  * allowing session lifecycle tests without the actual SDK.
  */
 class TestableClaudeSdkRuntime extends ClaudeSdkRuntime {
   async isAvailable() {
     return true;
+  }
+
+  async resolveSdkMethods() {
+    if (this.sdkMethods) return this.sdkMethods;
+    this.sdkMethods = {
+      createSession: async () => ({ id: `mock-${Date.now()}` }),
+      sendMessage: async () => {},
+      stopSession: async () => {},
+    };
+    this.sdkChecked = true;
+    return this.sdkMethods;
   }
 }
 

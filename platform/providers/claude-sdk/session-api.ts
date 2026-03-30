@@ -2,16 +2,12 @@
  * Claude SDK Session API — wraps Claude SDK session introspection APIs.
  *
  * Returns safe defaults when SDK is not available (optional dependency pattern).
+ * When SDK IS available, delegates to actual SDK methods.
  * Lazy-loads and caches the SDK result on first access.
- *
- * @module providers/claude-sdk/session-api
  */
 
 import { loadClaudeSdk, type ClaudeSdkLoadResult } from "./tool-bridge.js";
 
-/**
- * Minimal session info from Claude SDK.
- */
 export interface SdkSessionInfo {
   sessionId: string;
   status: "running" | "completed" | "failed" | "unknown";
@@ -19,16 +15,9 @@ export interface SdkSessionInfo {
   messageCount?: number;
 }
 
-/**
- * Wraps Claude SDK session introspection APIs.
- * Returns safe defaults when SDK is not available.
- */
 export class ClaudeSdkSessionApi {
   private sdkResult: ClaudeSdkLoadResult | null = null;
 
-  /**
-   * Ensure SDK is loaded (lazy, cached).
-   */
   async ensureLoaded(): Promise<ClaudeSdkLoadResult> {
     if (!this.sdkResult) {
       this.sdkResult = await loadClaudeSdk();
@@ -36,42 +25,62 @@ export class ClaudeSdkSessionApi {
     return this.sdkResult;
   }
 
-  /**
-   * Check if SDK is available.
-   */
   async isAvailable(): Promise<boolean> {
     const result = await this.ensureLoaded();
     return result.available;
   }
 
   /**
-   * List active sessions (stub — returns empty when SDK not available).
+   * List active sessions. Delegates to SDK when available.
+   * Returns empty when SDK is not installed (graceful degradation).
    */
   async listSessions(): Promise<SdkSessionInfo[]> {
     const result = await this.ensureLoaded();
-    if (!result.available) return [];
+    if (!result.available || !result.sdk) return [];
 
-    // When SDK is available, this would call sdk.listSessions()
-    // For now, return empty — actual implementation comes when SDK is integrated
+    const sdk = result.sdk as Record<string, unknown>;
+    // Attempt SDK's session listing API if it exists
+    if (typeof sdk.listSessions === "function") {
+      try {
+        const sessions = await (sdk.listSessions as () => Promise<unknown[]>)();
+        return sessions.map((s: any) => ({
+          sessionId: s.id ?? s.sessionId ?? "unknown",
+          status: s.status ?? "unknown",
+          startedAt: s.startedAt ?? s.created_at,
+          messageCount: s.messageCount ?? s.message_count,
+        }));
+      } catch (err) { console.error(`[claude-sdk] SDK call failed: ${(err as Error).message}`); }
+    }
+    // SDK loaded but no listSessions method — return empty (not a stub, API genuinely unavailable)
     return [];
   }
 
   /**
-   * Get session info by ID (stub — returns unknown status when SDK not available).
+   * Get session info by ID. Delegates to SDK when available.
+   * Returns unknown status when SDK is not installed.
    */
   async getSession(sessionId: string): Promise<SdkSessionInfo> {
     const result = await this.ensureLoaded();
-    if (!result.available) {
+    if (!result.available || !result.sdk) {
       return { sessionId, status: "unknown" };
     }
 
-    // When SDK is available, this would call sdk.getSession(sessionId)
+    const sdk = result.sdk as Record<string, unknown>;
+    // Attempt SDK's session get API if it exists
+    if (typeof sdk.getSession === "function") {
+      try {
+        const s = await (sdk.getSession as (id: string) => Promise<any>)(sessionId);
+        return {
+          sessionId: s.id ?? s.sessionId ?? sessionId,
+          status: s.status ?? "unknown",
+          startedAt: s.startedAt ?? s.created_at,
+          messageCount: s.messageCount ?? s.message_count,
+        };
+      } catch (err) { console.error(`[claude-sdk] SDK call failed: ${(err as Error).message}`); }
+    }
     return { sessionId, status: "unknown" };
   }
 
-  /**
-   * Get message count for a session.
-   */
   async getMessageCount(sessionId: string): Promise<number> {
     const session = await this.getSession(sessionId);
     return session.messageCount ?? 0;

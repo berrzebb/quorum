@@ -27,7 +27,7 @@ before(() => {
 
 after(() => {
   bridge.close();
-  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("bridge cleanup failed:", err?.message ?? err); }
 });
 
 // ═══ 1. Initialization ═══════════════════════════════════════════════

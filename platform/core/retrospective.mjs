@@ -48,7 +48,7 @@ export async function main() {
   try {
     const evidence = bridge.getLatestEvidence?.();
     if (evidence?.content) claudeMd = evidence.content;
-  } catch { /* bridge non-critical */ }
+  } catch (err) { console.warn("[retrospective] evidence read failed:", err?.message ?? err); }
 
   if (!claudeMd) {
     console.log(t("retro.no_claude_md"));
@@ -80,7 +80,7 @@ export async function main() {
         console.log(`[enforcement] Policy review needed for rejection codes: ${result.codes.join(", ")}`);
       }
     }
-  } catch { /* enforcement is non-critical */ }
+  } catch (err) { console.warn("[retrospective] enforcement check failed:", err?.message ?? err); }
 
   if (!existsSync(MARKER_DIR)) mkdirSync(MARKER_DIR, { recursive: true });
   writeFileSync(MARKER_PATH, JSON.stringify({

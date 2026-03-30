@@ -33,7 +33,7 @@ before(() => {
 after(() => {
   try {
     if (tmpDir && existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  } catch { /* Windows may hold file locks briefly */ }
+  } catch (err) { console.warn("hybrid-scan cleanup failed:", err?.message ?? err); }
 });
 
 function writeFile(name, content) {

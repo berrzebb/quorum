@@ -26,7 +26,7 @@ function saveAgentState(repoRoot: string, id: string, data: Record<string, unkno
 
 function removeAgentState(repoRoot: string, id: string): void {
   const path = resolve(repoRoot, ".claude", "agents", `${id}.json`);
-  try { if (existsSync(path)) rmSync(path); } catch { /* ignore */ }
+  try { if (existsSync(path)) rmSync(path); } catch (err) { console.warn(`[agent] failed to remove agent state ${path}: ${(err as Error).message}`); }
 }
 
 /** Emit agent event to EventStore via bridge. */
@@ -39,7 +39,7 @@ async function emitAgentEvent(repoRoot: string, type: string, payload: Record<st
     await bridge.init(repoRoot);
     bridge.emitEvent(type, "claude-code", payload);
     bridge.close();
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn(`[agent] emitAgentEvent failed: ${(err as Error).message}`); }
 }
 
 export async function run(args: string[]): Promise<void> {

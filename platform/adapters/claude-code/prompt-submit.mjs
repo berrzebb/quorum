@@ -30,7 +30,7 @@ const configPath = (() => {
 if (!configPath) process.exit(0);
 
 let cfg;
-try { cfg = JSON.parse(readFileSync(configPath, "utf8")); } catch { process.exit(0); }
+try { cfg = JSON.parse(readFileSync(configPath, "utf8")); } catch (err) { console.warn(`[prompt-submit] config parse error: ${err?.message}`); process.exit(0); }
 
 const locale = cfg.plugin?.locale ?? "en";
 const t = createT(locale);

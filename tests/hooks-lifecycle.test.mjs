@@ -130,7 +130,7 @@ describe("WorktreeCreate hook", () => {
     // Clean up worktrees before removing repo
     try {
       execFileSync("git", ["worktree", "prune"], { cwd: tmpRepo, stdio: "pipe" });
-    } catch { /* ignore */ }
+    } catch (err) { console.warn("worktree prune failed:", err?.message ?? err); }
     if (tmpRepo && existsSync(tmpRepo)) {
       rmSync(tmpRepo, { recursive: true, force: true });
     }
@@ -206,7 +206,7 @@ describe("WorktreeRemove hook", () => {
   });
 
   after(() => {
-    try { execFileSync("git", ["worktree", "prune"], { cwd: tmpRepo, stdio: "pipe" }); } catch {}
+    try { execFileSync("git", ["worktree", "prune"], { cwd: tmpRepo, stdio: "pipe" }); } catch (err) { console.warn("worktree prune failed:", err?.message ?? err); }
     if (tmpRepo && existsSync(tmpRepo)) rmSync(tmpRepo, { recursive: true, force: true });
   });
 

@@ -63,7 +63,8 @@ export function parseAuditResponse(
       raw,
       duration,
     };
-  } catch {
+  } catch (err) {
+    console.warn(`[parse] audit response JSON parse failed: ${(err as Error).message}`);
     const lower = raw.toLowerCase();
     const approved = lower.includes("approved") && !lower.includes("not approved");
     return {

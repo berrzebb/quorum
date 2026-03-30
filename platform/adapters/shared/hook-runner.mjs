@@ -56,7 +56,8 @@ export function parseHookJson(text) {
       additional_context: typeof obj.additional_context === "string"
         ? obj.additional_context : undefined,
     };
-  } catch {
+  } catch (err) {
+    console.warn(`[hook-runner] hook JSON parse error: ${err?.message}`);
     return null;
   }
 }
@@ -182,7 +183,7 @@ export class HookRunner {
   /** Pre-compile matcher regex on definition (avoids per-fire() allocation). */
   #compileMatcher(def) {
     if (def.matcher) {
-      try { def._matcherRe = new RegExp(def.matcher); } catch { def._matcherRe = null; }
+      try { def._matcherRe = new RegExp(def.matcher); } catch (err) { console.warn(`[hook-runner] invalid matcher regex "${def.matcher}": ${err?.message}`); def._matcherRe = null; }
     }
   }
 

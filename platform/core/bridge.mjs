@@ -55,7 +55,8 @@ async function loadModules() {
     ]);
     _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
     return _modules;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] loadModules failed:", err?.message ?? err);
     return null;
   }
 }
@@ -78,7 +79,8 @@ async function loadParliamentModules() {
     ]);
     _parliamentModules = { meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
     return _parliamentModules;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] loadParliamentModules failed:", err?.message ?? err);
     return null;
   }
 }
@@ -93,7 +95,8 @@ function getStore(repoRoot) {
     const { EventStore } = _modules.storeMod;
     _store = new EventStore({ dbPath });
     return _store;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getStore failed:", err?.message ?? err);
     return null;
   }
 }
@@ -104,7 +107,8 @@ function getRouter() {
     const { TierRouter } = _modules.routerMod;
     _router = new TierRouter();
     return _router;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getRouter failed:", err?.message ?? err);
     return null;
   }
 }
@@ -116,7 +120,8 @@ function getLockService() {
     const { LockService } = _modules.lockMod;
     _lockService = new LockService(_store.getDb());
     return _lockService;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getLockService failed:", err?.message ?? err);
     return null;
   }
 }
@@ -130,7 +135,8 @@ function getClaimService() {
     const { ClaimService } = _modules.claimMod;
     _claimService = new ClaimService(_store.getDb());
     return _claimService;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getClaimService failed:", err?.message ?? err);
     return null;
   }
 }
@@ -159,7 +165,8 @@ export function emitEvent(type, source, payload = {}, meta = {}) {
   const event = createEvent(type, source, payload, meta);
   try {
     return _store.append(event);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] emitEvent failed:", err?.message ?? err);
     return null;
   }
 }
@@ -205,7 +212,8 @@ export function detectStagnation(repoRoot) {
     const verdictEvents = _store.query({ eventType: "audit.verdict", limit: 50, descending: true }).reverse();
     if (verdictEvents.length < 3) return { detected: false, patterns: [], recommendation: "continue" };
     return detect(verdictEvents);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] detectStagnation failed:", err?.message ?? err);
     return null;
   }
 }
@@ -217,7 +225,8 @@ export function queryEvents(filter = {}) {
   if (!_store) return [];
   try {
     return _store.query(filter);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] queryEvents failed:", err?.message ?? err);
     return [];
   }
 }
@@ -233,7 +242,8 @@ export function acquireLock(lockName, pid, sessionId, ttlMs) {
   if (!svc) return false;
   try {
     return svc.acquire(lockName, pid, sessionId, ttlMs);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] acquireLock failed:", err?.message ?? err);
     return false;
   }
 }
@@ -246,7 +256,8 @@ export function releaseLock(lockName, pid) {
   if (!svc) return false;
   try {
     return svc.release(lockName, pid);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] releaseLock failed:", err?.message ?? err);
     return false;
   }
 }
@@ -259,7 +270,8 @@ export function isLockHeld(lockName) {
   if (!svc) return { held: false };
   try {
     return svc.isHeld(lockName);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] isLockHeld failed:", err?.message ?? err);
     return { held: false };
   }
 }
@@ -273,7 +285,8 @@ export function getState(key) {
   if (!_store) return null;
   try {
     return _store.getKV(key);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getState failed:", err?.message ?? err);
     return null;
   }
 }
@@ -286,7 +299,8 @@ export function setState(key, value) {
   try {
     _store.setKV(key, value);
     return true;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] setState failed:", err?.message ?? err);
     return false;
   }
 }
@@ -317,7 +331,8 @@ export function recordTransition(entityType, entityId, fromState, toState, sourc
       metadata,
     }], []);
     return "ok";
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] recordTransition failed:", err?.message ?? err);
     return null;
   }
 }
@@ -329,7 +344,8 @@ export function currentState(entityType, entityId) {
   if (!_store) return null;
   try {
     return _store.currentState(entityType, entityId);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] currentState failed:", err?.message ?? err);
     return null;
   }
 }
@@ -365,7 +381,8 @@ export function queryItemStates() {
       metadata: r.metadata ? JSON.parse(r.metadata) : {},
       updatedAt: r.created_at,
     }));
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] queryItemStates failed:", err?.message ?? err);
     return [];
   }
 }
@@ -380,7 +397,8 @@ export function claimFiles(agentId, files, sessionId, ttlMs) {
   if (!svc) return [];
   try {
     return svc.claimFiles(agentId, files, sessionId, ttlMs);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] claimFiles failed:", err?.message ?? err);
     return [];
   }
 }
@@ -393,7 +411,8 @@ export function releaseFiles(agentId) {
   if (!svc) return 0;
   try {
     return svc.releaseFiles(agentId);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] releaseFiles failed:", err?.message ?? err);
     return 0;
   }
 }
@@ -406,7 +425,8 @@ export function checkConflicts(agentId, files) {
   if (!svc) return [];
   try {
     return svc.checkConflicts(agentId, files);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] checkConflicts failed:", err?.message ?? err);
     return [];
   }
 }
@@ -419,7 +439,8 @@ export function getClaims(agentId) {
   if (!svc) return [];
   try {
     return svc.getClaims(agentId);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getClaims failed:", err?.message ?? err);
     return [];
   }
 }
@@ -434,7 +455,8 @@ export function planExecution(items) {
   if (!_modules?.parallelMod) return null;
   try {
     return _modules.parallelMod.planParallel(items);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] planExecution failed:", err?.message ?? err);
     return null;
   }
 }
@@ -447,7 +469,8 @@ export function selectExecutionMode(items) {
   if (!_modules?.orchestratorMod) return null;
   try {
     return _modules.orchestratorMod.selectMode(items);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] selectExecutionMode failed:", err?.message ?? err);
     return null;
   }
 }
@@ -461,7 +484,8 @@ export function validatePlanClaims(plan, agentId) {
   if (!svc) return new Map();
   try {
     return _modules.parallelMod.validateAgainstClaims(plan, svc, agentId);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] validatePlanClaims failed:", err?.message ?? err);
     return new Map();
   }
 }
@@ -476,7 +500,8 @@ export function analyzeAuditLearnings() {
   if (!_modules?.autoLearnMod || !_store) return null;
   try {
     return _modules.autoLearnMod.analyzeAndSuggest(_store);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] analyzeAuditLearnings failed:", err?.message ?? err);
     return null;
   }
 }
@@ -492,7 +517,8 @@ export function createUnitOfWork() {
   try {
     const { TransactionalUnitOfWork } = _modules.storeMod;
     return new TransactionalUnitOfWork(_store);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] createUnitOfWork failed:", err?.message ?? err);
     return null;
   }
 }
@@ -516,7 +542,8 @@ async function loadDomainModules() {
     _routerMod2 = rm;
     _specialistMod = sm;
     return { _domainMod, _routerMod2, _specialistMod };
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] loadDomainModules failed:", err?.message ?? err);
     return null;
   }
 }
@@ -530,7 +557,8 @@ export async function detectDomains(changedFiles, diff) {
   if (!mods?._domainMod) return null;
   try {
     return mods._domainMod.detectDomains(changedFiles, diff);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] detectDomains failed:", err?.message ?? err);
     return null;
   }
 }
@@ -544,7 +572,8 @@ export async function selectReviewers(domains, tier) {
   if (!mods?._routerMod2) return null;
   try {
     return mods._routerMod2.selectReviewers(domains, tier);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] selectReviewers failed:", err?.message ?? err);
     return null;
   }
 }
@@ -558,7 +587,8 @@ export async function runSpecialistTools(selection, evidence, cwd) {
   if (!mods?._specialistMod) return null;
   try {
     return await mods._specialistMod.runSpecialistReviews(selection, evidence, cwd);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] runSpecialistTools failed:", err?.message ?? err);
     return null;
   }
 }
@@ -572,7 +602,8 @@ export async function enrichEvidence(evidence, toolResults, opinions) {
   if (!mods?._specialistMod) return evidence;
   try {
     return mods._specialistMod.enrichEvidence(evidence, toolResults, opinions);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] enrichEvidence failed:", err?.message ?? err);
     return evidence;
   }
 }
@@ -593,7 +624,8 @@ export function getMessageBus() {
       _messageBus = new _modules.messageBusMod.MessageBus(_store);
     }
     return _messageBus;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getMessageBus failed:", err?.message ?? err);
     return null;
   }
 }
@@ -604,28 +636,28 @@ export function getMessageBus() {
 export function postAgentQuery(fromAgent, question, toAgent, context) {
   const mb = getMessageBus();
   if (!mb) return null;
-  try { return mb.postQuery({ fromAgent, question, toAgent, context }); } catch { return null; }
+  try { return mb.postQuery({ fromAgent, question, toAgent, context }); } catch (err) { console.warn("[bridge] postAgentQuery failed:", err?.message ?? err); return null; }
 }
 
 /** Respond to an agent query. */
 export function respondToAgentQuery(queryId, fromAgent, answer, confidence) {
   const mb = getMessageBus();
   if (!mb) return;
-  try { mb.respondToQuery({ queryId, fromAgent, answer, confidence }); } catch { /* fail-open */ }
+  try { mb.respondToQuery({ queryId, fromAgent, answer, confidence }); } catch (err) { console.warn("[bridge] respondToAgentQuery failed:", err?.message ?? err); }
 }
 
 /** Poll for queries addressed to this agent (or broadcast). */
 export function pollAgentQueries(agentId, since) {
   const mb = getMessageBus();
   if (!mb) return [];
-  try { return mb.pollQueries(agentId, since); } catch { return []; }
+  try { return mb.pollQueries(agentId, since); } catch (err) { console.warn("[bridge] pollAgentQueries failed:", err?.message ?? err); return []; }
 }
 
 /** Get all responses to a specific query. */
 export function getQueryResponses(queryId) {
   const mb = getMessageBus();
   if (!mb) return [];
-  try { return mb.getResponses(queryId); } catch { return []; }
+  try { return mb.getResponses(queryId); } catch (err) { console.warn("[bridge] getQueryResponses failed:", err?.message ?? err); return []; }
 }
 
 /** Get the agent roster for a track. */
@@ -649,7 +681,8 @@ export function parseToolFindings(toolResult) {
       return mods.parseToolFindings(toolResult);
     }
     return [];
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] parseToolFindings failed:", err?.message ?? err);
     return [];
   }
 }
@@ -668,7 +701,8 @@ export function getFitnessLoop() {
     if (!_store) return null;
     _fitnessLoop = new _modules.fitnessLoopMod.FitnessLoop(_store);
     return _fitnessLoop;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] getFitnessLoop failed:", err?.message ?? err);
     return null;
   }
 }
@@ -680,7 +714,8 @@ export function computeFitness(signals, config) {
   if (!_modules?.fitnessMod) return null;
   try {
     return _modules.fitnessMod.computeFitness(signals, config);
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] computeFitness failed:", err?.message ?? err);
     return null;
   }
 }
@@ -706,7 +741,7 @@ export async function computeBlastRadius(changedFiles) {
   try {
     const tc = await _getToolCore();
     return tc.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] computeBlastRadius failed:", err?.message ?? err); return null; }
 }
 
 /**
@@ -736,7 +771,8 @@ export async function initHookRunner(repoRoot, hooksCfg) {
 
     _hookRunner = new HookRunner(repoRoot, merged);
     return _hookRunner;
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] initHookRunner failed:", err?.message ?? err);
     return null;
   }
 }
@@ -761,7 +797,8 @@ export async function fireHook(event, input = {}) {
   if (!_hookRunner) return [];
   try {
     return await _hookRunner.fire(event, { hook_event_name: event, ...input });
-  } catch {
+  } catch (err) {
+    console.warn("[bridge] fireHook failed:", err?.message ?? err);
     return [];
   }
 }
@@ -812,7 +849,7 @@ export async function checkParliamentConvergence(agendaId) {
   if (!pMods?.meetingLogMod) return null;
   try {
     return pMods.meetingLogMod.checkConvergence(_store, agendaId);
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] checkParliamentConvergence failed:", err?.message ?? err); return null; }
 }
 
 /**
@@ -825,7 +862,7 @@ export async function proposeAmendment(options) {
   if (!pMods?.amendmentMod) return null;
   try {
     return pMods.amendmentMod.proposeAmendment(_store, options);
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] proposeAmendment failed:", err?.message ?? err); return null; }
 }
 
 /**
@@ -836,7 +873,7 @@ export async function verifyConfluence(input) {
   if (!pMods?.confluenceMod) return null;
   try {
     return pMods.confluenceMod.verifyConfluence(input);
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] verifyConfluence failed:", err?.message ?? err); return null; }
 }
 
 /**
@@ -848,7 +885,7 @@ export async function getConvergenceReport() {
   if (!pMods?.normalFormMod) return null;
   try {
     return pMods.normalFormMod.generateConvergenceReport(_store);
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] getConvergenceReport failed:", err?.message ?? err); return null; }
 }
 
 // ── Parliament Enforcement Gates ─────────────
@@ -861,7 +898,7 @@ export function checkParliamentGates(options = {}) {
   if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
   try {
     return _modules.parliamentGateMod.checkAllGates(_store, options);
-  } catch { return { allowed: true }; }
+  } catch (err) { console.warn("[bridge] checkParliamentGates failed:", err?.message ?? err); return { allowed: true }; }
 }
 
 /**
@@ -870,25 +907,25 @@ export function checkParliamentGates(options = {}) {
 export function checkAmendmentGate() {
   if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
   try { return _modules.parliamentGateMod.checkAmendmentGate(_store); }
-  catch { return { allowed: true }; }
+  catch (err) { console.warn("[bridge] checkAmendmentGate failed:", err?.message ?? err); return { allowed: true }; }
 }
 
 export function checkVerdictGate() {
   if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
   try { return _modules.parliamentGateMod.checkVerdictGate(_store); }
-  catch { return { allowed: true }; }
+  catch (err) { console.warn("[bridge] checkVerdictGate failed:", err?.message ?? err); return { allowed: true }; }
 }
 
 export function checkConfluenceGate() {
   if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
   try { return _modules.parliamentGateMod.checkConfluenceGate(_store); }
-  catch { return { allowed: true }; }
+  catch (err) { console.warn("[bridge] checkConfluenceGate failed:", err?.message ?? err); return { allowed: true }; }
 }
 
 export function checkDesignGate(planningDir, trackName) {
   if (!_modules?.parliamentGateMod) return { allowed: true };
   try { return _modules.parliamentGateMod.checkDesignGate(planningDir, trackName); }
-  catch { return { allowed: true }; }
+  catch (err) { console.warn("[bridge] checkDesignGate failed:", err?.message ?? err); return { allowed: true }; }
 }
 
 /**
@@ -902,12 +939,12 @@ export function createConsensusAuditors(roles, cwd) {
     return import(toURL(factoryPath)).then(mod =>
       mod.createConsensusAuditors(roles, cwd ?? process.cwd())
     );
-  } catch { return null; }
+  } catch (err) { console.warn("[bridge] createConsensusAuditors failed:", err?.message ?? err); return null; }
 }
 
 export function close() {
   if (_store) {
-    try { _store.close(); } catch { /* ignore */ }
+    try { _store.close(); } catch (err) { console.warn("[bridge] close failed:", err?.message ?? err); }
     _store = null;
   }
   _router = null;

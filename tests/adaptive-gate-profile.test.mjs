@@ -248,12 +248,12 @@ describe('recordIteration', () => {
     assert.equal(next.history[0].action, 'escalate');
   });
 
-  it('records exhausted as amend in history', () => {
+  it('records exhausted as exhausted in history (preserves diagnostic info)', () => {
     const state = { ...createIterationState(), currentAttempt: 2 };
     const decision = { action: 'exhausted', reason: 'max reached' };
     const next = recordIteration(state, decision);
     assert.equal(next.currentAttempt, 3);
-    assert.equal(next.history[0].action, 'amend');
+    assert.equal(next.history[0].action, 'exhausted');
   });
 
   it('builds cumulative history across multiple iterations', () => {
@@ -276,7 +276,7 @@ describe('recordIteration', () => {
 
     assert.equal(state.history[0].action, 'retry');
     assert.equal(state.history[1].action, 'escalate');
-    assert.equal(state.history[2].action, 'amend'); // exhausted → amend
+    assert.equal(state.history[2].action, 'exhausted');
   });
 
   it('does not mutate the original state', () => {

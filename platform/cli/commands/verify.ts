@@ -33,7 +33,7 @@ export async function run(args: string[]): Promise<void> {
         }
       }
     }
-  } catch { /* config read error */ }
+  } catch (err) { console.warn(`[verify] config read error: ${(err as Error).message}`); }
   if (checks.length === 0) {
     console.log("  No quality_rules presets matched — skipping CQ/T checks\n");
   }
@@ -204,7 +204,7 @@ async function runScopeCheck(repoRoot: string, baseBranch?: string): Promise<boo
     if (evidence?.content) {
       evidenceArg = evidence.content;  // Pass content directly (no file read)
     }
-  } catch { /* bridge unavailable */ }
+  } catch (err) { console.warn(`[verify] bridge unavailable: ${(err as Error).message}`); }
 
   // No fallback — evidence must come from SQLite EventStore
 

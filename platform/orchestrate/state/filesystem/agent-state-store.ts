@@ -18,7 +18,8 @@ export class FilesystemAgentStateStore implements AgentStatePort {
     if (!existsSync(p)) return null;
     try {
       return JSON.parse(readFileSync(p, "utf8")) as AgentSessionState;
-    } catch {
+    } catch (err) {
+      console.error(`[agent-state-store] failed to load agent ${agentId}: ${(err as Error).message}`);
       return null;
     }
   }
@@ -35,9 +36,7 @@ export class FilesystemAgentStateStore implements AgentStatePort {
   remove(agentId: string): void {
     try {
       rmSync(resolve(this.baseDir, `${agentId}.json`), { force: true });
-    } catch {
-      /* fail-open */
-    }
+    } catch (err) { console.warn(`[agent-state] remove ${agentId} failed: ${(err as Error).message}`); }
   }
 
   list(): AgentSessionState[] {
@@ -51,12 +50,13 @@ export class FilesystemAgentStateStore implements AgentStatePort {
             readFileSync(resolve(this.baseDir, f), "utf8"),
           ) as AgentSessionState;
           results.push(data);
-        } catch {
-          /* skip corrupt files */
+        } catch (err) {
+          console.warn(`[agent-state-store] skipping corrupt file ${f}: ${(err as Error).message}`);
         }
       }
       return results;
-    } catch {
+    } catch (err) {
+      console.error(`[agent-state-store] failed to list agents: ${(err as Error).message}`);
       return [];
     }
   }

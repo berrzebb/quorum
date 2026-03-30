@@ -11,6 +11,7 @@
  * Minimal own logic: orchestration glue only.
  */
 
+import { execSync } from "node:child_process";
 import type { WorkItem, Wave, Bridge } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
@@ -211,7 +212,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       const outputBytes = Buffer.byteLength(pollOutput, "utf8");
       if (outputBytes > MAX_OUTPUT_BYTES) {
         log(`\n    \x1b[31m!\x1b[0m ${s.item.id} output exceeded ${Math.round(MAX_OUTPUT_BYTES / 1_000_000)}MB — killing`);
-        try { await mux.kill(s.sessionId); } catch {}
+        try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
         active.splice(si, 1);
         removeAgentState(repoRoot, s.sessionId);
         continue;
@@ -220,7 +221,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       const prev = lastOutputSize.get(s.sessionId);
       if (prev && prev.size === outputBytes && Date.now() - prev.at > STALL_THRESHOLD) {
         log(`\n    \x1b[31m!\x1b[0m ${s.item.id} stalled (no output for ${Math.round(STALL_THRESHOLD / 1000)}s) — killing`);
-        try { await mux.kill(s.sessionId); } catch {}
+        try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
         active.splice(si, 1);
         removeAgentState(repoRoot, s.sessionId);
         continue;
@@ -237,7 +238,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       localCompleted.add(s.item.id);
       active.splice(si, 1);
       removeAgentState(repoRoot, s.sessionId);
-      try { await mux.kill(s.sessionId); } catch {}
+      try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
 
       if (bridge?.emitEvent) {
         bridge.emitEvent("agent.complete", "generic", {
@@ -268,7 +269,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   for (const s of active) {
     timedOutIds.push(s.item.id);
     removeAgentState(repoRoot, s.sessionId);
-    try { await mux.kill(s.sessionId); } catch {}
+    try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
   }
   for (const item of wave.items) {
     if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
@@ -297,7 +298,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   }
 
   if (completedItems.length > 0) {
-    // Stub fix
+    // Run fixer on detected stub/placeholder patterns
     if (auditGates.stubs.length > 0) {
       log(`\n  \x1b[31m◈ Stub/placeholder detected — fixing\x1b[0m`);
       await runFixer({ repoRoot, findings: auditGates.stubs, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult });
@@ -373,10 +374,10 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
           if (round.length > 3) log(`    ... and ${round.length - 3} more`);
         }
         // Rollback or mark failed
-        const { execSync } = await import("node:child_process");
         try {
           execSync("git revert HEAD --no-edit", { cwd: repoRoot, timeout: 30_000, stdio: "pipe", windowsHide: true });
-        } catch {
+        } catch (err) {
+          log(`  \x1b[33m⚠ git revert failed: ${(err as Error).message} — marking failed\x1b[0m`);
           updateRTM(rtmPath, completedItems, "failed");
           amendWaveCommit(repoRoot, rtmPath);
         }
@@ -385,10 +386,10 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
     // Handle fitness auto-reject rollback
     if (fitnessDecision === "auto-reject") {
-      const { execSync } = await import("node:child_process");
       try {
         execSync("git revert HEAD --no-edit", { cwd: repoRoot, timeout: 30_000, stdio: "pipe", windowsHide: true });
-      } catch {
+      } catch (err) {
+        log(`  \x1b[33m⚠ git revert failed: ${(err as Error).message} — marking failed\x1b[0m`);
         updateRTM(rtmPath, completedItems, "failed");
         amendWaveCommit(repoRoot, rtmPath);
       }

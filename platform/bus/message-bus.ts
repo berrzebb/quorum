@@ -173,7 +173,7 @@ export class MessageBus {
         },
       }));
       this.store.commitTransaction([], transitions, []);
-    } catch { /* non-critical: event already recorded */ }
+    } catch (err) { console.warn(`[message-bus] submitFindings state transition failed: ${(err as Error).message}`); }
 
     this._invalidate();
     return ids;
@@ -220,7 +220,7 @@ export class MessageBus {
         toState: newState,
         source: source,
       }], []);
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn(`[message-bus] ackFinding state transition failed: ${(err as Error).message}`); }
     this._invalidate();
   }
 
@@ -246,7 +246,7 @@ export class MessageBus {
         toState: resolution,
         source: source,
       }], []);
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn(`[message-bus] resolveFinding state transition failed: ${(err as Error).message}`); }
     this._invalidate();
   }
 
@@ -298,7 +298,7 @@ export class MessageBus {
           replyTo: opts.parentId,
         },
       }], []);
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn(`[message-bus] replyToFinding state transition failed: ${(err as Error).message}`); }
 
     this._invalidate();
     return id;

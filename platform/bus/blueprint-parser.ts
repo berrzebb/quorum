@@ -175,7 +175,7 @@ function findMarkdownFiles(dir: string, maxDepth = 3, depth = 0): string[] {
         results.push(fullPath);
       }
     }
-  } catch { /* skip inaccessible directories */ }
+  } catch (err) { console.warn(`[blueprint-parser] skip inaccessible directory ${dir}: ${(err as Error).message}`); }
 
   return results;
 }

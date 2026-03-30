@@ -73,7 +73,7 @@ function saveAgentState(cwd: string, session: MuxSession, role: string, outputFi
 }
 
 function removeAgentState(cwd: string, sessionId: string): void {
-  try { rmSync(resolve(agentsDir(cwd), `${sessionId}.json`), { force: true }); } catch { /* ok */ }
+  try { rmSync(resolve(agentsDir(cwd), `${sessionId}.json`), { force: true }); } catch (err) { console.warn(`[mux-auditor] agent state removal failed: ${(err as Error).message}`); }
 }
 
 // ── CLI argument builders ───────────────────
@@ -219,7 +219,7 @@ export class MuxAuditor implements Auditor {
         pollOutput = capture.output;
       } else if (outputFile && existsSync(outputFile)) {
         // Read output file (reliable, no terminal padding/truncation)
-        try { pollOutput = readFileSync(outputFile, "utf8"); } catch { continue; }
+        try { pollOutput = readFileSync(outputFile, "utf8"); } catch (err) { console.warn(`[mux-auditor] output file read failed: ${(err as Error).message}`); continue; }
       } else {
         continue;
       }
@@ -246,7 +246,7 @@ export class MuxAuditor implements Auditor {
       cleanupPromptFile(promptFile.replace(/\.txt$/, ".out"));
     }
     if (!keepSession) {
-      try { await mux.kill(session.id); } catch { /* ok */ }
+      try { await mux.kill(session.id); } catch (err) { console.warn(`[mux-auditor] session kill failed: ${(err as Error).message}`); }
     }
 
     const duration = Date.now() - start;
@@ -287,7 +287,7 @@ function sendEOF(mux: ProcessMux, session: MuxSession): void {
 }
 
 function cleanupPromptFile(path: string): void {
-  try { rmSync(path, { force: true }); } catch { /* ok */ }
+  try { rmSync(path, { force: true }); } catch (err) { console.warn(`[mux-auditor] cleanup failed for ${path}: ${(err as Error).message}`); }
 }
 
 function infraFailure(message: string, start: number): AuditResult {
@@ -347,7 +347,8 @@ export function parseAuditOutput(raw: string, duration: number): AuditResult {
       raw: textToParse,
       duration,
     };
-  } catch {
+  } catch (err) {
+    console.warn(`[mux-auditor] audit output parse failed: ${(err as Error).message}`);
     return {
       verdict: AUDIT_VERDICT.CHANGES_REQUESTED,
       codes: ["parse-error"],
@@ -381,7 +382,7 @@ export function extractAssistantText(raw: string): string | null {
       if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 10) {
         return obj.result;
       }
-    } catch { /* skip malformed entries */ }
+    } catch (err) { console.warn(`[mux-auditor] NDJSON entry parse failed: ${(err as Error).message}`); }
   }
 
   // Fallback: assemble from content_block_delta text deltas
@@ -392,7 +393,7 @@ export function extractAssistantText(raw: string): string | null {
       if (obj.type === "content_block_delta" && obj.delta?.text) {
         parts.push(obj.delta.text);
       }
-    } catch { /* skip */ }
+    } catch (err) { console.warn(`[mux-auditor] content delta parse failed: ${(err as Error).message}`); }
   }
 
   return parts.length > 0 ? parts.join("") : null;

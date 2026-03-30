@@ -121,7 +121,7 @@ function extractApiCalls(filePath, visited = new Set()) {
   visited.add(filePath);
 
   let content;
-  try { content = readFileSync(filePath, "utf8"); } catch { return []; }
+  try { content = readFileSync(filePath, "utf8"); } catch (err) { console.warn("[fvm-generator] file read failed:", err?.message ?? err); return []; }
 
   const calls = [];
 
@@ -157,7 +157,7 @@ function scanAllFeApiCalls(projectRoot) {
 
   function walk(dir) {
     let entries;
-    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch (err) { console.warn("[fvm-generator] readdir failed:", err?.message ?? err); return; }
     for (const e of entries) {
       if (e.name.startsWith(".") || e.name === "node_modules") continue;
       const full = join(dir, e.name);
@@ -165,7 +165,7 @@ function scanAllFeApiCalls(projectRoot) {
       if (!CODE_EXT.has(extname(e.name))) continue;
 
       let content;
-      try { content = readFileSync(full, "utf8"); } catch { continue; }
+      try { content = readFileSync(full, "utf8"); } catch (err) { console.warn("[fvm-generator] file read failed:", err?.message ?? err); continue; }
 
       const apiRe = /api\.(get|post|put|patch|del)\s*(?:<[^>]*>)?\s*\(\s*["'`]([^"'`\n]+)["'`]/g;
       let m;
@@ -213,13 +213,13 @@ function extractBeEndpoints(projectRoot) {
 
   const endpoints = [];
   let entries;
-  try { entries = readdirSync(routesDir, { withFileTypes: true }); } catch { return []; }
+  try { entries = readdirSync(routesDir, { withFileTypes: true }); } catch (err) { console.warn("[fvm-generator] routes readdir failed:", err?.message ?? err); return []; }
 
   for (const e of entries) {
     if (!e.isFile() || !e.name.endsWith(".ts")) continue;
     const full = join(routesDir, e.name);
     let content;
-    try { content = readFileSync(full, "utf8"); } catch { continue; }
+    try { content = readFileSync(full, "utf8"); } catch (err) { console.warn("[fvm-generator] handler file read failed:", err?.message ?? err); continue; }
 
     // Parse JSDoc: *   METHOD /api/path — description
     const docRe = /^\s*\*\s+(GET|POST|PUT|PATCH|DELETE)\s+(\/api\/[^\s]+)\s*(?:—|-)\s*(.+)$/gm;

@@ -25,7 +25,8 @@ export const AUDIT_STATUS = /** @type {const} */ ({
 export function readAuditStatus(repoRoot) {
   try {
     return JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8"));
-  } catch {
+  } catch (err) {
+    console.warn(`[audit-state] readAuditStatus failed: ${err?.message}`);
     return null;
   }
 }
@@ -39,7 +40,8 @@ export function readAuditStatus(repoRoot) {
 export function readRetroMarker(adapterDir) {
   try {
     return JSON.parse(readFileSync(resolve(adapterDir, ".session-state", "retro-marker.json"), "utf8"));
-  } catch {
+  } catch (err) {
+    console.warn(`[audit-state] readRetroMarker failed: ${err?.message}`);
     return null;
   }
 }

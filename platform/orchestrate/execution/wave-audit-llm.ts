@@ -87,7 +87,7 @@ export async function runWaveAuditLLM(
         passed: !!verdict.passed,
         findings: Array.isArray(verdict.findings) ? verdict.findings : [],
       };
-    } catch { /* fall through */ }
+    } catch (err) { console.warn(`[wave-audit-llm] fenced JSON parse failed: ${(err as Error).message}`); }
   }
 
   // Bare JSON without fences — non-greedy to avoid spanning multiple objects
@@ -99,7 +99,7 @@ export async function runWaveAuditLLM(
         passed: !!verdict.passed,
         findings: Array.isArray(verdict.findings) ? verdict.findings : [],
       };
-    } catch { /* fall through */ }
+    } catch (err) { console.warn(`[wave-audit-llm] bare JSON parse failed: ${(err as Error).message}`); }
   }
 
   const lowerOutput = output.toLowerCase();

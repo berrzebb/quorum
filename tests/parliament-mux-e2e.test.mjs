@@ -13,13 +13,13 @@ import { join } from "node:path";
 function hasPsmux() {
   try {
     return spawnSync("psmux", ["version"], { encoding: "utf8", timeout: 3000 }).status === 0;
-  } catch { return false; }
+  } catch (err) { console.warn("psmux detection failed:", err?.message ?? err); return false; }
 }
 
 function hasClaude() {
   try {
     return spawnSync("claude", ["--version"], { encoding: "utf8", timeout: 5000 }).status === 0;
-  } catch { return false; }
+  } catch (err) { console.warn("claude detection failed:", err?.message ?? err); return false; }
 }
 
 const SKIP = !hasPsmux();
@@ -64,7 +64,7 @@ describe("psmux E2E", { skip: SKIP ? "psmux not available" : false }, () => {
     assert.ok(cap.stdout.includes(marker), `pipe output should contain '${marker}', got: ${cap.stdout.slice(0, 300)}`);
 
     spawnSync("psmux", ["kill-session", "-t", name]);
-    try { rmSync(promptFile); } catch {}
+    try { rmSync(promptFile); } catch (err) { console.warn("prompt file cleanup failed:", err?.message ?? err); }
   });
 
   describe("claude -p via psmux", { skip: SKIP_CLAUDE ? "claude not installed" : false }, () => {
@@ -98,7 +98,7 @@ describe("psmux E2E", { skip: SKIP ? "psmux not available" : false }, () => {
       assert.ok(flat.includes('"type":"result"'), "Should contain result event in stream-json output");
 
       spawnSync("psmux", ["kill-session", "-t", name]);
-      try { rmSync(promptFile); } catch {}
+      try { rmSync(promptFile); } catch (err) { console.warn("prompt file cleanup failed:", err?.message ?? err); }
     });
   });
 });

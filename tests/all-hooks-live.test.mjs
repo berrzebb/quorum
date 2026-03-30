@@ -206,7 +206,7 @@ describe("Claude Code hooks — live execution (22)", () => {
       });
       assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
     } finally {
-      if (!hadStatus) try { rmSync(statusPath); } catch {}
+      if (!hadStatus) try { rmSync(statusPath); } catch (err) { console.warn("status file cleanup failed:", err?.message ?? err); }
     }
   });
 

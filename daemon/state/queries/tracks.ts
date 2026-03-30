@@ -43,7 +43,8 @@ export function queryTrackProgress(store: EventStore): TrackInfo[] {
     }
 
     return [...trackMap.values()].sort((a, b) => b.lastUpdate - a.lastUpdate);
-  } catch {
+  } catch (err) {
+    console.warn(`[tracks] queryTrackProgress failed: ${(err as Error).message}`);
     return [];
   }
 }

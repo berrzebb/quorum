@@ -10,10 +10,12 @@ export {
   queryFindingStats,
   queryReviewProgress,
   queryFindingThreads,
+  fetchFindingEvents,
 } from "./findings.js";
 export type {
   FindingInfo,
   FindingStats,
+  FindingEventCache,
   ReviewProgressInfo,
   ThreadMessage,
   FileThread,

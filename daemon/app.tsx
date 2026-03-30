@@ -60,7 +60,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
           if (stateFingerprint(prev) === stateFingerprint(next)) return prev;
           return next;
         });
-      } catch { /* non-critical */ }
+      } catch (err) { console.warn(`[app] state polling failed: ${(err as Error).message}`); }
     };
     update();
     const poll = setInterval(update, 1000);

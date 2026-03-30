@@ -20,7 +20,8 @@ export class FilesystemCheckpointStore implements CheckpointPort {
       const data = JSON.parse(readFileSync(p, "utf8")) as WaveCheckpoint;
       if (data.trackName !== trackName) return null;
       return data;
-    } catch {
+    } catch (err) {
+      console.error(`[checkpoint-store] failed to load checkpoint for ${trackName}: ${(err as Error).message}`);
       return null;
     }
   }

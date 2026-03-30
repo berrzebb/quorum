@@ -32,7 +32,7 @@ before(() => {
 after(() => {
   try {
     if (tmpDir && existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  } catch {}
+  } catch (err) { console.warn("fitness-loop cleanup failed:", err?.message ?? err); }
 });
 
 function makeStore() {

@@ -163,7 +163,7 @@ export function crossCheckGitDiff(listedFiles, repoRoot) {
         }
       }
     }
-  } catch { /* git unavailable */ }
+  } catch (err) { console.warn(`[trigger-runner] git diff cross-check failed: ${err?.message}`); }
   return { notInDiff };
 }
 
@@ -214,7 +214,7 @@ export function buildTriggerContext({
 export function hasPlanDocuments(repoRoot) {
   const planDirs = ["docs/plan", "docs/plans", "plans"];
   return planDirs.some(d => {
-    try { return existsSync(resolve(repoRoot, d)); } catch { return false; }
+    try { return existsSync(resolve(repoRoot, d)); } catch (err) { console.warn(`[trigger-runner] plan doc check failed: ${err?.message}`); return false; }
   });
 }
 

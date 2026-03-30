@@ -16,12 +16,12 @@ function detectBackend() {
     try {
       const r = spawnSync("psmux", ["version"], { encoding: "utf8", timeout: 3000 });
       if (r.status === 0) return "psmux";
-    } catch {}
+    } catch (err) { console.warn("psmux detection failed:", err?.message ?? err); }
   } else {
     try {
       const r = spawnSync("tmux", ["-V"], { encoding: "utf8", timeout: 3000 });
       if (r.status === 0) return "tmux";
-    } catch {}
+    } catch (err) { console.warn("tmux detection failed:", err?.message ?? err); }
   }
   return "raw";
 }

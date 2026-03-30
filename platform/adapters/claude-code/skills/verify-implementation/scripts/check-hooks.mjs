@@ -22,7 +22,7 @@ function findHooksDir() {
     const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
     const fromRoot = resolve(root, ".claude", "hooks", "quorum");
     if (existsSync(resolve(fromRoot, "index.mjs"))) return fromRoot;
-  } catch { /* git unavailable */ }
+  } catch (err) { console.warn(`[check-hooks] git unavailable: ${err?.message}`); }
 
   console.error("Could not find quorum hooks directory");
   process.exit(1);
@@ -37,8 +37,8 @@ for (const f of files) {
   try {
     execSync(`node --check "${path}"`, { stdio: "pipe", shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true });
     console.log(`  ✓ ${f}`);
-  } catch {
-    console.error(`  ✗ ${f}`);
+  } catch (err) {
+    console.error(`  ✗ ${f}: ${err?.message}`);
     failed++;
   }
 }

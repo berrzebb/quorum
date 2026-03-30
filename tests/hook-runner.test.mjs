@@ -348,7 +348,7 @@ describe("hook-loader", () => {
   });
 
   after(() => {
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("hook-runner cleanup failed:", err?.message ?? err); }
   });
 
   describe("loadHooksFromFile", () => {

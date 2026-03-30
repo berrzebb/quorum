@@ -34,7 +34,8 @@ export async function readStdinJson({ exitOnEmpty = true, fallback = null } = {}
 
   try {
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    console.warn(`[hook-io] stdin JSON parse error: ${err?.message}`);
     if (exitOnEmpty) process.exit(0);
     return fallback ?? {};
   }
@@ -58,7 +59,7 @@ export async function withBridge(repoRoot, hooksCfg, fn) {
       bridge.close();
       return result;
     }
-  } catch { /* fail-open */ }
+  } catch (err) { console.warn(`[hook-io] bridge init/run failed: ${err?.message}`); }
   return null;
 }
 
@@ -90,6 +91,6 @@ export function createDebugLogger(adapterDir, filename = "debug.log") {
   const logPath = resolve(adapterDir, filename);
   return function log(msg) {
     const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
-    try { appendFileSync(logPath, `[${ts}] ${msg}\n`); } catch { /* */ }
+    try { appendFileSync(logPath, `[${ts}] ${msg}\n`); } catch (err) { console.warn(`[hook-io] debug log write failed: ${err?.message}`); }
   };
 }

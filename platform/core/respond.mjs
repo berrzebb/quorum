@@ -96,7 +96,7 @@ function runAutoFix(codes) {
   try {
     const events = bridge.queryEvents({ eventType: "audit.verdict", limit: 1 });
     verdictText = events?.[0]?.payload?.verdictText ?? "";
-  } catch { /* bridge non-critical */ }
+  } catch (err) { console.warn("[respond] verdict text read failed:", err?.message ?? err); }
 
   const prompt = template
     .replace(/\{\{CORRECTIONS\}\}/g, codes.map(c => `- ${c}`).join("\n"))
@@ -152,7 +152,7 @@ function checkExplainGate() {
       console.log("[explain-gate] Retro blocked — add explanation to evidence first");
       return true; // blocked
     }
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn("[respond] checkExplainGate failed:", err?.message ?? err); }
   return false;
 }
 
@@ -180,7 +180,7 @@ function handleStagnation(track) {
       }
       bridge.emitEvent("stagnation.resolve", "system", { action: "force_approve", track });
     }
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn("[respond] handleStagnation failed:", err?.message ?? err); }
 }
 
 async function handleTechDebt(track) {
@@ -205,7 +205,7 @@ async function handleTechDebt(track) {
             if (existsSync(p)) candidates.push(p);
           }
         }
-      } catch { /* dir may not exist */ }
+      } catch (err) { console.warn("[respond] handleTechDebt scandir failed:", err?.message ?? err); }
       for (const catalogPath of candidates) {
         if (existsSync(catalogPath)) {
           const appended = appendTechDebt(catalogPath, risks, track);
@@ -216,7 +216,7 @@ async function handleTechDebt(track) {
         }
       }
     }
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn("[respond] handleTechDebt failed:", err?.message ?? err); }
 }
 
 // ── Main ──────────────────────────────────────
@@ -247,7 +247,7 @@ export async function main() {
     if (escalation?.escalated) {
       console.log(`[respond] Router escalated ${taskKey} → tier ${escalation.tier}`);
     }
-  } catch { /* non-critical */ }
+  } catch (err) { console.warn("[respond] recordVerdict failed:", err?.message ?? err); }
 
   // Branch on verdict
   if (verdict.verdict === "changes_requested") {

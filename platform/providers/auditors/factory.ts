@@ -107,7 +107,8 @@ export async function checkAvailability(
       try {
         const ok = await auditor.available();
         return { role, available: ok };
-      } catch {
+      } catch (err) {
+        console.warn(`[auditor-factory] availability check failed for ${role}: ${(err as Error).message}`);
         return { role, available: false };
       }
     }),

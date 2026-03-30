@@ -96,9 +96,10 @@ export class CodexProvider implements QuorumProvider {
           shell: process.platform === "win32",
         });
         return true;
-      } catch { /* fall through */ }
+      } catch (err) { console.warn(`[codex-adapter] binary check failed: ${(err as Error).message}`); }
       return false;
-    } catch {
+    } catch (err) {
+      console.warn(`[codex-adapter] availability check failed: ${(err as Error).message}`);
       return false;
     }
   }
@@ -137,8 +138,8 @@ export class CodexProvider implements QuorumProvider {
             }));
           }
           this.lastEventTime = Date.now();
-        } catch {
-          // Skip malformed lines
+        } catch (err) {
+          console.warn(`[codex-adapter] malformed agent log line: ${(err as Error).message}`);
         }
       }
 

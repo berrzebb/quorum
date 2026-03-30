@@ -31,7 +31,7 @@ function mcpCall(toolName, args, cwd) {
     try {
       const parsed = JSON.parse(line);
       if (parsed.id === 2) return parsed.result;
-    } catch { /* skip */ }
+    } catch (err) { console.warn("JSON parse skipped:", err?.message ?? err); }
   }
   throw new Error("No response for id:2");
 }

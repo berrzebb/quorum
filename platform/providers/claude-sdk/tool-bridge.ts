@@ -17,7 +17,8 @@ export function isClaudeSdkAvailable(): boolean {
   try {
     require.resolve("@anthropic-ai/claude-agent-sdk");
     return true;
-  } catch {
+  } catch (err) {
+    console.warn(`[tool-bridge] Claude Agent SDK not available: ${(err as Error).message}`);
     return false;
   }
 }

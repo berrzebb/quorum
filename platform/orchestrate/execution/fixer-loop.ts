@@ -10,6 +10,7 @@
 
 import { spawnSync } from "node:child_process";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
+import { invalidateTscCache } from "../governance/fitness-gates.js";
 import type { WorkItem } from "../planning/types.js";
 import { prepareProviderSpawn } from "../core/provider-binary.js";
 
@@ -115,6 +116,9 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     windowsHide: true,
   });
 
+  // Fixer modifies source files → invalidate tsc cache so next fitness gate re-checks
+  invalidateTscCache();
+
   return { completed: result.status === 0 || result.status === null };
 }
 
@@ -152,9 +156,9 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       const stag = detectStagnation(findingsHistory);
       if (stag) {
         stagnation = stag;
-        if (attempts >= maxRounds) {
-          return { passed: false, attempts, stagnation, findingsHistory };
-        }
+        // Early exit on stagnation — continuing to fix is pointless
+        // when the fixer is spinning, oscillating, or making no progress.
+        return { passed: false, attempts, stagnation, findingsHistory };
       }
     }
 

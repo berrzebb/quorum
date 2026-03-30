@@ -591,7 +591,7 @@ const rl = createInterface({ input: process.stdin, terminal: false });
 rl.on("line", async (line) => {
   if (!line.trim()) return;
   let req;
-  try { req = JSON.parse(line); } catch { return; }
+  try { req = JSON.parse(line); } catch (err) { console.warn("[mcp-server] JSON parse failed:", err?.message ?? err); return; }
 
   const result = await handleRequest(req);
   if (result === null || req.id === undefined) return;

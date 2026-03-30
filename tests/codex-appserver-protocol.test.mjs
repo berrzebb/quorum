@@ -240,7 +240,7 @@ function createMockServerScript(behavior) {
               result: null
             }) + "\\n");
           }
-        } catch {}
+        } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
       }
     });
   `;
@@ -437,7 +437,7 @@ describe("CodexAppServerClient notifications", () => {
                 result: null
               }) + "\\n");
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -505,7 +505,7 @@ describe("CodexAppServerClient notifications", () => {
                 result: null
               }) + "\\n");
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -561,7 +561,7 @@ describe("CodexAppServerClient buffer handling", () => {
                 process.stdout.write(resp.slice(mid) + "\\n");
               }, 30);
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -606,7 +606,7 @@ describe("CodexAppServerClient buffer handling", () => {
               // Write both in one chunk
               process.stdout.write(resp + "\\n" + notif + "\\n");
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -655,7 +655,7 @@ describe("CodexAppServerClient buffer handling", () => {
                 process.stdout.write("THIS IS NOT JSON\\n");
               }, 50);
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -704,7 +704,7 @@ describe("CodexAppServerClient process lifecycle", () => {
               // Exit after 100ms
               setTimeout(() => process.exit(0), 100);
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -756,7 +756,7 @@ describe("CodexAppServerClient process lifecycle", () => {
               // Exit without responding
               process.exit(1);
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;
@@ -801,7 +801,7 @@ describe("CodexAppServerClient process lifecycle", () => {
                 result: { serverName: "stderr-test", serverVersion: "1.0", capabilities: {} }
               }) + "\\n");
             }
-          } catch {}
+          } catch (e) { process.stderr.write("mock-server parse error: " + e + "\\n"); }
         }
       });
     `;

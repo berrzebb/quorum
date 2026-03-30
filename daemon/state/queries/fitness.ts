@@ -89,7 +89,8 @@ export function queryFitnessInfo(store: EventStore): FitnessInfo {
       trend,
       components,
     };
-  } catch {
+  } catch (err) {
+    console.warn(`[fitness] queryFitnessInfo failed: ${(err as Error).message}`);
     return { baseline: null, current: null, gate: null, history: [], trend: null, components: null };
   }
 }

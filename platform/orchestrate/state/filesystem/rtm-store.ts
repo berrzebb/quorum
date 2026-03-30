@@ -27,7 +27,8 @@ export class FilesystemRTMStore implements RTMPort {
     try {
       const content = readFileSync(p, "utf8");
       return parseRTMMarkdown(content);
-    } catch {
+    } catch (err) {
+      console.error(`[rtm-store] failed to load RTM from ${trackDir}: ${(err as Error).message}`);
       return null;
     }
   }
@@ -51,8 +52,8 @@ export class FilesystemRTMStore implements RTMPort {
         content = content.replace(pattern, `$1 ${status} |`);
       }
       writeFileSync(p, content, "utf8");
-    } catch {
-      /* fail-open */
+    } catch (err) {
+      console.error(`[rtm-store] updateStatus failed for ${trackDir}: ${(err as Error).message}`);
     }
   }
 }

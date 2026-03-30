@@ -62,7 +62,7 @@ function findMemoryDir(repoRoot) {
 
   // 2. Case-insensitive match (Windows drive letter D: vs d:)
   let entries;
-  try { entries = readdirSync(claudeProjectsDir); } catch { return null; }
+  try { entries = readdirSync(claudeProjectsDir); } catch (err) { console.warn(`[handoff-writer] projects dir read failed: ${err?.message}`); return null; }
 
   const slugLower = slug.toLowerCase();
   for (const entry of entries) {
@@ -143,7 +143,7 @@ export function syncHandoffToMemory(repoRoot, handoffRelPath, opts = {}) {
       if (memMtime > repoMtime) {
         return { success: true, memoryDir, skipped: "memory_is_newer" };
       }
-    } catch { /* on stat failure, keep existing behavior */ }
+    } catch (err) { console.warn(`[handoff-writer] stat comparison failed: ${err?.message}`); }
   }
 
   const content = readFileSync(repoHandoff, "utf8");

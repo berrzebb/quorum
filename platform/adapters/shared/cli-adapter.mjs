@@ -62,7 +62,7 @@ export class ClaudeCliAdapter {
     if (!trimmed || trimmed.startsWith("//")) return null;
 
     let parsed;
-    try { parsed = JSON.parse(trimmed); } catch { return null; }
+    try { parsed = JSON.parse(trimmed); } catch (err) { console.warn(`[cli-adapter] claude JSON parse error: ${err?.message}`); return null; }
     const type = String(parsed.type ?? "");
 
     if (type === "system" && parsed.subtype === "init") {
@@ -140,7 +140,7 @@ export class CodexCliAdapter {
     if (!trimmed) return null;
 
     let parsed;
-    try { parsed = JSON.parse(trimmed); } catch { return null; }
+    try { parsed = JSON.parse(trimmed); } catch (err) { console.warn(`[cli-adapter] codex JSON parse error: ${err?.message}`); return null; }
     const type = String(parsed.type ?? "");
 
     if (type === "thread.started") { this.sessionId = String(parsed.thread_id ?? ""); this.#lastText = ""; return null; }
@@ -221,7 +221,7 @@ export class GeminiCliAdapter {
     if (!trimmed) return null;
 
     let parsed;
-    try { parsed = JSON.parse(trimmed); } catch { return null; }
+    try { parsed = JSON.parse(trimmed); } catch (err) { console.warn(`[cli-adapter] gemini JSON parse error: ${err?.message}`); return null; }
     const type = String(parsed.type ?? "");
 
     if (type === "init") { this.sessionId = String(parsed.session_id ?? ""); this.#lastText = ""; return null; }
@@ -312,7 +312,7 @@ function extractToolResultText(block) {
 
 function extractToolInput(item) {
   if (typeof item.arguments === "string") {
-    try { return JSON.parse(item.arguments); } catch { return { arguments: item.arguments }; }
+    try { return JSON.parse(item.arguments); } catch (err) { console.warn(`[cli-adapter] tool input parse error: ${err?.message}`); return { arguments: item.arguments }; }
   }
   const { type: _, call_id: _2, id: _3, status: _4, ...rest } = item;
   return rest;

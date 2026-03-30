@@ -64,7 +64,7 @@ function parseArgs(args) {
 
     // JSON values (arrays, objects)
     if (val.startsWith("[") || val.startsWith("{")) {
-      try { params[key] = JSON.parse(val); } catch { params[key] = val; }
+      try { params[key] = JSON.parse(val); } catch (err) { console.warn("[tool-runner] JSON parse failed for --" + key + ":", err?.message ?? err); params[key] = val; }
     }
     // Boolean literals
     else if (val === "true") params[key] = true;

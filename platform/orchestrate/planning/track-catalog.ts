@@ -51,7 +51,7 @@ function scanDir(dir: string, tracks: TrackInfo[]): void {
         });
       }
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn(`[track-catalog] directory scan failed for ${dir}: ${(err as Error).message}`); }
 }
 
 // ── Track resolution (name, index, or auto) ──

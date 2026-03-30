@@ -35,7 +35,7 @@ export function buildImplementerPrompt(
   try {
     const p = resolve(repoRoot, "agents", "knowledge", "implementer-protocol.md");
     if (existsSync(p)) protocol = readFileSync(p, "utf8");
-  } catch { /* ok */ }
+  } catch (err) { console.warn(`[implementer-prompt] protocol load failed: ${(err as Error).message}`); }
 
   // Inject domain-specific knowledge for detected domains
   let domainKnowledge = "";
@@ -48,7 +48,7 @@ export function buildImplementerPrompt(
           const content = readFileSync(domainPath, "utf8");
           domainSections.push(`### ${domain.toUpperCase()} Domain\n${content.slice(0, 1500)}`);
         }
-      } catch { /* ok */ }
+      } catch (err) { console.warn(`[implementer-prompt] domain knowledge load failed for ${domain}: ${(err as Error).message}`); }
     }
     if (domainSections.length > 0) {
       domainKnowledge = `\n## Domain-Specific Guidance\n\nThis task touches ${detectedDomains.join(", ")} domain(s). Review these checklists BEFORE implementing:\n\n${domainSections.join("\n\n---\n\n")}\n`;

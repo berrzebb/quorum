@@ -93,7 +93,7 @@ export class ClaudeCodeProvider implements QuorumProvider {
     if (lastSize > 0) {
       try {
         lastLineCount = readFileSync(inboxPath, "utf8").trim().split(/\r?\n/).length;
-      } catch { /* start from 0 */ }
+      } catch (err) { console.warn(`[claude-code-adapter] inbox read failed, starting from 0: ${(err as Error).message}`); }
     }
 
     this.intervals.push(setInterval(() => {
@@ -117,8 +117,8 @@ export class ClaudeCodeProvider implements QuorumProvider {
           const event = JSON.parse(line);
           this.bus.emit(event);
           this.lastEventTime = Date.now();
-        } catch {
-          // Skip malformed lines
+        } catch (err) {
+          console.warn(`[claude-code-adapter] malformed inbox line: ${(err as Error).message}`);
         }
       }
 

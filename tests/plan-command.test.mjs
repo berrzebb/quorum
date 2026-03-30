@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 const TMP = resolve(tmpdir(), `quorum-plan-cmd-${Date.now()}`);
 
 before(() => mkdirSync(TMP, { recursive: true }));
-after(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch {} });
+after(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch (err) { console.warn("plan-command cleanup failed:", err?.message ?? err); } });
 
 function writePlan(trackName, wbContent, rtmContent) {
   const dir = resolve(TMP, "docs", trackName);

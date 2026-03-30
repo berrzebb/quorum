@@ -118,7 +118,7 @@ function scanAndUpdate(dir, repoRoot, results) {
         }
       }
     }
-  } catch { /* skip */ }
+  } catch (err) { console.warn("[rtm-updater] scanAndUpdate failed:", err?.message ?? err); }
 }
 
 // ── Git commit history integration ────────────
@@ -150,7 +150,8 @@ function getCommitMap(repoRoot, since) {
       }
     }
     return map;
-  } catch {
+  } catch (err) {
+    console.error("[rtm-updater] getCommitMap failed:", err?.message ?? err);
     return new Map();
   }
 }
@@ -242,7 +243,7 @@ function getProgressFromGit(repoRoot, rtmPaths) {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
     progress.recentCommits = log.trim().split("\n").filter(Boolean);
-  } catch { /* skip */ }
+  } catch (err) { console.warn("[rtm-updater] getProgressFromGit git log failed:", err?.message ?? err); }
 
   // Per-track progress from RTM files
   for (const rtmPath of rtmPaths) {

@@ -142,7 +142,7 @@ export async function run(args: string[]): Promise<void> {
   if (existsSync(mcpPath)) {
     try {
       mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8"));
-    } catch { /* fresh start */ }
+    } catch (err) { console.warn(`[setup] .mcp.json parse failed: ${(err as Error).message}`); }
   }
 
   const mcpServers = (mcpConfig.mcpServers ?? {}) as Record<string, unknown>;

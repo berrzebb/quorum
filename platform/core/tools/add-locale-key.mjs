@@ -23,7 +23,7 @@ function findLocalesDir() {
     const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", windowsHide: true }).trim();
     const fromRoot = resolve(root, ".claude", "hooks", "quorum", "locales");
     if (existsSync(fromRoot)) return fromRoot;
-  } catch { /* git unavailable */ }
+  } catch (err) { console.warn("[add-locale-key] git rev-parse failed:", err?.message ?? err); }
 
   console.error("Could not find locales directory");
   process.exit(1);

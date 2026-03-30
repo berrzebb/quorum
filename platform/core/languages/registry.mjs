@@ -119,7 +119,7 @@ class LanguageRegistry {
     const candidates = ["src", "lib", "cli", "core", "bus", "app", "pkg", "cmd", "internal", "daemon", "providers", "server", "client", "engine"];
     for (const name of candidates) {
       const p = resolve(dir, name);
-      try { if (statSync(p).isDirectory()) sampledDirs.push(p); } catch { /* skip */ }
+      if (existsSync(p) && statSync(p).isDirectory()) sampledDirs.push(p);
     }
 
     for (const d of sampledDirs) {
@@ -129,7 +129,7 @@ class LanguageRegistry {
           const spec = this._byExt.get(ext);
           if (spec) found.add(spec);
         }
-      } catch { /* skip */ }
+      } catch (err) { console.warn("[lang-registry] detectLanguages readdir failed:", err?.message ?? err); }
     }
     return [...found];
   }
@@ -168,7 +168,8 @@ async function tryImportDefault(filePath) {
     statSync(filePath);
     const mod = await import(pathToFileURL(filePath).href);
     return mod.default ?? mod.spec ?? null;
-  } catch {
+  } catch (err) {
+    console.warn("[lang-registry] tryImportDefault failed:", err?.message ?? err);
     return null;
   }
 }
@@ -240,7 +241,8 @@ export async function loadAll() {
   let entries;
   try {
     entries = readdirSync(LANGUAGES_DIR, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    console.warn("[lang-registry] loadAll readdir failed:", err?.message ?? err);
     return registry;
   }
 

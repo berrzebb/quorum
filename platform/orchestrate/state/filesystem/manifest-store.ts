@@ -28,7 +28,8 @@ export class FilesystemManifestStore implements ManifestPort {
       const key = `wave:manifest:${trackName}:${waveIndex}`;
       const data = this.bridge.getState(key);
       return (data as WaveManifestEntry) ?? null;
-    } catch {
+    } catch (err) {
+      console.error(`[manifest-store] failed to load manifest ${trackName}:${waveIndex}: ${(err as Error).message}`);
       return null;
     }
   }
@@ -38,8 +39,8 @@ export class FilesystemManifestStore implements ManifestPort {
     try {
       const key = `wave:manifest:${manifest.trackName}:${manifest.waveIndex}`;
       this.bridge.setState(key, manifest);
-    } catch {
-      /* fail-open */
+    } catch (err) {
+      console.warn(`[manifest-store] failed to save manifest: ${(err as Error).message}`);
     }
   }
 
@@ -51,8 +52,8 @@ export class FilesystemManifestStore implements ManifestPort {
         const key = `wave:manifest:${trackName}:${i}`;
         const m = this.bridge.getState(key);
         if (m) manifests.push(m as WaveManifestEntry);
-      } catch {
-        /* skip */
+      } catch (err) {
+        console.warn(`[manifest-store] failed to load manifest ${trackName}:${i}: ${(err as Error).message}`);
       }
     }
     return manifests;

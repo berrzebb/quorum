@@ -6,7 +6,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 import {
   collectFitnessSignals,
@@ -37,7 +37,7 @@ export function walkSourceFiles(
       if (entry.isDirectory()) results.push(...walkSourceFiles(full, filter, maxDepth, depth + 1));
       else if (filter(entry.name)) results.push(full);
     }
-  } catch { /* permission or access error */ }
+  } catch (err) { console.warn(`[preflight] walkSourceFiles access error in ${dir}: ${(err as Error).message}`); }
   return results;
 }
 
@@ -59,7 +59,7 @@ export function runPreflightCheck(repoRoot: string): PreflightResult {
       const lines = status.split("\n").length;
       warnings.push(`${lines} uncommitted change(s) — consider committing before orchestrate`);
     }
-  } catch { /* not a git repo — skip */ }
+  } catch (err) { console.warn(`[preflight] git status check skipped: ${(err as Error).message}`); }
 
   // 2. Check project builds
   const pkgPath = resolve(repoRoot, "package.json");
@@ -70,11 +70,12 @@ export function runPreflightCheck(repoRoot: string): PreflightResult {
       if (pkg.devDependencies?.typescript || pkg.dependencies?.typescript) {
         try {
           execSync("npx tsc --noEmit", { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
-        } catch {
+        } catch (err) {
+          console.error(`[preflight] tsc --noEmit failed: ${(err as Error).message}`);
           errors.push("Project does not compile (npx tsc --noEmit failed)");
         }
       }
-    } catch { /* invalid package.json */ }
+    } catch (err) { console.warn(`[preflight] invalid package.json: ${(err as Error).message}`); }
   }
 
   // 3. Check existing tests pass
@@ -86,7 +87,6 @@ export function runPreflightCheck(repoRoot: string): PreflightResult {
   // 4. Collect fitness baseline
   try {
     const srcDir = resolve(repoRoot, "src");
-    const sep = repoRoot.includes("/") ? "/" : "\\";
     const allFiles = existsSync(srcDir)
       ? walkSourceFiles(srcDir, n => /\.[jt]sx?$/.test(n)).map(f => f.replace(repoRoot + sep, ""))
       : [];
@@ -95,7 +95,7 @@ export function runPreflightCheck(repoRoot: string): PreflightResult {
       const score = computeFitness(signals);
       fitnessBaseline = score.total;
     }
-  } catch { /* skip fitness baseline */ }
+  } catch (err) { console.warn(`[preflight] fitness baseline skipped: ${(err as Error).message}`); }
 
   return { errors, warnings, fitnessBaseline };
 }

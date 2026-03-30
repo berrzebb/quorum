@@ -7,13 +7,10 @@
 
 import type { ContractLedger } from '../core/harness/contract-ledger.js';
 import { StrictContractEnforcer } from './contract-enforcer.js';
+import type { PromotionGateResult } from './promotion-gate.js';
 
-// ── Gate result ─────────────────────────────
-
-export interface HandoffGateResult {
-  allowed: boolean;
-  reason?: string;
-}
+// Re-export shared gate result type
+export type HandoffGateResult = PromotionGateResult;
 
 // ── Handoff Gate ────────────────────────────
 

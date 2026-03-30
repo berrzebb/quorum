@@ -11,7 +11,7 @@ let _computeBlastRadius = null;
 try {
   const tc = await import("../tools/tool-core.mjs");
   _computeBlastRadius = tc.computeBlastRadius;
-} catch { /* tool-core unavailable — blast radius skipped */ }
+} catch (err) { console.warn("[pre-verify] tool-core import failed:", err?.message ?? err); }
 
 /**
  * Run all deterministic verifications LOCALLY before invoking the auditor.
@@ -177,7 +177,7 @@ export function computeChangedFiles(markdown, root) {
           useMergeBase = true;
         }
       }
-    } catch { /* merge-base failed */ }
+    } catch (err) { console.warn("[pre-verify] merge-base failed:", err?.message ?? err); }
 
     if (!useMergeBase) {
       try {
@@ -191,7 +191,7 @@ export function computeChangedFiles(markdown, root) {
             diffCmd = `git diff --name-only ${oldest}..HEAD`;
           }
         }
-      } catch { /* fallback failed */ }
+      } catch (err) { console.warn("[pre-verify] git log fallback failed:", err?.message ?? err); }
     }
   }
 
@@ -250,7 +250,8 @@ function computeBlastRadiusSection(changedFiles, root) {
     if (result.files.length > 20) {
       lines.push(`- _...and ${result.files.length - 20} more files_`);
     }
-  } catch {
+  } catch (err) {
+    console.warn("[pre-verify] blast radius computation failed:", err?.message ?? err);
     lines.push("_blast radius computation failed — skipped_");
   }
   return lines.join("\n");

@@ -29,7 +29,7 @@ before(() => {
 });
 
 after(() => {
-  try { store.close(); } catch { /* best-effort */ }
+  try { store.close(); } catch (err) { console.warn("daemon-baseline store close failed:", err?.message ?? err); }
 });
 
 // ═══ 1. StateReader contract (structural) ════════════════════════════
@@ -260,7 +260,7 @@ describe("StateReader with seeded data", () => {
   });
 
   after(() => {
-    try { seededStore.close(); } catch { /* best-effort */ }
+    try { seededStore.close(); } catch (err) { console.warn("daemon-baseline seededStore close failed:", err?.message ?? err); }
   });
 
   it("ItemStateInfo has entityId, currentState, source fields", () => {

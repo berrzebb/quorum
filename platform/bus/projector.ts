@@ -108,7 +108,8 @@ export class MarkdownProjector {
         metadata: row.metadata ? JSON.parse(row.metadata) : {},
         createdAt: row.created_at,
       }));
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] queryItemStates failed: ${(err as Error).message}`);
       return [];
     }
   }
@@ -135,7 +136,8 @@ export class MarkdownProjector {
         source: r.source,
         createdAt: r.created_at,
       }));
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] entityHistory failed for '${entityId}': ${(err as Error).message}`);
       return [];
     }
   }
@@ -167,7 +169,8 @@ export class MarkdownProjector {
         lines.push("");
       }
       return lines.join("\n");
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] projectSessionDigest failed: ${(err as Error).message}`);
       return "Parliament session data unavailable.";
     }
   }
@@ -209,7 +212,8 @@ export class MarkdownProjector {
         lines.push("");
       }
       return lines.join("\n");
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] projectAmendmentLog failed: ${(err as Error).message}`);
       return "Amendment data unavailable.";
     }
   }
@@ -254,7 +258,8 @@ export class MarkdownProjector {
       lines.push("");
 
       return lines.join("\n");
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] projectConvergenceStatus failed: ${(err as Error).message}`);
       return "Convergence data unavailable.";
     }
   }
@@ -280,7 +285,8 @@ export class MarkdownProjector {
         lines.push("");
       }
       return lines.join("\n");
-    } catch {
+    } catch (err) {
+      console.warn(`[projector] projectCPS failed: ${(err as Error).message}`);
       return "CPS data unavailable.";
     }
   }

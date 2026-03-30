@@ -53,8 +53,9 @@ export class OllamaAuditor extends OpenAICompatibleAuditor {
       });
       clearTimeout(timer);
       return res.ok;
-    } catch {
+    } catch (err) {
       // Fallback to OpenAI-compatible endpoint
+      console.warn(`[ollama-auditor] native API check failed, trying OpenAI endpoint: ${(err as Error).message}`);
       return super.available();
     }
   }

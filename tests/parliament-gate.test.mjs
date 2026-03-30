@@ -121,7 +121,7 @@ describe("Design Gate", () => {
 
   // Cleanup
   it("cleanup", () => {
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ok */ }
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("parliament-gate cleanup failed:", err?.message ?? err); }
     assert.ok(true);
   });
 });

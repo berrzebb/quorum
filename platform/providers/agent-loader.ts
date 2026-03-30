@@ -90,7 +90,7 @@ export class AgentLoader {
             names.add(basename(file, ".md"));
           }
         }
-      } catch { /* skip unreadable dirs */ }
+      } catch (err) { console.warn(`[agent-loader] directory read failed for ${dir}: ${(err as Error).message}`); }
     }
 
     return [...names].sort();

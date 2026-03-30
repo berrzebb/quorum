@@ -6,7 +6,7 @@
  * No audit logic, no fixer retry logic.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { WorkItem } from "../planning/types.js";
 import { selectModelForTask, type ModelSelection } from "./model-routing.js";
@@ -14,6 +14,11 @@ import { buildImplementerPrompt } from "./implementer-prompt.js";
 import type { RosterEntry } from "./implementer-prompt.js";
 import type { WaveManifest } from "./dependency-context.js";
 import { writePromptFile, writeScriptFile } from "../core/prompt-files.js";
+import { FilesystemAgentStateStore } from "../state/filesystem/agent-state-store.js";
+import type { AgentSessionState } from "../state/state-types.js";
+
+// Re-export for backward compatibility
+export type { AgentSessionState };
 
 // ── Types ────────────────────────────────────
 
@@ -37,21 +42,7 @@ export interface AgentHandle {
   tier: ModelSelection;
 }
 
-/** Persisted agent session state (written to .claude/agents/). */
-export interface AgentSessionState {
-  id: string;
-  name: string;
-  backend: string;
-  role: string;
-  type: string;
-  trackName: string;
-  wbId: string;
-  startedAt: number;
-  status: string;
-  outputFile?: string;
-}
-
-// ── Agent State Persistence ─────────────────
+// ── Agent State Persistence (delegates to FilesystemAgentStateStore) ──
 
 const AGENTS_DIR = ".claude/agents";
 
@@ -62,22 +53,22 @@ export function saveAgentState(
   repoRoot: string, sessionId: string, sessionName: string,
   backend: string, itemId: string, trackName: string, outputFile?: string,
 ): void {
-  const dir = resolve(repoRoot, AGENTS_DIR);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, `${sessionId}.json`), JSON.stringify({
+  const store = new FilesystemAgentStateStore(resolve(repoRoot, AGENTS_DIR));
+  store.save({
     id: sessionId, name: sessionName, backend,
     role: "implementer", type: "orchestrate",
     trackName, wbId: itemId,
     startedAt: Date.now(), status: "running",
     ...(outputFile ? { outputFile } : {}),
-  }, null, 2), "utf8");
+  });
 }
 
 /**
  * Remove persisted agent state file.
  */
 export function removeAgentState(repoRoot: string, sessionId: string): void {
-  try { rmSync(resolve(repoRoot, AGENTS_DIR, `${sessionId}.json`), { force: true }); } catch { /* ok */ }
+  const store = new FilesystemAgentStateStore(resolve(repoRoot, AGENTS_DIR));
+  store.remove(sessionId);
 }
 
 // ── Agent Spawn ──────────────────────────────
@@ -126,7 +117,8 @@ export async function spawnAgent(opts: SpawnAgentOptions): Promise<AgentHandle |
     saveAgentState(repoRoot, session.id, session.name, mux.getBackend(), item.id, trackName, outputFile);
 
     return { sessionId: session.id, sessionName: session.name, outputFile, tier };
-  } catch {
+  } catch (err) {
+    console.error(`[agent-session] spawn failed for ${item.id}: ${(err as Error).message}`);
     return null;
   }
 }
@@ -142,7 +134,7 @@ export function captureAgentOutput(
 ): string {
   // Primary: read from output file (reliable)
   if (outputFile && existsSync(outputFile)) {
-    try { return readFileSync(outputFile, "utf8"); } catch { /* fall through */ }
+    try { return readFileSync(outputFile, "utf8"); } catch (err) { console.warn(`[agent-session] could not read output file ${outputFile}: ${(err as Error).message}`); }
   }
   // Fallback: capture-pane from mux
   const cap = mux.capture(sessionId, 200);
