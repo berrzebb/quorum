@@ -69,7 +69,9 @@ export default async function startDaemon(): Promise<void> {
 }
 
 // Direct invocation: node daemon/index.ts
-const isDirectRun = import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`;
+import { fileURLToPath } from "node:url";
+const __daemon_filename = fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === __daemon_filename;
 if (isDirectRun) {
   startDaemon().catch((err) => {
     console.error("Daemon failed to start:", err);

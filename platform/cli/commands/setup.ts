@@ -124,6 +124,18 @@ export async function run(args: string[]): Promise<void> {
         agree_tag: "[APPROVED]",
         pending_tag: "[CHANGES_REQUESTED]",
         planning_dirs: ["docs/design"],
+        design_docs_dir: "docs/design/**",
+        roles: {
+          advocate: "claude",
+          devil: "claude",
+          judge: "claude",
+        },
+      },
+      parliament: {
+        convergenceThreshold: 0.7,
+        eligibleVoters: 3,
+        maxRounds: 10,
+        maxAutoAmendments: 5,
       },
       quality_rules: { presets: detectPresets(repoRoot), overrides: [] },
     };

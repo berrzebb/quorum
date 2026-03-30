@@ -11,8 +11,8 @@ function getVersion(): string {
   if (process.env.npm_package_version) return process.env.npm_package_version;
   try {
     const candidates = [
-      resolve(__dirname, "..", "..", "package.json"),
-      resolve(__dirname, "..", "..", "..", "package.json"),
+      resolve(__dirname, "..", "..", "..", "package.json"),  // dist/daemon/components → root
+      resolve(__dirname, "..", "..", "package.json"),        // daemon/components → root (tsx mode)
     ];
     for (const p of candidates) {
       try {
