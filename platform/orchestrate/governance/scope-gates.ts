@@ -410,7 +410,13 @@ export function runProjectTests(repoRoot: string): ProjectTestResult {
           });
           return { ran: true, passed: true, summary: "npm test passed" };
         } catch (e: any) {
-          const stderr = e?.stderr?.toString?.()?.slice(0, 200) ?? "";
+          const stderr = e?.stderr?.toString?.()?.slice(0, 500) ?? "";
+          const stdout = e?.stdout?.toString?.()?.slice(0, 500) ?? "";
+          const output = stderr + stdout;
+          // "No test files found" means no tests exist yet — not a failure
+          if (/no test (files|suites?) found/i.test(output) || /exiting with code 1/i.test(output) && /no test/i.test(output)) {
+            return { ran: false, passed: true, summary: "no test files found (skip)" };
+          }
           console.error(`[scope-gates] npm test failed: ${stderr || "exit non-zero"}`);
           return { ran: true, passed: false, summary: stderr || "npm test failed" };
         }

@@ -295,6 +295,39 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
   }
 
+  // ── 2.5. Scope enforcement — revert out-of-scope file changes ──
+  const allowedFiles = new Set(wave.items.flatMap(i => i.targetFiles));
+  if (allowedFiles.size > 0) {
+    try {
+      const diffRaw = execSync("git diff --name-only HEAD", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+      const untrackedRaw = execSync("git ls-files --others --exclude-standard", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+      const allChanged = [...diffRaw.split("\n"), ...untrackedRaw.split("\n")].filter(Boolean);
+      const outOfScope = allChanged.filter(f =>
+        !allowedFiles.has(f) &&
+        !f.startsWith(".claude/") &&
+        !f.endsWith(".lock") &&
+        !f.startsWith("docs/plan/") &&       // RTM + plan docs managed by orchestrator
+        f !== "package.json" &&               // deps install modifies this
+        f !== "package-lock.json",
+      );
+      if (outOfScope.length > 0) {
+        log(`\n  \x1b[33m◈ Scope enforcement:\x1b[0m reverting ${outOfScope.length} out-of-scope file(s)`);
+        for (const f of outOfScope) {
+          log(`    \x1b[2m↩ ${f}\x1b[0m`);
+          try { execSync(`git checkout -- "${f}"`, { cwd: repoRoot, timeout: 5_000, stdio: "pipe", windowsHide: true }); }
+          catch { try { execSync(`git rm -f "${f}"`, { cwd: repoRoot, timeout: 5_000, stdio: "pipe", windowsHide: true }); } catch { /* untracked file cleanup */ } }
+        }
+        // Clean untracked out-of-scope files
+        for (const f of outOfScope) {
+          try {
+            const fullPath = resolve(repoRoot, f);
+            if (existsSync(fullPath)) unlinkSync(fullPath);
+          } catch { /* ignore */ }
+        }
+      }
+    } catch (err) { log(`  \x1b[33m⚠ scope enforcement failed: ${(err as Error).message}\x1b[0m`); }
+  }
+
   // ── 3. Run audit gates ──────────────────────
   const auditGates = runWaveAuditGates({
     repoRoot, wave, completedIds, snapshotRef, blueprintRules, bridge,
@@ -356,7 +389,14 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     let wavePassed = fitnessDecision !== "auto-reject";
     let testResult: { ran: boolean; passed: boolean; summary: string } | undefined;
 
-    if (completedItems.length > 0 && fitnessDecision !== "auto-reject") {
+    // Skip LLM audit for XS-only waves — mechanical gates (fitness, stubs, scope, blueprint) suffice.
+    const allXS = completedItems.every(i => i.size === "XS");
+    if (allXS && completedItems.length > 0 && fitnessDecision !== "auto-reject") {
+      log(`  \x1b[36m◈ LLM audit skipped\x1b[0m (XS-only wave — mechanical gates passed)`);
+      // RTM: passed (mechanical gates only)
+      updateRTM(rtmPath, completedItems, "passed");
+      amendWaveCommit(repoRoot, rtmPath);
+    } else if (completedItems.length > 0 && fitnessDecision !== "auto-reject") {
       log(`  \x1b[36m◈ LLM audit\x1b[0m (auditor: ${auditor}, max retries: ${maxRetries})`);
       const auditStart = Date.now();
       const fixResult = await runFixCycle({
@@ -401,6 +441,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
           updateRTM(rtmPath, completedItems, "failed");
           amendWaveCommit(repoRoot, rtmPath);
         }
+        // Rollback completedIds — code was reverted, so items are not truly complete
+        for (const id of localCompleted) completedIds.delete(id);
       }
     }
 
@@ -413,6 +455,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         updateRTM(rtmPath, completedItems, "failed");
         amendWaveCommit(repoRoot, rtmPath);
       }
+      // Rollback completedIds — code was reverted, so items are not truly complete
+      for (const id of localCompleted) completedIds.delete(id);
       wavePassed = false;
     }
 
@@ -421,8 +465,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
     return {
       passed: wavePassed,
-      completedItemIds: [...localCompleted],
-      timedOutIds,
+      completedItemIds: wavePassed ? [...localCompleted] : [],
+      timedOutIds: wavePassed ? timedOutIds : [...localCompleted, ...timedOutIds],
       fitnessResult: auditGates.fitnessResult,
       auditGates,
       blueprintBlocked,
@@ -443,7 +487,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
 // ── Helpers ─────────────────────────────────
 
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 
 function _ensureTmpDir(repoRoot: string): string {

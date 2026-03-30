@@ -83,11 +83,15 @@ export function buildImplementerPrompt(
     ? `## Constraints\n${item.constraints}`
     : "";
 
+  const scopeWarning = item.targetFiles.length > 0
+    ? `\n## SCOPE RESTRICTION (CRITICAL)\nYou MUST only create/modify the files listed in "Target Files" above.\nDo NOT create files for other work breakdown items. Do NOT implement features beyond this WB.\nOther WBs will handle their own files — implementing them here causes scope violations and audit failure.\n`
+    : "";
+
   return `# Task: ${item.id} (Track: ${trackName})
 
 ## Target Files
 ${files}
-
+${scopeWarning}
 ${item.dependsOn ? `## Dependencies: ${item.dependsOn.join(", ")}` : ""}
 ${actionSection}
 ${ctxSection}
@@ -95,8 +99,8 @@ ${constraintSection}
 ${verifySection}
 ${depContext}${peerSection}${domainKnowledge}
 ## Instructions
-Implement this work breakdown item. Follow the implementer protocol.
-When done, run the verify command to confirm your work is correct.
+Implement ONLY this work breakdown item (${item.id}). Do not implement other items.
+Follow the implementer protocol. When done, run the verify command to confirm your work is correct.
 
 ${protocol}`;
 }

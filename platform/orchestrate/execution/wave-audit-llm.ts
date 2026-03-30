@@ -5,7 +5,7 @@
  * No mechanical gates, no fixer logic — pure LLM review.
  */
 
-import { spawnSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 
 import { prepareProviderSpawn } from "../core/provider-binary.js";
 
@@ -111,40 +111,40 @@ export async function runWaveAuditLLM(
     return parts.join("\n");
   }).join("\n");
 
+  // Include git diff in the prompt so the auditor doesn't need to read files (avoids timeout)
+  let diffSection = "";
+  try {
+    const diff = execSync("git diff HEAD~1 -- " + [...new Set(files)].slice(0, 20).map(f => `"${f}"`).join(" "), {
+      cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+    }).slice(0, 8000); // Cap at 8KB to avoid prompt bloat
+    if (diff.trim()) diffSection = `\n## Code Changes (git diff):\n\`\`\`diff\n${diff}\n\`\`\`\n`;
+  } catch { /* fallback: auditor reads files */ }
+
   const prompt = [
     "# Wave Audit — Review Implementation Changes",
     "",
     `## Items completed in this wave (with scope and done criteria):`,
     itemList,
     "",
-    `## Files to review:`,
+    `## Files changed:`,
     fileList,
-    "",
+    diffSection,
     "## Instructions:",
-    "You MAY read files to review code. Do NOT run build/test/lint commands (npm test, tsc, eslint, etc).",
+    "Review the code changes shown above. Do NOT read files or run commands — all information is provided.",
     "Build verification is already handled by the orchestrator. Your role is code quality review.",
     "",
     "IMPORTANT: Only judge each item against ITS OWN done criteria and scope.",
     "Do NOT fail an item for work that belongs to a DIFFERENT work-breakdown item.",
-    "Each WB has a defined scope (target files) — out-of-scope concerns are not this item's responsibility.",
     "",
-    "1. Read each file listed above",
-    "2. Check: are types correct? Are there obvious bugs or logic errors?",
-    "3. Check: is error handling appropriate? Are edge cases considered?",
-    "4. **Substantiveness check** — for EACH file, verify:",
-    "   a. NO stub indicators: TODO, FIXME, placeholder, 'not implemented', empty function bodies",
-    "   b. NO hardcoded mock data where real logic is expected (return [], return null, return {})",
-    "   c. Functions have REAL logic, not just type signatures or pass-through",
-    "   d. Event handlers do actual work, not just console.log",
-    "   e. API calls return real data flows, not static fixtures",
-    "   If ANY stub is found, output passed: false with the specific stub location.",
-    "5. Output a JSON verdict at the END of your response in this exact format:",
+    "1. Check: are types correct? Are there obvious bugs or logic errors?",
+    "2. Check: is error handling appropriate? Are edge cases considered?",
+    "3. **Substantiveness check** — verify NO stubs (TODO, FIXME, placeholder, empty functions, mock data)",
+    "4. Output a JSON verdict at the END of your response:",
     '```json',
     '{"passed": true|false, "findings": ["issue 1", "issue 2"]}',
     '```',
     "",
     "FAIL if: type errors, obvious bugs, regressions, OR stub/placeholder code.",
-    "Stubs are NOT acceptable — every function must have real implementation.",
   ].join("\n");
 
   const spawn = await prepareProviderSpawn(provider, prompt, {

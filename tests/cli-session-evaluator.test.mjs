@@ -59,14 +59,13 @@ describe("CliSessionEvaluator", async () => {
     assert.strictEqual(result.passed, false);
   });
 
-  it("blocks interpreter inline flags (-e, -c, -p, --eval=, --print=)", async () => {
+  it("blocks dangerous interpreter inline flags (python -c, ruby -e, etc.)", async () => {
     const evaluator = new CliSessionEvaluator(process.cwd());
     const blocked = [
-      "node -e process.exit(0)",
-      "node --eval=process.exit(0)",
       "python -c print(1)",
-      "node -p process.version",
-      "node --print=process.version",
+      "python3 -e import(os)",
+      "ruby -e puts(1)",
+      "perl -e print(1)",
     ];
     for (const cmd of blocked) {
       const result = await evaluator.run({

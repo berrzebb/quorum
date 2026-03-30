@@ -245,11 +245,23 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         .flatMap(w => w.items);
       console.log(`\n  \x1b[36m◈ Phase gate\x1b[0m — verifying ${currentPhaseId} before ${wave.phaseId}`);
 
-      // Store phase-level evaluation contract (key must match canPromote lookup)
+      // Store phase-level sprint + evaluation contracts (keys must match canPromote lookup)
       // Only bind promotion gate when fitness data exists (avoids undefined < threshold → false)
       const phaseContractId = `${trackName}/${currentPhaseId}`;
       const hasPromotionData = lastFitnessResult != null;
       if (hasPromotionData) {
+        // Sprint contract required by PromotionGate.canPromote()
+        const phaseSprintContract = createSprintContract({
+          trackName,
+          waveId: currentPhaseId,
+          scope: prevPhaseItems.map(i => i.id),
+          doneCriteria: prevPhaseItems.filter(i => i.done).map(i => i.done!),
+          evidenceRequired: [],
+          approvalState: "approved",
+        });
+        phaseSprintContract.contractId = phaseContractId;
+        contractLedger.storeSprintContract(phaseSprintContract);
+
         const phaseEvalContract = createEvaluationContract({
           contractId: phaseContractId,
           blockingChecks: ["fitness", "scope", "tests"],
@@ -474,12 +486,15 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
 
 /** Pick a default auditor that differs from the provider for cross-model review. */
 function _defaultAuditor(provider: string): string {
+  // Prefer gemini (fast, stable parsing) → codex → claude.
+  // Same-provider audit is blocked — cross-model review is mandatory.
   // Only CLI-spawnable providers (ollama is HTTP-only, would fail in runWaveAuditLLM).
-  const candidates = ["codex", "gemini", "claude"];
+  const candidates = ["gemini", "codex", "claude"];
   for (const c of candidates) {
     if (c !== provider) return c;
   }
-  return provider;
+  // Fallback: still return different model. If truly no option, warn at call site.
+  return candidates[0]!;
 }
 
 function printWaveAuditDetails(wave: Wave, wr: WaveResult): void {

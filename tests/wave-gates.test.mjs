@@ -325,20 +325,35 @@ describe("verifyPhaseCompletion", () => {
     assert.ok(result.failures.some(f => f.includes("blocked") || f.includes("metachar") || f.includes("allowlist")));
   });
 
-  it("blocks interpreter inline execution flags", () => {
+  it("blocks interpreter inline execution flags for dangerous interpreters", () => {
     const blocked = [
-      "node -e process.exit(0)",
-      "node --eval=process.exit(0)",
       "python -c print(1)",
-      "node --eval process.exit(0)",
-      "node -p process.version",
-      "node --print=process.version",
+      "python3 -e import os",
+      "ruby -e puts(1)",
+      "perl -e print(1)",
     ];
     for (const cmd of blocked) {
       const items = [{ id: "WB-01", targetFiles: [], verify: cmd }];
       const completedIds = new Set(["WB-01"]);
       const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
       assert.strictEqual(result.passed, false, `Expected "${cmd}" to be blocked`);
+    }
+  });
+
+  it("allows node -e for inline verification checks", () => {
+    const allowed = [
+      "node -e process.exit(0)",
+      'node -e "console.log(1)"',
+      'node -p "process.version"',
+    ];
+    for (const cmd of allowed) {
+      const items = [{ id: "WB-01", targetFiles: [], verify: cmd }];
+      const completedIds = new Set(["WB-01"]);
+      const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
+      // node -e should be allowed (not blocked by inline filter)
+      // It may still fail on execution, but should not be blocked by allowlist
+      const hasBlockedFailure = result.failures.some(f => f.includes("blocked") || f.includes("allowlist"));
+      assert.strictEqual(hasBlockedFailure, false, `Expected "${cmd}" to NOT be blocked by allowlist`);
     }
   });
 

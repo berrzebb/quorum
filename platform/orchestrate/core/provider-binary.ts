@@ -73,8 +73,14 @@ export function buildProviderArgs(provider: string, opts: ProviderArgsOptions): 
   } else if (provider === "codex") {
     if (opts.systemPrompt) args.push("--instructions", opts.systemPrompt);
     if (opts.fullAuto) args.push("--full-auto");
+  } else if (provider === "gemini") {
+    // Gemini CLI: -p for non-interactive, --yolo for auto-approve, no --system-prompt flag
+    const fullPrompt = opts.systemPrompt
+      ? `[System: ${opts.systemPrompt}]\n\n${opts.prompt}`
+      : opts.prompt;
+    args.push("-p", fullPrompt, "--yolo");
   } else {
-    // gemini, ollama, vllm, etc.
+    // ollama, vllm, etc.
     if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt);
     if (opts.prompt) args.push(opts.prompt);
   }
@@ -111,6 +117,12 @@ export async function prepareProviderSpawn(
   if (provider === "codex") {
     finalArgs = ["exec", "--full-auto", "-"];
     stdinInput = prompt;
+  } else if (provider === "gemini") {
+    // Gemini: pipe prompt via stdin to avoid Windows cmd.exe length limits.
+    // gemini -p reads stdin and appends -p value (use empty -p "").
+    const sysPrefix = opts?.systemPrompt ? `[System: ${opts.systemPrompt}]\n\n` : "";
+    stdinInput = sysPrefix + prompt;
+    finalArgs = ["-p", "", "--yolo"];
   } else {
     finalArgs = buildProviderArgs(provider, {
       prompt,
