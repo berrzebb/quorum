@@ -268,9 +268,10 @@ function parseRtmFile(path: string, status: Map<string, TaskItem["status"]>): vo
 }
 
 function resolveStatus(cell: string): TaskItem["status"] {
-  if (cell === "verified" || cell === "done" || cell === "complete") return "verified";
+  if (cell === "verified" || cell === "done" || cell === "complete" || cell === "approved") return "verified";
   if (cell === "wip" || cell === "in-progress" || cell.startsWith("partial")) return "wip";
-  if (cell === "blocked") return "blocked";
+  if (cell === "blocked" || cell === "failed" || cell === "rejected") return "blocked";
+  // "pending" is the RTM initial value — treat as open
   return "open";
 }
 
