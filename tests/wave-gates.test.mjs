@@ -302,6 +302,53 @@ describe("verifyPhaseCompletion", () => {
     const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
     assert.strictEqual(result.passed, true);
   });
+
+  it("blocks verify commands not in allowlist", () => {
+    const items = [
+      { id: "WB-01", targetFiles: [], verify: "echo hello" },
+    ];
+    const completedIds = new Set(["WB-01"]);
+
+    const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
+    assert.strictEqual(result.passed, false);
+    assert.ok(result.failures.some(f => f.includes("blocked") || f.includes("allowlist")));
+  });
+
+  it("blocks shell metacharacters in verify commands", () => {
+    const items = [
+      { id: "WB-01", targetFiles: [], verify: "npm test & rm -rf /" },
+    ];
+    const completedIds = new Set(["WB-01"]);
+
+    const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
+    assert.strictEqual(result.passed, false);
+    assert.ok(result.failures.some(f => f.includes("blocked") || f.includes("metachar") || f.includes("allowlist")));
+  });
+
+  it("blocks interpreter inline execution flags", () => {
+    const blocked = [
+      "node -e process.exit(0)",
+      "node --eval=process.exit(0)",
+      "python -c print(1)",
+      "node --eval process.exit(0)",
+    ];
+    for (const cmd of blocked) {
+      const items = [{ id: "WB-01", targetFiles: [], verify: cmd }];
+      const completedIds = new Set(["WB-01"]);
+      const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
+      assert.strictEqual(result.passed, false, `Expected "${cmd}" to be blocked`);
+    }
+  });
+
+  it("blocks Windows %VAR% expansion in verify commands", () => {
+    const items = [
+      { id: "WB-01", targetFiles: [], verify: "npm test %COMSPEC%" },
+    ];
+    const completedIds = new Set(["WB-01"]);
+
+    const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
+    assert.strictEqual(result.passed, false);
+  });
 });
 
 // ═══ 5. detectRegressions — overwrite detection ═════════════════════════
