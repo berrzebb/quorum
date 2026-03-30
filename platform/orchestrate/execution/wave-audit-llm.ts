@@ -12,6 +12,10 @@ import { prepareProviderSpawn } from "../core/provider-binary.js";
 interface WorkItemLike {
   id: string;
   title?: string;
+  done?: string;
+  verify?: string;
+  targetFiles?: string[];
+  constraints?: string;
 }
 
 /**
@@ -23,12 +27,19 @@ export async function runWaveAuditLLM(
 ): Promise<{ passed: boolean; findings: string[] }> {
 
   const fileList = [...new Set(files)].slice(0, 20).map(f => `- ${f}`).join("\n");
-  const itemList = items.map(i => `- ${i.id}: ${i.title ?? "(no title)"}`).join("\n");
+  const itemList = items.map(i => {
+    const parts = [`- ${i.id}: ${i.title ?? "(no title)"}`];
+    if (i.done) parts.push(`  Done: ${i.done}`);
+    if (i.verify) parts.push(`  Verify: ${i.verify}`);
+    if (i.targetFiles?.length) parts.push(`  Scope: ${i.targetFiles.join(", ")}`);
+    if (i.constraints) parts.push(`  Constraints: ${i.constraints}`);
+    return parts.join("\n");
+  }).join("\n");
 
   const prompt = [
     "# Wave Audit — Review Implementation Changes",
     "",
-    `## Items completed in this wave:`,
+    `## Items completed in this wave (with scope and done criteria):`,
     itemList,
     "",
     `## Files to review:`,
@@ -37,6 +48,10 @@ export async function runWaveAuditLLM(
     "## Instructions:",
     "You MAY read files to review code. Do NOT run build/test/lint commands (npm test, tsc, eslint, etc).",
     "Build verification is already handled by the orchestrator. Your role is code quality review.",
+    "",
+    "IMPORTANT: Only judge each item against ITS OWN done criteria and scope.",
+    "Do NOT fail an item for work that belongs to a DIFFERENT work-breakdown item.",
+    "Each WB has a defined scope (target files) — out-of-scope concerns are not this item's responsibility.",
     "",
     "1. Read each file listed above",
     "2. Check: are types correct? Are there obvious bugs or logic errors?",
