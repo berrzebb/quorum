@@ -569,6 +569,11 @@ Consider:
 - Alternative approaches
 - Impact on existing systems
 
+CRITICAL: Only report bugs or issues that you have DIRECTLY VERIFIED in the actual source code.
+Do NOT infer bugs from function signatures, comments, or general assumptions about how code might work.
+If you cannot read the actual file, state "unverified" rather than reporting a false bug.
+Hallucinated bugs waste implementation time and erode trust in the deliberation process.
+
 Provide your honest assessment regardless of your assigned role.`;
 }
 

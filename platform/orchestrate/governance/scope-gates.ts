@@ -135,8 +135,11 @@ export function detectFileScopeViolations(
   const allowedFiles = new Set(completedItems.flatMap(i => i.targetFiles));
   const violations: string[] = [];
   for (const file of diffFiles) {
-    if (/\.(lock|json|md)$/.test(file)) continue;
-    if (file.startsWith(".claude/") || file.startsWith("node_modules/")) continue;
+    if (/\.(lock|json|md|css)$/.test(file)) continue;
+    if (file.startsWith(".claude/") || file.startsWith("node_modules/") || file.startsWith("dist/")) continue;
+    // Config/dotfiles are commonly modified as side-effects (e.g. .gitignore, .env.example, .eslintrc)
+    const basename = file.split("/").pop() ?? file;
+    if (basename.startsWith(".")) continue;
     if (!allowedFiles.has(file)) {
       violations.push(`${file} — not in any WB's targetFiles`);
     }

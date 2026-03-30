@@ -41,6 +41,26 @@ import {
 import { waveCommit, amendWaveCommit } from "../governance/lifecycle-hooks.js";
 import { updateRTM } from "../governance/rtm-updater.js";
 
+// ── Git helpers ─────────────────────────────
+
+/**
+ * Safely revert the WIP commit created by waveCommit().
+ * Fixer may have left uncommitted changes that block `git revert --no-edit`.
+ * Discard those changes first, then revert the commit.
+ */
+function safeRevertWipCommit(repoRoot: string): void {
+  // 1. Discard any uncommitted changes left by fixer/auditor
+  try {
+    execSync("git checkout -- .", { cwd: repoRoot, timeout: 15_000, stdio: "pipe", windowsHide: true });
+  } catch { /* no uncommitted changes — fine */ }
+  // 2. Remove untracked files added by fixer
+  try {
+    execSync("git clean -fd", { cwd: repoRoot, timeout: 15_000, stdio: "pipe", windowsHide: true });
+  } catch { /* nothing to clean — fine */ }
+  // 3. Now revert the WIP commit cleanly
+  execSync("git revert HEAD --no-edit", { cwd: repoRoot, timeout: 30_000, stdio: "pipe", windowsHide: true });
+}
+
 // ── Types ────────────────────────────────────
 
 /** Options for running a single wave. */
@@ -373,9 +393,9 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
           for (const f of round.slice(0, 3)) log(`    - ${f}`);
           if (round.length > 3) log(`    ... and ${round.length - 3} more`);
         }
-        // Rollback or mark failed
+        // Rollback or mark failed — discard fixer's uncommitted changes first
         try {
-          execSync("git revert HEAD --no-edit", { cwd: repoRoot, timeout: 30_000, stdio: "pipe", windowsHide: true });
+          safeRevertWipCommit(repoRoot);
         } catch (err) {
           log(`  \x1b[33m⚠ git revert failed: ${(err as Error).message} — marking failed\x1b[0m`);
           updateRTM(rtmPath, completedItems, "failed");
@@ -387,7 +407,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     // Handle fitness auto-reject rollback
     if (fitnessDecision === "auto-reject") {
       try {
-        execSync("git revert HEAD --no-edit", { cwd: repoRoot, timeout: 30_000, stdio: "pipe", windowsHide: true });
+        safeRevertWipCommit(repoRoot);
       } catch (err) {
         log(`  \x1b[33m⚠ git revert failed: ${(err as Error).message} — marking failed\x1b[0m`);
         updateRTM(rtmPath, completedItems, "failed");
