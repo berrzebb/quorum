@@ -8,7 +8,12 @@
 import { execFileSync } from "node:child_process";
 import type { WorkItem } from "../planning/types.js";
 import type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
-import { isAllowedVerifier } from "./scope-gates.js";
+import { isAllowedVerifier, getChangedFiles } from "./scope-gates.js";
+
+/** Get files changed since the phase started (all WIP commits in this phase). */
+function getChangedFilesSincePhaseStart(repoRoot: string): string[] {
+  return getChangedFiles(repoRoot);
+}
 
 /**
  * Verify Phase N is complete before allowing Phase N+1.
@@ -66,11 +71,19 @@ export function verifyPhaseCompletion(
     }
   }
 
-  // 3. Regression check on all phase files
+  // 3. Regression check — only on files OUTSIDE this phase's targetFiles.
+  // Files that multiple WBs within the same phase modify are expected to evolve
+  // (e.g. WEA-1 creates vite.config.ts, WEA-2 adds vitest config to it).
+  // Regression = unplanned overwrite of files belonging to OTHER phases.
   if (detectRegressionsFn) {
-    const phaseFiles = [...new Set(phaseItems.flatMap(i => i.targetFiles))];
-    const regressions = detectRegressionsFn(repoRoot, phaseFiles);
-    for (const r of regressions) failures.push(`Regression: ${r}`);
+    const phaseFiles = new Set(phaseItems.flatMap(i => i.targetFiles));
+    // Get all files changed in this phase but NOT in any WB's targetFiles
+    const allChangedFiles = getChangedFilesSincePhaseStart(repoRoot);
+    const outOfPhaseChanges = allChangedFiles.filter(f => !phaseFiles.has(f));
+    if (outOfPhaseChanges.length > 0) {
+      const regressions = detectRegressionsFn(repoRoot, outOfPhaseChanges);
+      for (const r of regressions) failures.push(`Regression: ${r}`);
+    }
   }
 
   // 4. [CONTRACT CONTROL PLANE] Evaluation contract promotion gate
