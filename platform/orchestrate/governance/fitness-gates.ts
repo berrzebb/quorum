@@ -83,7 +83,7 @@ export function collectFitnessSignals(repoRoot: string, changedFiles: string[], 
       const abs = resolve(repoRoot, f);
       try {
         effectiveLines += readFileSync(abs, "utf8").split("\n").length;
-      } catch { /* file may have been deleted between diff and scan — skip */ }
+      } catch (err) { console.warn(`[fitness-gates] skipped ${f}: ${(err as Error).message}`); }
     }
   }
 

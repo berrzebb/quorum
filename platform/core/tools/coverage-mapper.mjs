@@ -165,5 +165,7 @@ async function main() {
 }
 
 // Only run CLI main when executed directly, not when imported as a module
-const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
+import { fileURLToPath } from "node:url";
+const __filename = fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] && resolve(process.argv[1]) === __filename;
 if (isDirectRun) main();
