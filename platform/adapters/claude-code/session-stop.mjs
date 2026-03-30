@@ -5,22 +5,12 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { syncHandoffToMemory } from "./handoff-writer.mjs";
+import { resolveRepoRoot } from "../shared/repo-resolver.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// cwd-based git resolution (worktree-aware) — legacy layout as fallback
-function resolveRepoRoot() {
-  try {
-    const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
-    if (r.status === 0) return r.stdout.trim();
-  } catch (err) { console.warn(`[session-stop] git rev-parse failed: ${err?.message}`); }
-  const legacy = resolve(__dirname, "..", "..", "..");
-  if (existsSync(resolve(legacy, ".git"))) return legacy;
-  return process.cwd();
-}
 const REPO_ROOT = resolveRepoRoot();
 
 // Read config — prefer CLAUDE_PLUGIN_ROOT (set by hooks.json), fallback to __dirname

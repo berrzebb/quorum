@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { runFvmValidation } from "./fvm-validator.mjs";
 import { generateFvm } from "./fvm-generator.mjs";
+import { loadCoverageSummary } from "./coverage-mapper.mjs";
 
 // AST bridge — fail-safe optional import for hybrid scanning
 let _createAstRefine = null;
@@ -448,22 +449,7 @@ export function toolAuditScan(params) {
 
 // ═══ Tool: coverage_map ═════════════════════════════════════════════════
 
-function loadCoverageSummary(coverageDir) {
-  const summaryPath = resolve(coverageDir, "coverage-summary.json");
-  if (!existsSync(summaryPath)) return null;
-  const raw = JSON.parse(readFileSync(summaryPath, "utf8"));
-  const result = new Map();
-  for (const [filePath, data] of Object.entries(raw)) {
-    if (filePath === "total") continue;
-    result.set(filePath.replace(/\\/g, "/"), {
-      statements: data.statements?.pct ?? 0,
-      branches: data.branches?.pct ?? 0,
-      functions: data.functions?.pct ?? 0,
-      lines: data.lines?.pct ?? 0,
-    });
-  }
-  return result;
-}
+// loadCoverageSummary imported from coverage-mapper.mjs
 
 export function toolCoverageMap(params) {
   const { path: targetPath, coverage_dir: covDir = "coverage" } = params;

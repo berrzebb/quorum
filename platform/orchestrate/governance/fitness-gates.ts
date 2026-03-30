@@ -5,7 +5,7 @@
  * No execution logic, no agent spawning.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { computeFitness } from "../../bus/fitness.js";
@@ -81,11 +81,9 @@ export function collectFitnessSignals(repoRoot: string, changedFiles: string[], 
   if (precomputed?.effectiveLines === undefined) {
     for (const f of changedFiles) {
       const abs = resolve(repoRoot, f);
-      if (existsSync(abs)) {
-        try {
-          effectiveLines += readFileSync(abs, "utf8").split("\n").length;
-        } catch (err) { console.warn(`[fitness-gates] could not read ${f} for line count: ${(err as Error).message}`); }
-      }
+      try {
+        effectiveLines += readFileSync(abs, "utf8").split("\n").length;
+      } catch { /* file may have been deleted between diff and scan — skip */ }
     }
   }
 

@@ -160,7 +160,16 @@ export function AgentChatPanel({ mux, liveSessions }: Props) {
           next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-MAX_BUFFER_LINES));
         }
       }
-      setOutputs(next);
+      // Only update state if output actually changed (avoids unnecessary re-renders)
+      let changed = false;
+      for (const [id, lines] of next) {
+        const prev = outputs.get(id);
+        if (!prev || prev.length !== lines.length || prev[prev.length - 1] !== lines[lines.length - 1]) {
+          changed = true;
+          break;
+        }
+      }
+      if (changed || next.size !== outputs.size) setOutputs(next);
     };
     poll();
     const timer = setInterval(poll, 2000);

@@ -19,7 +19,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, relative } from "node:path";
 
-function loadCoverageSummary(coverageDir) {
+export function loadCoverageSummary(coverageDir) {
   const summaryPath = resolve(coverageDir, "coverage-summary.json");
   if (!existsSync(summaryPath)) return null;
 
@@ -164,4 +164,6 @@ async function main() {
   process.stdout.write(result);
 }
 
-main();
+// Only run CLI main when executed directly, not when imported as a module
+const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
+if (isDirectRun) main();

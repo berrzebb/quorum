@@ -15,16 +15,7 @@
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Provider error classification (regex-based, no external dependency). */
-function classifyErrorCode(msg) {
-  if (/context.*overflow|prompt.*too.*large/i.test(msg)) return "token_limit";
-  if (/invalid.*api.*key|unauthorized|authentication/i.test(msg)) return "auth";
-  if (/rate.*limit|too.*many.*requests/i.test(msg)) return "rate_limit";
-  if (/billing|quota.*exceeded|insufficient/i.test(msg)) return "billing";
-  if (/failover|model.*unavailable|overloaded/i.test(msg)) return "failover";
-  if (/crash|segfault|aborted/i.test(msg)) return "crash";
-  return "fatal";
-}
+import { classifyErrorCode } from "./api-adapter.mjs";
 
 function mapErrorCode(parsed) {
   return classifyErrorCode(String(parsed.error ?? parsed.message ?? ""));

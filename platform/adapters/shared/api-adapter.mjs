@@ -32,9 +32,9 @@
  * }} ApiAdapterConfig
  */
 
-// ── Error classification (shared with cli-adapter.mjs) ──
+// ── Error classification (canonical source) ──
 
-function classifyErrorCode(msg) {
+export function classifyErrorCode(msg) {
   if (/context.*overflow|prompt.*too.*large/i.test(msg)) return "token_limit";
   if (/invalid.*api.*key|unauthorized|authentication/i.test(msg)) return "auth";
   if (/rate.*limit|too.*many.*requests/i.test(msg)) return "rate_limit";
