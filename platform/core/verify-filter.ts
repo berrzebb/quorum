@@ -23,9 +23,19 @@ export const VERIFY_INTERPRETER_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--com
 /**
  * Check if a verifier command is allowed.
  * Three-layer defense: allowlist prefix + metachar filter + interpreter inline filter.
+ *
+ * Supports `&&`-chained commands: "npx tsc --noEmit && npx vitest run"
+ * Each sub-command is validated independently. Other shell operators (;|`$) remain blocked.
  */
 export function isAllowedVerifier(cmd: string): boolean {
   const trimmed = cmd.trim();
+
+  // Allow && chaining by splitting and validating each part
+  if (trimmed.includes("&&")) {
+    const parts = trimmed.split("&&").map(p => p.trim()).filter(Boolean);
+    return parts.length > 0 && parts.every(p => isAllowedVerifier(p));
+  }
+
   if (VERIFY_SHELL_META.test(trimmed)) return false;
   if (VERIFY_INTERPRETER_RE.test(` ${trimmed}`)) return false;
   return ALLOWED_VERIFY_PREFIXES.some(p => trimmed.startsWith(p));
