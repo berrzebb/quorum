@@ -7,18 +7,12 @@
  *
  * Uses shared modules for business logic, Gemini-specific I/O here.
  */
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { spawn } from "node:child_process";
-
 import { createHookContext, createDebugLogger, readStdinJson } from "../../../shared/hook-io.mjs";
-import { extractTags } from "../../../shared/config-resolver.mjs";
-import { validateEvidenceFormat, isPlanningFile } from "../../../shared/trigger-runner.mjs";
+import { isPlanningFile } from "../../../shared/trigger-runner.mjs";
 
-const { ADAPTER_DIR, REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);
+const { ADAPTER_DIR, cfg, configMissing } = createHookContext(import.meta.url);
 if (configMissing) process.exit(0);
 
-const { triggerTag } = extractTags(cfg);
 const consensus = cfg.consensus ?? {};
 const log = createDebugLogger(ADAPTER_DIR);
 
