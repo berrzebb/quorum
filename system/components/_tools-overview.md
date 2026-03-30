@@ -1,6 +1,6 @@
 # MCP Tools Overview
 
-> 22 deterministic analysis tools registered in quorum (v0.4.5)
+> 22 deterministic analysis tools registered in quorum (v0.4.8)
 >
 > **v0.3.0**: 6 core tools (code_map, dependency_graph, audit_scan, rtm_parse, rtm_merge, coverage_map)
 > **v0.4.0**: 8 domain tools (perf_scan, a11y_scan, compat_check, license_scan, i18n_validate, infra_scan, observability_check, doc_coverage)

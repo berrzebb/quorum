@@ -485,8 +485,8 @@ npm run build           # compile
 GitHub Actions builds cross-platform binaries on tag push:
 
 ```bash
-git tag v0.4.2
-git push origin v0.4.2
+git tag v0.4.8
+git push origin v0.4.8
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 binaries in Releases
 ```
 

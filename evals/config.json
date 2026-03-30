@@ -1,5 +1,5 @@
 {
-  "version": "0.4.5",
+  "version": "0.4.8",
   "defaultTimeout": 120000,
   "maxRetries": 2,
   "parityThreshold": 0.85,

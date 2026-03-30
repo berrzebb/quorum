@@ -1,6 +1,6 @@
 name: skill-authoring
 classification: capability
-version: 0.4.5
+version: 0.4.8
 description: "Skill creation quality evaluation"
 
 evals:

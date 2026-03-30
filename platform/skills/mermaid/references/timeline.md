@@ -12,6 +12,7 @@ timeline
   2024-Q3 : v0.3 Parliament protocol
   2024-Q4 : v0.4 Full orchestration
   2025-Q1 : v0.4.5 OpenAI-compatible
+  2025-Q1 : v0.4.8 Daemon TUI + quality audit
 ```
 
 ## Multiple Events per Period

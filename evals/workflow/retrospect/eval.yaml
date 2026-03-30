@@ -1,6 +1,6 @@
 name: retrospect
 classification: workflow
-version: 0.4.5
+version: 0.4.8
 description: "Retrospective learning extraction procedure compliance evaluation"
 
 evals:

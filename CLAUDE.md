@@ -294,7 +294,7 @@ platform/adapters/openai-compatible/
 ## Testing
 
 ```bash
-npm test                              # all (2401 tests)
+npm test                              # all (2412 tests)
 node --test tests/e2e-smoke.test.mjs  # full pipeline
 node --test tests/bridge.test.mjs     # MJS↔TS bridge
 node --test tests/store.test.mjs      # SQLite EventStore

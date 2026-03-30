@@ -1,6 +1,6 @@
 # Agents Overview
 
-> 13 agents defined in quorum (v0.4.5)
+> 13 agents defined in quorum (v0.4.8)
 >
 > **v0.3.0**: implementer, scout — core execution agents
 > **v0.4.0**: 11 domain specialists added (perf, a11y, security, ...)

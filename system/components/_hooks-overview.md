@@ -1,6 +1,6 @@
 # Hooks Overview
 
-> 26 unique hook events across 4 adapters (v0.4.5)
+> 26 unique hook events across 4 adapters (v0.4.8)
 >
 > **v0.3.0**: 5 core events (SessionStart, PreToolUse, PostToolUse, Stop, UserPromptSubmit)
 > **v0.4.0**: SubagentStart/Stop, TaskCompleted, WorktreeCreate/Remove

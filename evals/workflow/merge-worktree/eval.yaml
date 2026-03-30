@@ -1,6 +1,6 @@
 name: merge-worktree
 classification: workflow
-version: 0.4.5
+version: 0.4.8
 description: "Squash-merge procedure compliance evaluation"
 
 evals:

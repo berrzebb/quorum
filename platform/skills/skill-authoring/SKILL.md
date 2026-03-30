@@ -174,7 +174,7 @@ evals/{classification}/{name}/
 ```yaml
 name: {name}
 classification: {workflow|capability}
-version: 0.4.5
+version: 0.4.8
 description: "{skill name} {classification type} evaluation"
 
 evals:

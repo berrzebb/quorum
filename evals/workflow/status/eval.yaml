@@ -1,6 +1,6 @@
 name: status
 classification: workflow
-version: 0.4.5
+version: 0.4.8
 description: "Gate status reporting procedure compliance evaluation"
 
 evals:

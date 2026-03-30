@@ -1,6 +1,6 @@
 name: implementer
 classification: capability
-version: 0.4.5
+version: 0.4.8
 description: "Implementation protocol compliance and code quality evaluation"
 
 evals:

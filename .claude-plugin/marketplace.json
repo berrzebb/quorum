@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "berrzebb-plugins",
-  "version": "0.4.5",
+  "version": "0.4.8",
   "description": "Cross-model audit gate with structural enforcement — edit, audit, agree, retro, commit.",
   "owner": {
     "name": "berrzebb",
@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "quorum",
-      "description": "Cross-model audit gate — 3-adapter (Claude Code + Gemini CLI + Codex), parliament protocol, 5 enforcement gates, 26 MCP tools, 2401 tests.",
-      "version": "0.4.5",
+      "description": "Cross-model audit gate — 3-adapter (Claude Code + Gemini CLI + Codex), parliament protocol, 5 enforcement gates, 26 MCP tools, 2412 tests.",
+      "version": "0.4.8",
       "author": {
         "name": "berrzebb",
         "url": "https://github.com/berrzebb"

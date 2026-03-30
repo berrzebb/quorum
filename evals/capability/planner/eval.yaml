@@ -1,6 +1,6 @@
 name: planner
 classification: capability
-version: 0.4.5
+version: 0.4.8
 description: "PRD + WB generation quality evaluation"
 
 evals:

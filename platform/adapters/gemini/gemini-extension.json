@@ -1,6 +1,6 @@
 {
   "name": "quorum",
-  "version": "0.4.5",
+  "version": "0.4.8",
   "description": "Cross-model audit gate — parliament protocol, 5 enforcement gates, 26 MCP tools, 2401 tests.",
   "mcpServers": {
     "quorum": {
