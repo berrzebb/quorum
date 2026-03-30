@@ -169,7 +169,10 @@ async function tryImportDefault(filePath) {
     const mod = await import(pathToFileURL(filePath).href);
     return mod.default ?? mod.spec ?? null;
   } catch (err) {
-    console.warn("[lang-registry] tryImportDefault failed:", err?.message ?? err);
+    // ENOENT is expected for missing optional fragments — only warn on unexpected errors
+    if (err?.code !== "ENOENT") {
+      console.warn("[lang-registry] tryImportDefault failed:", err?.message ?? err);
+    }
     return null;
   }
 }

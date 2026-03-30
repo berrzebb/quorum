@@ -10,8 +10,11 @@
  * - Config refresh loop
  */
 
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { execFileSync } from "node:child_process";
 import { QuorumBus } from "../../platform/bus/bus.js";
 import { EventStore } from "../../platform/bus/store.js";
@@ -243,7 +246,9 @@ export async function startConfigRefresh(intervalMs = 10_000): Promise<() => voi
   // Lazy import to avoid circular deps with MJS module
   let _refreshConfig: (() => void) | null = null;
   try {
-    const mod = await import("../../platform/core/context.mjs" as any);
+    // Resolve to source .mjs (not dist/) — tsc doesn't copy .mjs files
+    const contextPath = resolve(__dirname, "..", "..", "..", "platform", "core", "context.mjs");
+    const mod = await import(contextPath);
     _refreshConfig = mod.refreshConfigIfChanged;
   } catch (err) { console.warn(`[daemon-bootstrap] config refresh module load failed: ${(err as Error).message}`); }
 
