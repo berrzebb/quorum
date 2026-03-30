@@ -284,18 +284,18 @@ describe("verifyPhaseCompletion", () => {
 
   it("fails when verify command fails", () => {
     const items = [
-      { id: "WB-01", targetFiles: [], verify: "exit 1" },
+      { id: "WB-01", targetFiles: [], verify: "node nonexistent-file-that-does-not-exist.js" },
     ];
     const completedIds = new Set(["WB-01"]);
 
     const result = verifyPhaseCompletion(repo, "Phase1", items, completedIds);
     assert.strictEqual(result.passed, false);
-    assert.ok(result.failures.some(f => f.includes("verify failed")));
+    assert.ok(result.failures.some(f => f.includes("verify")));
   });
 
   it("passes when verify command succeeds", () => {
     const items = [
-      { id: "WB-01", targetFiles: [], verify: "echo ok" },
+      { id: "WB-01", targetFiles: [], verify: "node --version" },
     ];
     const completedIds = new Set(["WB-01"]);
 

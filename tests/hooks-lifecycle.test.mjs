@@ -284,7 +284,11 @@ describe("PostCompact hook", () => {
       retro_marker: { retro_pending: false },
     }));
 
-    const result = runHook("post-compact.mjs", { type: "auto" }, { cwd: tmpDir });
+    // Override QUORUM_REPO_ROOT so post-compact finds the snapshot in tmpDir
+    const result = runHook("post-compact.mjs", { type: "auto" }, {
+      cwd: tmpDir,
+      env: { QUORUM_REPO_ROOT: tmpDir },
+    });
     assert.equal(result.exitCode, 0);
     assert.ok(result.stderr.includes("Restored state"), "Should log restoration");
   });

@@ -5,7 +5,7 @@
  * No execution logic, no agent spawning.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import type { WorkItem } from "../planning/types.js";
 import type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
 
@@ -46,11 +46,27 @@ export function verifyPhaseCompletion(
     failures.push(`${incomplete.length} item(s) incomplete: ${incomplete.map(i => i.id).join(", ")}`);
   }
 
-  // 2. Re-run verify commands (integration check)
+  // 2. Re-run verify commands (integration check — allowlist + metachar filter)
+  const ALLOWED_VERIFY = [
+    "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
+    "go ", "cargo ", "python ", "pytest ", "pip ",
+    "java ", "javac ", "mvn ", "gradle ",
+  ];
+  const SHELL_META = /[;&|`$><\r\n%]/;
   for (const item of phaseItems) {
     if (!item.verify || !completedIds.has(item.id)) continue;
+    const trimmed = item.verify.trim();
+    const INTERP_FLAGS = [" -e ", " --eval ", " -c ", " --command "];
+    if (SHELL_META.test(trimmed) || INTERP_FLAGS.some(f => ` ${trimmed} `.includes(f)) || !ALLOWED_VERIFY.some(p => trimmed.startsWith(p))) {
+      failures.push(`${item.id} verify blocked (not in allowlist): ${item.verify}`);
+      continue;
+    }
+    const parts = trimmed.split(/\s+/);
     try {
-      execSync(item.verify, { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
+      execFileSync(parts[0], parts.slice(1), {
+        cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true,
+        shell: process.platform === "win32",
+      });
     } catch {
       failures.push(`${item.id} verify failed: ${item.verify}`);
     }

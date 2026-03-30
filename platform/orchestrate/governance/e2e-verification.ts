@@ -8,7 +8,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 import type { NamingRule } from "../../bus/blueprint-parser.js";
@@ -28,6 +28,15 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(__dirname, "..", "..");
+
+const ALLOWED_VERIFY_PREFIXES = [
+  "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
+  "go ", "cargo ", "python ", "pytest ", "pip ",
+  "java ", "javac ", "mvn ", "gradle ",
+];
+
+/** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
+const SHELL_META = /[;&|`$><\r\n%]/;
 
 interface WorkItemLike {
   id: string;
@@ -55,8 +64,20 @@ export async function runE2EVerification(
   let verifyFails = 0;
   for (const item of allItems) {
     if (!item.verify) continue;
+    const trimmed = item.verify.trim();
+    const INTERP_FLAGS = [" -e ", " --eval ", " -c ", " --command "];
+    if (SHELL_META.test(trimmed) || INTERP_FLAGS.some(f => ` ${trimmed} `.includes(f)) || !ALLOWED_VERIFY_PREFIXES.some(p => trimmed.startsWith(p))) {
+      console.log(`    \x1b[31m✗ ${item.id} verify blocked (not in allowlist or contains shell metacharacters): ${item.verify}\x1b[0m`);
+      verifyFails++;
+      e2ePassed = false;
+      continue;
+    }
+    const parts = trimmed.split(/\s+/);
     try {
-      execSync(item.verify, { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
+      execFileSync(parts[0], parts.slice(1), {
+        cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true,
+        shell: process.platform === "win32",
+      });
     } catch {
       console.log(`    \x1b[31m✗ ${item.id} verify failed: ${item.verify}\x1b[0m`);
       verifyFails++;

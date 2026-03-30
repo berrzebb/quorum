@@ -14,7 +14,6 @@ import { spawn } from "node:child_process";
 
 import { createHookContext, createDebugLogger, readStdinJson } from "../../../shared/hook-io.mjs";
 import { extractTags } from "../../../shared/config-resolver.mjs";
-import { evaluateAuditTrigger } from "../../../shared/audit-trigger.mjs";
 import { validateEvidenceFormat } from "../../../shared/trigger-runner.mjs";
 
 const { ADAPTER_DIR, REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);

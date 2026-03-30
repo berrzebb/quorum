@@ -120,6 +120,9 @@ function buildPrompt(scopeText, promotionHint, preVerified, diffScope, contextAn
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
+  // Initialize bridge (loads EventStore from SQLite)
+  await bridge.init(REPO_ROOT);
+
   // Audit CWD — always REPO_ROOT (worktree context comes from ProcessMux, not file paths)
   const auditCwd = REPO_ROOT;
   const statusDir = resolve(auditCwd, ".claude");
@@ -188,6 +191,11 @@ async function main() {
   }
 
   let prompt = buildPrompt(scopeText, promotionHint, preVerified, diffScope);
+
+  // Append evidence content to prompt so the auditor can verify claims
+  if (claudeMd) {
+    prompt += "\n\n# Implementer Evidence Package\n" + claudeMd + "\n";
+  }
 
   // Guard: truncate prompt if too large — prevents Codex STATUS_HEAP_CORRUPTION crash
   const MAX_PROMPT_CHARS = 80_000;
