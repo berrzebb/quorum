@@ -149,8 +149,8 @@ export function computeChangedFiles(markdown, root) {
   const cwd = root || REPO_ROOT;
   let diffCmd = "git diff --name-only";
 
-  // 1. Extract from evidence — look for explicit diff basis
-  const diffBasisRe = /git\s+diff\s+(?:--name-only\s+)?([0-9a-f]{7,40}\.{2,3}[0-9a-f]{7,40})/;
+  // 1. Extract from evidence — look for explicit diff basis (hash..hash or hash..HEAD)
+  const diffBasisRe = /git\s+diff\s+(?:--name-only\s+)?([0-9a-f]{7,40}\.{2,3}(?:[0-9a-f]{7,40}|HEAD))/;
   const match = markdown.match(diffBasisRe);
   if (match) {
     diffCmd = `git diff --name-only ${match[1]}`;
