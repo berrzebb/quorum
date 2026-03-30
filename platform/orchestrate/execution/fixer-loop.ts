@@ -137,6 +137,9 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
   } = opts;
   const fixer = opts.fixerProvider ?? provider;
 
+  // Collect all in-scope file paths for filtering out-of-scope findings
+  const scopeFiles = new Set(completedItems.flatMap(i => i.targetFiles));
+
   const findingsHistory: string[][] = [];
   let attempts = 0;
   let stagnation: string | undefined;
@@ -150,14 +153,33 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: true, attempts, findingsHistory };
     }
 
-    findingsHistory.push([...auditResult.findings]);
+    // Separate in-scope vs out-of-scope findings.
+    // Out-of-scope findings reference files not in any WB's targetFiles —
+    // the fixer can't resolve these and they shouldn't cause stagnation.
+    const inScope: string[] = [];
+    const outOfScope: string[] = [];
+    for (const f of auditResult.findings) {
+      // Check if finding references an out-of-scope file path
+      const refsOutOfScope = scopeFiles.size > 0 && !Array.from(scopeFiles).some(sf => f.includes(sf));
+      if (refsOutOfScope && /[a-z]+\.[a-z]+:\d+/i.test(f)) {
+        outOfScope.push(f);
+      } else {
+        inScope.push(f);
+      }
+    }
+
+    // If ALL remaining findings are out-of-scope, treat as pass
+    if (inScope.length === 0 && outOfScope.length > 0) {
+      return { passed: true, attempts, findingsHistory };
+    }
+
+    // Only track in-scope findings for stagnation detection
+    findingsHistory.push([...inScope]);
 
     if (attempts >= 2 && detectStagnation) {
       const stag = detectStagnation(findingsHistory);
       if (stag) {
         stagnation = stag;
-        // Early exit on stagnation — continuing to fix is pointless
-        // when the fixer is spinning, oscillating, or making no progress.
         return { passed: false, attempts, stagnation, findingsHistory };
       }
     }
@@ -166,9 +188,10 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: false, attempts, stagnation, findingsHistory };
     }
 
+    // Only pass in-scope findings to fixer — don't waste time on out-of-scope
     await runFixer({
       repoRoot,
-      findings: auditResult.findings,
+      findings: inScope,
       files,
       provider: fixer,
       fitnessContext,
