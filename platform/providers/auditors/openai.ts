@@ -7,6 +7,7 @@
 
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { parseAuditResponse } from "./parse.js";
+import { formatAuditPrompt } from "./format-prompt.js";
 
 export interface OpenAIAuditorConfig {
   apiKey?: string;
@@ -41,7 +42,7 @@ export class OpenAIAuditor implements Auditor {
       };
     }
 
-    const prompt = formatPrompt(request);
+    const prompt = formatAuditPrompt(request);
 
     try {
       const controller = new AbortController();
@@ -97,6 +98,4 @@ export class OpenAIAuditor implements Auditor {
   }
 }
 
-function formatPrompt(request: AuditRequest): string {
-  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with JSON:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
-}
+// formatPrompt → shared formatAuditPrompt in format-prompt.ts

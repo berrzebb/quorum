@@ -78,30 +78,38 @@ export class DataProbeEvaluator implements RuntimeEvaluator {
   }
 }
 
-/** Simple JSON path evaluator for basic checks (e.g., "$.length > 0", "$.status === ok"). */
+/** JSON path evaluator supporting dot notation and bracket array access.
+ *  Examples: "$.length > 0", "$.items[0].status === ok", "$.results[2].count >= 5" */
 function evaluateJsonPath(obj: unknown, expr: string): { valid: boolean; reason?: string } {
   try {
-    // $.key.subkey — traverse
-    const pathMatch = expr.match(/^\$\.(\S+?)\s*(>|<|>=|<=|===|!==)\s*(.+)$/);
+    const pathMatch = expr.match(/^\$\.?(\S+?)\s*(>|<|>=|<=|===|!==)\s*(.+)$/);
     if (!pathMatch) return { valid: false, reason: `unparseable expression: ${expr}` };
 
     const [, path, op, rhs] = pathMatch;
-    let value: any = obj;
-    for (const key of (path ?? "").split(".")) {
-      if (value == null) return { valid: false, reason: `path $.${path} is null` };
-      value = (value as Record<string, unknown>)[key];
+    let value: unknown = obj;
+    // Split on "." and "[" to handle both $.key.sub and $.items[0].name
+    const segments = (path ?? "").split(/\.|\[|\]/).filter(Boolean);
+    for (const seg of segments) {
+      if (value == null) return { valid: false, reason: `path $.${path} is null at segment '${seg}'` };
+      const idx = /^\d+$/.test(seg) ? Number(seg) : NaN;
+      if (!isNaN(idx) && Array.isArray(value)) {
+        if (idx < 0 || idx >= value.length) return { valid: false, reason: `array index ${idx} out of bounds (length ${value.length})` };
+        value = value[idx];
+      } else {
+        value = (value as Record<string, unknown>)[seg];
+      }
     }
 
     const numRhs = Number(rhs);
-    const cmpRhs = isNaN(numRhs) ? rhs : numRhs;
+    const numValue = Number(value);
 
     switch (op) {
-      case ">":   return { valid: value > cmpRhs, reason: `${value} > ${cmpRhs}` };
-      case "<":   return { valid: value < cmpRhs, reason: `${value} < ${cmpRhs}` };
-      case ">=":  return { valid: value >= cmpRhs, reason: `${value} >= ${cmpRhs}` };
-      case "<=":  return { valid: value <= cmpRhs, reason: `${value} <= ${cmpRhs}` };
-      case "===": return { valid: String(value) === String(cmpRhs), reason: `${value} === ${cmpRhs}` };
-      case "!==": return { valid: String(value) !== String(cmpRhs), reason: `${value} !== ${cmpRhs}` };
+      case ">":   return { valid: numValue > numRhs, reason: `${value} > ${rhs}` };
+      case "<":   return { valid: numValue < numRhs, reason: `${value} < ${rhs}` };
+      case ">=":  return { valid: numValue >= numRhs, reason: `${value} >= ${rhs}` };
+      case "<=":  return { valid: numValue <= numRhs, reason: `${value} <= ${rhs}` };
+      case "===": return { valid: String(value) === rhs.trim(), reason: `${value} === ${rhs}` };
+      case "!==": return { valid: String(value) !== rhs.trim(), reason: `${value} !== ${rhs}` };
       default:    return { valid: true };
     }
   } catch {

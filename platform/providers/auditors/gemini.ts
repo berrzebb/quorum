@@ -8,6 +8,7 @@
 import { spawn, spawnSync, execSync } from "node:child_process";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { parseAuditResponse } from "./parse.js";
+import { formatAuditPrompt } from "./format-prompt.js";
 
 const isWin = process.platform === "win32";
 
@@ -33,7 +34,7 @@ export class GeminiAuditor implements Auditor {
 
   async audit(request: AuditRequest): Promise<AuditResult> {
     const start = Date.now();
-    const prompt = formatPrompt(request);
+    const prompt = formatAuditPrompt(request);
 
     return new Promise<AuditResult>((resolve) => {
       // Gemini CLI: pipe prompt via stdin + -m flag
@@ -94,6 +95,4 @@ export class GeminiAuditor implements Auditor {
   }
 }
 
-function formatPrompt(request: AuditRequest): string {
-  return `${request.prompt}\n\n## Evidence\n\n${request.evidence}\n\n## Changed Files\n\n${request.files.map((f) => `- ${f}`).join("\n")}\n\nRespond with ONLY a JSON object:\n{"verdict": "approved" | "changes_requested" | "infra_failure", "codes": [], "summary": "..."}`;
-}
+// formatPrompt → shared formatAuditPrompt in format-prompt.ts

@@ -17,6 +17,11 @@ import { computeDelta, computeTrend } from "./fitness.js";
 
 export type GateDecision = "proceed" | "self-correct" | "auto-reject";
 
+/** Canonical gate decision constants — use instead of raw string literals. */
+export const GATE_DECISION: Record<string, GateDecision> = {
+  PROCEED: "proceed", SELF_CORRECT: "self-correct", AUTO_REJECT: "auto-reject",
+} as const;
+
 export interface FitnessGateResult {
   decision: GateDecision;
   current: number;

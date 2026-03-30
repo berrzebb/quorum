@@ -179,6 +179,11 @@ export interface SpecialistReviewPayload {
 export type FindingSeverity = "critical" | "major" | "minor" | "style";
 export type FindingStatus = "open" | "confirmed" | "dismissed" | "fixed";
 
+/** Canonical finding status constants — use instead of raw string literals. */
+export const FINDING_STATUS: Record<Uppercase<FindingStatus>, FindingStatus> = {
+  OPEN: "open", CONFIRMED: "confirmed", DISMISSED: "dismissed", FIXED: "fixed",
+} as const;
+
 /** Canonical severity ordering. Higher = more severe. */
 export const SEVERITY_RANK: Record<FindingSeverity, number> = {
   critical: 4, major: 3, minor: 2, style: 1,
