@@ -15,13 +15,13 @@ const ALLOWED_PREFIXES = [
 /** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
 const SHELL_META = /[;&|`$><\r\n%]/;
 
-/** Interpreter inline execution flags that allow arbitrary code despite prefix match. */
-const INTERPRETER_FLAGS = [" -e ", " --eval ", " -c ", " --command "];
+/** Interpreter inline execution patterns (space or = delimited). */
+const INTERPRETER_RE = /\s-[ec]\s|\s-[ec]$|\s--eval[\s=]|\s--command[\s=]/;
 
 function isAllowedVerifier(cmd: string): boolean {
   const trimmed = cmd.trim();
   if (SHELL_META.test(trimmed)) return false;
-  if (INTERPRETER_FLAGS.some(f => ` ${trimmed} `.includes(f))) return false;
+  if (INTERPRETER_RE.test(` ${trimmed}`)) return false;
   return ALLOWED_PREFIXES.some(p => trimmed.startsWith(p));
 }
 

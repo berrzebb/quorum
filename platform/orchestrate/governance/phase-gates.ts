@@ -56,8 +56,8 @@ export function verifyPhaseCompletion(
   for (const item of phaseItems) {
     if (!item.verify || !completedIds.has(item.id)) continue;
     const trimmed = item.verify.trim();
-    const INTERP_FLAGS = [" -e ", " --eval ", " -c ", " --command "];
-    if (SHELL_META.test(trimmed) || INTERP_FLAGS.some(f => ` ${trimmed} `.includes(f)) || !ALLOWED_VERIFY.some(p => trimmed.startsWith(p))) {
+    const INTERP_RE = /\s-[ec]\s|\s-[ec]$|\s--eval[\s=]|\s--command[\s=]/;
+    if (SHELL_META.test(trimmed) || INTERP_RE.test(` ${trimmed}`) || !ALLOWED_VERIFY.some(p => trimmed.startsWith(p))) {
       failures.push(`${item.id} verify blocked (not in allowlist): ${item.verify}`);
       continue;
     }

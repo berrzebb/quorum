@@ -65,8 +65,8 @@ export async function runE2EVerification(
   for (const item of allItems) {
     if (!item.verify) continue;
     const trimmed = item.verify.trim();
-    const INTERP_FLAGS = [" -e ", " --eval ", " -c ", " --command "];
-    if (SHELL_META.test(trimmed) || INTERP_FLAGS.some(f => ` ${trimmed} `.includes(f)) || !ALLOWED_VERIFY_PREFIXES.some(p => trimmed.startsWith(p))) {
+    const INTERP_RE = /\s-[ec]\s|\s-[ec]$|\s--eval[\s=]|\s--command[\s=]/;
+    if (SHELL_META.test(trimmed) || INTERP_RE.test(` ${trimmed}`) || !ALLOWED_VERIFY_PREFIXES.some(p => trimmed.startsWith(p))) {
       console.log(`    \x1b[31m✗ ${item.id} verify blocked (not in allowlist or contains shell metacharacters): ${item.verify}\x1b[0m`);
       verifyFails++;
       e2ePassed = false;
