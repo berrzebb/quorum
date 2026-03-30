@@ -9,6 +9,81 @@ import { spawnSync } from "node:child_process";
 
 import { prepareProviderSpawn } from "../core/provider-binary.js";
 
+// ── Verdict Parsing ─────────────────────────
+
+/** Extract {passed, findings} from auditor output. Tries multiple formats. */
+function parseAuditVerdict(output: string): { passed: boolean; findings: string[] } | null {
+  // Strategy 1: Fenced JSON block (```json ... ```)
+  const fencedMatches = output.matchAll(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/g);
+  for (const m of fencedMatches) {
+    const v = tryParseVerdict(m[1]!);
+    if (v) return v;
+  }
+
+  // Strategy 2: Any JSON object containing "passed" key (greedy — handles nested arrays)
+  // Find opening { before "passed" and match balanced braces
+  const passedIdx = output.indexOf('"passed"');
+  if (passedIdx >= 0) {
+    // Walk backward to find opening brace
+    let start = output.lastIndexOf("{", passedIdx);
+    if (start >= 0) {
+      const candidate = extractBalancedJson(output, start);
+      if (candidate) {
+        const v = tryParseVerdict(candidate);
+        if (v) return v;
+      }
+    }
+  }
+
+  // Strategy 3: NDJSON lines (codex exec --json wraps in event objects)
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) continue;
+    const v = tryParseVerdict(trimmed);
+    if (v) return v;
+    // Check if it's a wrapper: {type: "message", content: "...{passed...}"}
+    try {
+      const obj = JSON.parse(trimmed);
+      const text = obj.content ?? obj.text ?? obj.result ?? obj.message;
+      if (typeof text === "string") {
+        const inner = parseAuditVerdict(text);
+        if (inner) return inner;
+      }
+    } catch { /* not JSON */ }
+  }
+
+  return null;
+}
+
+/** Try to parse a string as a verdict JSON. */
+function tryParseVerdict(s: string): { passed: boolean; findings: string[] } | null {
+  try {
+    const obj = JSON.parse(s.trim());
+    if (typeof obj.passed === "boolean") {
+      return {
+        passed: obj.passed,
+        findings: Array.isArray(obj.findings) ? obj.findings : [],
+      };
+    }
+  } catch { /* not valid JSON */ }
+  return null;
+}
+
+/** Extract a balanced JSON object starting at `start` index. */
+function extractBalancedJson(s: string, start: number): string | null {
+  let depth = 0;
+  for (let i = start; i < s.length && i < start + 5000; i++) {
+    if (s[i] === "{") depth++;
+    else if (s[i] === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+// ── Types ───────────────────────────────────
+
 interface WorkItemLike {
   id: string;
   title?: string;
@@ -93,34 +168,22 @@ export async function runWaveAuditLLM(
 
   const output = (result.stdout ?? "") as string;
 
-  // Parse verdict from output — fenced JSON (most reliable)
-  const jsonMatch = output.match(/```json\s*\n({[\s\S]*?})\s*\n```/);
-  if (jsonMatch) {
-    try {
-      const verdict = JSON.parse(jsonMatch[1]!);
-      return {
-        passed: !!verdict.passed,
-        findings: Array.isArray(verdict.findings) ? verdict.findings : [],
-      };
-    } catch (err) { console.warn(`[wave-audit-llm] fenced JSON parse failed: ${(err as Error).message}`); }
-  }
+  const parsed = parseAuditVerdict(output);
+  if (parsed) return parsed;
 
-  // Bare JSON without fences — non-greedy to avoid spanning multiple objects
-  const bareJsonMatch = output.match(/\{[^{}]*"passed"\s*:\s*(true|false)[^{}]*\}/);
-  if (bareJsonMatch) {
-    try {
-      const verdict = JSON.parse(bareJsonMatch[0]);
-      return {
-        passed: !!verdict.passed,
-        findings: Array.isArray(verdict.findings) ? verdict.findings : [],
-      };
-    } catch (err) { console.warn(`[wave-audit-llm] bare JSON parse failed: ${(err as Error).message}`); }
-  }
-
+  // Last resort: heuristic text analysis
   const lowerOutput = output.toLowerCase();
-  if (lowerOutput.includes('"passed": true') || lowerOutput.includes("all items are correctly")) {
-    return { passed: true, findings: [] };
+  const hasPassSignal = lowerOutput.includes('"passed": true') || lowerOutput.includes('"passed":true')
+    || lowerOutput.includes("all checks pass") || lowerOutput.includes("no issues found")
+    || lowerOutput.includes("all items are correctly");
+  const hasFailSignal = lowerOutput.includes('"passed": false') || lowerOutput.includes('"passed":false');
+
+  if (hasPassSignal && !hasFailSignal) return { passed: true, findings: [] };
+  if (hasFailSignal) {
+    // Try to extract bullet points as findings
+    const bullets = output.match(/^[-*]\s+.+$/gm) ?? [];
+    return { passed: false, findings: bullets.length > 0 ? bullets.map(b => b.replace(/^[-*]\s+/, "")) : ["Audit returned 'passed: false' but findings could not be extracted"] };
   }
 
-  return { passed: false, findings: ["Audit returned unstructured output — manual review needed"] };
+  return { passed: false, findings: ["Audit returned unstructured output — manual review needed. Raw length: " + output.length] };
 }
