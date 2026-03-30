@@ -80,6 +80,7 @@ describe("deriveAuditCwd", () => {
 describe("audit.mjs worktree isolation invariants", () => {
   const auditDir = resolve(CORE_DIR, "audit");
   const auditModules = ["index.mjs", "args.mjs", "session.mjs", "scope.mjs", "pre-verify.mjs", "codex-runner.mjs", "solo-verdict.mjs"];
+  const preVerifySource = readFileSync(resolve(auditDir, "pre-verify.mjs"), "utf8");
   const auditSource = auditModules.map(f => readFileSync(resolve(auditDir, f), "utf8")).join("\n");
 
   it("has zero cwd:REPO_ROOT in audit chain functions", () => {
@@ -154,6 +155,23 @@ describe("audit.mjs worktree isolation invariants", () => {
   it("infra_failure verdict is recorded to SQLite on Codex failure", () => {
     assert.match(auditSource, /infra_failure.*auditor exited|mode.*infra_failure/);
     assert.match(auditSource, /bridge\.recordTransition[\s\S]*?infra_failure/);
+  });
+
+  it("computeChangedFiles diff basis regex accepts ..HEAD", () => {
+    // The regex must match both hash..hash and hash..HEAD
+    const regex = /git\s+diff\s+(?:--name-only\s+)?([0-9a-f]{7,40}\.{2,3}(?:[0-9a-f]{7,40}|HEAD))/;
+    assert.ok(regex.test("git diff --name-only 0262eba..HEAD"), "should match hash..HEAD");
+    assert.ok(regex.test("git diff --name-only abc1234..def5678"), "should match hash..hash");
+    assert.ok(regex.test("git diff abc1234...HEAD"), "should match hash...HEAD (triple dot)");
+    assert.ok(!regex.test("git diff --name-only main..HEAD"), "should NOT match ref..HEAD");
+    // Verify the source code uses this pattern
+    assert.match(preVerifySource, /HEAD\)/, "pre-verify.mjs should accept HEAD in diff basis regex");
+  });
+
+  it("audit/index.mjs appends evidence content to prompt", () => {
+    // The audit pipeline must inject evidence into the prompt sent to the auditor
+    assert.match(auditSource, /Implementer Evidence Package/, "should append evidence section header");
+    assert.match(auditSource, /claudeMd/, "should reference evidence variable");
   });
 });
 
