@@ -56,7 +56,7 @@ export function verifyPhaseCompletion(
   for (const item of phaseItems) {
     if (!item.verify || !completedIds.has(item.id)) continue;
     const trimmed = item.verify.trim();
-    const INTERP_RE = /\s-[ec]\s|\s-[ec]$|\s--eval[\s=]|\s--command[\s=]/;
+    const INTERP_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--command[\s=]|\s--print[\s=]/;
     if (SHELL_META.test(trimmed) || INTERP_RE.test(` ${trimmed}`) || !ALLOWED_VERIFY.some(p => trimmed.startsWith(p))) {
       failures.push(`${item.id} verify blocked (not in allowlist): ${item.verify}`);
       continue;

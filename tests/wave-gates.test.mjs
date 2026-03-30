@@ -331,6 +331,8 @@ describe("verifyPhaseCompletion", () => {
       "node --eval=process.exit(0)",
       "python -c print(1)",
       "node --eval process.exit(0)",
+      "node -p process.version",
+      "node --print=process.version",
     ];
     for (const cmd of blocked) {
       const items = [{ id: "WB-01", targetFiles: [], verify: cmd }];

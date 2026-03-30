@@ -15,8 +15,8 @@ const ALLOWED_PREFIXES = [
 /** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
 const SHELL_META = /[;&|`$><\r\n%]/;
 
-/** Interpreter inline execution patterns (space or = delimited). */
-const INTERPRETER_RE = /\s-[ec]\s|\s-[ec]$|\s--eval[\s=]|\s--command[\s=]/;
+/** Interpreter inline execution patterns (space or = delimited). -p/--print is also inline eval. */
+const INTERPRETER_RE = /\s-[ecp]\s|\s-[ecp]$|\s--eval[\s=]|\s--command[\s=]|\s--print[\s=]/;
 
 function isAllowedVerifier(cmd: string): boolean {
   const trimmed = cmd.trim();
