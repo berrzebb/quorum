@@ -414,3 +414,158 @@ export async function generateCompactWithUpgrade(
     breaker: currentBreaker,
   };
 }
+
+// ═══ RTI-6: Bounded Session Memory Carryover ════════════════════════════
+
+/**
+ * A single memory entry carried between waves/sessions.
+ * Bounded: max entries per digest, fixed token budget.
+ * @since RTI-6
+ */
+export interface MemoryEntry {
+  /** What was learned or constrained. */
+  content: string;
+  /** Source wave/session that produced this memory. */
+  sourceWave: number;
+  /** Category of the memory. */
+  category: "constraint" | "learned" | "unresolved" | "decision";
+  /** Importance score (0.0 - 1.0). Higher = more likely to survive pruning. */
+  importance: number;
+}
+
+/**
+ * Bounded memory digest for wave/session carryover.
+ * This is NOT an authoritative source — it's a derived summary
+ * that helps the next wave avoid repeating past mistakes.
+ * @since RTI-6
+ */
+export interface MemoryDigest {
+  /** Entries in the digest (bounded). */
+  entries: MemoryEntry[];
+  /** Maximum entries allowed. */
+  maxEntries: number;
+  /** Estimated token count of the serialized digest. */
+  tokenEstimate: number;
+  /** When this digest was last updated. */
+  updatedAt: number;
+}
+
+/** Default memory budget. */
+const MAX_MEMORY_ENTRIES = 5;
+const MAX_MEMORY_TOKENS = 500;
+
+/**
+ * Create an empty memory digest.
+ * @since RTI-6
+ */
+export function createMemoryDigest(maxEntries = MAX_MEMORY_ENTRIES): MemoryDigest {
+  return {
+    entries: [],
+    maxEntries,
+    tokenEstimate: 0,
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Add a memory entry to the digest, respecting bounds.
+ * If at capacity, replaces the lowest-importance entry.
+ * @since RTI-6
+ */
+export function addMemory(digest: MemoryDigest, entry: MemoryEntry): MemoryDigest {
+  const entries = [...digest.entries];
+
+  if (entries.length >= digest.maxEntries) {
+    // Find lowest importance entry to replace
+    let minIdx = 0;
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i].importance < entries[minIdx].importance) minIdx = i;
+    }
+    // Only replace if new entry is more important
+    if (entry.importance > entries[minIdx].importance) {
+      entries[minIdx] = entry;
+    }
+  } else {
+    entries.push(entry);
+  }
+
+  const serialized = entries.map(e => e.content).join("\n");
+  const tokenEstimate = Math.ceil(serialized.length / 4); // rough estimate
+
+  return {
+    entries,
+    maxEntries: digest.maxEntries,
+    tokenEstimate: Math.min(tokenEstimate, MAX_MEMORY_TOKENS),
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Extract memory entries from a compact summary + LLM result.
+ * This is the bridge between compact generation and memory carryover.
+ * @since RTI-6
+ */
+export function extractMemories(
+  summary: CompactSummary,
+  llmResult?: LlmCompactResult,
+  waveIndex?: number,
+): MemoryEntry[] {
+  const wave = waveIndex ?? summary.waveIndex;
+  const entries: MemoryEntry[] = [];
+
+  // Unresolved high-severity findings → "unresolved" memories
+  for (const f of summary.unresolvedFindings.filter(f => f.severity === "high")) {
+    entries.push({
+      content: `[Wave ${wave}] Unresolved: ${f.code} — ${f.summary}`,
+      sourceWave: wave,
+      category: "unresolved",
+      importance: 0.9,
+    });
+  }
+
+  // Explicit constraints → "constraint" memories
+  for (const c of summary.nextConstraints) {
+    entries.push({
+      content: c,
+      sourceWave: wave,
+      category: "constraint",
+      importance: 0.8,
+    });
+  }
+
+  // LLM learned constraints → "learned" memories
+  if (llmResult) {
+    for (const c of llmResult.learnedConstraints) {
+      entries.push({
+        content: c,
+        sourceWave: wave,
+        category: "learned",
+        importance: 0.7,
+      });
+    }
+    for (const d of llmResult.keyDecisions) {
+      entries.push({
+        content: d,
+        sourceWave: wave,
+        category: "decision",
+        importance: 0.6,
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Format memory digest as prompt context for the next wave.
+ * @since RTI-6
+ */
+export function formatMemoryContext(digest: MemoryDigest): string {
+  if (digest.entries.length === 0) return "";
+
+  const sections = ["## Session Memory (carried from previous waves)", ""];
+  for (const entry of digest.entries) {
+    sections.push(`- [${entry.category}] ${entry.content}`);
+  }
+  return sections.join("\n");
+}
