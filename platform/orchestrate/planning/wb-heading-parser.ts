@@ -18,13 +18,13 @@ import type { HeadingInfo, WBSize } from './types.js';
 export const ID_PATTERN = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?/;
 
 /**
- * Parent label pattern — matches Phase/Step/단계 headings.
- * Examples: Phase 1, Step 2A, 단계 3
+ * Parent label pattern — matches Phase/Step/Wave/단계 headings.
+ * Examples: Phase 1, Step 2A, Wave 0, 단계 3
  */
-export const PARENT_LABEL_PATTERN = /(?:Phase|Step|단계)\s*\d+[A-Za-z]?/;
+export const PARENT_LABEL_PATTERN = /(?:Phase|Step|Wave|단계)\s*\d+[A-Za-z]?/;
 
-/** Matches a Phase/Step parent heading line (## or ###). */
-const PARENT_HEADING_RE = /^(#{2,3})\s+((?:Phase|Step|단계)\s*\d+[A-Za-z]?)\s*:\s*(.*)/;
+/** Matches a Phase/Step/Wave parent heading line (## or ###). */
+const PARENT_HEADING_RE = /^(#{2,3})\s+((?:Phase|Step|Wave|단계)\s*\d+[A-Za-z]?)\s*:\s*(.*)/;
 
 /** Matches an ID-based heading line (## or ###), with optional brackets. */
 const ID_HEADING_RE = /^(#{2,3})\s+(?:\[)?([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d+[A-Za-z]?)\]?\s*[:\s]\s*(.*)/;
@@ -92,7 +92,7 @@ export function parseHeading(line: string): HeadingInfo | null {
  */
 export function scanHeadings(content: string): (HeadingInfo & { offset: number })[] {
   // Phase 1: detect document structure — does this file have Phase parents?
-  const hasPhaseParents = /^#{2,3}\s+(?:Phase|Step|단계)\s*\d+[A-Za-z]?[:\s]/gm.test(content);
+  const hasPhaseParents = /^#{2,3}\s+(?:Phase|Step|Wave|단계)\s*\d+[A-Za-z]?[:\s]/gm.test(content);
 
   // ID-based parents only when no Phase labels exist AND both h2+h3 IDs present
   const hasIdParents = !hasPhaseParents

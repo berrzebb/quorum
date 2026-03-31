@@ -15,7 +15,8 @@ import type { WorkItem, WBSize } from './types.js';
 
 /**
  * Extract target files from "First touch files" or "Target Files" fields.
- * Collects backtick-quoted filenames (must have an extension).
+ * Collects backtick-quoted filenames — supports extensions of any length
+ * and dotfiles without extensions (e.g. `.gitignore`, `.env.example`).
  */
 export function extractTargetFiles(body: string): string[] {
   const files: string[] = [];
@@ -29,7 +30,10 @@ export function extractTargetFiles(body: string): string[] {
   const end = ends.length > 0 ? Math.min(...ends) : Math.min(fieldStart + 500, body.length);
   const fileBlock = body.slice(fieldStart, end);
 
-  const fileRegex = /`([^`]+\.[a-z]{1,5})`/g;
+  // Match backtick-quoted paths:
+  //  - files with extensions: `foo.js`, `src/db/schema.js`, `.env.example`
+  //  - dotfiles without extensions: `.gitignore`, `.gitkeep`, `.env`
+  const fileRegex = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
   let m: RegExpExecArray | null;
   while ((m = fileRegex.exec(fileBlock)) !== null) {
     files.push(m[1]!);
@@ -74,7 +78,7 @@ export function extractContextBudget(
 
   const readMatch = ctxBlock.match(/Read:\s*(.+)/i);
   if (readMatch) {
-    const fileRegex = /`([^`]+\.[a-z]{1,5})`/g;
+    const fileRegex = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
     let fm: RegExpExecArray | null;
     while ((fm = fileRegex.exec(readMatch[1]!)) !== null) {
       readFiles.push(fm[1]!);

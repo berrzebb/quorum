@@ -53,10 +53,20 @@ export async function tryWrapInMuxSession(repoRoot: string): Promise<MuxWrapResu
 
   const mux = new ProcessMux(backend);
   try {
+    // Resolve the daemon entry point — prefer dist/ for compiled JS,
+    // fall back to tsx for TypeScript source (npm run dev).
+    const distEntry = resolve(repoRoot, "dist", "daemon", "index.js");
+    const { existsSync } = await import("node:fs");
+    const useDistEntry = existsSync(distEntry);
+    const command = useDistEntry ? process.execPath : process.execPath;
+    const args = useDistEntry
+      ? [distEntry]
+      : [resolve(repoRoot, "node_modules", ".bin", "tsx"), resolve(repoRoot, "daemon", "index.ts")];
+
     const session = await mux.spawn({
       name: DASHBOARD_SESSION,
-      command: process.execPath,
-      args: [resolve(__dirname, "..", "index.js")],
+      command,
+      args,
       cwd: repoRoot,
       env: { QUORUM_IN_MUX_SESSION: "1" },
     });

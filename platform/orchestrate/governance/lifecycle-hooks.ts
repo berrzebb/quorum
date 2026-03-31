@@ -51,9 +51,16 @@ export function waveCommit(
     });
     if (existingFiles.length === 0) return false;
 
-    execFileSync("git", ["add", ...existingFiles], {
-      cwd: repoRoot, windowsHide: true, stdio: "pipe",
-    });
+    try {
+      execFileSync("git", ["add", ...existingFiles], {
+        cwd: repoRoot, windowsHide: true, stdio: "pipe",
+      });
+    } catch {
+      // Retry with -f to handle .gitignore'd files (e.g. RTM under docs/plan/)
+      execFileSync("git", ["add", "-f", ...existingFiles], {
+        cwd: repoRoot, windowsHide: true, stdio: "pipe",
+      });
+    }
 
     const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
       cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"],
@@ -74,7 +81,7 @@ export function waveCommit(
  */
 export function amendWaveCommit(repoRoot: string, rtmPath: string): void {
   try {
-    execFileSync("git", ["add", rtmPath], { cwd: repoRoot, windowsHide: true, stdio: "pipe" });
+    execFileSync("git", ["add", "-f", rtmPath], { cwd: repoRoot, windowsHide: true, stdio: "pipe" });
     execFileSync("git", ["commit", "--amend", "--no-edit"], {
       cwd: repoRoot, encoding: "utf8", windowsHide: true, stdio: "pipe",
     });

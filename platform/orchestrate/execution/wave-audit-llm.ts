@@ -114,9 +114,9 @@ export async function runWaveAuditLLM(
   // Include git diff in the prompt so the auditor doesn't need to read files (avoids timeout)
   let diffSection = "";
   try {
-    const diff = execSync("git diff HEAD~1 -- " + [...new Set(files)].slice(0, 20).map(f => `"${f}"`).join(" "), {
+    const diff = execSync("git diff HEAD~1", {
       cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    }).slice(0, 8000); // Cap at 8KB to avoid prompt bloat
+    }).slice(0, 32000); // Cap at 32KB — larger waves need more diff context
     if (diff.trim()) diffSection = `\n## Code Changes (git diff):\n\`\`\`diff\n${diff}\n\`\`\`\n`;
   } catch { /* fallback: auditor reads files */ }
 

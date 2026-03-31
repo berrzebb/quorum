@@ -12,6 +12,7 @@ export const ALLOWED_VERIFY_PREFIXES = [
   "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
   "go ", "cargo ", "python ", "pytest ", "pip ",
   "java ", "javac ", "mvn ", "gradle ",
+  "cat ", "ls ", "test ",
 ];
 
 /** Shell metacharacters that enable command chaining/injection (incl. Windows %VAR% expansion). */
