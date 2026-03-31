@@ -10,6 +10,7 @@
  */
 
 import type { AuditRequest, AuditResult } from "../provider.js";
+import { extractJson } from "../auditors/parse.js";
 
 // ── Request Mapping ─────────────────────────────────────
 
@@ -125,35 +126,20 @@ export function mapPluginVerdict(
  * 2. JSON embedded in markdown/text
  * 3. NDJSON with final message containing verdict
  */
-export function parsePluginOutput(raw: string): CodexPluginVerdict | null {
+export function parsePluginOutput(raw: string, _depth = 0): CodexPluginVerdict | null {
   // 1. Try direct JSON parse
   try {
     const parsed = JSON.parse(raw.trim());
     if (parsed.verdict) return parsed as CodexPluginVerdict;
   } catch { /* not direct JSON */ }
 
-  // 2. Try extracting from fenced code block
-  const fenced = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-  if (fenced) {
+  // 2-3. Use shared extractJson (handles fenced code blocks + balanced braces)
+  const extracted = extractJson(raw);
+  if (extracted) {
     try {
-      const parsed = JSON.parse(fenced[1]!);
+      const parsed = JSON.parse(extracted);
       if (parsed.verdict) return parsed as CodexPluginVerdict;
-    } catch { /* invalid JSON in fence */ }
-  }
-
-  // 3. Try balanced brace extraction (find first complete JSON with "verdict")
-  const verdictIdx = raw.indexOf('"verdict"');
-  if (verdictIdx >= 0) {
-    let start = raw.lastIndexOf("{", verdictIdx);
-    if (start >= 0) {
-      const extracted = extractBalancedJson(raw, start);
-      if (extracted) {
-        try {
-          const parsed = JSON.parse(extracted);
-          if (parsed.verdict) return parsed as CodexPluginVerdict;
-        } catch { /* invalid JSON */ }
-      }
-    }
+    } catch { /* invalid extracted JSON */ }
   }
 
   // 4. Try NDJSON — look for the last line with a verdict
@@ -166,33 +152,15 @@ export function parsePluginOutput(raw: string): CodexPluginVerdict | null {
       // Direct verdict
       if (parsed.verdict) return parsed as CodexPluginVerdict;
       // Codex wrapper: { type: "...", content: "...{verdict...}" }
-      const inner = parsed.content ?? parsed.text ?? parsed.result ?? parsed.message;
-      if (typeof inner === "string" && inner.includes('"verdict"')) {
-        const nested = parsePluginOutput(inner);
-        if (nested) return nested;
+      if (_depth < 2) {
+        const inner = parsed.content ?? parsed.text ?? parsed.result ?? parsed.message;
+        if (typeof inner === "string" && inner.includes('"verdict"')) {
+          const nested = parsePluginOutput(inner, _depth + 1);
+          if (nested) return nested;
+        }
       }
     } catch { /* not JSON */ }
   }
 
-  return null;
-}
-
-/** Extract a balanced JSON object starting at `start` index. */
-function extractBalancedJson(s: string, start: number): string | null {
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < s.length && i < start + 10_000; i++) {
-    const ch = s[i];
-    if (escape) { escape = false; continue; }
-    if (ch === "\\") { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) return s.slice(start, i + 1);
-    }
-  }
   return null;
 }

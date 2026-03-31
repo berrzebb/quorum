@@ -66,7 +66,8 @@ export const OPINION_SCHEMA = {
     },
   },
   required: ["verdict", "reasoning", "codes", "confidence"],
-};
+} as const;
+Object.freeze(OPINION_SCHEMA);
 
 /** JSON Schema for judge final verdict. */
 export const JUDGE_VERDICT_SCHEMA = {
@@ -92,7 +93,8 @@ export const JUDGE_VERDICT_SCHEMA = {
     },
   },
   required: ["verdict", "summary", "codes"],
-};
+} as const;
+Object.freeze(JUDGE_VERDICT_SCHEMA);
 
 // ── Validation ──────────────────────────────────────────
 
@@ -144,7 +146,8 @@ function isValidOpinion(obj: unknown): obj is StructuredOpinion {
   const o = obj as Record<string, unknown>;
   return (o.verdict === "approved" || o.verdict === "changes_requested")
     && typeof o.reasoning === "string"
-    && typeof o.confidence === "number";
+    && typeof o.confidence === "number"
+    && (Array.isArray(o.codes) || o.codes === undefined);
 }
 
 function isValidJudgeVerdict(obj: unknown): obj is StructuredJudgeVerdict {

@@ -302,6 +302,21 @@ export interface DivergenceItem {
 }
 
 function parseDivergeOpinion(raw: string, role: "advocate" | "devil"): { opinion: RoleOpinion; items: DivergenceItem[] } {
+  // Fast path: structured output (codex-plugin-cc provides validated JSON)
+  const structured = parseStructuredOpinion(raw);
+  if (structured) {
+    return {
+      opinion: {
+        role,
+        verdict: normalizeVerdict(structured.verdict),
+        reasoning: structured.reasoning,
+        codes: structured.codes,
+        confidence: structured.confidence,
+      },
+      items: [],
+    };
+  }
+
   try {
     const json = extractJson(raw);
     if (!json) throw new Error("No JSON found");

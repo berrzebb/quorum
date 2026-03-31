@@ -19,9 +19,7 @@
 import { resolve, join } from "node:path";
 import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { FilesystemAgentStateStore } from "../../orchestrate/state/filesystem/agent-state-store.js";
-import { tmpdir } from "node:os";
-import { platform } from "node:os";
-import { spawnSync } from "node:child_process";
+import { tmpdir, platform } from "node:os";
 import { ProcessMux, type MuxSession, type MuxBackend } from "../../bus/mux.js";
 import type { Auditor, AuditRequest, AuditResult } from "../provider.js";
 import { extractJson } from "./parse.js";
@@ -262,16 +260,6 @@ export class MuxAuditor implements Auditor {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
-}
-
-/** Send Ctrl-D (EOF) to a mux session to signal end of stdin. */
-function sendEOF(mux: ProcessMux, session: MuxSession): void {
-  const backend = mux.getBackend();
-  if (backend === "tmux") {
-    spawnSync("tmux", ["send-keys", "-t", session.name, "", "C-d"], { windowsHide: true });
-  } else if (backend === "psmux") {
-    spawnSync("psmux", ["send-keys", "-t", session.name, "", "C-d"], { windowsHide: true });
-  }
 }
 
 function cleanupPromptFile(path: string): void {

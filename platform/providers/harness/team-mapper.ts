@@ -204,12 +204,9 @@ export function mapTeam(agents: HarnessAgent[]): TeamMappingResult {
     warnings.push(`Auto-supplemented "${missing}" agent for consensus coverage.`);
   }
 
-  const consensusReady = missingRoles.length === 0
-    || mapped.some(m => m.supplemented); // supplemented agents fill the gap
-
   return {
     agents: mapped,
-    consensusReady: true, // always true after supplementation
+    consensusReady: missingRoles.length === 0 || mapped.some(m => m.supplemented),
     missingRoles,
     warnings,
   };

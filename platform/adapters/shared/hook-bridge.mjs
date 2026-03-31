@@ -179,10 +179,12 @@ export function hookRunnerToStopReviewGate(runner, sessionId, options = {}) {
  * @returns {Record<string, Array>} — merged hooks config
  */
 export function mergeHookConfigs(primary, secondary) {
+  if (!primary || typeof primary !== "object") return secondary ?? {};
+  if (!secondary || typeof secondary !== "object") return { ...primary };
   const merged = { ...primary };
   for (const [event, hooks] of Object.entries(secondary)) {
-    if (merged[event]) {
-      // Append plugin hooks after quorum hooks
+    if (!Array.isArray(hooks)) continue;
+    if (Array.isArray(merged[event])) {
       merged[event] = [...merged[event], ...hooks];
     } else {
       merged[event] = hooks;

@@ -12,6 +12,8 @@
  */
 
 import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { WorkItem, Wave, Bridge } from "../planning/types.js";
 import type { NamingRule } from "../../bus/blueprint-parser.js";
 import type { FitnessGateResult } from "../governance/fitness-gates.js";
@@ -514,9 +516,6 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 }
 
 // ── Helpers ─────────────────────────────────
-
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 function _ensureTmpDir(repoRoot: string): string {
   const tmpDir = resolve(repoRoot, ".claude", "agents", "tmp");

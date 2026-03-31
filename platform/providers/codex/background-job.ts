@@ -94,12 +94,11 @@ export function submitBackgroundJob(request: BackgroundJobRequest): string | nul
 /**
  * Query the status of a codex-plugin-cc background job.
  */
-export function queryJobStatus(jobId?: string, cwd?: string): BackgroundJobStatus | null {
+export function queryJobStatus(jobId: string, cwd?: string): BackgroundJobStatus | null {
   const companionPath = getCompanionScriptPath();
   if (!companionPath) return null;
 
-  const args = [companionPath, "status", "--json"];
-  if (jobId) args.push(jobId);
+  const args = [companionPath, "status", "--json", jobId];
 
   try {
     const result = spawnSync(process.execPath, args, {
@@ -133,12 +132,11 @@ export function queryJobStatus(jobId?: string, cwd?: string): BackgroundJobStatu
 /**
  * Retrieve the result of a completed codex-plugin-cc background job.
  */
-export function getJobResult(jobId?: string, cwd?: string): BackgroundJobResult | null {
+export function getJobResult(jobId: string, cwd?: string): BackgroundJobResult | null {
   const companionPath = getCompanionScriptPath();
   if (!companionPath) return null;
 
-  const args = [companionPath, "result", "--json"];
-  if (jobId) args.push(jobId);
+  const args = [companionPath, "result", "--json", jobId];
 
   try {
     const result = spawnSync(process.execPath, args, {
@@ -179,12 +177,11 @@ export function getJobResult(jobId?: string, cwd?: string): BackgroundJobResult 
 /**
  * Cancel a running codex-plugin-cc background job.
  */
-export function cancelJob(jobId?: string, cwd?: string): boolean {
+export function cancelJob(jobId: string, cwd?: string): boolean {
   const companionPath = getCompanionScriptPath();
   if (!companionPath) return false;
 
-  const args = [companionPath, "cancel", "--json"];
-  if (jobId) args.push(jobId);
+  const args = [companionPath, "cancel", "--json", jobId];
 
   try {
     const result = spawnSync(process.execPath, args, {

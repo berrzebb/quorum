@@ -9,7 +9,7 @@
  * 4. Prepares for skill_sync to generate adapter wrappers
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join, basename, dirname } from "node:path";
 
 // ── Types ───────────────────────────────────────────────
@@ -162,7 +162,6 @@ export function validateSkillDirectory(skillsDir: string): SkillMappingResult {
   }
 
   // Scan for skill.md or SKILL.md files
-  const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
 
   let entries: string[];
   try {

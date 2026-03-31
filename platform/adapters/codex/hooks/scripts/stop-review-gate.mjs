@@ -83,7 +83,7 @@ try {
     {
       cwd: REPO_ROOT,
       encoding: "utf8",
-      timeout: 600_000, // 10 minutes max
+      timeout: 60_000, // 60 seconds max — fail-open on timeout
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });

@@ -64,7 +64,6 @@ export class CodexPluginAuditor implements Auditor {
       const child = spawn(process.execPath, args, {
         cwd: this.cwd,
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env },
         windowsHide: true,
       });
 
