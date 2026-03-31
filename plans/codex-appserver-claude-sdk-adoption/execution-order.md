@@ -69,13 +69,13 @@ Phase 4  Rollout and readiness
 - ✅ daemon session projection spine이 있다. (`daemon/state/store.ts`, selectors)
 - ✅ design system primitives가 있다. (`Panel`, `StatusPill`, `SectionDivider`)
 
-### Gate B - Runtime Wiring Converged
+### Gate B - Runtime Wiring Converged ✅ PASSED
 
-`SDK-15` 완료 후 통과 조건:
+`SDK-15` 완료 후 통과 조건 (모두 충족):
 
-- Codex App Server와 Claude SDK가 같은 runtime model로 매핑된다.
-- today-applied peer review / harness / stop gate surface가 새 runtime path를 사용한다.
-- CLI fallback과 provider-native runtime이 같은 contract gate semantics를 지킨다.
+- ✅ Codex App Server와 Claude SDK가 같은 runtime model로 매핑된다. (`projectEventsToState()` provider-agnostic, both mappers produce identical event kinds with capability enrichment)
+- ✅ today-applied peer review / harness / stop gate surface가 새 runtime path를 사용한다. (`adversarial-review.ts` → capability registry, `team-mapper.ts` → `validateToolAccess()`, `permissions.ts` → `isReadOnly()`/`isDestructive()`)
+- ✅ CLI fallback과 provider-native runtime이 같은 contract gate semantics를 지킨다. (backward-compatible constructors, ledger/gate optional)
 
 ### Gate C - Adoption Ready
 
