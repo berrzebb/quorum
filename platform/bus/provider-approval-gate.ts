@@ -19,6 +19,8 @@ import type {
 } from "../providers/session-runtime.js";
 import type { SessionLedger } from "../providers/session-ledger.js";
 import type { ContractLedger } from "../core/harness/contract-ledger.js";
+import type { ClassifierDecision, ClassifierInput } from "./approval-classifier.js";
+import { classify, telemetryToInput } from "./approval-classifier.js";
 
 // ── RTI-1A: Approval Telemetry ──────────────────
 
@@ -53,10 +55,19 @@ export interface ApprovalTelemetryRecord {
   reason: string;
   /** Contract ID if bound to a sprint contract. */
   contractId?: string;
+  /** RTI-2B: Shadow classifier decision (advisory only). */
+  classifierDecision?: ClassifierDecision;
 }
 
 /** Callback for telemetry consumers. */
 export type ApprovalTelemetryCallback = (record: ApprovalTelemetryRecord) => void;
+
+/** Callback for shadow classifier decisions (RTI-2B). */
+export type ShadowClassifierCallback = (
+  input: ClassifierInput,
+  decision: ClassifierDecision,
+  gateDecision: "allow" | "deny",
+) => void;
 
 // ── Policy interface ────────────────────────────
 
@@ -112,6 +123,7 @@ export interface ApprovalGateResult {
 export class ProviderApprovalGate {
   private policies: ApprovalPolicy[] = [];
   private telemetryCallbacks: ApprovalTelemetryCallback[] = [];
+  private shadowCallbacks: ShadowClassifierCallback[] = [];
 
   constructor(
     private readonly sessionLedger: SessionLedger,
@@ -124,6 +136,15 @@ export class ProviderApprovalGate {
    */
   onTelemetry(cb: ApprovalTelemetryCallback): void {
     this.telemetryCallbacks.push(cb);
+  }
+
+  /**
+   * Register a shadow classifier callback. Called with classifier decision
+   * alongside the actual gate decision — for calibration and analysis.
+   * @since RTI-2B
+   */
+  onShadowClassifier(cb: ShadowClassifierCallback): void {
+    this.shadowCallbacks.push(cb);
   }
 
   /**
@@ -201,8 +222,15 @@ export class ProviderApprovalGate {
       this.sessionLedger.updateState(sessionRecord.quorumSessionId, "waiting_approval");
     }
 
-    // 3. Evaluate
+    // RTI-2B: Run shadow classifier BEFORE gate (advisory only)
+    const classifierInput = this.buildClassifierInput(request);
+    const classifierDecision = classify(classifierInput);
+
+    // 3. Evaluate through gate (classifier does NOT affect this)
     const result = this.evaluate(request);
+
+    // RTI-2B: Emit shadow classifier results for calibration
+    this.emitShadowClassifier(classifierInput, classifierDecision, result.decision);
 
     // 4. Resolve in ledger
     this.sessionLedger.resolveApproval(request.requestId, result.decision);
@@ -215,8 +243,8 @@ export class ProviderApprovalGate {
       );
     }
 
-    // RTI-1A: Emit telemetry record for replay/classifier
-    this.emitTelemetry(request, result);
+    // RTI-1A: Emit telemetry record (now includes classifier decision)
+    this.emitTelemetry(request, result, classifierDecision);
 
     return {
       requestId: request.requestId,
@@ -224,10 +252,40 @@ export class ProviderApprovalGate {
     };
   }
 
-  /** Emit a normalized telemetry record (RTI-1A). */
+  /** Build classifier input from an approval request. @since RTI-2B */
+  private buildClassifierInput(request: ProviderApprovalRequest): ClassifierInput {
+    const capability = (request as unknown as Record<string, unknown>).toolCapability as
+      | { isReadOnly?: boolean; isDestructive?: boolean; isConcurrencySafe?: boolean; category?: string }
+      | undefined;
+
+    return {
+      tool: request.reason,
+      kind: request.kind,
+      readOnly: capability?.isReadOnly ?? false,
+      destructive: capability?.isDestructive ?? false,
+      network: request.kind === "network",
+      diff: request.kind === "diff",
+      concurrencySafe: capability?.isConcurrencySafe,
+      category: capability?.category,
+    };
+  }
+
+  /** Emit shadow classifier results for calibration. @since RTI-2B */
+  private emitShadowClassifier(
+    input: ClassifierInput,
+    decision: ClassifierDecision,
+    gateDecision: "allow" | "deny",
+  ): void {
+    for (const cb of this.shadowCallbacks) {
+      try { cb(input, decision, gateDecision); } catch { /* shadow must not break gate */ }
+    }
+  }
+
+  /** Emit a normalized telemetry record (RTI-1A + RTI-2B classifier). */
   private emitTelemetry(
     request: ProviderApprovalRequest,
     result: ApprovalGateResult,
+    classifierDecision?: ClassifierDecision,
   ): void {
     if (this.telemetryCallbacks.length === 0) return;
 
@@ -251,6 +309,7 @@ export class ProviderApprovalGate {
       contractId: this.sessionLedger.findByProviderSession(
         request.providerRef.providerSessionId,
       )?.contractId,
+      classifierDecision,
     };
 
     for (const cb of this.telemetryCallbacks) {

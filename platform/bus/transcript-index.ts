@@ -207,3 +207,213 @@ function extractTextContent(obj: Record<string, unknown>): string {
   }
   return "";
 }
+
+// ═══ RTI-3B: Transcript Index + Query Primitives ════════════════════════
+
+// ── Types ───────────────────────────────────────────
+
+/** Search scope for transcript queries. */
+export type SearchScope = "session" | "provider" | "global";
+
+/** A single search hit in the transcript. */
+export interface TranscriptHit {
+  /** Session that contains the hit. */
+  sessionId: string;
+  /** Line number within visible text (0-based). */
+  line: number;
+  /** Text excerpt around the match. */
+  excerpt: string;
+  /** Relevance score (higher = better). */
+  score: number;
+  /** Section type where the hit occurred. */
+  section?: ClassifiedLine["section"];
+}
+
+/** Internal index entry. */
+interface IndexEntry {
+  /** Normalized tokens for matching. */
+  tokens: string[];
+  /** Original visible text. */
+  text: string;
+  /** Visible line number. */
+  visibleLine: number;
+  /** Section type. */
+  section?: ClassifiedLine["section"];
+}
+
+// ── TranscriptIndex ─────────────────────────────────
+
+/**
+ * Append-friendly, session-scoped transcript index.
+ *
+ * Design:
+ * - Incremental: append() adds lines without re-indexing existing entries.
+ * - Token-based: text is normalized (lowercase, split on whitespace/punct).
+ * - Bounded: each session's index is capped to prevent memory growth.
+ * - Visible-only: only indexes text that passes the visibility contract.
+ *
+ * @since RTI-3B
+ */
+export class TranscriptIndex {
+  /** Per-session index. Key: sessionId. */
+  private sessions = new Map<string, IndexEntry[]>();
+
+  /** Maximum entries per session (prevents unbounded growth). */
+  private maxEntriesPerSession: number;
+
+  constructor(maxEntriesPerSession = 50_000) {
+    this.maxEntriesPerSession = maxEntriesPerSession;
+  }
+
+  /**
+   * Append a raw transcript line to a session's index.
+   * Only visible text is indexed (hidden content is silently skipped).
+   * Returns true if the line was indexed, false if hidden/skipped.
+   */
+  append(sessionId: string, rawLine: string): boolean {
+    const entries = this.getOrCreateSession(sessionId);
+
+    // Cap check
+    if (entries.length >= this.maxEntriesPerSession) return false;
+
+    const classified = classifyLine(rawLine, entries.length);
+    if (classified.visibility !== "visible" || !classified.text.trim()) {
+      return false;
+    }
+
+    // Split multi-line text into individual index entries
+    const lines = classified.text.split("\n").filter(l => l.trim());
+    for (const line of lines) {
+      if (entries.length >= this.maxEntriesPerSession) break;
+      entries.push({
+        tokens: tokenize(line),
+        text: line,
+        visibleLine: entries.length,
+        section: classified.section,
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Append multiple raw lines at once (batch).
+   * Returns count of lines actually indexed.
+   */
+  appendBatch(sessionId: string, rawLines: string[]): number {
+    let indexed = 0;
+    for (const line of rawLines) {
+      if (this.append(sessionId, line)) indexed++;
+    }
+    return indexed;
+  }
+
+  /**
+   * Query a session's index.
+   * Returns hits ranked by relevance (token overlap score).
+   */
+  query(sessionId: string, searchText: string, maxResults = 20): TranscriptHit[] {
+    const entries = this.sessions.get(sessionId);
+    if (!entries || entries.length === 0) return [];
+
+    const queryTokens = tokenize(searchText);
+    if (queryTokens.length === 0) return [];
+
+    const hits: TranscriptHit[] = [];
+
+    for (const entry of entries) {
+      const score = computeScore(queryTokens, entry.tokens);
+      if (score > 0) {
+        hits.push({
+          sessionId,
+          line: entry.visibleLine,
+          excerpt: entry.text.slice(0, 120),
+          score,
+          section: entry.section,
+        });
+      }
+    }
+
+    // Sort by score descending, then by line ascending (earlier = better for ties)
+    hits.sort((a, b) => b.score - a.score || a.line - b.line);
+    return hits.slice(0, maxResults);
+  }
+
+  /**
+   * Query across all sessions (global scope).
+   */
+  queryAll(searchText: string, maxResults = 50): TranscriptHit[] {
+    const allHits: TranscriptHit[] = [];
+    for (const sessionId of this.sessions.keys()) {
+      allHits.push(...this.query(sessionId, searchText, maxResults));
+    }
+    allHits.sort((a, b) => b.score - a.score || a.line - b.line);
+    return allHits.slice(0, maxResults);
+  }
+
+  /** Get the number of indexed entries for a session. */
+  entryCount(sessionId: string): number {
+    return this.sessions.get(sessionId)?.length ?? 0;
+  }
+
+  /** Get all indexed session IDs. */
+  sessionIds(): string[] {
+    return [...this.sessions.keys()];
+  }
+
+  /** Clear a session's index. */
+  clearSession(sessionId: string): void {
+    this.sessions.delete(sessionId);
+  }
+
+  /** Clear all indices. */
+  clearAll(): void {
+    this.sessions.clear();
+  }
+
+  private getOrCreateSession(sessionId: string): IndexEntry[] {
+    let entries = this.sessions.get(sessionId);
+    if (!entries) {
+      entries = [];
+      this.sessions.set(sessionId, entries);
+    }
+    return entries;
+  }
+}
+
+// ── Tokenization ────────────────────────────────────
+
+/** Normalize text into searchable tokens. */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 0);
+}
+
+/** Compute token overlap score between query and entry. */
+function computeScore(queryTokens: string[], entryTokens: string[]): number {
+  if (queryTokens.length === 0 || entryTokens.length === 0) return 0;
+
+  const entrySet = new Set(entryTokens);
+  let matches = 0;
+
+  for (const qt of queryTokens) {
+    // Exact match
+    if (entrySet.has(qt)) {
+      matches += 2;
+      continue;
+    }
+    // Prefix match (for partial typing)
+    for (const et of entryTokens) {
+      if (et.startsWith(qt) || qt.startsWith(et)) {
+        matches += 1;
+        break;
+      }
+    }
+  }
+
+  // Normalize by query length to get 0-1 range, then scale
+  return matches / (queryTokens.length * 2);
+}
