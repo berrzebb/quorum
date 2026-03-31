@@ -125,3 +125,101 @@ export function emitTranscriptWorkload(metrics: TranscriptWorkloadMetrics): void
     try { cb(metrics); } catch { /* telemetry must not break projector */ }
   }
 }
+
+// ── RTI-3C: Search State Projection ─────────────────
+
+/**
+ * Search state projected for daemon/UI consumption.
+ * UI reads this instead of calling the index directly.
+ * @since RTI-3C
+ */
+export interface SearchStateProjection {
+  /** Whether a search is currently active. */
+  active: boolean;
+  /** Current search query (empty if no search). */
+  query: string;
+  /** Session scope of the search. */
+  scope: "session" | "provider" | "global";
+  /** Target session ID (for session-scoped search). */
+  sessionId?: string;
+  /** Search results. */
+  hits: SearchHitProjection[];
+  /** Index of the currently focused hit (-1 if none). */
+  focusedHitIndex: number;
+  /** Total indexed line count for the session. */
+  indexedLineCount: number;
+  /** Search latency in ms (for telemetry). */
+  lastSearchMs?: number;
+}
+
+/** Projected search hit for UI. */
+export interface SearchHitProjection {
+  sessionId: string;
+  line: number;
+  excerpt: string;
+  score: number;
+  section?: string;
+}
+
+/**
+ * Create an empty search state (no active search).
+ * @since RTI-3C
+ */
+export function emptySearchState(): SearchStateProjection {
+  return {
+    active: false,
+    query: "",
+    scope: "session",
+    hits: [],
+    focusedHitIndex: -1,
+    indexedLineCount: 0,
+  };
+}
+
+/**
+ * Create a search state from query results.
+ * @since RTI-3C
+ */
+export function projectSearchState(
+  query: string,
+  scope: SearchStateProjection["scope"],
+  hits: SearchHitProjection[],
+  indexedLineCount: number,
+  searchMs?: number,
+  sessionId?: string,
+): SearchStateProjection {
+  return {
+    active: query.length > 0,
+    query,
+    scope,
+    sessionId,
+    hits,
+    focusedHitIndex: hits.length > 0 ? 0 : -1,
+    indexedLineCount,
+    lastSearchMs: searchMs,
+  };
+}
+
+/**
+ * Navigate to next hit in search state.
+ * @since RTI-3C
+ */
+export function nextSearchHit(state: SearchStateProjection): SearchStateProjection {
+  if (state.hits.length === 0) return state;
+  return {
+    ...state,
+    focusedHitIndex: (state.focusedHitIndex + 1) % state.hits.length,
+  };
+}
+
+/**
+ * Navigate to previous hit in search state.
+ * @since RTI-3C
+ */
+export function prevSearchHit(state: SearchStateProjection): SearchStateProjection {
+  if (state.hits.length === 0) return state;
+  return {
+    ...state,
+    focusedHitIndex: (state.focusedHitIndex - 1 + state.hits.length) % state.hits.length,
+  };
+}
