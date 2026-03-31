@@ -307,3 +307,110 @@ export function formatCompactContext(summary: CompactSummary): string {
 
   return sections.join("\n");
 }
+
+// ═══ RTI-5: Pluggable LLM Compact Upgrade ═══════════════════════════════
+
+/**
+ * Interface for LLM compact summarizers.
+ * Implementations call an LLM to produce richer summaries than deterministic.
+ * Must be pluggable — the system never depends on a specific LLM.
+ * @since RTI-5
+ */
+export interface CompactSummarizer {
+  /** Human-readable name (for telemetry/logging). */
+  readonly name: string;
+  /**
+   * Generate an enhanced summary from the deterministic baseline.
+   * Receives the deterministic summary + raw context for enrichment.
+   * Must throw on failure — caller handles fallback.
+   */
+  summarize(
+    baseline: CompactSummary,
+    rawContext?: string,
+  ): Promise<LlmCompactResult>;
+}
+
+/** Result from LLM compact summarizer. */
+export interface LlmCompactResult {
+  /** Enhanced summary text (replaces formatCompactContext output). */
+  enhancedSummary: string;
+  /** Learned constraints extracted by the LLM. */
+  learnedConstraints: string[];
+  /** Key decisions or patterns the LLM identified. */
+  keyDecisions: string[];
+  /** Token count of the enhanced summary (for budget tracking). */
+  tokenEstimate: number;
+}
+
+/**
+ * Run compact with optional LLM upgrade.
+ *
+ * Flow:
+ * 1. Always generate deterministic summary (safety floor).
+ * 2. If summarizer is provided and circuit breaker not tripped, try LLM upgrade.
+ * 3. On LLM failure, fall back to deterministic (invariant: handoff never blocked).
+ * 4. Emit telemetry for both paths.
+ *
+ * @since RTI-5
+ */
+export async function generateCompactWithUpgrade(
+  input: WaveCompactInput,
+  summarizer?: CompactSummarizer,
+  breaker?: CompactCircuitBreaker,
+): Promise<{ summary: CompactSummary; llmResult?: LlmCompactResult; breaker: CompactCircuitBreaker }> {
+  const currentBreaker = breaker ?? createCircuitBreaker();
+  const start = Date.now();
+
+  // Step 1: Always generate deterministic (safety floor)
+  const deterministicSummary = generateCompactSummary(input);
+
+  // Step 2: Try LLM upgrade if available and breaker not tripped
+  if (summarizer && !currentBreaker.tripped) {
+    try {
+      const rawContext = formatCompactContext(deterministicSummary);
+      const llmResult = await summarizer.summarize(deterministicSummary, rawContext);
+
+      // Merge learned constraints into summary
+      const enhanced: CompactSummary = {
+        ...deterministicSummary,
+        nextConstraints: [
+          ...deterministicSummary.nextConstraints,
+          ...llmResult.learnedConstraints,
+        ],
+        source: "generated", // Still deterministic base, LLM enhanced
+      };
+
+      const durationMs = Date.now() - start;
+      emitCompactTelemetry(enhanced, true, currentBreaker, durationMs);
+
+      return {
+        summary: enhanced,
+        llmResult,
+        breaker: recordSuccess(currentBreaker),
+      };
+    } catch (err) {
+      // LLM failed — fall back to deterministic (invariant: handoff never blocked)
+      const failedBreaker = recordFailure(
+        currentBreaker,
+        `${summarizer.name}: ${(err as Error).message}`,
+      );
+
+      const durationMs = Date.now() - start;
+      emitCompactTelemetry(deterministicSummary, false, failedBreaker, durationMs);
+
+      return {
+        summary: deterministicSummary,
+        breaker: failedBreaker,
+      };
+    }
+  }
+
+  // No summarizer or breaker tripped — return deterministic
+  const durationMs = Date.now() - start;
+  emitCompactTelemetry(deterministicSummary, true, currentBreaker, durationMs);
+
+  return {
+    summary: deterministicSummary,
+    breaker: currentBreaker,
+  };
+}
