@@ -77,11 +77,11 @@ Phase 4  Rollout and readiness
 - ✅ today-applied peer review / harness / stop gate surface가 새 runtime path를 사용한다. (`adversarial-review.ts` → capability registry, `team-mapper.ts` → `validateToolAccess()`, `permissions.ts` → `isReadOnly()`/`isDestructive()`)
 - ✅ CLI fallback과 provider-native runtime이 같은 contract gate semantics를 지킨다. (backward-compatible constructors, ledger/gate optional)
 
-### Gate C - Adoption Ready
+### Gate C - Adoption Ready ✅ PASSED
 
-`SDK-17` 완료 후 통과 조건:
+`SDK-17` 완료 후 통과 조건 (모두 충족):
 
-- config/runtime selection policy가 문서화된다.
-- production boundary와 optional dependency policy가 명시된다.
-- build/test 회귀가 green이다.
-- 구현 착수 시 "어떤 leaked-code 패턴을 어디에 어떻게 적용하는가"가 문서상 더 이상 모호하지 않다.
+- ✅ config/runtime selection policy가 문서화된다. (`runtime-selector.ts` 5-point policy comment + `describeRuntimePolicy()` structured data + `validateRuntimeConfig()`)
+- ✅ production boundary와 optional dependency policy가 명시된다. (cli_exec/app_server/agent_sdk boundaries documented in runtime-selector.ts; optional deps: codex binary, claude-agent-sdk, codex-plugin-cc, harness)
+- ✅ build/test 회귀가 green이다. (2697 pass, 0 fail, 1 todo baseline)
+- ✅ 구현 착수 시 "어떤 leaked-code 패턴을 어디에 어떻게 적용하는가"가 문서상 더 이상 모호하지 않다. (7 modules implemented: capability-registry, deferred-loading, output-tail, wave-compact, context-fork, daemon-store, design-system)

@@ -1,5 +1,31 @@
 import type { ProviderExecutionMode } from "./session-runtime.js";
 
+// ── Runtime Selection Policy (SDK-16) ────────────────────
+//
+// 1. DEFAULT: cli_exec for both providers (one-shot audit).
+//    This is the stable production path with no external dependencies.
+//
+// 2. UPGRADE PATH:
+//    - codex: cli_exec → app_server (requires codex binary with --app-server support)
+//    - claude: cli_exec → agent_sdk (requires @anthropic-ai/claude-agent-sdk peer dep)
+//
+// 3. FALLBACK GUARANTEE: if the requested mode's dependency is missing,
+//    resolveExecutionMode() silently falls back to cli_exec.
+//    Consumer code never needs mode-specific error handling.
+//
+// 4. OPTIONAL DEPENDENCIES (none required for default behavior):
+//    - codex binary: for app_server mode only
+//    - @anthropic-ai/claude-agent-sdk: for agent_sdk mode only
+//    - codex-plugin-cc: for broker-based auditing (separate from app_server)
+//    - revfactory/harness: for team generation meta-skill
+//
+// 5. PRODUCTION BOUNDARIES:
+//    - cli_exec: safe for all environments (subprocess + one-shot)
+//    - app_server: requires persistent subprocess (not suitable for serverless)
+//    - agent_sdk: requires in-process SDK (memory budget consideration)
+//
+// Config source priority: CLI flags > config.json runtime section > defaults
+
 /**
  * Provider runtime configuration (from config.json or CLI flags).
  */
@@ -90,4 +116,65 @@ export function mergeRuntimeConfig(
  */
 export function isSessionRuntimeEnabled(config: ProviderRuntimeConfig): boolean {
   return config.codex.mode !== "cli_exec" || config.claude.mode !== "cli_exec";
+}
+
+// ── SDK-16: Config validation + policy description ──────
+
+/** Valid modes per provider. */
+const VALID_MODES: Record<"codex" | "claude", ProviderExecutionMode[]> = {
+  codex: ["cli_exec", "app_server"],
+  claude: ["cli_exec", "agent_sdk"],
+};
+
+/**
+ * Validate a runtime config. Returns warnings (not errors) since
+ * resolveExecutionMode handles fallback at runtime.
+ */
+export function validateRuntimeConfig(config: ProviderRuntimeConfig): string[] {
+  const warnings: string[] = [];
+
+  if (!VALID_MODES.codex.includes(config.codex.mode)) {
+    warnings.push(`codex.mode "${config.codex.mode}" is not valid (expected: ${VALID_MODES.codex.join(", ")}). Will fall back to cli_exec.`);
+  }
+  if (!VALID_MODES.claude.includes(config.claude.mode)) {
+    warnings.push(`claude.mode "${config.claude.mode}" is not valid (expected: ${VALID_MODES.claude.join(", ")}). Will fall back to cli_exec.`);
+  }
+
+  if (config.codex.mode === "app_server" && !config.codex.binary) {
+    warnings.push("codex.mode is app_server but no binary specified. Will use 'codex' default.");
+  }
+
+  return warnings;
+}
+
+/** Runtime selection policy as structured data (for documentation/tooling). */
+export interface RuntimePolicy {
+  provider: "codex" | "claude";
+  validModes: ProviderExecutionMode[];
+  defaultMode: ProviderExecutionMode;
+  optionalDependency?: string;
+  productionNote: string;
+}
+
+/**
+ * Describe the runtime selection policy for all providers.
+ * Used by CLI `quorum doctor` and documentation generation.
+ */
+export function describeRuntimePolicy(): RuntimePolicy[] {
+  return [
+    {
+      provider: "codex",
+      validModes: ["cli_exec", "app_server"],
+      defaultMode: "cli_exec",
+      optionalDependency: "codex binary (with --app-server)",
+      productionNote: "app_server requires persistent subprocess; not suitable for serverless.",
+    },
+    {
+      provider: "claude",
+      validModes: ["cli_exec", "agent_sdk"],
+      defaultMode: "cli_exec",
+      optionalDependency: "@anthropic-ai/claude-agent-sdk",
+      productionNote: "agent_sdk runs in-process; consider memory budget for large codebases.",
+    },
+  ];
 }

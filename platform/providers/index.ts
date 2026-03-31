@@ -167,8 +167,10 @@ export {
   resolveExecutionMode,
   mergeRuntimeConfig,
   isSessionRuntimeEnabled,
+  validateRuntimeConfig,
+  describeRuntimePolicy,
 } from "./runtime-selector.js";
-export type { ProviderRuntimeConfig } from "./runtime-selector.js";
+export type { ProviderRuntimeConfig, RuntimePolicy } from "./runtime-selector.js";
 
 export {
   createRuntimeEvent,
