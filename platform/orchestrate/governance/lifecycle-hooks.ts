@@ -88,6 +88,51 @@ export function amendWaveCommit(repoRoot: string, rtmPath: string): void {
   } catch (err) { console.warn(`[lifecycle] amendWaveCommit failed (best-effort): ${(err as Error).message}`); }
 }
 
+// ── Wave-end Dream consolidation (RDI-5) ────
+
+/**
+ * Attempt Dream consolidation after wave completion.
+ * This is fire-and-forget: failure NEVER blocks handoff or retro gate.
+ *
+ * @returns digest result or null if skipped/failed
+ * @since RDI-5
+ */
+export async function attemptWaveEndConsolidation(
+  repoRoot: string,
+  trackName: string,
+  waveIndex: number,
+  auditRecords?: unknown[],
+  compactSummaries?: unknown[],
+  memoryEntries?: unknown[],
+): Promise<{ status: string; digest: unknown | null; reason: string } | null> {
+  try {
+    const toURL = (p: string) => pathToFileURL(p).href;
+    const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
+    const engine = await import(toURL(resolve(quorumRoot, "platform", "core", "retro", "dream-engine.mjs")));
+    const lockDir = resolve(repoRoot, ".session-state");
+
+    const result = await engine.runDream({
+      trackName,
+      waveIndex,
+      trigger: "wave-end",
+      lockDir,
+      auditRecords: auditRecords ?? [],
+      compactSummaries: compactSummaries ?? [],
+      memoryEntries: memoryEntries ?? [],
+    });
+
+    if (result.status === "completed") {
+      console.log(`  \x1b[36m✓ Dream: ${result.reason}\x1b[0m`);
+    } else if (result.status === "failed") {
+      console.log(`  \x1b[33m⚠ Dream: ${result.reason} (handoff unaffected)\x1b[0m`);
+    }
+    return result;
+  } catch (err) {
+    console.warn(`[lifecycle] Dream consolidation skipped: ${(err as Error).message}`);
+    return null;
+  }
+}
+
 // ── Post-track lifecycle ────────────────────
 
 import type { Bridge } from "../planning/types.js";

@@ -42,6 +42,28 @@ export function queryGateStatus(store: EventStore): GateInfo[] {
     detail: retroMarker?.retro_pending ? "retrospective pending" : undefined,
   });
 
+  // Dream consolidation: from kv_state (independent of retro gate)
+  const dreamState = store.getKV("dream:state") as {
+    consolidationStatus?: string;
+    lastConsolidatedAt?: number;
+    lastDigestId?: string;
+  } | null;
+  if (dreamState) {
+    const cs = dreamState.consolidationStatus ?? "idle";
+    gates.push({
+      name: "Dream",
+      status: cs === "running" ? "pending"
+        : cs === "failed" ? "error"
+        : cs === "ready" ? "open"
+        : "open",
+      detail: cs !== "idle"
+        ? `consolidation ${cs}${dreamState.lastConsolidatedAt ? ` (last: ${new Date(dreamState.lastConsolidatedAt).toISOString().slice(0, 16)})` : ""}`
+        : dreamState.lastConsolidatedAt
+          ? `last consolidated ${new Date(dreamState.lastConsolidatedAt).toISOString().slice(0, 16)}`
+          : undefined,
+    });
+  }
+
   // Quality gate: recent quality.fail events in last 5 minutes
   const fiveMinAgo = Date.now() - 300_000;
   const qualityFails = store.count({

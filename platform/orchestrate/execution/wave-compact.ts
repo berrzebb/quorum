@@ -125,6 +125,8 @@ export interface WaveCompactInput {
   previousFindings?: CompactFinding[];
   /** Explicit constraints from audit or fixer. */
   constraints?: string[];
+  /** RetroDigest-derived carryover items (from Dream consolidation). @since RDI-6 */
+  retroCarryover?: string[];
 }
 
 /**
@@ -162,6 +164,11 @@ export function generateCompactSummary(input: WaveCompactInput): CompactSummary 
       : `${findingsByFile.get(r.path) ?? 0} findings`,
   }));
 
+  // Merge retro carryover into constraints (RDI-6)
+  const baseConstraints = input.constraints ?? [];
+  const retroItems = input.retroCarryover ?? [];
+  const mergedConstraints = [...baseConstraints, ...retroItems];
+
   return {
     waveIndex: input.waveIndex,
     trackName: input.trackName,
@@ -169,7 +176,7 @@ export function generateCompactSummary(input: WaveCompactInput): CompactSummary 
     fitness: input.fitness,
     unresolvedFindings: sortedFindings,
     topFiles,
-    nextConstraints: input.constraints ?? [],
+    nextConstraints: mergedConstraints,
     source: "generated",
     generatedAt: Date.now(),
   };

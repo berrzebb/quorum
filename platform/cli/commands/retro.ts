@@ -10,7 +10,8 @@
  */
 
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
 export async function run(args: string[]): Promise<void> {
   const repoRoot = process.cwd();
@@ -54,6 +55,50 @@ export async function run(args: string[]): Promise<void> {
     console.log();
   }
 
+  // ── --consolidate: run Dream consolidation (manual trigger) ──
+  if (args.includes("--consolidate")) {
+    console.log("  \x1b[36mRunning Dream consolidation (manual)...\x1b[0m\n");
+    try {
+      const __dir = dirname(fileURLToPath(import.meta.url));
+      const quorumRoot = resolve(__dir, "..", "..", "..", "..");
+      const engineUrl = pathToFileURL(resolve(quorumRoot, "platform", "core", "retro", "dream-engine.mjs")).href;
+      const { runDream } = await import(engineUrl);
+      const lockDir = resolve(repoRoot, ".session-state");
+
+      // Gather audit history for consolidation
+      const auditRecords = [];
+      if (existsSync(historyPath)) {
+        const lines = readFileSync(historyPath, "utf8").trim().split("\n").filter(Boolean);
+        for (const line of lines.slice(-20)) {
+          try { auditRecords.push(JSON.parse(line)); } catch { /* skip */ }
+        }
+      }
+
+      const result = await runDream({
+        trackName: marker.track ?? "unknown",
+        waveIndex: marker.wave ?? 0,
+        trigger: "manual",
+        lockDir,
+        auditRecords,
+        memoryEntries: [],
+      });
+
+      if (result.status === "completed") {
+        console.log(`  \x1b[32m✓ ${result.reason}\x1b[0m`);
+        console.log(`  Duration: ${result.durationMs}ms\n`);
+      } else if (result.status === "skipped") {
+        console.log(`  \x1b[33m⚠ Skipped: ${result.reason}\x1b[0m\n`);
+      } else {
+        console.log(`  \x1b[31m✗ ${result.reason}\x1b[0m`);
+        console.log("  (Consolidation failure does not affect retro gate)\n");
+      }
+    } catch (err) {
+      console.log(`  \x1b[31m✗ Dream engine error: ${(err as Error).message}\x1b[0m`);
+      console.log("  (Consolidation failure does not affect retro gate)\n");
+    }
+    return;
+  }
+
   if (args.includes("--complete")) {
     // Release the gate
     try {
@@ -71,5 +116,6 @@ export async function run(args: string[]): Promise<void> {
   console.log("    2. What went wrong?");
   console.log("    3. What should be remembered for next time?");
   console.log();
-  console.log("  When done, run: quorum retro --complete\n");
+  console.log("  When done, run: quorum retro --complete");
+  console.log("  Or run Dream consolidation: quorum retro --consolidate\n");
 }

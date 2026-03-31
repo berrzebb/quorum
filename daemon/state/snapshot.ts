@@ -112,6 +112,7 @@ export class SnapshotAssembler {
       e.type.startsWith("specialist.") ||
       e.type.startsWith("track.") ||
       e.type.startsWith("finding.") ||
+      e.type.startsWith("dream.") ||
       e.type === "review.progress",
     );
     return { events, hasStateChanges };

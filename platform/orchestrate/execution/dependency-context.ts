@@ -50,3 +50,20 @@ export function buildDepContextFromManifests(item: WorkItem, manifests: WaveMani
     ? `# Dependency Output (from MessageBus)\n\n${sections.join("\n\n---\n\n")}\n`
     : "";
 }
+
+/**
+ * Build context from a RetroDigest carryover.
+ * Appended to the implementer prompt alongside dependency context.
+ *
+ * @param retroContext - formatted digest context string (from digest.mjs formatDigestContext)
+ * @param depContext - existing dependency context string
+ * @returns combined context
+ * @since RDI-6
+ */
+export function mergeRetroContext(retroContext: string, depContext: string): string {
+  if (!retroContext && !depContext) return "";
+  const parts: string[] = [];
+  if (depContext) parts.push(depContext);
+  if (retroContext) parts.push(retroContext);
+  return parts.join("\n\n---\n\n");
+}

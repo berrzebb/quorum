@@ -95,7 +95,14 @@ export type EventType =
   | "parliament.meeting.log"
   | "parliament.session.digest"
   | "parliament.session.normalform"
-  | "parliament.cps.generated";
+  | "parliament.cps.generated"
+  // Dream / Retro Intelligence
+  | "dream.trigger.evaluate"
+  | "dream.consolidation.start"
+  | "dream.consolidation.complete"
+  | "dream.consolidation.failed"
+  | "dream.digest.generated"
+  | "dream.prune.applied";
 
 // ── Typed payloads ────────────────────────────────
 
