@@ -51,6 +51,13 @@ import {
   toolSkillSync,
   toolTrackArchive,
 } from "./tool-core.mjs";
+import {
+  getCapability,
+  toolsForRole,
+  toolsForDomain,
+  alwaysLoadTools,
+  searchTools,
+} from "./tool-capabilities.mjs";
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
 
@@ -404,8 +411,28 @@ async function handleRequest(req) {
         serverInfo: SERVER_INFO,
       };
 
-    case "tools/list":
-      return { tools: TOOLS };
+    case "tools/list": {
+      // Support role/domain filtering via cursor (MCP doesn't have params for tools/list)
+      // Clients can pass filter hints via environment or init metadata.
+      const role = process.env.QUORUM_AGENT_ROLE;
+      const domains = (process.env.QUORUM_DETECTED_DOMAINS || "").split(",").filter(Boolean);
+
+      if (!role && domains.length === 0) {
+        return { tools: TOOLS };
+      }
+
+      // Build filtered tool set: always-load + role-allowed + domain-specific
+      const allowed = new Set(alwaysLoadTools().map(t => t.name));
+      if (role) {
+        for (const t of toolsForRole(role)) allowed.add(t.name);
+      }
+      for (const d of domains) {
+        for (const t of toolsForDomain(d)) allowed.add(t.name);
+      }
+
+      const filtered = TOOLS.filter(t => allowed.has(t.name));
+      return { tools: filtered };
+    }
 
     case "tools/call": {
       const { name, arguments: args } = req.params;

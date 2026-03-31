@@ -44,3 +44,7 @@ export declare function deferredTools(): ToolCapability[];
 export declare function searchTools(query: string, maxResults?: number): ToolCapability[];
 export declare function allToolNames(): string[];
 export declare function isKnownTool(name: string): boolean;
+export declare function buildToolSurface(
+  role: string,
+  domains?: string[],
+): { tools: string[]; deferred: string[]; env: Record<string, string> };

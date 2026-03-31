@@ -222,6 +222,54 @@ describe("Tool Capability Registry — search", () => {
   });
 });
 
+// ── buildToolSurface ────────────────────────────────
+
+describe("Tool Capability Registry — buildToolSurface", () => {
+  it("implementer gets always-load + implementer-allowed tools", () => {
+    const surface = mod.buildToolSurface("implementer");
+    assert.ok(surface.tools.includes("code_map"), "always-load");
+    assert.ok(surface.tools.includes("audit_submit"), "always-load");
+    assert.ok(surface.tools.includes("blast_radius"), "always-load");
+  });
+
+  it("implementer does NOT get plan-only tools in tools list", () => {
+    const surface = mod.buildToolSurface("implementer");
+    assert.ok(!surface.tools.includes("rtm_parse"), "rtm_parse is plan-only");
+    assert.ok(!surface.tools.includes("fvm_generate"), "fvm_generate is plan-only");
+  });
+
+  it("scout gets plan-only tools", () => {
+    const surface = mod.buildToolSurface("scout");
+    // rtm_parse is deferred + plan role — should appear in deferred for scout without domain
+    assert.ok(
+      surface.tools.includes("rtm_parse") || surface.deferred.includes("rtm_parse"),
+      "scout should have access to rtm_parse",
+    );
+  });
+
+  it("domain detection promotes deferred tools to exposed", () => {
+    const surface = mod.buildToolSurface("self-checker", ["perf"]);
+    assert.ok(surface.tools.includes("perf_scan"), "perf_scan promoted by domain match");
+  });
+
+  it("domain detection does NOT promote unrelated deferred tools", () => {
+    const surface = mod.buildToolSurface("self-checker", ["perf"]);
+    assert.ok(!surface.tools.includes("a11y_scan"), "a11y_scan not promoted without a11y domain");
+  });
+
+  it("env has QUORUM_AGENT_ROLE and QUORUM_DETECTED_DOMAINS", () => {
+    const surface = mod.buildToolSurface("implementer", ["perf", "a11y"]);
+    assert.equal(surface.env.QUORUM_AGENT_ROLE, "implementer");
+    assert.equal(surface.env.QUORUM_DETECTED_DOMAINS, "perf,a11y");
+  });
+
+  it("tools and deferred arrays are sorted", () => {
+    const surface = mod.buildToolSurface("self-checker", ["perf"]);
+    const sorted = [...surface.tools].sort();
+    assert.deepEqual(surface.tools, sorted, "tools should be sorted");
+  });
+});
+
 // ── Invariants ──────────────────────────────────────
 
 describe("Tool Capability Registry — invariants", () => {

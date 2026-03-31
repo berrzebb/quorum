@@ -509,3 +509,58 @@ export function allToolNames() {
 export function isKnownTool(name) {
   return _byName.has(name);
 }
+
+/**
+ * Build the tool surface for an agent with a given role and detected domains.
+ * Returns: always-loaded + role-allowed + domain-specific tool names.
+ * Used by orchestrator to set QUORUM_AGENT_ROLE / QUORUM_DETECTED_DOMAINS
+ * env vars before spawning agent sessions.
+ *
+ * @param {string} role — orchestrator role (implementer, self-checker, etc.)
+ * @param {string[]} [domains=[]] — detected domains (perf, a11y, etc.)
+ * @returns {{ tools: string[], deferred: string[], env: Record<string, string> }}
+ */
+export function buildToolSurface(role, domains = []) {
+  const allowed = new Set();
+
+  // Always-loaded tools
+  for (const t of TOOL_CAPABILITIES) {
+    if (t.alwaysLoad) allowed.add(t.name);
+  }
+
+  // Role-specific tools
+  for (const t of TOOL_CAPABILITIES) {
+    if (t.allowedRoles.includes(role)) allowed.add(t.name);
+  }
+
+  // Domain-specific tools
+  for (const d of domains) {
+    for (const t of TOOL_CAPABILITIES) {
+      if (t.domain.includes(d)) allowed.add(t.name);
+    }
+  }
+
+  // Split into exposed (non-deferred or domain-activated) vs still-deferred
+  const tools = [];
+  const deferred = [];
+  for (const name of allowed) {
+    const cap = _byName.get(name);
+    if (!cap) continue;
+    // Domain tools that match detected domains are promoted (not deferred)
+    const domainMatch = cap.domain.length > 0 && cap.domain.some(d => domains.includes(d));
+    if (cap.shouldDefer && !domainMatch && !cap.alwaysLoad) {
+      deferred.push(name);
+    } else {
+      tools.push(name);
+    }
+  }
+
+  return {
+    tools: tools.sort(),
+    deferred: deferred.sort(),
+    env: {
+      QUORUM_AGENT_ROLE: role,
+      QUORUM_DETECTED_DOMAINS: domains.join(","),
+    },
+  };
+}
