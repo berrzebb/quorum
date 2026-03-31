@@ -7,8 +7,8 @@
  * - loadClaudeSdk() returns { available: false, error: ... }
  * - ClaudeSdkToolBridge implements ProviderToolBridge (has provider + buildToolConfig)
  * - buildToolConfig() returns fallback config when SDK not available
- * - ClaudeSdkToolBridge.getAvailableTools() returns 20 tool names
- * - All 20 tools are strings
+ * - ClaudeSdkToolBridge.getAvailableTools() returns 26 tool names (from registry)
+ * - All 26 tools are strings
  * - ClaudeSdkEventMapper normalizes known event types correctly
  * - ClaudeSdkEventMapper returns null for unknown event types
  * - Mapped events have correct kind values
@@ -122,9 +122,9 @@ describe('ClaudeSdkToolBridge', () => {
   // ── getAvailableTools ─────────────────────────
 
   describe('getAvailableTools', () => {
-    it('returns exactly 20 tool names', () => {
+    it('returns all 26 tools from capability registry', () => {
       const tools = ClaudeSdkToolBridge.getAvailableTools();
-      assert.equal(tools.length, 20);
+      assert.equal(tools.length, 26);
     });
 
     it('all entries are strings', () => {
@@ -163,11 +163,18 @@ describe('ClaudeSdkToolBridge', () => {
       assert.ok(tools.includes('fvm_validate'));
       // Audit/guide tools
       assert.ok(tools.includes('audit_scan'));
+      assert.ok(tools.includes('audit_submit'));
+      assert.ok(tools.includes('audit_history'));
       assert.ok(tools.includes('blast_radius'));
       assert.ok(tools.includes('doc_coverage'));
       assert.ok(tools.includes('blueprint_lint'));
       assert.ok(tools.includes('contract_drift'));
       assert.ok(tools.includes('ai_guide'));
+      // Coordination/lifecycle tools
+      assert.ok(tools.includes('agent_comm'));
+      assert.ok(tools.includes('skill_sync'));
+      assert.ok(tools.includes('track_archive'));
+      assert.ok(tools.includes('act_analyze'));
     });
 
     it('returns a new array each call (no shared mutation)', () => {

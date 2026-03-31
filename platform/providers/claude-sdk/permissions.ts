@@ -5,6 +5,10 @@
  * Key invariant: provider-native approval NEVER bypasses quorum gate.
  * Even in `bypassPermissions` mode, the quorum gate has final authority
  * when `enforceQuorumGate` is true.
+ *
+ * Control-plane integration (SDK-13):
+ * - Uses tool capability registry for plan mode filtering (isReadOnly)
+ * - Uses isDestructive for additional safety in acceptEdits mode
  */
 
 import type {
@@ -12,6 +16,11 @@ import type {
   ProviderSessionRef,
 } from "../session-runtime.js";
 import type { ProviderApprovalGate, ApprovalGateResult } from "../../bus/provider-approval-gate.js";
+import {
+  isReadOnly as checkReadOnly,
+  isDestructive as checkDestructive,
+  isKnownTool,
+} from "../../core/tools/capability-registry.js";
 
 // ── Permission mode ──────────────────────────────
 
@@ -46,8 +55,8 @@ export interface ToolPermissionResult {
 }
 
 // ── Read-only tool set for plan mode ─────────────
-
-const PLAN_MODE_ALLOWED_TOOLS = new Set([
+// Legacy hardcoded set (kept as fallback if registry load fails)
+const PLAN_MODE_ALLOWED_TOOLS_FALLBACK = new Set([
   "code_map",
   "blast_radius",
   "dependency_graph",
@@ -125,6 +134,10 @@ export class ClaudePermissionBridge {
 
   /**
    * Check permission based on SDK mode alone (used when gate not enforced).
+   *
+   * Control-plane integration:
+   * - plan mode: uses isReadOnly from capability registry (fallback to hardcoded set)
+   * - acceptEdits mode: blocks destructive tools via isDestructive from registry
    */
   private checkSdkModePermission(toolName: string): ToolPermissionResult {
     switch (this.config.mode) {
@@ -132,14 +145,26 @@ export class ClaudePermissionBridge {
         return { allowed: true, reason: "SDK mode: bypassPermissions", source: "sdk-mode" };
 
       case "acceptEdits":
+        // In acceptEdits, allow non-destructive tools. Block destructive tools.
+        if (isKnownTool(toolName) && checkDestructive(toolName)) {
+          return { allowed: false, reason: "SDK mode: acceptEdits (destructive tool blocked)", source: "sdk-mode" };
+        }
         return { allowed: true, reason: "SDK mode: acceptEdits", source: "sdk-mode" };
 
       case "plan":
-        // In plan mode, only read-only tools are allowed
-        if (PLAN_MODE_ALLOWED_TOOLS.has(toolName)) {
-          return { allowed: true, reason: "SDK mode: plan (read-only tool)", source: "sdk-mode" };
+        // In plan mode, only read-only tools are allowed.
+        // Use registry-based check; fall back to hardcoded set for unknown tools.
+        if (isKnownTool(toolName)) {
+          if (checkReadOnly(toolName)) {
+            return { allowed: true, reason: "SDK mode: plan (read-only per registry)", source: "sdk-mode" };
+          }
+          return { allowed: false, reason: "SDK mode: plan (write tool blocked per registry)", source: "sdk-mode" };
         }
-        return { allowed: false, reason: "SDK mode: plan (write tool blocked)", source: "sdk-mode" };
+        // Unknown tool: fall back to hardcoded set
+        if (PLAN_MODE_ALLOWED_TOOLS_FALLBACK.has(toolName)) {
+          return { allowed: true, reason: "SDK mode: plan (read-only tool, fallback)", source: "sdk-mode" };
+        }
+        return { allowed: false, reason: "SDK mode: plan (unknown tool blocked)", source: "sdk-mode" };
 
       case "default":
       default:

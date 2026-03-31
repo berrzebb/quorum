@@ -180,15 +180,19 @@ describe("ClaudePermissionBridge (gate not enforced)", () => {
     assert.ok(result.reason.includes("bypassPermissions"));
   });
 
-  it("acceptEdits mode → always allowed", () => {
+  it("acceptEdits mode → non-destructive tools allowed", () => {
     const bridge = new ClaudePermissionBridge(
       { mode: "acceptEdits", enforceQuorumGate: false },
       gate
     );
+    // Unknown tool (not in registry) → allowed (fail-open for non-registry tools)
     const result = bridge.checkToolPermission("write_file", sessionRef);
     assert.equal(result.allowed, true);
     assert.equal(result.source, "sdk-mode");
     assert.ok(result.reason.includes("acceptEdits"));
+    // Known read-only tool → allowed
+    const readResult = bridge.checkToolPermission("code_map", sessionRef);
+    assert.equal(readResult.allowed, true);
   });
 
   it("plan mode → read-only tools allowed", () => {
@@ -208,17 +212,26 @@ describe("ClaudePermissionBridge (gate not enforced)", () => {
     }
   });
 
-  it("plan mode → write tools denied", () => {
+  it("plan mode → write/unknown tools denied", () => {
     const bridge = new ClaudePermissionBridge(
       { mode: "plan", enforceQuorumGate: false },
       gate
     );
-    const writeTools = ["write_file", "bash", "edit_file"];
-    for (const tool of writeTools) {
+    // Adapter-specific tools (not in registry → denied as unknown)
+    const unknownTools = ["write_file", "bash", "edit_file"];
+    for (const tool of unknownTools) {
       const result = bridge.checkToolPermission(tool, sessionRef);
       assert.equal(result.allowed, false, `Expected ${tool} to be denied in plan mode`);
       assert.equal(result.source, "sdk-mode");
-      assert.ok(result.reason.includes("write tool blocked"));
+      assert.ok(result.reason.includes("blocked"), `Expected 'blocked' in reason for ${tool}: ${result.reason}`);
+    }
+    // Known registry tools that are NOT read-only → denied
+    const writeRegistryTools = ["audit_submit", "skill_sync"];
+    for (const tool of writeRegistryTools) {
+      const result = bridge.checkToolPermission(tool, sessionRef);
+      assert.equal(result.allowed, false, `Expected ${tool} to be denied in plan mode`);
+      assert.equal(result.source, "sdk-mode");
+      assert.ok(result.reason.includes("blocked"), `Expected 'blocked' in reason for ${tool}: ${result.reason}`);
     }
   });
 

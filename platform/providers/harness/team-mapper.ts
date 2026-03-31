@@ -6,9 +6,12 @@
  * 1. Maps Harness role names to quorum roles
  * 2. Validates consensus coverage (advocate/devil/judge)
  * 3. Auto-supplements missing roles
+ * 4. Validates tool access coverage per role (SDK-15: capability registry)
  *
  * This enables "any language, any domain → automatic quality governance".
  */
+
+import { toolsForRole, buildToolSurface } from "../../core/tools/capability-registry.js";
 
 // ── quorum Role System ──────────────────────────────────
 
@@ -210,6 +213,30 @@ export function mapTeam(agents: HarnessAgent[]): TeamMappingResult {
     missingRoles,
     warnings,
   };
+}
+
+/**
+ * Validate tool access coverage for a mapped team.
+ * Uses the capability registry to ensure each role has access to necessary tools.
+ *
+ * Returns warnings for roles with no tool access (e.g., unknown or unregistered roles).
+ * This is informational, not blocking — roles can still function via adapter tools.
+ *
+ * @since SDK-15
+ */
+export function validateToolAccess(result: TeamMappingResult): string[] {
+  const warnings: string[] = [];
+
+  for (const agent of result.agents) {
+    const surface = buildToolSurface(agent.quorumRole);
+    if (surface.tools.length === 0 && surface.deferred.length === 0) {
+      warnings.push(
+        `Role "${agent.quorumRole}" (agent: ${agent.harnessName}) has no registered tools in the capability registry.`,
+      );
+    }
+  }
+
+  return warnings;
 }
 
 /**

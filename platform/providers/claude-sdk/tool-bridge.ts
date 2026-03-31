@@ -5,10 +5,20 @@
  * Optional dependency: @anthropic-ai/claude-agent-sdk.
  * Returns fallback config if SDK is not installed.
  *
+ * Control-plane integration (SDK-13):
+ * - Uses tool capability registry (SDK-5) instead of hardcoded tool list
+ * - buildToolSurface() for role/domain-based tool filtering
+ * - getCapability() for per-tool metadata (isReadOnly, isDestructive, etc.)
+ *
  * @module providers/claude-sdk/tool-bridge
  */
 
 import type { ProviderToolBridge } from "../session-runtime.js";
+import {
+  allToolNames,
+  buildToolSurface,
+  getCapability,
+} from "../../core/tools/capability-registry.js";
 
 /**
  * Checks if the Claude Agent SDK is available as an optional dependency.
@@ -76,6 +86,11 @@ export interface SdkToolDefinition {
 /**
  * Claude SDK Tool Bridge — implements ProviderToolBridge.
  * Normalizes quorum's deterministic tools for Claude SDK's native tool loop.
+ *
+ * Control-plane integration:
+ * - getAvailableTools() delegates to tool capability registry (canonical source)
+ * - buildToolConfig() uses buildToolSurface() for role/domain-based filtering
+ * - Each tool entry includes capability metadata (isReadOnly, isDestructive, etc.)
  */
 export class ClaudeSdkToolBridge implements ProviderToolBridge {
   readonly provider = "claude" as const;
@@ -85,11 +100,16 @@ export class ClaudeSdkToolBridge implements ProviderToolBridge {
   /**
    * Build the tool configuration for Claude SDK runtime.
    * If SDK is not available, returns fallback config indicating CLI exec mode.
+   *
+   * When role/domain info is available in config, uses buildToolSurface()
+   * for intelligent tool filtering. Otherwise falls back to allowedTools list.
    */
   async buildToolConfig(input: {
     repoRoot: string;
     contractId?: string;
     allowedTools: string[];
+    role?: string;
+    domains?: string[];
   }): Promise<Record<string, unknown>> {
     const sdkResult = await loadClaudeSdk();
 
@@ -101,18 +121,41 @@ export class ClaudeSdkToolBridge implements ProviderToolBridge {
       };
     }
 
-    // Build tool definitions for allowed tools
-    const tools = input.allowedTools.map((name) => ({
-      name,
-      type: "quorum_deterministic",
-      source: "platform/core/tools",
-    }));
+    // Use buildToolSurface for role/domain-based filtering when available
+    let toolNames = input.allowedTools;
+    let deferred: string[] = [];
+    let env: Record<string, string> = {};
+
+    if (input.role) {
+      const surface = buildToolSurface(input.role, input.domains);
+      toolNames = surface.tools;
+      deferred = surface.deferred;
+      env = surface.env;
+    }
+
+    // Build tool definitions with capability metadata
+    const tools = toolNames.map((name) => {
+      const cap = getCapability(name);
+      return {
+        name,
+        type: "quorum_deterministic",
+        source: "platform/core/tools",
+        ...(cap ? {
+          isReadOnly: cap.isReadOnly,
+          isDestructive: cap.isDestructive,
+          isConcurrencySafe: cap.isConcurrencySafe,
+          category: cap.category,
+        } : {}),
+      };
+    });
 
     return {
       available: true,
       provider: "claude",
       mode: "agent_sdk",
       tools,
+      deferred,
+      env,
       repoRoot: input.repoRoot,
       contractId: input.contractId,
       useMcpServer: this.config.useMcpServer,
@@ -121,29 +164,9 @@ export class ClaudeSdkToolBridge implements ProviderToolBridge {
 
   /**
    * Get the list of quorum deterministic tools available for bridge.
+   * Delegates to the canonical tool capability registry (SDK-5).
    */
   static getAvailableTools(): string[] {
-    return [
-      "code_map",
-      "blast_radius",
-      "audit_scan",
-      "dependency_graph",
-      "perf_scan",
-      "a11y_scan",
-      "license_scan",
-      "observability_check",
-      "compat_check",
-      "i18n_validate",
-      "infra_scan",
-      "coverage_map",
-      "fvm_generate",
-      "fvm_validate",
-      "rtm_parse",
-      "rtm_merge",
-      "doc_coverage",
-      "blueprint_lint",
-      "contract_drift",
-      "ai_guide",
-    ];
+    return allToolNames();
   }
 }

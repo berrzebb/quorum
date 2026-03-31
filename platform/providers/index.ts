@@ -170,8 +170,21 @@ export {
 } from "./runtime-selector.js";
 export type { ProviderRuntimeConfig } from "./runtime-selector.js";
 
-export { createRuntimeEvent } from "./event-mapper.js";
-export type { ProviderEventMapper } from "./event-mapper.js";
+export {
+  createRuntimeEvent,
+  extractApprovalPayload,
+  extractItemPayload,
+  extractTerminalPayload,
+  projectEventsToState,
+} from "./event-mapper.js";
+export type {
+  ProviderEventMapper,
+  ToolCapabilityAnnotation,
+  ApprovalPayload,
+  ItemPayload,
+  SessionTerminalPayload,
+  ProjectedSessionState,
+} from "./event-mapper.js";
 
 export { InMemorySessionLedger } from "./session-ledger.js";
 export type { SessionLedger } from "./session-ledger.js";
@@ -197,6 +210,7 @@ export { ClaudeSdkSessionApi } from "./claude-sdk/session-api.js";
 export type { SdkSessionInfo } from "./claude-sdk/session-api.js";
 
 export { ClaudeSdkRuntime } from "./claude-sdk/runtime.js";
+export type { ClaudeRuntimeOptions } from "./claude-sdk/runtime.js";
 
 export { ClaudePermissionBridge } from "./claude-sdk/permissions.js";
 export type {
@@ -207,6 +221,7 @@ export type {
 
 // ── Codex App Server ────────────────────────────────
 export { CodexAppServerRuntime } from "./codex/app-server/runtime.js";
+export type { CodexRuntimeOptions } from "./codex/app-server/runtime.js";
 export { CodexAppServerClient } from "./codex/app-server/client.js";
 export { CodexAppServerMapper } from "./codex/app-server/mapper.js";
 export * from "./codex/app-server/protocol.js";
@@ -240,7 +255,7 @@ export type {
 } from "./codex/adversarial-review.js";
 
 // ── Harness Integration ────────────────────────────────
-export { mapRole, mapTeam, getProtocolPath } from "./harness/team-mapper.js";
+export { mapRole, mapTeam, getProtocolPath, validateToolAccess } from "./harness/team-mapper.js";
 export type {
   QuorumRole,
   HarnessAgent,

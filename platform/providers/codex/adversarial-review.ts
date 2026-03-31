@@ -6,12 +6,18 @@
  * challenge implementation decisions, design choices, tradeoffs, and
  * hidden assumptions. Integrates into quorum's consensus protocol as
  * a supplementary 4th opinion when confidence delta is narrow.
+ *
+ * SDK-15: Enriches findings with capability metadata from the tool registry.
+ * When a finding references a tool, the capability annotation (isDestructive,
+ * isReadOnly, etc.) is attached to help downstream consumers prioritize.
  */
 
 import { spawn } from "node:child_process";
 import { isCodexPluginAvailable, getCompanionScriptPath } from "./broker-detect.js";
 import { parsePluginOutput } from "./plugin-bridge.js";
 import type { AuditResult } from "../provider.js";
+import { getCapability } from "../../core/tools/capability-registry.js";
+import type { ToolCapabilityAnnotation } from "../event-mapper.js";
 
 export interface AdversarialReviewRequest {
   /** Focus areas for the adversarial review (e.g. "race conditions", "auth design"). */
@@ -32,6 +38,8 @@ export interface AdversarialFinding {
   lineStart?: number;
   confidence: number;
   recommendation?: string;
+  /** Tool capability annotation — present when finding references a known tool. @since SDK-15 */
+  toolCapability?: ToolCapabilityAnnotation;
 }
 
 export interface AdversarialReviewResult {
@@ -130,15 +138,31 @@ export async function runAdversarialReview(
         resolve({
           hasIssues: verdict.verdict === "needs-attention",
           summary: verdict.summary ?? "Review complete",
-          findings: (verdict.findings ?? []).map(f => ({
-            severity: (f.severity as "high" | "medium" | "low") ?? "medium",
-            title: f.title ?? "Finding",
-            body: f.body ?? "",
-            file: f.file,
-            lineStart: f.line_start,
-            confidence: f.confidence ?? 0.5,
-            recommendation: f.recommendation,
-          })),
+          findings: (verdict.findings ?? []).map(f => {
+            const finding: AdversarialFinding = {
+              severity: (f.severity as "high" | "medium" | "low") ?? "medium",
+              title: f.title ?? "Finding",
+              body: f.body ?? "",
+              file: f.file,
+              lineStart: f.line_start,
+              confidence: f.confidence ?? 0.5,
+              recommendation: f.recommendation,
+            };
+            // SDK-15: Enrich with tool capability if finding references a known tool
+            const toolName = (f as Record<string, unknown>).tool_name as string | undefined;
+            if (toolName) {
+              const cap = getCapability(toolName);
+              if (cap) {
+                finding.toolCapability = {
+                  isDestructive: cap.isDestructive,
+                  isReadOnly: cap.isReadOnly,
+                  isConcurrencySafe: cap.isConcurrencySafe,
+                  category: cap.category,
+                };
+              }
+            }
+            return finding;
+          }),
           nextSteps: verdict.next_steps ?? [],
           raw: stdout,
           duration,

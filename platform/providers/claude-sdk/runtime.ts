@@ -6,6 +6,10 @@
  *
  * Manages session lifecycle (start/resume/send/stop/poll/status) and
  * exposes pushEvent/complete/fail for SDK callback integration.
+ *
+ * Control-plane integration (SDK-13):
+ * - SessionLedger: records all sessions for traceability
+ * - CompactSummary: injects wave handoff context into session prompts
  */
 
 import type {
@@ -15,8 +19,21 @@ import type {
   ProviderRuntimeEvent,
   ProviderExecutionMode,
 } from "../session-runtime.js";
+import type { SessionLedger } from "../session-ledger.js";
+import { createProviderSessionRecord } from "../../core/harness/provider-session-record.js";
+import type { CompactSummary } from "../../orchestrate/execution/wave-compact.js";
+import { formatCompactContext } from "../../orchestrate/execution/wave-compact.js";
 import { ClaudeSdkSessionApi } from "./session-api.js";
 import { loadClaudeSdk } from "./tool-bridge.js";
+
+/**
+ * Options for control-plane integration.
+ * All optional — omitting reverts to pre-SDK-13 behavior.
+ */
+export interface ClaudeRuntimeOptions {
+  /** Session ledger for traceability. */
+  ledger?: SessionLedger;
+}
 
 interface SessionState {
   ref: ProviderSessionRef;
@@ -26,6 +43,8 @@ interface SessionState {
   sdkSession: unknown;
   /** Inputs sent during session (for traceability/diagnostics). */
   inputs: string[];
+  /** Compact summary injected into this session. */
+  compactSummary?: CompactSummary;
 }
 
 /** Minimum SDK shape required for session management. */
@@ -43,6 +62,11 @@ export class ClaudeSdkRuntime implements SessionRuntime {
   private sessions = new Map<string, SessionState>();
   protected sdkMethods: SdkSessionMethods | null = null;
   protected sdkChecked = false;
+  protected ledger?: SessionLedger;
+
+  constructor(opts?: ClaudeRuntimeOptions) {
+    this.ledger = opts?.ledger;
+  }
 
   async isAvailable(): Promise<boolean> {
     return this.sessionApi.isAvailable();
@@ -75,6 +99,13 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     return this.sdkMethods;
   }
 
+  /**
+   * Start a new Claude SDK session.
+   *
+   * Control-plane integration:
+   * - Extracts CompactSummary from metadata and injects into prompt
+   * - Records session in ledger (if available)
+   */
   async start(request: SessionRuntimeRequest): Promise<ProviderSessionRef> {
     const available = await this.isAvailable();
     if (!available) {
@@ -91,8 +122,17 @@ export class ClaudeSdkRuntime implements SessionRuntime {
       );
     }
 
+    // Extract compact summary from metadata (wave handoff)
+    const compact = request.metadata?.compactSummary as CompactSummary | undefined;
+
+    // Build prompt — inject compact context if available
+    let prompt = request.prompt;
+    if (compact) {
+      prompt = formatCompactContext(compact) + "\n\n" + prompt;
+    }
+
     const sdkSession = await methods.createSession({
-      prompt: request.prompt,
+      prompt,
       cwd: request.cwd,
       metadata: request.metadata,
     });
@@ -108,8 +148,18 @@ export class ClaudeSdkRuntime implements SessionRuntime {
       status: "running",
       events: [],
       sdkSession,
-      inputs: [request.prompt],
+      inputs: [prompt],
+      compactSummary: compact,
     });
+
+    // Record in session ledger (if available)
+    if (this.ledger) {
+      this.ledger.upsert(createProviderSessionRecord({
+        quorumSessionId: request.sessionId,
+        providerRef: ref,
+        contractId: request.contractId,
+      }));
+    }
 
     return ref;
   }
@@ -184,6 +234,7 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     const session = this.sessions.get(providerSessionId);
     if (session) {
       session.status = "completed";
+      this.updateLedgerState(session, "completed");
     }
   }
 
@@ -191,6 +242,16 @@ export class ClaudeSdkRuntime implements SessionRuntime {
     const session = this.sessions.get(providerSessionId);
     if (session) {
       session.status = "failed";
+      this.updateLedgerState(session, "failed");
+    }
+  }
+
+  /** Update session ledger state (if ledger is available). */
+  private updateLedgerState(session: SessionState, state: "completed" | "failed" | "detached"): void {
+    if (!this.ledger) return;
+    const record = this.ledger.findByProviderSession(session.ref.providerSessionId);
+    if (record) {
+      this.ledger.updateState(record.quorumSessionId, state);
     }
   }
 }

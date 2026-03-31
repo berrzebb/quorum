@@ -357,7 +357,7 @@ describe("Contract: Permission Bridge — quorum gate NOT enforced", () => {
     }
   });
 
-  it("plan mode denies write tools", () => {
+  it("plan mode denies write/unknown tools", () => {
     const bridge = new ClaudePermissionBridge(
       { mode: "plan", enforceQuorumGate: false },
       gate
@@ -367,7 +367,7 @@ describe("Contract: Permission Bridge — quorum gate NOT enforced", () => {
       const result = bridge.checkToolPermission(tool, sessionRef);
       assert.equal(result.allowed, false, `Expected ${tool} denied in plan mode`);
       assert.equal(result.source, "sdk-mode");
-      assert.ok(result.reason.includes("write tool blocked"));
+      assert.ok(result.reason.includes("blocked"), `Expected 'blocked' in reason for ${tool}: ${result.reason}`);
     }
   });
 
@@ -634,9 +634,9 @@ describe("Contract: Tool Bridge", () => {
     assert.ok(String(config.reason).length > 0);
   });
 
-  it("getAvailableTools() returns exactly 20 tools", () => {
+  it("getAvailableTools() returns all 26 tools from canonical registry", () => {
     const tools = ClaudeSdkToolBridge.getAvailableTools();
-    assert.equal(tools.length, 20);
+    assert.equal(tools.length, 26);
   });
 
   it("all tool names are valid strings", () => {

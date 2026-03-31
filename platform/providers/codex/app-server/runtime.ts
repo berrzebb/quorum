@@ -9,6 +9,12 @@
  *
  * Falls back gracefully when codex binary is not available.
  *
+ * Control-plane integration (SDK-12):
+ * - SessionLedger: records all sessions for traceability
+ * - ProviderApprovalGate: routes approval_requested through quorum gate
+ * - CompactSummary: injects wave handoff context into thread prompts
+ * - OutputCursor: tracks output files for delta-only reads
+ *
  * @module providers/codex/app-server/runtime
  */
 
@@ -19,9 +25,30 @@ import type {
   ProviderRuntimeEvent,
   ProviderExecutionMode,
 } from "../../session-runtime.js";
+import type { SessionLedger } from "../../session-ledger.js";
+import type { ProviderApprovalGate } from "../../../bus/provider-approval-gate.js";
+import { createProviderSessionRecord } from "../../../core/harness/provider-session-record.js";
+import type { CompactSummary } from "../../../orchestrate/execution/wave-compact.js";
+import { formatCompactContext } from "../../../orchestrate/execution/wave-compact.js";
+import type { OutputCursor } from "../../../orchestrate/execution/output-tail.js";
+import { createCursor, hasNewContent, tailRead } from "../../../orchestrate/execution/output-tail.js";
 import { CodexAppServerClient } from "./client.js";
 import { CodexAppServerMapper } from "./mapper.js";
 import type { JsonRpcNotification } from "./protocol.js";
+
+/**
+ * Options for control-plane integration.
+ * All optional — omitting reverts to pre-SDK-12 behavior.
+ */
+export interface CodexRuntimeOptions {
+  binaryPath?: string;
+  args?: string[];
+  timeout?: number;
+  /** Session ledger for traceability. */
+  ledger?: SessionLedger;
+  /** Approval gate for routing provider approval requests. */
+  approvalGate?: ProviderApprovalGate;
+}
 
 /**
  * Internal session state tracked by the runtime.
@@ -30,6 +57,10 @@ interface SessionState {
   ref: ProviderSessionRef;
   status: "running" | "completed" | "failed" | "detached";
   events: ProviderRuntimeEvent[];
+  /** Output cursor for delta-only reads (if output file specified). */
+  outputCursor?: OutputCursor;
+  /** Compact summary injected into this session. */
+  compactSummary?: CompactSummary;
 }
 
 /**
@@ -46,13 +77,22 @@ export class CodexAppServerRuntime implements SessionRuntime {
   protected client: CodexAppServerClient;
   protected mapper = new CodexAppServerMapper();
   protected sessions = new Map<string, SessionState>();
+  protected ledger?: SessionLedger;
+  protected approvalGate?: ProviderApprovalGate;
 
-  constructor(binaryPath?: string, args?: string[], timeout?: number) {
+  constructor(optsOrBinaryPath?: CodexRuntimeOptions | string, args?: string[], timeout?: number) {
+    // Backward-compatible: accept old (binaryPath, args, timeout) or new options object
+    const opts: CodexRuntimeOptions = typeof optsOrBinaryPath === "string"
+      ? { binaryPath: optsOrBinaryPath, args, timeout }
+      : optsOrBinaryPath ?? {};
+
     this.client = new CodexAppServerClient(
-      binaryPath ?? "codex",
-      args ?? ["--app-server"],
-      timeout ?? 30_000,
+      opts.binaryPath ?? "codex",
+      opts.args ?? ["--app-server"],
+      opts.timeout ?? 30_000,
     );
+    this.ledger = opts.ledger;
+    this.approvalGate = opts.approvalGate;
 
     // Wire up notifications from the client
     this.client.on("notification", (notification: JsonRpcNotification) => {
@@ -80,6 +120,11 @@ export class CodexAppServerRuntime implements SessionRuntime {
   /**
    * Start a new Codex App Server session.
    * Connects to the subprocess and creates a thread.
+   *
+   * Control-plane integration:
+   * - Extracts CompactSummary from metadata and injects into prompt
+   * - Creates OutputCursor if metadata.outputFile is specified
+   * - Records session in ledger (if available)
    */
   async start(request: SessionRuntimeRequest): Promise<ProviderSessionRef> {
     // Ensure client is connected
@@ -87,9 +132,18 @@ export class CodexAppServerRuntime implements SessionRuntime {
       await this.client.connect();
     }
 
-    // Create a thread
+    // Extract compact summary from metadata (wave handoff)
+    const compact = request.metadata?.compactSummary as CompactSummary | undefined;
+
+    // Build prompt — inject compact context if available
+    let prompt = request.prompt;
+    if (compact) {
+      prompt = formatCompactContext(compact) + "\n\n" + prompt;
+    }
+
+    // Create a thread with enriched prompt
     const threadRef = await this.client.createThread({
-      prompt: request.prompt,
+      prompt,
       cwd: request.cwd,
       metadata: request.metadata,
     });
@@ -101,11 +155,29 @@ export class CodexAppServerRuntime implements SessionRuntime {
       threadId: threadRef.threadId,
     };
 
+    // Create output cursor if output file is specified in metadata
+    let outputCursor: OutputCursor | undefined;
+    const outputFile = request.metadata?.outputFile as string | undefined;
+    if (outputFile) {
+      outputCursor = createCursor(outputFile);
+    }
+
     this.sessions.set(ref.providerSessionId, {
       ref,
       status: "running",
       events: [],
+      outputCursor,
+      compactSummary: compact,
     });
+
+    // Record in session ledger (if available)
+    if (this.ledger) {
+      this.ledger.upsert(createProviderSessionRecord({
+        quorumSessionId: request.sessionId,
+        providerRef: ref,
+        contractId: request.contractId,
+      }));
+    }
 
     return ref;
   }
@@ -173,10 +245,25 @@ export class CodexAppServerRuntime implements SessionRuntime {
 
   /**
    * Poll for new events from the session.
+   * If an output cursor is active, includes delta reads from the output file.
    */
   async poll(ref: ProviderSessionRef): Promise<ProviderRuntimeEvent[]> {
     const session = this.sessions.get(ref.providerSessionId);
     if (!session) return [];
+
+    // Check output cursor for new content
+    if (session.outputCursor && hasNewContent(session.outputCursor)) {
+      const read = tailRead(session.outputCursor);
+      if (read.content) {
+        session.events.push({
+          providerRef: ref,
+          kind: "item_delta",
+          payload: { delta: read.content, source: "output_cursor", truncated: read.truncated },
+          ts: Date.now(),
+        });
+      }
+      session.outputCursor = read.cursor;
+    }
 
     const events = [...session.events];
     session.events = [];
@@ -206,12 +293,18 @@ export class CodexAppServerRuntime implements SessionRuntime {
 
   /**
    * Handle a notification from the JSON-RPC client.
+   *
+   * Control-plane integration:
+   * - approval_requested: routes through ProviderApprovalGate and auto-responds
+   * - Terminal events: updates session ledger state
+   *
    * @internal exposed as protected for testing subclasses.
    */
   protected handleNotification(notification: JsonRpcNotification): void {
+    const ref = this.findRefByThread(notification.params?.threadId as string);
     const event = this.mapper.normalize(
       { method: notification.method, params: notification.params },
-      this.findRefByThread(notification.params?.threadId as string),
+      ref,
     );
 
     if (!event) return;
@@ -223,10 +316,46 @@ export class CodexAppServerRuntime implements SessionRuntime {
       if (session) {
         session.events.push(event);
 
+        // Route approval_requested through gate and auto-respond
+        if (event.kind === "approval_requested" && this.approvalGate) {
+          const decision = this.approvalGate.process({
+            providerRef: ref,
+            requestId: event.payload.requestId as string,
+            kind: event.payload.kind as "tool" | "command" | "diff" | "network",
+            reason: event.payload.reason as string,
+            scope: event.payload.scope as string[] | undefined,
+          });
+
+          // Auto-respond to the client (best-effort)
+          if (this.client.connected && ref.threadId) {
+            this.client.respondApproval({
+              requestId: event.payload.requestId as string,
+              decision: decision.decision,
+            }).catch(err =>
+              console.warn(`[codex-runtime] approval response failed: ${(err as Error).message}`),
+            );
+          }
+        }
+
         // Update status on terminal events
-        if (event.kind === "session_completed") session.status = "completed";
-        if (event.kind === "session_failed") session.status = "failed";
+        if (event.kind === "session_completed") {
+          session.status = "completed";
+          this.updateLedgerState(session, "completed");
+        }
+        if (event.kind === "session_failed") {
+          session.status = "failed";
+          this.updateLedgerState(session, "failed");
+        }
       }
+    }
+  }
+
+  /** Update session ledger state (if ledger is available). */
+  private updateLedgerState(session: SessionState, state: "completed" | "failed" | "detached"): void {
+    if (!this.ledger) return;
+    const record = this.ledger.findByProviderSession(session.ref.providerSessionId);
+    if (record) {
+      this.ledger.updateState(record.quorumSessionId, state);
     }
   }
 
