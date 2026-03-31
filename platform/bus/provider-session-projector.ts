@@ -84,3 +84,44 @@ export class ProviderSessionProjector {
     };
   }
 }
+
+// ── RTI-1C: Transcript Workload Metrics ─────────────────
+
+/**
+ * Telemetry metrics for transcript workload measurement.
+ * Used as baseline before search index introduction.
+ * @since RTI-1C
+ */
+export interface TranscriptWorkloadMetrics {
+  /** Session ID. */
+  sessionId: string;
+  /** Total event count in the session. */
+  eventCount: number;
+  /** Estimated visible text line count. */
+  visibleLineCount: number;
+  /** Timestamp of last event append. */
+  lastAppendTs: number;
+  /** Average events per minute (append cadence). */
+  appendCadence: number;
+}
+
+/** Callback for transcript workload telemetry. */
+export type TranscriptWorkloadCallback = (metrics: TranscriptWorkloadMetrics) => void;
+
+const _transcriptWorkloadCallbacks: TranscriptWorkloadCallback[] = [];
+
+/** Register a transcript workload telemetry callback. @since RTI-1C */
+export function onTranscriptWorkload(cb: TranscriptWorkloadCallback): void {
+  _transcriptWorkloadCallbacks.push(cb);
+}
+
+/**
+ * Emit transcript workload metrics.
+ * Called by daemon state reader or projector when transcript grows.
+ * @since RTI-1C
+ */
+export function emitTranscriptWorkload(metrics: TranscriptWorkloadMetrics): void {
+  for (const cb of _transcriptWorkloadCallbacks) {
+    try { cb(metrics); } catch { /* telemetry must not break projector */ }
+  }
+}

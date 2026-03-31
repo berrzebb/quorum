@@ -198,6 +198,77 @@ export function generateFallbackSummary(
   };
 }
 
+// ── RTI-1B: Compact Telemetry ─────────────────────
+
+/**
+ * Telemetry record for compact generation outcomes.
+ * Used by downstream speculation and quality measurement.
+ * @since RTI-1B
+ */
+export interface CompactTelemetryRecord {
+  /** Timestamp. */
+  ts: number;
+  /** Track name. */
+  trackName: string;
+  /** Wave index. */
+  waveIndex: number;
+  /** Whether generation succeeded. */
+  success: boolean;
+  /** Whether fallback was used. */
+  usedFallback: boolean;
+  /** Summary size in characters. */
+  summarySize: number;
+  /** Number of findings carried forward. */
+  findingCount: number;
+  /** Number of top files restored. */
+  topFileCount: number;
+  /** Fitness at compact time. */
+  fitness: number;
+  /** Circuit breaker state at compact time. */
+  circuitBreakerTripped: boolean;
+  /** Duration of compact generation in ms (if measured). */
+  durationMs?: number;
+}
+
+/** Callback for compact telemetry consumers. */
+export type CompactTelemetryCallback = (record: CompactTelemetryRecord) => void;
+
+/** Module-level telemetry callbacks. */
+const _compactTelemetryCallbacks: CompactTelemetryCallback[] = [];
+
+/** Register a compact telemetry callback. @since RTI-1B */
+export function onCompactTelemetry(cb: CompactTelemetryCallback): void {
+  _compactTelemetryCallbacks.push(cb);
+}
+
+/** Emit compact telemetry. */
+function emitCompactTelemetry(
+  summary: CompactSummary,
+  success: boolean,
+  breaker?: CompactCircuitBreaker,
+  durationMs?: number,
+): void {
+  if (_compactTelemetryCallbacks.length === 0) return;
+
+  const record: CompactTelemetryRecord = {
+    ts: Date.now(),
+    trackName: summary.trackName,
+    waveIndex: summary.waveIndex,
+    success,
+    usedFallback: summary.source === "fallback",
+    summarySize: formatCompactContext(summary).length,
+    findingCount: summary.unresolvedFindings.length,
+    topFileCount: summary.topFiles.length,
+    fitness: summary.fitness,
+    circuitBreakerTripped: breaker?.tripped ?? false,
+    durationMs,
+  };
+
+  for (const cb of _compactTelemetryCallbacks) {
+    try { cb(record); } catch { /* telemetry must not break compact */ }
+  }
+}
+
 // ── Prompt injection ────────────────────────────────
 
 /**

@@ -93,3 +93,63 @@ export function shouldRunGate(
     profile.optionalGates.includes(gateName)
   );
 }
+
+// ── RTI-1B: Gate Profile Telemetry ──────────────────────────────────────────
+
+/**
+ * Telemetry record for gate profile selection outcomes.
+ * @since RTI-1B
+ */
+export interface GateProfileTelemetryRecord {
+  /** Timestamp. */
+  ts: number;
+  /** Selected profile ID. */
+  profileId: string;
+  /** Input triggers that drove the selection. */
+  inputTriggers: string[];
+  /** Number of required gates in selected profile. */
+  requiredGateCount: number;
+  /** Number of optional gates in selected profile. */
+  optionalGateCount: number;
+  /** Whether the selection fell back to the standard profile. */
+  usedDefault: boolean;
+}
+
+/** Callback for gate profile telemetry consumers. */
+export type GateProfileTelemetryCallback = (record: GateProfileTelemetryRecord) => void;
+
+const _gateProfileTelemetryCallbacks: GateProfileTelemetryCallback[] = [];
+
+/** Register a gate profile telemetry callback. @since RTI-1B */
+export function onGateProfileTelemetry(cb: GateProfileTelemetryCallback): void {
+  _gateProfileTelemetryCallbacks.push(cb);
+}
+
+/**
+ * Select profile and emit telemetry (convenience wrapper).
+ * @since RTI-1B
+ */
+export function selectGateProfileWithTelemetry(
+  detectedTriggers: string[],
+  profiles?: AdaptiveGateProfile[],
+): AdaptiveGateProfile {
+  const selected = selectGateProfile(detectedTriggers, profiles);
+  const usedDefault = selected.profileId === STANDARD_PROFILE.profileId
+    && !detectedTriggers.some(t => STANDARD_PROFILE.triggers.includes(t));
+
+  if (_gateProfileTelemetryCallbacks.length > 0) {
+    const record: GateProfileTelemetryRecord = {
+      ts: Date.now(),
+      profileId: selected.profileId,
+      inputTriggers: detectedTriggers,
+      requiredGateCount: selected.requiredGates.length,
+      optionalGateCount: selected.optionalGates.length,
+      usedDefault,
+    };
+    for (const cb of _gateProfileTelemetryCallbacks) {
+      try { cb(record); } catch { /* telemetry must not break gate selection */ }
+    }
+  }
+
+  return selected;
+}

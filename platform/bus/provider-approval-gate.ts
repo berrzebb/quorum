@@ -7,6 +7,10 @@
  * from approving actions independently.
  *
  * Fail-closed: if no policy explicitly allows, the default is deny.
+ *
+ * RTI-1A: Approval telemetry — every approval request/decision is recorded
+ * as a replay-compatible telemetry record with normalized fields. Both
+ * Claude SDK and Codex App Server produce the same telemetry shape.
  */
 
 import type {
@@ -15,6 +19,44 @@ import type {
 } from "../providers/session-runtime.js";
 import type { SessionLedger } from "../providers/session-ledger.js";
 import type { ContractLedger } from "../core/harness/contract-ledger.js";
+
+// ── RTI-1A: Approval Telemetry ──────────────────
+
+/**
+ * Replay-compatible telemetry record for approval decisions.
+ * Shape is identical regardless of provider (Claude SDK or Codex App Server).
+ */
+export interface ApprovalTelemetryRecord {
+  /** Timestamp of the decision. */
+  ts: number;
+  /** Provider that made the request. */
+  provider: "codex" | "claude";
+  /** Provider session ID for correlation. */
+  sessionId: string;
+  /** Tool or command that was requested. */
+  tool: string;
+  /** Approval kind. */
+  kind: "tool" | "command" | "diff" | "network";
+  /** Whether the tool is read-only (from capability registry). */
+  readOnly: boolean;
+  /** Whether the tool is destructive (from capability registry). */
+  destructive: boolean;
+  /** Whether the request involves network access. */
+  network: boolean;
+  /** Whether the request involves diff/file changes. */
+  diff: boolean;
+  /** Final gate decision. */
+  decision: "allow" | "deny";
+  /** Which policy made the decision. */
+  decidedBy: string;
+  /** Decision reason (for audit trail). */
+  reason: string;
+  /** Contract ID if bound to a sprint contract. */
+  contractId?: string;
+}
+
+/** Callback for telemetry consumers. */
+export type ApprovalTelemetryCallback = (record: ApprovalTelemetryRecord) => void;
 
 // ── Policy interface ────────────────────────────
 
@@ -69,11 +111,20 @@ export interface ApprovalGateResult {
  */
 export class ProviderApprovalGate {
   private policies: ApprovalPolicy[] = [];
+  private telemetryCallbacks: ApprovalTelemetryCallback[] = [];
 
   constructor(
     private readonly sessionLedger: SessionLedger,
     private readonly contractLedger?: ContractLedger
   ) {}
+
+  /**
+   * Register a telemetry callback. Called for every approval decision.
+   * @since RTI-1A
+   */
+  onTelemetry(cb: ApprovalTelemetryCallback): void {
+    this.telemetryCallbacks.push(cb);
+  }
 
   /**
    * Register an approval policy. Policies are evaluated in order.
@@ -164,10 +215,47 @@ export class ProviderApprovalGate {
       );
     }
 
+    // RTI-1A: Emit telemetry record for replay/classifier
+    this.emitTelemetry(request, result);
+
     return {
       requestId: request.requestId,
       decision: result.decision,
     };
+  }
+
+  /** Emit a normalized telemetry record (RTI-1A). */
+  private emitTelemetry(
+    request: ProviderApprovalRequest,
+    result: ApprovalGateResult,
+  ): void {
+    if (this.telemetryCallbacks.length === 0) return;
+
+    const capability = (request as unknown as Record<string, unknown>).toolCapability as
+      | { isReadOnly?: boolean; isDestructive?: boolean }
+      | undefined;
+
+    const record: ApprovalTelemetryRecord = {
+      ts: Date.now(),
+      provider: request.providerRef.provider,
+      sessionId: request.providerRef.providerSessionId,
+      tool: request.reason,
+      kind: request.kind,
+      readOnly: capability?.isReadOnly ?? false,
+      destructive: capability?.isDestructive ?? false,
+      network: request.kind === "network",
+      diff: request.kind === "diff",
+      decision: result.decision,
+      decidedBy: result.decidedBy,
+      reason: result.reason,
+      contractId: this.sessionLedger.findByProviderSession(
+        request.providerRef.providerSessionId,
+      )?.contractId,
+    };
+
+    for (const cb of this.telemetryCallbacks) {
+      try { cb(record); } catch { /* telemetry must not break gate */ }
+    }
   }
 }
 
