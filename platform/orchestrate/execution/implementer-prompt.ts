@@ -83,8 +83,31 @@ export function buildImplementerPrompt(
     ? `## Constraints\n${item.constraints}`
     : "";
 
+  // Build explicit "do NOT touch" list from peer roster
+  const peerFiles = (roster ?? [])
+    .filter(r => r.wbId !== item.id)
+    .flatMap(r => r.targetFiles);
+  const doNotTouchList = [...new Set(peerFiles)]
+    .filter(f => !item.targetFiles.includes(f))
+    .slice(0, 20)
+    .map(f => `- ${f}`)
+    .join("\n");
+
   const scopeWarning = item.targetFiles.length > 0
-    ? `\n## SCOPE RESTRICTION (CRITICAL)\nYou MUST only create/modify the files listed in "Target Files" above.\nDo NOT create files for other work breakdown items. Do NOT implement features beyond this WB.\nOther WBs will handle their own files — implementing them here causes scope violations and audit failure.\n`
+    ? [
+      `\n## SCOPE RESTRICTION (CRITICAL)`,
+      `You MUST only create/modify the files listed in "Target Files" above.`,
+      `Do NOT create files for other work breakdown items. Do NOT implement features beyond this WB.`,
+      `Other WBs will handle their own files — implementing them here causes scope violations and audit failure.`,
+      ``,
+      `For SHARED files (files you modify that other WBs also use, like index.js or app.js):`,
+      `- ONLY add code related to THIS WB (${item.id})`,
+      `- Do NOT import/require modules that other WBs will create`,
+      `- Do NOT register commands, routes, or features belonging to other WBs`,
+      `- If unsure whether something belongs to this WB, leave it out`,
+      doNotTouchList ? `\nFiles belonging to OTHER WBs (do NOT create or import these):\n${doNotTouchList}` : "",
+      ``,
+    ].join("\n")
     : "";
 
   return `# Task: ${item.id} (Track: ${trackName})

@@ -324,6 +324,34 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
             if (existsSync(fullPath)) unlinkSync(fullPath);
           } catch { /* ignore */ }
         }
+
+        // Remove broken imports in allowed files that reference deleted out-of-scope modules
+        const deletedModules = new Set(outOfScope.map(f => {
+          const base = f.replace(/\.[^/.]+$/, ""); // strip extension
+          return "./" + base.replace(/\\/g, "/");
+        }));
+        for (const af of allowedFiles) {
+          const afPath = resolve(repoRoot, af);
+          if (!existsSync(afPath)) continue;
+          try {
+            const content = readFileSync(afPath, "utf8");
+            const lines = content.split("\n");
+            let changed = false;
+            const cleaned = lines.filter(line => {
+              // Match: require('./commands/foo') or import ... from './commands/foo'
+              const reqMatch = line.match(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+              const impMatch = line.match(/from\s+['"]([^'"]+)['"]/);
+              const modPath = reqMatch?.[1] ?? impMatch?.[1];
+              if (modPath && deletedModules.has(modPath)) {
+                log(`    \x1b[2m✂ removed broken import: ${line.trim()}\x1b[0m`);
+                changed = true;
+                return false;
+              }
+              return true;
+            });
+            if (changed) writeFileSync(afPath, cleaned.join("\n"), "utf8");
+          } catch { /* ignore read/write errors */ }
+        }
       }
     } catch (err) { log(`  \x1b[33m⚠ scope enforcement failed: ${(err as Error).message}\x1b[0m`); }
   }
@@ -487,7 +515,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
 // ── Helpers ─────────────────────────────────
 
-import { existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 function _ensureTmpDir(repoRoot: string): string {
