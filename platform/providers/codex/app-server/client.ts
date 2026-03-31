@@ -1,6 +1,11 @@
 /**
  * Codex App Server JSON-RPC client over stdio.
  *
+ * @deprecated Since v0.5.0. Prefer codex-plugin-cc's broker-based client
+ * (openai/codex-plugin-cc) which provides persistent sessions, multiplexing,
+ * and structured output validation. Use {@link CodexPluginAuditor} instead.
+ * This module will be removed in v0.6.0.
+ *
  * Thin typed wrapper around a subprocess running `codex --app-server`.
  * Mirrors the pattern from platform/adapters/shared/jsonrpc-client.mjs
  * but uses TypeScript types from ./protocol.ts.

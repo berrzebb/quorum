@@ -2,6 +2,9 @@
  * CodexAppServerMapper — maps Codex App Server JSON-RPC notifications
  * to normalized ProviderRuntimeEvent.
  *
+ * @deprecated Since v0.5.0. codex-plugin-cc handles event normalization
+ * internally. This mapper will be removed in v0.6.0.
+ *
  * Each Codex notification (thread/started, turn/started, item/*, etc.)
  * is mapped 1:1 to a ProviderRuntimeEvent kind. Unknown methods return null.
  */

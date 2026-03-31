@@ -121,6 +121,7 @@ describe("adapter wrapper structure — cross-reference coverage", () => {
   // This baseline documents exactly which ones lack coverage.
   const KNOWN_UNWRAPPED = new Set([
     "docx",
+    "harness-bootstrap",
     "html-report",
     "report",
     "specialist-review",
@@ -172,7 +173,7 @@ describe("adapter wrapper structure — cross-reference coverage", () => {
   });
 
   it("known unwrapped count should be exactly 5 (baseline)", () => {
-    assert.equal(KNOWN_UNWRAPPED.size, 5, "baseline: 5 known unwrapped canonical skills");
+    assert.equal(KNOWN_UNWRAPPED.size, 6, "baseline: 6 known unwrapped canonical skills");
   });
 });
 

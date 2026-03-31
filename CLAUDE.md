@@ -146,9 +146,20 @@ platform/providers/
   ├→ domain-router.ts   ← Conditional specialist activation (domain × tier)
   ├→ specialist.ts      ← Specialist review orchestrator (tools + agents → enriched evidence)
   ├→ claude-code/       ← ClaudeCodeProvider (hook-forwarding)
-  ├→ codex/             ← CodexProvider (file-watch) + CodexAuditor
+  ├→ codex/             ← CodexProvider (file-watch) + CodexAuditor + CodexPluginAuditor (codex-plugin-cc bridge)
+  │   ├→ broker-detect.ts     ← isCodexPluginAvailable() — runtime detection of codex-plugin-cc
+  │   ├→ plugin-bridge.ts     ← AuditRequest ↔ codex-plugin-cc format conversion (XML-tag prompts, structured output)
+  │   ├→ plugin-auditor.ts    ← CodexPluginAuditor (delegates to codex-companion.mjs, auto-selected by factory)
+  │   ├→ adversarial-review.ts ← Adversarial review wrapper (design decision challenge via codex-plugin-cc)
+  │   ├→ background-job.ts    ← Background job submission/status/result/cancel via codex-plugin-cc
+  │   └→ app-server/          ← [DEPRECATED v0.5.0] Direct JSON-RPC client (→ use codex-plugin-cc broker)
+  ├→ harness/           ← Harness integration (revfactory/harness meta-skill bridge)
+  │   ├→ team-mapper.ts       ← Harness roles → quorum 9-role mapping + consensus coverage validation
+  │   ├→ skill-mapper.ts      ← Harness skills → quorum canonical format (neutrality check, Progressive Disclosure)
+  │   └→ workspace-bridge.ts  ← Harness _workspace/ → quorum bus events (artifact discovery + handoff)
   ├→ auditors/          ← Auditor implementations (claude, codex, gemini, ollama, openai, openai-compatible, vllm, mux, parse)
-  │   └→ factory.ts     ← createConsensusAuditors()
+  │   ├→ factory.ts     ← createConsensusAuditors() — auto-selects CodexPluginAuditor when codex-plugin-cc available
+  │   └→ structured-schema.ts ← JSON Schema for structured audit verdicts (opinion + judge schemas)
   └→ evaluators/        ← Runtime evaluation probes (cli-session, api-probe, data-probe, artifact-validator, browser-playwright)
       └→ evaluator-port.ts ← Evaluator interface
 
@@ -212,7 +223,11 @@ platform/adapters/gemini/
 
 platform/adapters/codex/
   ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
+  ├→ hooks/plugin-hooks.json ← codex-plugin-cc integration hooks (Stop review gate, appended after quorum hooks)
+  ├→ hooks/scripts/stop-review-gate.mjs ← Codex stop-time review gate (fitness check → codex companion → ALLOW/BLOCK)
   └→ skills/               ← 33 skills (shared wrappers)
+
+platform/skills/harness-bootstrap/ ← Meta-skill: auto-generate quorum-governed agent teams via Harness
 
 platform/adapters/openai-compatible/
   ├→ agents/               ← 13 agents (mirror of claude-code agents)
@@ -290,6 +305,12 @@ platform/adapters/openai-compatible/
 - **Consensus Checklist**: Advocate (5 items), Devil's Advocate (6 items), Judge (explicit decision procedure). All verdicts must include file:line evidence. Tie-breaking: both approved→approved, both rejected→rejected, split→check agreement, neither→reject (fail-safe).
 - **Trigger Interaction Multipliers**: Factor 13 — high-risk co-occurrence (security×blast-radius ×1.3, security×cross-layer ×1.2, cross-layer×API ×1.15, rejection×stagnation ×1.25). `Math.max` prevents multiplier explosion.
 - **Evidence via SQLite**: `audit_submit` MCP tool replaces watch_file markdown. Evidence stored in EventStore, trigger evaluated inline. Hooks read from `tool_input.content`, not file. `readWatchContent()` eliminated.
+- **Codex Plugin Integration**: `codex-plugin-cc` (openai/codex-plugin-cc) optional peer dependency. `isCodexPluginAvailable()` runtime detection → `CodexPluginAuditor` auto-selected by factory. Falls back to `CodexAuditor` (direct CLI) when unavailable. Structured output schemas eliminate `extractJson` fallback. Adversarial review wraps codex-plugin-cc's challenge review as 4th consensus opinion.
+- **Harness Integration**: `revfactory/harness` optional peer dependency. `harness-bootstrap` meta-skill generates quorum-governed agent teams. `team-mapper.ts` maps 30+ Harness roles → quorum 9-role system with auto-supplementation. `skill-mapper.ts` enforces protocol neutrality + Progressive Disclosure. AgentLoader discovers Harness-generated agents via `.claude/agents/` (no code change needed).
+- **Stop Review Gate**: `stop-review-gate.mjs` hook fires on session Stop. Two gates: fitness score threshold (mechanical) + codex-plugin-cc adversarial review (LLM). Fail-open on error. Enabled via `config.stopReviewGate.enabled`.
+- **Structured Verdict Schema**: `structured-schema.ts` defines JSON Schemas for advocate/devil opinions and judge verdicts. `parseOpinion()` and `parseJudgeVerdict()` use schema-first fast path (skip `extractJson` when structured output available), with existing fallback chain preserved.
+- **Hook Coexistence**: `mergeHookConfigs()` in hook-bridge.mjs ensures quorum hooks fire before plugin hooks. `hookRunnerToStopReviewGate()` bridges Stop hooks with fitness scoring.
+- **Background Jobs**: `background-job.ts` wraps codex-plugin-cc's detached job system. `submitBackgroundJob()` / `queryJobStatus()` / `getJobResult()` / `cancelJob()` for long-running audits.
 
 ## Testing
 

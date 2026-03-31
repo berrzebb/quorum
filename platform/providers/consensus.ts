@@ -12,6 +12,7 @@
 
 import type { Auditor, AuditRequest } from "./provider.js";
 import { extractJson } from "./auditors/parse.js";
+import { parseStructuredOpinion, parseStructuredJudgeVerdict } from "./auditors/structured-schema.js";
 
 type Verdict = "approved" | "changes_requested" | "infra_failure";
 
@@ -373,6 +374,18 @@ function parseConvergeVerdict(raw: string): {
 // ── Parsers ───────────────────────────────────
 
 function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
+  // Fast path: try structured output parsing first (codex-plugin-cc provides validated JSON)
+  const structured = parseStructuredOpinion(raw);
+  if (structured) {
+    return {
+      role,
+      verdict: normalizeVerdict(structured.verdict),
+      reasoning: structured.reasoning,
+      codes: structured.codes,
+      confidence: structured.confidence,
+    };
+  }
+
   try {
     const json = extractJson(raw);
     if (!json) throw new Error("No JSON found");
@@ -402,6 +415,16 @@ function parseOpinion(raw: string, role: "advocate" | "devil"): RoleOpinion {
 }
 
 function parseJudgeVerdict(raw: string): { verdict: "approved" | "changes_requested" | "infra_failure"; summary: string; codes: string[] } {
+  // Fast path: try structured output parsing first
+  const structured = parseStructuredJudgeVerdict(raw);
+  if (structured) {
+    return {
+      verdict: normalizeVerdict(structured.verdict),
+      summary: structured.summary,
+      codes: structured.codes,
+    };
+  }
+
   try {
     const json = extractJson(raw);
     if (!json) throw new Error("No JSON found");

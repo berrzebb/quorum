@@ -136,6 +136,18 @@ export type { MuxAuditorConfig } from "./auditors/mux.js";
 
 export { checkAvailability } from "./auditors/factory.js";
 
+export {
+  parseStructuredOpinion,
+  parseStructuredJudgeVerdict,
+  OPINION_SCHEMA,
+  JUDGE_VERDICT_SCHEMA,
+} from "./auditors/structured-schema.js";
+export type {
+  StructuredOpinion,
+  StructuredJudgeVerdict,
+  StructuredFinding,
+} from "./auditors/structured-schema.js";
+
 // ── Session Runtime ─────────────────────────────────
 export type {
   ProviderExecutionMode,
@@ -198,6 +210,52 @@ export { CodexAppServerRuntime } from "./codex/app-server/runtime.js";
 export { CodexAppServerClient } from "./codex/app-server/client.js";
 export { CodexAppServerMapper } from "./codex/app-server/mapper.js";
 export * from "./codex/app-server/protocol.js";
+
+// ── Codex Plugin (codex-plugin-cc) ──────────────────
+export { CodexPluginAuditor } from "./codex/plugin-auditor.js";
+export type { CodexPluginAuditorConfig } from "./codex/plugin-auditor.js";
+export { isCodexPluginAvailable, getCompanionScriptPath, resetBrokerCache } from "./codex/broker-detect.js";
+export { buildCompanionPrompt, mapPluginVerdict, parsePluginOutput } from "./codex/plugin-bridge.js";
+export type { CodexPluginVerdict } from "./codex/plugin-bridge.js";
+export {
+  isAdversarialReviewAvailable,
+  runAdversarialReview,
+  toAuditResult as adversarialToAuditResult,
+} from "./codex/adversarial-review.js";
+export {
+  submitBackgroundJob,
+  queryJobStatus,
+  getJobResult,
+  cancelJob,
+} from "./codex/background-job.js";
+export type {
+  BackgroundJobRequest,
+  BackgroundJobStatus,
+  BackgroundJobResult,
+} from "./codex/background-job.js";
+export type {
+  AdversarialReviewRequest,
+  AdversarialReviewResult,
+  AdversarialFinding,
+} from "./codex/adversarial-review.js";
+
+// ── Harness Integration ────────────────────────────────
+export { mapRole, mapTeam, getProtocolPath } from "./harness/team-mapper.js";
+export type {
+  QuorumRole,
+  HarnessAgent,
+  MappedAgent,
+  TeamMappingResult,
+} from "./harness/team-mapper.js";
+export {
+  parseFrontmatter,
+  validateSkill,
+  validateSkillDirectory,
+  normalizeToCanonical,
+} from "./harness/skill-mapper.js";
+export type { SkillValidation, SkillMappingResult } from "./harness/skill-mapper.js";
+export { scanWorkspace, buildHandoffEvent } from "./harness/workspace-bridge.js";
+export type { WorkspaceArtifact, WorkspaceSummary } from "./harness/workspace-bridge.js";
 
 // ── Provider implementations ─────────────────────────
 export { ClaudeCodeProvider } from "./claude-code/adapter.js";

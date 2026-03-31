@@ -1,3 +1,8 @@
+/**
+ * @deprecated Since v0.5.0. Prefer codex-plugin-cc's codex-companion.mjs
+ * for Codex CLI invocation. Use CodexPluginAuditor in providers/codex/
+ * plugin-auditor.ts instead. This module will be removed in v0.6.0.
+ */
 /* global process, console, Buffer */
 
 import { existsSync, readFileSync, appendFileSync } from "node:fs";

@@ -9,6 +9,8 @@
 
 import type { Auditor } from "../provider.js";
 import { CodexAuditor } from "../codex/auditor.js";
+import { CodexPluginAuditor } from "../codex/plugin-auditor.js";
+import { isCodexPluginAvailable } from "../codex/broker-detect.js";
 import { ClaudeAuditor } from "./claude.js";
 import { OpenAIAuditor } from "./openai.js";
 import { GeminiAuditor } from "./gemini.js";
@@ -41,6 +43,11 @@ export function createAuditor(spec: string, cwd?: string): Auditor {
 
   switch (provider) {
     case "codex":
+      // Prefer codex-plugin-cc (official OpenAI plugin) when available;
+      // fall back to direct CodexAuditor (codex exec) otherwise.
+      if (isCodexPluginAvailable()) {
+        return new CodexPluginAuditor({ model, cwd });
+      }
       return new CodexAuditor({ model, cwd });
 
     case "claude":

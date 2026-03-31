@@ -1,0 +1,17 @@
+{
+  "description": "codex-plugin-cc hook declarations for quorum integration. These hooks are appended AFTER quorum's own hooks to ensure governance priority.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./platform/adapters/codex/hooks/scripts/stop-review-gate.mjs",
+            "timeout": 900,
+            "statusMessage": "Running Codex stop-time review gate"
+          }
+        ]
+      }
+    ]
+  }
+}

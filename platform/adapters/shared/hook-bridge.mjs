@@ -119,6 +119,79 @@ export function hookRunnerToAuditGate(runner, event, sessionId) {
 }
 
 /**
+ * Convert HookRunner into a stop-review gate function.
+ *
+ * Integrates codex-plugin-cc's Stop-review-gate pattern into quorum's
+ * hook chain. When a Stop event fires, this gate:
+ * 1. Checks quorum's fitness score (if available via metadata)
+ * 2. Delegates to codex-plugin-cc's adversarial review (if available)
+ * 3. Returns BLOCK if fitness < threshold OR review found issues
+ *
+ * @param {import("./hook-runner.mjs").HookRunner} runner
+ * @param {string} [sessionId]
+ * @param {{ fitnessThreshold?: number }} [options]
+ * @returns {(metadata?: Record<string, unknown>) => Promise<{ decision: "block"|"allow", reason?: string }>}
+ */
+export function hookRunnerToStopReviewGate(runner, sessionId, options = {}) {
+  const fitnessThreshold = options.fitnessThreshold ?? 0.7;
+
+  return async (metadata) => {
+    const fitness = metadata?.fitness;
+
+    // Gate 1: Fitness score check (purely mechanical)
+    if (typeof fitness === "number" && fitness < fitnessThreshold) {
+      return {
+        decision: "block",
+        reason: `Fitness score ${fitness.toFixed(2)} below threshold ${fitnessThreshold}. Run \`quorum verify\` to check quality gates.`,
+      };
+    }
+
+    // Gate 2: Fire Stop hooks (including any codex-plugin-cc stop-review-gate)
+    if (runner.has("Stop")) {
+      const results = await runner.fire("Stop", {
+        hook_event_name: "Stop",
+        session_id: sessionId,
+        metadata,
+      });
+
+      for (const r of results) {
+        if (r.output.decision === "block" || r.output.decision === "deny") {
+          return {
+            decision: "block",
+            reason: r.output.reason || `Blocked by stop review gate: ${r.hook_name}`,
+          };
+        }
+      }
+    }
+
+    return { decision: "allow" };
+  };
+}
+
+/**
+ * Merge hook configurations from multiple sources (quorum + plugins).
+ *
+ * Ensures quorum hooks fire before plugin hooks for the same event.
+ * This preserves governance priority: quorum gates first, plugin gates second.
+ *
+ * @param {Record<string, Array>} primary — quorum hooks (high priority)
+ * @param {Record<string, Array>} secondary — plugin hooks (lower priority)
+ * @returns {Record<string, Array>} — merged hooks config
+ */
+export function mergeHookConfigs(primary, secondary) {
+  const merged = { ...primary };
+  for (const [event, hooks] of Object.entries(secondary)) {
+    if (merged[event]) {
+      // Append plugin hooks after quorum hooks
+      merged[event] = [...merged[event], ...hooks];
+    } else {
+      merged[event] = hooks;
+    }
+  }
+  return merged;
+}
+
+/**
  * Build a standard HookInput from quorum adapter context.
  * Normalizes adapter-specific field names to the canonical format.
  *

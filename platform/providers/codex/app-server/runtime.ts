@@ -2,6 +2,11 @@
  * Codex App Server session runtime.
  * Implements SessionRuntime for Codex's bidirectional JSON-RPC App Server.
  *
+ * @deprecated Since v0.5.0. Prefer codex-plugin-cc's session management
+ * (openai/codex-plugin-cc) which provides broker-based multiplexing,
+ * thread persistence, and background job execution. This module will be
+ * removed in v0.6.0.
+ *
  * Falls back gracefully when codex binary is not available.
  *
  * @module providers/codex/app-server/runtime
