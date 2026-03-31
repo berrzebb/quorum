@@ -174,3 +174,57 @@ export function validateSafetyInvariant(input: ClassifierInput, decision: Classi
   }
   return true;
 }
+
+// ═══ RTI-8: Classifier Enforce Mode ═════════════════════════════════════
+
+/**
+ * Enforce mode configuration.
+ * Only safe buckets (auto-allow for read-only tools) can be auto-decided.
+ * High-risk buckets ALWAYS go through the full gate.
+ * @since RTI-8
+ */
+export interface EnforceModeConfig {
+  /** Whether enforce mode is enabled. Default: false (shadow only). */
+  enabled: boolean;
+  /** Minimum classifier confidence to enforce. Default: 0.8. */
+  minConfidence: number;
+  /** Buckets that the classifier can auto-decide. NEVER includes high-risk. */
+  enforceBuckets: RiskBucket[];
+}
+
+/**
+ * Default enforce mode config — disabled, conservative thresholds.
+ * @since RTI-8
+ */
+export function defaultEnforceConfig(): EnforceModeConfig {
+  return {
+    enabled: false,
+    minConfidence: 0.8,
+    // Only auto-allow for safe reads; auto-deny for destructive
+    enforceBuckets: ["auto-allow", "auto-deny"],
+  };
+}
+
+/**
+ * Determine if the classifier decision should be enforced.
+ *
+ * Returns true ONLY when:
+ * 1. Enforce mode is enabled
+ * 2. The bucket is in the enforceable set
+ * 3. Confidence meets the threshold
+ * 4. The safety invariant holds
+ *
+ * If ANY condition fails, returns false → gate decides as usual.
+ * @since RTI-8
+ */
+export function shouldEnforce(
+  config: EnforceModeConfig,
+  input: ClassifierInput,
+  decision: ClassifierDecision,
+): boolean {
+  if (!config.enabled) return false;
+  if (!config.enforceBuckets.includes(decision.bucket)) return false;
+  if (decision.confidence < config.minConfidence) return false;
+  if (!validateSafetyInvariant(input, decision)) return false;
+  return true;
+}

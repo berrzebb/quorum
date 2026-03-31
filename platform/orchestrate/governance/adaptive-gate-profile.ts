@@ -290,3 +290,113 @@ export function emitSpeculation(
     try { cb(input, result, actualOutcome); } catch { /* telemetry must not break */ }
   }
 }
+
+// ═══ RTI-9: Feature-Flagged Speculation Fast-Lane ═══════════════════════
+
+/**
+ * Fast-lane configuration. Default: OFF.
+ * Can only be enabled after calibration threshold is met.
+ * @since RTI-9
+ */
+export interface FastLaneConfig {
+  /** Whether fast-lane is enabled. Default: false. */
+  enabled: boolean;
+  /** Minimum precision from calibration to enable. */
+  minPrecision: number;
+  /** Minimum number of calibration samples before enabling. */
+  minSamples: number;
+  /** Pass-likelihood threshold for fast-lane eligibility. */
+  likelihoodThreshold: number;
+}
+
+/**
+ * Default fast-lane config — disabled, strict thresholds.
+ * @since RTI-9
+ */
+export function defaultFastLaneConfig(): FastLaneConfig {
+  return {
+    enabled: false,
+    minPrecision: 0.85,
+    minSamples: 20,
+    likelihoodThreshold: 0.85,
+  };
+}
+
+/**
+ * Calibration state for the speculation predictor.
+ * Tracks predicted vs actual outcomes to compute precision.
+ * @since RTI-9
+ */
+export interface CalibrationState {
+  /** Total predictions made. */
+  totalPredictions: number;
+  /** Predictions where "likely pass" was correct. */
+  correctPassPredictions: number;
+  /** Predictions where "likely pass" was incorrect (false positive). */
+  falsePassPredictions: number;
+  /** Computed precision (correctPass / (correctPass + falsePass)). */
+  precision: number;
+}
+
+/**
+ * Create initial calibration state.
+ * @since RTI-9
+ */
+export function createCalibrationState(): CalibrationState {
+  return {
+    totalPredictions: 0,
+    correctPassPredictions: 0,
+    falsePassPredictions: 0,
+    precision: 0,
+  };
+}
+
+/**
+ * Record a calibration sample.
+ * @since RTI-9
+ */
+export function recordCalibration(
+  state: CalibrationState,
+  predicted: SpeculationResult,
+  actual: "pass" | "fail",
+  likelihoodThreshold = 0.85,
+): CalibrationState {
+  const predictedPass = predicted.passLikelihood >= likelihoodThreshold;
+  const total = state.totalPredictions + 1;
+  let correct = state.correctPassPredictions;
+  let falsePos = state.falsePassPredictions;
+
+  if (predictedPass && actual === "pass") correct++;
+  if (predictedPass && actual === "fail") falsePos++;
+
+  const denom = correct + falsePos;
+  const precision = denom > 0 ? correct / denom : 0;
+
+  return { totalPredictions: total, correctPassPredictions: correct, falsePassPredictions: falsePos, precision };
+}
+
+/**
+ * Determine if fast-lane can be used for this prediction.
+ *
+ * Returns the recommended profile ONLY if:
+ * 1. Fast-lane is enabled
+ * 2. Calibration has enough samples
+ * 3. Precision meets threshold
+ * 4. This prediction's likelihood meets threshold
+ *
+ * Otherwise returns null → use the standard gate profile.
+ * @since RTI-9
+ */
+export function tryFastLane(
+  config: FastLaneConfig,
+  calibration: CalibrationState,
+  prediction: SpeculationResult,
+): AdaptiveGateProfile | null {
+  if (!config.enabled) return null;
+  if (calibration.totalPredictions < config.minSamples) return null;
+  if (calibration.precision < config.minPrecision) return null;
+  if (prediction.passLikelihood < config.likelihoodThreshold) return null;
+
+  // Use the recommended lighter profile
+  return selectGateProfile([prediction.recommendedProfile]);
+}
