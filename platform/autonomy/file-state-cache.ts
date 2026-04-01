@@ -11,7 +11,8 @@
  * @since RAI-7
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
+import { djb2Hash as simpleHash } from "./hash-util.js";
 
 // ── Types ────────────────────────────────────
 
@@ -61,7 +62,6 @@ export function defaultFileCacheConfig(): FileCacheConfig {
 
 export class FileStateCache {
   private cache = new Map<string, CachedFileState>();
-  private accessOrder: string[] = [];
   private stats: CacheStats = { hits: 0, misses: 0, evictions: 0, revalidations: 0, size: 0 };
 
   constructor(private readonly config: FileCacheConfig = defaultFileCacheConfig()) {}
@@ -79,7 +79,7 @@ export class FileStateCache {
       // Check freshness
       if (currentTime - cached.loadedAt < this.config.maxAgeMs) {
         this.stats.hits++;
-        this.touchLRU(path);
+        this.promoteLRU(path, cached);
         return cached;
       }
 
@@ -91,7 +91,7 @@ export class FileStateCache {
           cached.loadedAt = currentTime;
           this.stats.hits++;
           this.stats.revalidations++;
-          this.touchLRU(path);
+          this.promoteLRU(path, cached);
           return cached;
         }
       } catch {
@@ -118,8 +118,6 @@ export class FileStateCache {
    */
   clear(): void {
     this.cache.clear();
-    this.accessOrder = [];
-    this.stats.size = 0;
   }
 
   /**
@@ -140,13 +138,12 @@ export class FileStateCache {
       let partial = false;
 
       if (stat.size > this.config.maxFileSize) {
-        // Read only the beginning for large files
         const buf = Buffer.alloc(this.config.maxFileSize);
-        const fd = require("node:fs").openSync(path, "r");
+        const fd = openSync(path, "r");
         try {
-          require("node:fs").readSync(fd, buf, 0, this.config.maxFileSize, 0);
+          readSync(fd, buf, 0, this.config.maxFileSize, 0);
         } finally {
-          require("node:fs").closeSync(fd);
+          closeSync(fd);
         }
         content = buf.toString("utf8");
         partial = true;
@@ -163,15 +160,14 @@ export class FileStateCache {
         partial,
       };
 
-      // Enforce LRU bounds
+      // Enforce LRU bounds — Map iteration order = insertion order
       while (this.cache.size >= this.config.maxEntries) {
-        const oldest = this.accessOrder.shift();
-        if (oldest) this.evict(oldest);
+        const oldest = this.cache.keys().next().value;
+        if (oldest) { this.cache.delete(oldest); this.stats.evictions++; }
+        else break;
       }
 
       this.cache.set(path, entry);
-      this.accessOrder.push(path);
-      this.stats.size = this.cache.size;
 
       return entry;
     } catch {
@@ -182,25 +178,12 @@ export class FileStateCache {
   private evict(path: string): void {
     if (this.cache.delete(path)) {
       this.stats.evictions++;
-      this.stats.size = this.cache.size;
     }
-    const idx = this.accessOrder.indexOf(path);
-    if (idx >= 0) this.accessOrder.splice(idx, 1);
   }
 
-  private touchLRU(path: string): void {
-    const idx = this.accessOrder.indexOf(path);
-    if (idx >= 0) this.accessOrder.splice(idx, 1);
-    this.accessOrder.push(path);
+  /** Promote entry to newest position via delete + re-set (O(1) Map LRU). */
+  private promoteLRU(path: string, entry: CachedFileState): void {
+    this.cache.delete(path);
+    this.cache.set(path, entry);
   }
-}
-
-// ── Helpers ──────────────────────────────────
-
-function simpleHash(str: string): string {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(36);
 }

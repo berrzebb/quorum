@@ -1,6 +1,6 @@
 # quorum System Architecture
 
-> Cross-model audit gate with structural enforcement. v0.4.8
+> Cross-model audit gate with structural enforcement. v0.5.0
 >
 > **v0.3.0**: Parliament protocol, 3-role deliberative consensus
 > **v0.4.0**: SQLite unified state, fitness score engine, 26 MCP tools
@@ -8,6 +8,7 @@
 > **v0.4.5**: Wave execution, Fixer role, 4-adapter parity, 2401 tests
 > **v0.4.6**: Quality gate chain (21-gate), fitness integration, cross-model audit
 > **v0.4.8**: Daemon TUI fix, safe git revert, scope gate refinement, 430+ silent catch cleanup, 2412 tests
+> **v0.5.0**: Claude Code pattern adoption (20 patterns), Dream consolidation, Remote autonomy, 3030 tests
 
 ## Overview
 

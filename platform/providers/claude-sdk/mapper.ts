@@ -14,12 +14,7 @@
 import type { ProviderRuntimeEvent, ProviderSessionRef } from "../session-runtime.js";
 import type { ProviderEventMapper } from "../event-mapper.js";
 import { createRuntimeEvent } from "../event-mapper.js";
-import {
-  getCapability,
-  isDestructive as checkDestructive,
-  isReadOnly as checkReadOnly,
-  isConcurrencySafe as checkConcurrencySafe,
-} from "../../core/tools/capability-registry.js";
+import { getCapability } from "../../core/tools/capability-registry.js";
 
 /**
  * Maps Claude SDK events to normalized ProviderRuntimeEvent.

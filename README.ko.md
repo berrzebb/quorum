@@ -409,7 +409,7 @@ quorum verify SCOPE        # diff vs 증거 매칭
 ## 테스트
 
 ```bash
-npm test                # 2401 tests
+npm test                # 3030 tests
 npm run typecheck       # TypeScript 검사
 npm run build           # 컴파일
 ```
@@ -419,8 +419,8 @@ npm run build           # 컴파일
 태그 푸시 시 GitHub Actions가 크로스 플랫폼 바이너리 빌드:
 
 ```bash
-git tag v0.4.8
-git push origin v0.4.8
+git tag v0.5.0
+git push origin v0.5.0
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 바이너리가 Releases에 올라감
 ```
 

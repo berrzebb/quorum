@@ -219,6 +219,13 @@ export function parseFile(filePath, filters) {
   return symbols;
 }
 
+// Optional vendor: globby for .gitignore-aware glob (fail-safe)
+let _globby = null;
+try {
+  const mod = await import("globby");
+  _globby = mod.globby;
+} catch { /* fallback to manual walkDir */ }
+
 export function walkDir(dir, extensions, maxDepth, depth = 0) {
   if (depth > maxDepth) return [];
   const files = [];
@@ -234,6 +241,35 @@ export function walkDir(dir, extensions, maxDepth, depth = 0) {
     else if (extensions.has(extname(e.name))) files.push(full);
   }
   return files;
+}
+
+/**
+ * Enhanced walkDir using globby — respects .gitignore, supports negation.
+ * Falls back to manual walkDir if globby unavailable.
+ *
+ * @param {string} dir — root directory
+ * @param {Set<string>} extensions — e.g. new Set([".ts", ".mjs"])
+ * @param {number} maxDepth
+ * @returns {Promise<string[]>}
+ */
+export async function walkDirAsync(dir, extensions, maxDepth) {
+  if (_globby) {
+    const extArray = [...extensions].map(e => `**/*${e}`);
+    try {
+      const results = await _globby(extArray, {
+        cwd: dir,
+        gitignore: true,
+        onlyFiles: true,
+        deep: maxDepth,
+        absolute: true,
+      });
+      return results;
+    } catch (err) {
+      if (process.env.QUORUM_DEBUG) console.error(`[tool-core] globby fallback: ${err.message}`);
+    }
+  }
+  // Fallback to synchronous manual walk
+  return walkDir(dir, extensions, maxDepth);
 }
 
 // ═══ Pattern scan helper ═══════════════════════════════════════════════

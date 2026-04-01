@@ -14,6 +14,12 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, extname } from "node:path";
 
+// Optional vendor: marked for structured markdown parsing (fail-safe)
+let _marked: { lexer: (md: string) => any[] } | null = null;
+try {
+  _marked = await import("marked") as any;
+} catch { /* fallback to regex parsing */ }
+
 // ── Types ────────────────────────────────────
 
 export interface NamingRule {
@@ -63,39 +69,84 @@ export function parseBlueprints(designDir: string): BlueprintRules {
 
 /**
  * Parse a single Blueprint markdown string for naming convention tables.
+ * Uses `marked` lexer when available for robust table parsing,
+ * falls back to regex for environments without the vendor package.
  */
 export function extractNamingRules(content: string, source: string = "blueprint.md"): NamingRule[] {
+  // Try structured parsing first (marked), fallback to regex
+  if (_marked) {
+    const result = extractNamingRulesWithMarked(content, source);
+    if (result.length > 0) return result;
+  }
+  return extractNamingRulesRegex(content, source);
+}
+
+/** Structured parsing via marked lexer — finds tables under "Naming Conventions" headings. */
+function extractNamingRulesWithMarked(content: string, source: string): NamingRule[] {
+  const rules: NamingRule[] = [];
+  const tokens = _marked!.lexer(content);
+
+  let inNamingSection = false;
+  for (const token of tokens) {
+    // Track when we enter/leave a Naming Conventions heading
+    if (token.type === "heading") {
+      inNamingSection = /naming\s+convention/i.test(token.text);
+      continue;
+    }
+
+    // Parse tables inside Naming Conventions sections
+    if (inNamingSection && token.type === "table") {
+      const headers = (token.header || []).map((h: any) => (h.text || "").toLowerCase());
+      const conceptIdx = headers.findIndex((h: string) => h.includes("concept"));
+      const nameIdx = headers.findIndex((h: string) => h === "name" || h.includes("name"));
+      const rationaleIdx = headers.findIndex((h: string) => h.includes("rationale") || h.includes("reason"));
+
+      if (conceptIdx === -1 || nameIdx === -1) continue;
+
+      for (const row of token.rows || []) {
+        const concept = (row[conceptIdx]?.text || "").replace(/`/g, "").trim();
+        const name = (row[nameIdx]?.text || "").replace(/`/g, "").trim();
+        const rationale = rationaleIdx >= 0 ? (row[rationaleIdx]?.text || "").trim() : "";
+
+        if (!concept || !name) continue;
+
+        const alternatives = generateAlternatives(concept, name);
+        const violationPattern = buildViolationPattern(name, alternatives);
+        rules.push({ concept, name, rationale, source, violationPattern, alternatives });
+      }
+    }
+  }
+
+  return rules;
+}
+
+/** Regex fallback — original parser for environments without marked. */
+function extractNamingRulesRegex(content: string, source: string): NamingRule[] {
   const rules: NamingRule[] = [];
 
-  // Find "Naming Conventions" section (case-insensitive)
   const sections = content.split(/^#+\s+/m);
   for (const section of sections) {
     if (!/naming\s+convention/i.test(section.split("\n")[0] ?? "")) continue;
 
-    // Parse markdown table rows
     const lines = section.split("\n");
     let headerFound = false;
 
     for (const line of lines) {
-      // Skip header row and separator
       if (/^\s*\|.*Concept.*Name.*\|/i.test(line)) {
         headerFound = true;
         continue;
       }
       if (/^\s*\|[\s\-:|]+\|/.test(line)) continue;
 
-      // Parse data rows
       if (headerFound && /^\s*\|/.test(line)) {
         const cells = line.split("|").map(c => c.trim()).filter(Boolean);
         if (cells.length >= 2) {
           const concept = cells[0]!;
-          const name = cells[1]!.replace(/`/g, ""); // Strip backticks
+          const name = cells[1]!.replace(/`/g, "");
           const rationale = cells[2] ?? "";
 
-          // Generate violation patterns — common wrong-name variants
           const alternatives = generateAlternatives(concept, name);
           const violationPattern = buildViolationPattern(name, alternatives);
-
           rules.push({ concept, name, rationale, source, violationPattern, alternatives });
         }
       }

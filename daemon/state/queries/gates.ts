@@ -2,7 +2,7 @@
  * Gate status queries — 3 enforcement gates derived from SQLite state.
  */
 
-import type Database from "better-sqlite3";
+import type { SQLiteDatabase, SQLiteStatement } from "../../../platform/bus/sqlite-adapter.js";
 import type { EventStore } from "../../../platform/bus/store.js";
 
 // ── Types ────────────────────────────────────
@@ -81,9 +81,9 @@ export function queryGateStatus(store: EventStore): GateInfo[] {
 
 // ── Private helpers ──────────────────────────
 
-const transitionStmtCache = new WeakMap<Database.Database, Database.Statement>();
+const transitionStmtCache = new WeakMap<SQLiteDatabase, SQLiteStatement>();
 
-function latestTransition(db: Database.Database, entityType: string, entityId: string): {
+function latestTransition(db: SQLiteDatabase, entityType: string, entityId: string): {
   to_state: string;
   created_at: number;
 } | null {

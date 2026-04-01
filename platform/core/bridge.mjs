@@ -91,7 +91,7 @@ function getStore(repoRoot) {
     const dbDir = resolve(repoRoot, ".claude");
     if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
     const dbPath = resolve(dbDir, "quorum-events.db");
-    // Synchronous import for store (better-sqlite3 is sync)
+    // Synchronous import for store (SQLite adapter: bun:sqlite or better-sqlite3)
     const { EventStore } = _modules.storeMod;
     _store = new EventStore({ dbPath });
     return _store;

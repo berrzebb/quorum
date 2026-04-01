@@ -5,7 +5,7 @@
  * query wrappers for item states, entity history, and parliament views.
  */
 
-import type Database from "better-sqlite3";
+import type { SQLiteDatabase, SQLiteStatement } from "./sqlite-adapter.js";
 import { COMMITTEE_IDS } from "./meeting-log.js";
 
 // ── Types ────────────────────────────────────
@@ -27,20 +27,20 @@ export interface ItemState {
 // ── Projector ────────────────────────────────
 
 export class MarkdownProjector {
-  private db: Database.Database;
+  private db: SQLiteDatabase;
   private config: ProjectorConfig;
 
   // ── Cached prepared statements ──
-  private stmtItemStates: Database.Statement;
-  private stmtEntityHistory: Database.Statement;
+  private stmtItemStates: SQLiteStatement;
+  private stmtEntityHistory: SQLiteStatement;
 
   // ── Parliament prepared statements ──
-  private stmtParliamentSessions: Database.Statement;
-  private stmtParliamentAmendments: Database.Statement;
-  private stmtParliamentConvergence: Database.Statement;
-  private stmtParliamentCPS: Database.Statement;
+  private stmtParliamentSessions: SQLiteStatement;
+  private stmtParliamentAmendments: SQLiteStatement;
+  private stmtParliamentConvergence: SQLiteStatement;
+  private stmtParliamentCPS: SQLiteStatement;
 
-  constructor(db: Database.Database, config: ProjectorConfig) {
+  constructor(db: SQLiteDatabase, config: ProjectorConfig) {
     this.db = db;
     this.config = config;
 

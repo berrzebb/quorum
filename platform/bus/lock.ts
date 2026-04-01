@@ -8,7 +8,7 @@
  * ignored by acquire() and can be cleaned up by cleanExpired().
  */
 
-import type Database from "better-sqlite3";
+import type { SQLiteDatabase, SQLiteStatement } from "./sqlite-adapter.js";
 
 export interface LockInfo {
   held: boolean;

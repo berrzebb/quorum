@@ -58,7 +58,7 @@ export async function tryWrapInMuxSession(repoRoot: string): Promise<MuxWrapResu
     const distEntry = resolve(repoRoot, "dist", "daemon", "index.js");
     const { existsSync } = await import("node:fs");
     const useDistEntry = existsSync(distEntry);
-    const command = useDistEntry ? process.execPath : process.execPath;
+    const command = process.execPath;
     const args = useDistEntry
       ? [distEntry]
       : [resolve(repoRoot, "node_modules", ".bin", "tsx"), resolve(repoRoot, "daemon", "index.ts")];

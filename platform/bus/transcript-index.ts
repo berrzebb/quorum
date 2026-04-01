@@ -33,16 +33,11 @@ export interface ClassifiedLine {
 /** Patterns that indicate hidden/system-only content. */
 const HIDDEN_PATTERNS = [
   /^<system-reminder>/,
-  /^<\/system-reminder>/,
   /<system-reminder>.*<\/system-reminder>/s,
   /^<local-command-/,
-  /^<\/local-command-/,
   /^<command-/,
-  /^<\/command-/,
-  /^</,
-  /^<\/antml:/,
   /^<task-notification>/,
-  /^<\/task-notification>/,
+  /^<\//, // Catches all closing tags (</system-reminder>, </command-*, </*, etc.)
 ];
 
 /** JSON fields that are metadata-only (not visible to operator). */

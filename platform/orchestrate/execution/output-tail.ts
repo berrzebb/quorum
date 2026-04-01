@@ -15,7 +15,7 @@
  * @module orchestrate/execution/output-tail
  */
 
-import { existsSync, openSync, readSync, fstatSync, closeSync } from "node:fs";
+import { openSync, readSync, fstatSync, closeSync } from "node:fs";
 
 // ── Types ───────────────────────────────────────────
 
@@ -75,15 +75,6 @@ export function createCursor(filePath: string): OutputCursor {
  * @returns TailReadResult with new content and updated cursor
  */
 export function tailRead(cursor: OutputCursor, maxBytes = DEFAULT_MAX_READ): TailReadResult {
-  if (!existsSync(cursor.filePath)) {
-    return {
-      content: "",
-      bytesRead: 0,
-      truncated: false,
-      cursor: { ...cursor, wasReset: false },
-    };
-  }
-
   let fd: number;
   try {
     fd = openSync(cursor.filePath, "r");
@@ -186,7 +177,6 @@ export function tailReadAll(cursor: OutputCursor): TailReadResult {
  * Useful for conditional polling (skip expensive reads when nothing new).
  */
 export function hasNewContent(cursor: OutputCursor): boolean {
-  if (!existsSync(cursor.filePath)) return false;
   let fd: number;
   try {
     fd = openSync(cursor.filePath, "r");

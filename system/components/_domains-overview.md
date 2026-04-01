@@ -1,6 +1,6 @@
 # Domain Specialists Overview
 
-> 11 domain knowledge files powering zero-cost specialist routing (v0.4.8)
+> 11 domain knowledge files powering zero-cost specialist routing (v0.5.0)
 >
 > **v0.4.0**: 11 domains defined — perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security
 

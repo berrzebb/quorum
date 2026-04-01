@@ -4,7 +4,7 @@
  * Prepared statements are cached per-db to avoid recompilation on every poll tick.
  */
 
-import type Database from "better-sqlite3";
+import type { SQLiteDatabase, SQLiteStatement } from "../../../platform/bus/sqlite-adapter.js";
 import type { EventStore } from "../../../platform/bus/store.js";
 import type { LockInfo } from "../../../platform/bus/lock.js";
 
@@ -20,12 +20,12 @@ export interface ItemStateInfo {
 
 // ── Statement cache (per database instance) ──
 
-const stmtCache = new WeakMap<Database.Database, {
-  itemStates: Database.Statement;
-  activeLocks: Database.Statement;
+const stmtCache = new WeakMap<SQLiteDatabase, {
+  itemStates: SQLiteStatement;
+  activeLocks: SQLiteStatement;
 }>();
 
-function getStatements(db: Database.Database) {
+function getStatements(db: SQLiteDatabase) {
   let cached = stmtCache.get(db);
   if (!cached) {
     cached = {
@@ -56,7 +56,7 @@ function getStatements(db: Database.Database) {
 /**
  * Current state of every tracked audit item.
  */
-export function queryItemStates(db: Database.Database): ItemStateInfo[] {
+export function queryItemStates(db: SQLiteDatabase): ItemStateInfo[] {
   try {
     const { itemStates } = getStatements(db);
     const rows = itemStates.all() as Array<{
@@ -89,7 +89,7 @@ export function queryItemStates(db: Database.Database): ItemStateInfo[] {
 /**
  * Active (non-expired) locks.
  */
-export function queryActiveLocks(db: Database.Database): LockInfo[] {
+export function queryActiveLocks(db: SQLiteDatabase): LockInfo[] {
   try {
     const { activeLocks } = getStatements(db);
     const rows = activeLocks.all(Date.now()) as Array<{

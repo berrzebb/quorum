@@ -37,31 +37,6 @@ export function defaultPollConfig(): PollConfig {
 
 // ── Snapshot Fingerprinting ─────────────────
 
-/**
- * Compute a fingerprint for snapshot diffing.
- * Returns a string that changes when the snapshot data changes.
- */
-export function computeSnapshotFingerprint(state: FullState): string {
-  // Use a lightweight hash of key indicators:
-  // - gate statuses
-  // - item count
-  // - finding count
-  // - track progress
-  // - recent event count
-  // - parliament session count
-  const parts = [
-    state.gates.map(g => `${g.name}:${g.status}`).join(","),
-    `items:${state.items.length}`,
-    `findings:${state.findings.length}`,
-    `tracks:${state.tracks.map(t => `${t.trackId}:${t.completed}`).join(",")}`,
-    `events:${state.recentEvents.length}`,
-    `parliament:${state.parliament.sessionCount}`,
-    `locks:${state.locks.length}`,
-    `fitness:${state.fitness.current}`,
-  ];
-  return parts.join("|");
-}
-
 // ── Snapshot Diffing ────────────────────────
 
 /**
@@ -69,7 +44,6 @@ export function computeSnapshotFingerprint(state: FullState): string {
  */
 export interface SnapshotDiff {
   changed: boolean;
-  fingerprint: string;
   /** Which sections changed (for targeted panel updates) */
   changedSections: Set<string>;
 }
@@ -84,9 +58,8 @@ export function diffSnapshots(
   if (!prev) {
     return {
       changed: true,
-      fingerprint: computeSnapshotFingerprint(next),
       changedSections: new Set([
-        "gates", "items", "findings", "tracks",
+        "gates", "items", "findings", "findingStats", "tracks",
         "events", "parliament", "locks", "fitness",
         "specialists", "reviewProgress", "fileThreads", "agentQueries",
       ]),
@@ -99,8 +72,14 @@ export function diffSnapshots(
       prev.gates.some((g, i) => g.status !== next.gates[i]?.status)) {
     changedSections.add("gates");
   }
-  if (prev.items.length !== next.items.length) changedSections.add("items");
-  if (prev.findings.length !== next.findings.length) changedSections.add("findings");
+  if (prev.items.length !== next.items.length ||
+      prev.items.some((it, i) => it.currentState !== next.items[i]?.currentState)) {
+    changedSections.add("items");
+  }
+  if (prev.findings.length !== next.findings.length ||
+      prev.findings.some((f, i) => f.severity !== next.findings[i]?.severity)) {
+    changedSections.add("findings");
+  }
   if (prev.tracks.length !== next.tracks.length ||
       prev.tracks.some((t, i) => t.completed !== next.tracks[i]?.completed)) {
     changedSections.add("tracks");
@@ -111,10 +90,15 @@ export function diffSnapshots(
   if (prev.fitness.current !== next.fitness.current) changedSections.add("fitness");
   if (prev.specialists.length !== next.specialists.length) changedSections.add("specialists");
   if (prev.findingStats.total !== next.findingStats.total) changedSections.add("findingStats");
+  if (prev.reviewProgress.length !== next.reviewProgress.length ||
+      prev.reviewProgress.some((r, i) => r.progress !== next.reviewProgress[i]?.progress)) {
+    changedSections.add("reviewProgress");
+  }
+  if (prev.fileThreads.length !== next.fileThreads.length) changedSections.add("fileThreads");
+  if (prev.agentQueries.length !== next.agentQueries.length) changedSections.add("agentQueries");
 
   return {
     changed: changedSections.size > 0,
-    fingerprint: computeSnapshotFingerprint(next),
     changedSections,
   };
 }
@@ -128,7 +112,6 @@ export function diffSnapshots(
 export class PollScheduler {
   private config: PollConfig;
   private stateTimer: ReturnType<typeof setInterval> | null = null;
-  private lastFingerprint: string = "";
   private _running = false;
 
   constructor(config?: Partial<PollConfig>) {
@@ -157,7 +140,6 @@ export class PollScheduler {
       const diff = diffSnapshots(prevState, state);
 
       if (diff.changed) {
-        this.lastFingerprint = diff.fingerprint;
         prevState = state;
         onUpdate(state, diff);
       }

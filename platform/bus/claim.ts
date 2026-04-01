@@ -8,7 +8,7 @@
  * All claims are stored in the `file_claims` table (created by EventStore).
  */
 
-import type Database from "better-sqlite3";
+import type { SQLiteDatabase as Database } from "./sqlite-adapter.js";
 
 export interface ClaimInfo {
   filePath: string;

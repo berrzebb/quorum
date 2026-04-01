@@ -1,6 +1,6 @@
 # Skills Overview
 
-> 36 canonical skills defined in quorum (v0.4.8)
+> 36 canonical skills defined in quorum (v0.5.0)
 >
 > **v0.3.0**: audit, implementer, scout, planner, status — core workflow
 > **v0.4.0**: consensus-tools (26 MCP tool references), verify-implementation

@@ -61,7 +61,7 @@ import {
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
 
-const SERVER_INFO = { name: "quorum", version: "0.4.8" };
+const SERVER_INFO = { name: "quorum", version: "0.5.0" };
 
 const TOOLS = [
   {

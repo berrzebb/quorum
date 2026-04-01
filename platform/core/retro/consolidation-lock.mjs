@@ -324,7 +324,6 @@ function writeLock(lockPath, content) {
  */
 function getLockMtime(filePath) {
   try {
-    if (!existsSync(filePath)) return 0;
     return statSync(filePath).mtimeMs;
   } catch {
     return 0;

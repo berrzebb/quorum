@@ -100,7 +100,7 @@ export class CodexAppServerClient extends EventEmitter {
 
     const result = await this.request<InitializeResult>(CODEX_METHODS.INITIALIZE, {
       clientName: "quorum",
-      clientVersion: "0.4.8",
+      clientVersion: "0.5.0",
       ...params,
     });
 

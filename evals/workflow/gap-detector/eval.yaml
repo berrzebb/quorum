@@ -1,6 +1,6 @@
 name: gap-detector
 classification: workflow
-version: 0.4.8
+version: 0.5.0
 description: "Design-implementation gap detection workflow evaluation"
 
 evals:

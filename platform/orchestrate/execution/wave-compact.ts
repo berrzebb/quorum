@@ -103,7 +103,7 @@ export function recordFailure(breaker: CompactCircuitBreaker, error: string): Co
  * Record a compact success. Resets the failure counter.
  */
 export function recordSuccess(breaker: CompactCircuitBreaker): CompactCircuitBreaker {
-  return { failures: 0, tripped: false };
+  return { ...breaker, failures: 0, tripped: false };
 }
 
 // ── Summary Generation ──────────────────────────────
@@ -148,10 +148,11 @@ export function generateCompactSummary(input: WaveCompactInput): CompactSummary 
     if (f.file) findingsByFile.set(f.file, (findingsByFile.get(f.file) ?? 0) + 1);
   }
 
+  const changedSet = new Set(input.changedFiles);
   const ranked = [...new Set([...input.changedFiles, ...input.waveFiles])]
     .map(path => ({
       path,
-      score: (input.changedFiles.includes(path) ? 10 : 0)
+      score: (changedSet.has(path) ? 10 : 0)
         + (findingsByFile.get(path) ?? 0) * 3,
     }))
     .sort((a, b) => b.score - a.score)
@@ -159,7 +160,7 @@ export function generateCompactSummary(input: WaveCompactInput): CompactSummary 
 
   const topFiles: TopFileEntry[] = ranked.map(r => ({
     path: r.path,
-    reason: input.changedFiles.includes(r.path)
+    reason: changedSet.has(r.path)
       ? `changed in wave ${input.waveIndex}`
       : `${findingsByFile.get(r.path) ?? 0} findings`,
   }));
@@ -575,4 +576,64 @@ export function formatMemoryContext(digest: MemoryDigest): string {
     sections.push(`- [${entry.category}] ${entry.content}`);
   }
   return sections.join("\n");
+}
+
+// ═══ Diff-based change summary (vendor: diff-match-patch) ═══════════════
+
+// Optional vendor: diff-match-patch for precise text diff
+let _DiffMatchPatch: any = null;
+try {
+  const mod = await (Function('return import("diff-match-patch")')() as Promise<any>);
+  _DiffMatchPatch = mod.default || mod.diff_match_patch || mod;
+} catch { /* optional — fallback to line-count heuristic */ }
+
+export interface FileDiffSummary {
+  path: string;
+  additions: number;
+  deletions: number;
+  unchanged: number;
+  /** Short description: "+12 -3 lines" */
+  shortStat: string;
+}
+
+/**
+ * Compute a precise diff summary between two file contents.
+ * Uses diff-match-patch when available, otherwise falls back to line-count heuristic.
+ *
+ * Useful for enriching CompactSummary.changedFiles with change magnitude.
+ */
+export function computeFileDiffSummary(
+  path: string, oldContent: string, newContent: string,
+): FileDiffSummary {
+  if (_DiffMatchPatch) {
+    const dmp = new _DiffMatchPatch();
+    const diffs = dmp.diff_main(oldContent, newContent);
+    dmp.diff_cleanupSemantic(diffs);
+
+    let additions = 0, deletions = 0, unchanged = 0;
+    for (const [op, text] of diffs) {
+      const lines = (text.match(/\n/g) || []).length || 1;
+      if (op === 1) additions += lines;
+      else if (op === -1) deletions += lines;
+      else unchanged += lines;
+    }
+
+    return {
+      path, additions, deletions, unchanged,
+      shortStat: `+${additions} -${deletions} lines`,
+    };
+  }
+
+  // Fallback: simple line count comparison
+  const oldLines = oldContent.split("\n").length;
+  const newLines = newContent.split("\n").length;
+  const delta = newLines - oldLines;
+
+  return {
+    path,
+    additions: delta > 0 ? delta : 0,
+    deletions: delta < 0 ? -delta : 0,
+    unchanged: Math.min(oldLines, newLines),
+    shortStat: delta >= 0 ? `+${delta} lines` : `${delta} lines`,
+  };
 }

@@ -66,7 +66,7 @@ export class SessionInbox {
     const valid = queue.filter(m => currentTime - m.queuedAt < this.config.maxAgeMs);
 
     for (const m of valid) m.deliveredAt = currentTime;
-    this.queues.set(recipient, []);
+    this.queues.delete(recipient);
 
     return valid;
   }

@@ -1,6 +1,6 @@
 name: qa-strategist
 classification: workflow
-version: 0.4.8
+version: 0.5.0
 description: "Quality strategy planning workflow evaluation"
 
 evals:

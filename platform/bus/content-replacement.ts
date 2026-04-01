@@ -10,7 +10,7 @@
  * @since RAI-6
  */
 
-import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, unlinkSync, statSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { resolve, join } from "node:path";
 
 // ── Types ────────────────────────────────────
@@ -158,10 +158,13 @@ function generatePreview(content: string, maxChars: number): string {
 
 function enforceRetention(config: ReplacementConfig): void {
   try {
-    if (!existsSync(config.artifactDir)) return;
     const files = readdirSync(config.artifactDir)
       .filter(f => f.startsWith("artifact-"))
-      .map(f => ({ name: f, mtime: statSync(join(config.artifactDir, f)).mtimeMs }))
+      .map(f => {
+        // Extract timestamp from filename (artifact-{session}-{timestamp}.txt)
+        const match = f.match(/(\d{13,})\.txt$/);
+        return { name: f, mtime: match ? Number(match[1]) : 0 };
+      })
       .sort((a, b) => a.mtime - b.mtime);
 
     // Remove oldest if over limit

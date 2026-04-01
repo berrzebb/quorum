@@ -126,7 +126,6 @@ export class BridgeServer {
     transport.onControl((msg) => this.handleControl(msg));
     await transport.start();
 
-    // Poll and broadcast state changes
     const intervalMs = this.options.pollIntervalMs ?? 1000;
     this.pollInterval = setInterval(() => {
       try { this.broadcastIfChanged(); } catch { /* bridge must not crash daemon */ }
@@ -166,7 +165,7 @@ export class BridgeServer {
     if (!this.transport || this.transport.clientCount() === 0) return;
 
     const state = this.snapshot();
-    const hash = `${state.state}:${state.pendingAction?.requestId ?? "none"}:${state.updatedAt}`;
+    const hash = `${state.state}:${state.pendingAction?.requestId ?? "none"}:${state.latestTaskSummary}:${state.activeTracks.length}`;
 
     if (hash !== this.lastBroadcastHash) {
       this.lastBroadcastHash = hash;
@@ -199,7 +198,6 @@ export function projectRemoteState(
 ): RemoteSessionState {
   const now = Date.now();
 
-  // Derive tri-state from active sessions and pending approvals
   const sessions = projector.projectAll();
   let state: RemoteSessionState["state"] = "idle";
   let pendingAction: PendingAction | null = null;
@@ -207,19 +205,9 @@ export function projectRemoteState(
   for (const session of sessions) {
     if (session.pendingApprovals > 0) {
       state = "requires_action";
-      // Get the actual pending approval details
       const approvals = ledger.pendingApprovals(session.providerSessionId);
       if (approvals.length > 0) {
-        const a = approvals[0];
-        pendingAction = {
-          requestId: a.requestId,
-          kind: a.kind as PendingAction["kind"],
-          reason: a.reason ?? "",
-          tool: a.reason ?? "",
-          provider: session.provider,
-          sessionId: session.quorumSessionId,
-          createdAt: a.requestedAt ?? now,
-        };
+        pendingAction = mapApprovalToPendingAction(approvals[0], session.provider, session.quorumSessionId, now);
       }
       break;
     }
@@ -228,11 +216,12 @@ export function projectRemoteState(
     }
   }
 
-  // Active tracks from event store
-  const activeTracks: RemoteTrackInfo[] = [];
-  const recentTrackEvents = store.recent(50).filter(e => e.type === "track.progress");
+  // Single store.recent() call — derive all views from one result
+  const allRecent = store.recent(50);
+
   const trackMap = new Map<string, RemoteTrackInfo>();
-  for (const e of recentTrackEvents) {
+  for (const e of allRecent) {
+    if (e.type !== "track.progress") continue;
     const p = e.payload as { trackId?: string; total?: number; completed?: number };
     if (p.trackId) {
       trackMap.set(p.trackId, {
@@ -243,16 +232,14 @@ export function projectRemoteState(
       });
     }
   }
-  activeTracks.push(...trackMap.values());
+  const activeTracks = [...trackMap.values()];
 
-  // Recent events (compact for mobile)
-  const recentEvents: RemoteEvent[] = store.recent(10).map(e => ({
+  const recentEvents: RemoteEvent[] = allRecent.slice(0, 10).map(e => ({
     type: e.type,
     timestamp: e.timestamp,
     summary: summarizeEvent(e),
   }));
 
-  // Dream status from KV
   const dreamKV = store.getKV("dream:state") as {
     consolidationStatus?: string;
     lastConsolidatedAt?: number;
@@ -265,8 +252,7 @@ export function projectRemoteState(
     lastDigestSummary: dreamKV.lastDigestId ?? null,
   } : null;
 
-  // Latest task summary
-  const latestAudit = store.recent(5).find(e => e.type === "audit.verdict");
+  const latestAudit = allRecent.slice(0, 5).find(e => e.type === "audit.verdict");
   const latestTaskSummary = latestAudit
     ? `Audit: ${(latestAudit.payload as { verdict?: string }).verdict ?? "unknown"}`
     : sessions.length > 0 ? `${sessions.length} active session(s)` : "No active sessions";
@@ -280,6 +266,26 @@ export function projectRemoteState(
     recentEvents,
     dreamStatus,
     updatedAt: now,
+  };
+}
+
+// ── Shared Mapping ──────────────────────────
+
+/** Map a ledger approval record to a PendingAction for remote consumers. */
+export function mapApprovalToPendingAction(
+  a: { requestId: string; kind: string; reason?: string | null; tool?: string | null; requestedAt?: number | null; providerRef?: { provider?: string; providerSessionId?: string } | null },
+  provider: string,
+  sessionId: string,
+  now?: number,
+): PendingAction {
+  return {
+    requestId: a.requestId,
+    kind: a.kind as PendingAction["kind"],
+    reason: a.reason ?? "",
+    tool: a.tool ?? a.reason ?? "",
+    provider,
+    sessionId,
+    createdAt: a.requestedAt ?? (now ?? Date.now()),
   };
 }
 

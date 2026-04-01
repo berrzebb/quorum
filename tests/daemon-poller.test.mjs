@@ -2,7 +2,7 @@
 /**
  * DUX-5: Shell-level Poll Scheduler — snapshot diffing + centralized polling.
  *
- * Tests computeSnapshotFingerprint, diffSnapshots, PollScheduler, and PollConfig.
+ * Tests diffSnapshots, PollScheduler, and PollConfig.
  * Uses mock FullState objects (no SQLite needed).
  *
  * Run: node --test tests/daemon-poller.test.mjs
@@ -13,7 +13,6 @@ import { describe, it } from "node:test";
 
 const {
   defaultPollConfig,
-  computeSnapshotFingerprint,
   diffSnapshots,
   PollScheduler,
 } = await import("../dist/daemon/state/poller.js");
@@ -76,142 +75,24 @@ describe("PollConfig", () => {
   });
 });
 
-// ═══ 2. computeSnapshotFingerprint ═══════════════════════════════════
-
-describe("computeSnapshotFingerprint", () => {
-  it("returns a string", () => {
-    const state = makeFullState();
-    const fp = computeSnapshotFingerprint(state);
-    assert.equal(typeof fp, "string");
-    assert.ok(fp.length > 0, "fingerprint should not be empty");
-  });
-
-  it("same state produces same fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState();
-    assert.equal(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different gate status produces different fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      gates: [
-        { name: "Audit", status: "blocked", detail: "rejected" },
-        { name: "Retro", status: "open" },
-        { name: "Quality", status: "open" },
-      ],
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different item count produces different fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      items: [{ entityId: "x", currentState: "pending", source: "test", updatedAt: 0 }],
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different finding count produces different fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      findings: [{ id: "f-1", severity: "high", description: "test", category: "safety", reviewerId: "r", provider: "p", timestamp: 0 }],
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different track progress produces different fingerprint", () => {
-    const state1 = makeFullState({
-      tracks: [{ trackId: "t1", total: 10, completed: 3, pending: 5, blocked: 2, lastUpdate: 0 }],
-    });
-    const state2 = makeFullState({
-      tracks: [{ trackId: "t1", total: 10, completed: 7, pending: 2, blocked: 1, lastUpdate: 0 }],
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different parliament session count produces different fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      parliament: {
-        committees: [],
-        lastVerdict: null,
-        pendingAmendments: 0,
-        conformance: null,
-        sessionCount: 5,
-        liveSessions: [],
-      },
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("different fitness current produces different fingerprint", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      fitness: {
-        baseline: null,
-        current: 0.85,
-        gate: null,
-        history: [],
-        trend: null,
-        components: null,
-      },
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-
-  it("fingerprint includes lock count", () => {
-    const state1 = makeFullState();
-    const state2 = makeFullState({
-      locks: [{ held: true, lockName: "audit", owner: 1234, acquiredAt: Date.now(), ttlMs: 60000 }],
-    });
-    assert.notEqual(
-      computeSnapshotFingerprint(state1),
-      computeSnapshotFingerprint(state2),
-    );
-  });
-});
-
-// ═══ 3. diffSnapshots ═══════════════════════════════════════════════
+// ═══ 2. diffSnapshots ═══════════════════════════════════════════════
 
 describe("diffSnapshots", () => {
   it("null prev → all sections changed", () => {
     const state = makeFullState();
     const diff = diffSnapshots(null, state);
     assert.equal(diff.changed, true);
-    assert.equal(typeof diff.fingerprint, "string");
     assert.ok(diff.changedSections instanceof Set);
-    // Should include all 12 sections
+    // Should include all 13 sections
     const expectedSections = [
-      "gates", "items", "findings", "tracks",
+      "gates", "items", "findings", "findingStats", "tracks",
       "events", "parliament", "locks", "fitness",
       "specialists", "reviewProgress", "fileThreads", "agentQueries",
     ];
     for (const section of expectedSections) {
       assert.ok(diff.changedSections.has(section), `Missing section: ${section}`);
     }
-    assert.equal(diff.changedSections.size, 12);
+    assert.equal(diff.changedSections.size, 13);
   });
 
   it("same state → no sections changed", () => {
@@ -383,11 +264,6 @@ describe("diffSnapshots", () => {
     assert.ok(diff.changedSections.size >= 4);
   });
 
-  it("diff fingerprint matches computeSnapshotFingerprint", () => {
-    const state = makeFullState();
-    const diff = diffSnapshots(null, state);
-    assert.equal(diff.fingerprint, computeSnapshotFingerprint(state));
-  });
 });
 
 // ═══ 4. PollScheduler ═══════════════════════════════════════════════

@@ -1,6 +1,6 @@
 name: specialist-review
 classification: capability
-version: 0.4.8
+version: 0.5.0
 description: "Domain specialist analysis accuracy evaluation"
 
 evals:

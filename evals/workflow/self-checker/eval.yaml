@@ -1,6 +1,6 @@
 name: self-checker
 classification: workflow
-version: 0.4.8
+version: 0.5.0
 description: "Pre-audit self-verification workflow evaluation"
 
 evals:

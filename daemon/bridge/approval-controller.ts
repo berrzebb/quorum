@@ -15,6 +15,7 @@
 
 import type { SessionLedger } from "../../platform/providers/session-ledger.js";
 import type { BridgeControlMessage, PendingAction } from "./server.js";
+import { mapApprovalToPendingAction } from "./server.js";
 
 // ── Types ────────────────────────────────────
 
@@ -56,7 +57,6 @@ export class ApprovalController {
    * Then resolves through the ledger (which the gate reads).
    */
   handleCallback(msg: BridgeControlMessage): ApprovalCallbackResult {
-    // Validate message type
     if (msg.type !== "approve" && msg.type !== "deny") {
       return { success: false, requestId: msg.requestId ?? "", reason: `unsupported type: ${msg.type}` };
     }
@@ -76,12 +76,10 @@ export class ApprovalController {
       return { success: false, requestId, reason: "callback timestamp in future" };
     }
 
-    // Auth: verify signature
     if (!this.verifySignature(msg)) {
       return { success: false, requestId, reason: "invalid signature" };
     }
 
-    // Resolve through ledger (gate reads from ledger)
     const decision = msg.type === "approve" ? "allow" : "deny";
     try {
       this.ledger.resolveApproval(requestId, decision);
@@ -89,7 +87,7 @@ export class ApprovalController {
       return { success: false, requestId, reason: `ledger error: ${(err as Error).message}` };
     }
 
-    return { success: true, requestId, decision: decision as "allow" | "deny", reason: "resolved" };
+    return { success: true, requestId, decision, reason: "resolved" };
   }
 
   /**
@@ -111,15 +109,11 @@ export class ApprovalController {
    */
   listPending(providerSessionId: string): PendingAction[] {
     const approvals = this.ledger.pendingApprovals(providerSessionId);
-    return approvals.map(a => ({
-      requestId: a.requestId,
-      kind: a.kind as PendingAction["kind"],
-      reason: a.reason ?? "",
-      tool: a.reason ?? "",
-      provider: a.providerRef?.provider ?? "unknown",
-      sessionId: a.providerRef?.providerSessionId ?? "",
-      createdAt: a.requestedAt ?? Date.now(),
-    }));
+    return approvals.map(a => mapApprovalToPendingAction(
+      a,
+      a.providerRef?.provider ?? "unknown",
+      a.providerRef?.providerSessionId ?? "",
+    ));
   }
 
   // ── Auth ──────────────────────────────────

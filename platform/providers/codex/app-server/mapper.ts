@@ -17,12 +17,7 @@ import type { ProviderRuntimeEvent, ProviderSessionRef } from "../../session-run
 import type { ProviderEventMapper } from "../../event-mapper.js";
 import { createRuntimeEvent } from "../../event-mapper.js";
 import { CODEX_NOTIFICATIONS } from "./protocol.js";
-import {
-  getCapability,
-  isDestructive as checkDestructive,
-  isReadOnly as checkReadOnly,
-  isConcurrencySafe as checkConcurrencySafe,
-} from "../../../core/tools/capability-registry.js";
+import { getCapability } from "../../../core/tools/capability-registry.js";
 
 /**
  * Maps Codex App Server JSON-RPC notifications to ProviderRuntimeEvent.
@@ -109,9 +104,10 @@ export class CodexAppServerMapper implements ProviderEventMapper {
     return {
       ...params,
       toolCapability: {
-        isDestructive: checkDestructive(toolName),
-        isReadOnly: checkReadOnly(toolName),
-        isConcurrencySafe: checkConcurrencySafe(toolName),
+        isDestructive: cap.isDestructive,
+        isReadOnly: cap.isReadOnly,
+        isConcurrencySafe: cap.isConcurrencySafe,
+        category: cap.category,
       },
     };
   }

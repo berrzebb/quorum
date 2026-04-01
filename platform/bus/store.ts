@@ -14,7 +14,7 @@
  * - phase-boundary transactions (UnitOfWork)
  */
 
-import Database from "better-sqlite3";
+import { openDatabase, type SQLiteDatabase, type SQLiteStatement } from "./sqlite-adapter.js";
 import { randomUUID } from "node:crypto";
 import { writeFileSync, renameSync, rmSync } from "node:fs";
 import type { QuorumEvent, EventType, ProviderKind } from "./events.js";
@@ -62,24 +62,24 @@ export interface QueryFilter {
 }
 
 export class EventStore {
-  private db: Database.Database;
+  private db: SQLiteDatabase;
 
   // ── Cached prepared statements (compiled once, reused on every call) ──
-  private stmtAppend!: Database.Statement;
-  private stmtCurrentState!: Database.Statement;
-  private stmtGetKV!: Database.Statement;
-  private stmtSetKV!: Database.Statement;
-  private stmtReplay!: Database.Statement;
-  private stmtEventsAfter!: Database.Statement;
-  private stmtRecent!: Database.Statement;
-  private stmtInsertTransition!: Database.Statement;
+  private stmtAppend!: SQLiteStatement;
+  private stmtCurrentState!: SQLiteStatement;
+  private stmtGetKV!: SQLiteStatement;
+  private stmtSetKV!: SQLiteStatement;
+  private stmtReplay!: SQLiteStatement;
+  private stmtEventsAfter!: SQLiteStatement;
+  private stmtRecent!: SQLiteStatement;
+  private stmtInsertTransition!: SQLiteStatement;
 
   /** Cache for dynamically-built query/count prepared statements (keyed by filter shape). */
-  private queryCache = new Map<string, Database.Statement>();
-  private countCache = new Map<string, Database.Statement>();
+  private queryCache = new Map<string, SQLiteStatement>();
+  private countCache = new Map<string, SQLiteStatement>();
 
   constructor(opts: StoreOptions) {
-    this.db = new Database(opts.dbPath);
+    this.db = openDatabase(opts.dbPath);
 
     // WAL mode for concurrent read access (TUI reads while hooks write)
     if (opts.wal !== false) {

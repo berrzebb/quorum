@@ -60,15 +60,6 @@ export interface DaemonStore {
 // ── Fingerprinting ──────────────────────────────────
 
 /**
- * Cheap fingerprint for arrays — length + first/last element identity.
- * Avoids deep comparison while catching most real changes.
- */
-function arrayFingerprint(arr: unknown[]): string {
-  if (arr.length === 0) return "[]";
-  return `[${arr.length}:${arr[0] === arr[arr.length - 1] ? "same" : "diff"}]`;
-}
-
-/**
  * Determine if a selected slice has changed.
  * Uses reference equality first, then shallow fingerprint for arrays.
  */
@@ -77,12 +68,11 @@ function hasChanged<T>(prev: T, next: T): boolean {
   if (prev == null || next == null) return true;
   if (Array.isArray(prev) && Array.isArray(next)) {
     if (prev.length !== next.length) return true;
-    // Check first and last elements by reference (cheap heuristic)
-    if (prev.length > 0) {
-      if (prev[0] !== next[0]) return true;
-      if (prev[prev.length - 1] !== next[next.length - 1]) return true;
+    // Check every element by reference — cheap for small arrays (gates, items, tracks)
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i] !== next[i]) return true;
     }
-    return false; // Same length + same endpoints → likely same
+    return false;
   }
   if (typeof prev === "object" && typeof next === "object") {
     // Shallow comparison for plain objects

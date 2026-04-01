@@ -1,6 +1,6 @@
 name: ui-review
 classification: capability
-version: 0.4.8
+version: 0.5.0
 description: "UI verification checklist coverage evaluation"
 
 evals:

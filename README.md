@@ -475,7 +475,7 @@ Full reference: [docs/TOOLS.md](docs/TOOLS.md) | [docs/ko-KR/TOOLS.md](docs/ko-K
 ## Tests
 
 ```bash
-npm test                # 2401 tests
+npm test                # 3030 tests
 npm run typecheck       # TypeScript check
 npm run build           # compile
 ```
@@ -485,8 +485,8 @@ npm run build           # compile
 GitHub Actions builds cross-platform binaries on tag push:
 
 ```bash
-git tag v0.4.8
-git push origin v0.4.8
+git tag v0.5.0
+git push origin v0.5.0
 # → linux-x64, darwin-x64, darwin-arm64, win-x64 binaries in Releases
 ```
 

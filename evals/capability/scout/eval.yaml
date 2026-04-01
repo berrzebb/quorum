@@ -1,6 +1,6 @@
 name: scout
 classification: capability
-version: 0.4.8
+version: 0.5.0
 description: "RTM generation accuracy evaluation"
 
 evals:

@@ -25,13 +25,15 @@ export function queryTrackProgress(store: EventStore): TrackInfo[] {
     const trackEvents = store.query({
       eventType: "track.progress",
       limit: 100,
+      descending: true,
     });
 
-    // Latest per track
+    // Latest per track (DESC order → first occurrence is latest)
     const trackMap = new Map<string, TrackInfo>();
     for (const evt of trackEvents) {
       const p = evt.payload;
       const trackId = (p.trackId ?? evt.trackId ?? "unknown") as string;
+      if (trackMap.has(trackId)) continue;
       trackMap.set(trackId, {
         trackId,
         total: (p.total ?? 0) as number,
