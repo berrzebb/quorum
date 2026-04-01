@@ -60,7 +60,6 @@
     "version-sync": "node --input-type=module -e \"import{readFileSync as r,writeFileSync as w}from'fs';const v=JSON.parse(r('package.json','utf8')).version;const f='platform/adapters/gemini/gemini-extension.json';const j=JSON.parse(r(f,'utf8'));j.version=v;w(f,JSON.stringify(j,null,2)+'\\n');console.log('Synced '+v+' → '+f)\""
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
     "diff-match-patch": "^1.0.5",
     "globby": "^16.2.0",
     "ink": "^6.0.0",
@@ -69,6 +68,9 @@
     "react": "^19.0.0",
     "tree-sitter-wasms": "^0.1.13",
     "web-tree-sitter": "^0.26.8"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.8.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

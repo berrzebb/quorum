@@ -22,6 +22,8 @@ export interface SQLiteDatabase {
   pragma(pragma: string): unknown;
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T;
   close(): void;
+  /** Database file path (or ":memory:"). */
+  readonly name: string;
   /** Backend identifier for diagnostics. */
   readonly _backend: "bun:sqlite" | "better-sqlite3";
 }
@@ -72,6 +74,7 @@ export function openDatabase(dbPath: string): SQLiteDatabase {
       pragma: (p: string) => db.exec(`PRAGMA ${p}`),
       transaction: <T>(fn: (...args: any[]) => T) => db.transaction(fn),
       close: () => db.close(),
+      name: dbPath,
       _backend: "bun:sqlite",
     };
   }
@@ -84,6 +87,7 @@ export function openDatabase(dbPath: string): SQLiteDatabase {
       pragma: (p: string) => db.pragma(p),
       transaction: <T>(fn: (...args: any[]) => T) => db.transaction(fn),
       close: () => db.close(),
+      name: db.name || dbPath,
       _backend: "better-sqlite3",
     };
   }

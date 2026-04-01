@@ -130,7 +130,7 @@ export class EventStore {
   }
 
   /** Expose the raw database handle (for LockService, StateReader). */
-  getDb(): Database.Database {
+  getDb(): SQLiteDatabase {
     return this.db;
   }
 

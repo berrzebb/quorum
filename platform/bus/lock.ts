@@ -20,18 +20,18 @@ export interface LockInfo {
 }
 
 export class LockService {
-  private db: Database.Database;
+  private db: SQLiteDatabase;
 
   // ── Cached prepared statements ──
-  private stmtDeleteExpired: Database.Statement;
-  private stmtUpsert: Database.Statement;
-  private stmtVerifyOwner: Database.Statement;
-  private stmtRelease: Database.Statement;
-  private stmtCleanAll: Database.Statement;
-  private stmtIsHeld: Database.Statement;
-  private stmtListActive: Database.Statement;
+  private stmtDeleteExpired: SQLiteStatement;
+  private stmtUpsert: SQLiteStatement;
+  private stmtVerifyOwner: SQLiteStatement;
+  private stmtRelease: SQLiteStatement;
+  private stmtCleanAll: SQLiteStatement;
+  private stmtIsHeld: SQLiteStatement;
+  private stmtListActive: SQLiteStatement;
 
-  constructor(db: Database.Database) {
+  constructor(db: SQLiteDatabase) {
     this.db = db;
 
     this.stmtDeleteExpired = db.prepare(

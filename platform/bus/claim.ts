@@ -8,7 +8,7 @@
  * All claims are stored in the `file_claims` table (created by EventStore).
  */
 
-import type { SQLiteDatabase as Database } from "./sqlite-adapter.js";
+import type { SQLiteDatabase, SQLiteStatement } from "./sqlite-adapter.js";
 
 export interface ClaimInfo {
   filePath: string;
@@ -26,20 +26,20 @@ export interface ClaimConflict {
 }
 
 export class ClaimService {
-  private db: Database.Database;
+  private db: SQLiteDatabase;
 
   // ── Cached prepared statements ──
-  private stmtCleanExpired: Database.Statement;
-  private stmtUpsert: Database.Statement;
-  private stmtVerifyOwner: Database.Statement;
-  private stmtReleaseByAgent: Database.Statement;
-  private stmtReleasePath: Database.Statement;
-  private stmtCheckHeld: Database.Statement;
-  private stmtListByAgent: Database.Statement;
-  private stmtListActive: Database.Statement;
-  private stmtCleanAll: Database.Statement;
+  private stmtCleanExpired: SQLiteStatement;
+  private stmtUpsert: SQLiteStatement;
+  private stmtVerifyOwner: SQLiteStatement;
+  private stmtReleaseByAgent: SQLiteStatement;
+  private stmtReleasePath: SQLiteStatement;
+  private stmtCheckHeld: SQLiteStatement;
+  private stmtListByAgent: SQLiteStatement;
+  private stmtListActive: SQLiteStatement;
+  private stmtCleanAll: SQLiteStatement;
 
-  constructor(db: Database.Database) {
+  constructor(db: SQLiteDatabase) {
     this.db = db;
 
     this.stmtCleanExpired = db.prepare(
