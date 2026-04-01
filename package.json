@@ -66,8 +66,12 @@
     "marked": "^17.0.5",
     "quorum-audit": "^0.2.5",
     "react": "^19.0.0",
-    "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.26.8"
+    "tree-sitter-go": "0.23.4",
+    "tree-sitter-java": "0.23.5",
+    "tree-sitter-python": "0.23.6",
+    "tree-sitter-rust": "0.23.2",
+    "tree-sitter-typescript": "0.23.2",
+    "web-tree-sitter": "0.24.7"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.8.0"

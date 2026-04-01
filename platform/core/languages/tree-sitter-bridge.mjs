@@ -31,14 +31,15 @@ const _languages = new Map();
 // ── Grammar mapping ────────────────────────────────────
 
 /**
- * Maps quorum language IDs to tree-sitter-wasms grammar filenames.
+ * Maps quorum language IDs to grammar resolution info.
+ * Each entry has: npm package name + wasm filename.
  */
 const GRAMMAR_MAP = {
-  typescript: "tree-sitter-typescript.wasm",
-  python:     "tree-sitter-python.wasm",
-  go:         "tree-sitter-go.wasm",
-  rust:       "tree-sitter-rust.wasm",
-  java:       "tree-sitter-java.wasm",
+  typescript: { pkg: "tree-sitter-typescript", wasm: "tree-sitter-typescript.wasm" },
+  python:     { pkg: "tree-sitter-python",     wasm: "tree-sitter-python.wasm" },
+  go:         { pkg: "tree-sitter-go",         wasm: "tree-sitter-go.wasm" },
+  rust:       { pkg: "tree-sitter-rust",        wasm: "tree-sitter-rust.wasm" },
+  java:       { pkg: "tree-sitter-java",        wasm: "tree-sitter-java.wasm" },
 };
 
 /**
@@ -83,13 +84,19 @@ const IMPORT_NODE_TYPES = {
 
 // ── Init ───────────────────────────────────────────────
 
-function resolveGrammarPath(grammarFile) {
-  // Try node_modules/tree-sitter-wasms/out/ first
-  const nmPath = resolve(process.cwd(), "node_modules", "tree-sitter-wasms", "out", grammarFile);
-  if (existsSync(nmPath)) return nmPath;
+function resolveGrammarPath(grammarInfo) {
+  const { pkg, wasm } = grammarInfo;
+
+  // Try npm package first (e.g. node_modules/tree-sitter-typescript/tree-sitter-typescript.wasm)
+  const pkgPath = resolve(process.cwd(), "node_modules", pkg, wasm);
+  if (existsSync(pkgPath)) return pkgPath;
+
+  // Try tree-sitter-wasms bundle (older approach)
+  const wasmsPath = resolve(process.cwd(), "node_modules", "tree-sitter-wasms", "out", wasm);
+  if (existsSync(wasmsPath)) return wasmsPath;
 
   // Try local grammars directory
-  const localPath = resolve(__dirname, "grammars", grammarFile);
+  const localPath = resolve(__dirname, "grammars", wasm);
   if (existsSync(localPath)) return localPath;
 
   return null;
@@ -112,7 +119,11 @@ export async function initTreeSitterBridge(langIds) {
     try {
       const mod = await import("web-tree-sitter");
       Parser = mod.default || mod;
-      await Parser.init();
+      // locateFile tells the WASM loader where to find the runtime .wasm
+      const runtimeDir = resolve(process.cwd(), "node_modules", "web-tree-sitter");
+      await Parser.init({
+        locateFile: (file) => resolve(runtimeDir, file),
+      });
     } catch (err) {
       if (process.env.QUORUM_DEBUG) console.warn("[tree-sitter-bridge] WASM init failed:", err?.message);
       return { loaded, failed: targets };
@@ -127,15 +138,15 @@ export async function initTreeSitterBridge(langIds) {
       continue;
     }
 
-    const grammarFile = GRAMMAR_MAP[langId];
-    if (!grammarFile) {
+    const grammarInfo = GRAMMAR_MAP[langId];
+    if (!grammarInfo) {
       failed.push(langId);
       continue;
     }
 
-    const grammarPath = resolveGrammarPath(grammarFile);
+    const grammarPath = resolveGrammarPath(grammarInfo);
     if (!grammarPath) {
-      if (process.env.QUORUM_DEBUG) console.warn(`[tree-sitter-bridge] grammar not found: ${grammarFile}`);
+      if (process.env.QUORUM_DEBUG) console.warn(`[tree-sitter-bridge] grammar not found: ${grammarInfo.wasm}`);
       failed.push(langId);
       continue;
     }
