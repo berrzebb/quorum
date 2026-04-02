@@ -1,89 +1,114 @@
-# agents/knowledge/ — Shared Protocol Corpus
+# agents/knowledge/ — Quorum Knowledge Base
 
 ## Purpose
 
-This directory is the **cross-adapter shared protocol layer** for all quorum agents and skills.
-Every protocol file here is referenced by all adapters (Claude Code, Gemini, Codex, OpenAI-Compatible)
-and by the canonical skill definitions in `platform/skills/`.
+Single source of truth for all domain knowledge, protocols, and reference material.
+Harness reads this directory to dynamically compose skills and agents on demand.
 
-Protocol change here = 1 file edit = all adapters reflect. No duplication.
+**Knowledge change here = 1 file edit = all generated skills reflect. No duplication.**
 
 ## Why Root (Not Under `platform/`)
 
-`agents/knowledge/` is intentionally **not** under `platform/`. It is a protocol corpus, not
-runtime source code:
+`agents/knowledge/` contains Markdown protocol definitions and reference documents —
+consumed by LLM agents at prompt-construction time, never compiled or executed.
+`platform/` contains compiled TypeScript and MJS modules that Node.js runs.
 
-- `platform/` contains compiled TypeScript, MJS modules, and adapter I/O — things that `tsc`
-  builds and Node.js executes.
-- `agents/knowledge/` contains Markdown protocol definitions — referenced at prompt-construction
-  time, never compiled or executed. They are instruction documents consumed by LLM agents.
-
-This is the same reasoning that keeps `tests/` at root: they are shared concerns,
-not part of the platform runtime source tree. (`languages/` has since moved to `platform/core/languages/`.)
-
-## Ownership Rules
-
-1. **All-adapter check required.** Any change to a protocol file here must be verified against
-   all adapter wrappers (`platform/adapters/claude-code/`, `platform/adapters/gemini/`, `platform/adapters/codex/`,
-   `platform/adapters/openai-compatible/`) to ensure no wrapper assumptions are broken.
-
-2. **No adapter-specific content.** Protocol files must remain adapter-neutral. Tool names,
-   env vars, and invocation paths belong in adapter wrappers, not here.
-
-3. **Reviewed changes only.** These protocols define behavioral contracts for LLM agents.
-   Casual edits can silently change agent behavior across the entire system.
-
-## Stability Contract
-
-Files in this directory are **stable references**. They are not frequently changed and should
-be treated as semi-frozen contracts:
-
-- Adding a new protocol file is acceptable (with all-adapter verification).
-- Modifying an existing protocol requires checking downstream consumers:
-  adapters, canonical skills, and any CLAUDE.md/ARCHITECTURE.md entries that describe it.
-- Removing a protocol file requires migration of all references first.
-
-## Protocol Index
-
-### Core Protocols
-
-| File | Description |
-|------|-------------|
-| `implementer-protocol.md` | Code-only execution flow: self-check delegation to self-checker, correction delegation to fixer |
-| `scout-protocol.md` | Phase 5-8 RTM gap analyzer (upstream: wb-parser + rtm-scanner) |
-| `specialist-base.md` | JSON output format, confidence >= 0.8 filter, max 10 findings per review |
-| `ui-review-protocol.md` | UI-1~8 verification checklist, report format, completion gate |
-| `doc-sync-protocol.md` | 3-layer fact extraction, numeric mismatch detection, section parity |
-| `parliament-rules.md` | Standing rules for parliamentary sessions: consensus, amendment voting, confluence |
-| `tool-inventory.md` | 26-tool catalog (codebase, domain, RTM/FVM, audit, guide) |
-
-### Domain Knowledge (`domains/`)
-
-| File | Domain |
-|------|--------|
-| `domains/a11y.md` | Accessibility |
-| `domains/compat.md` | Cross-browser / cross-platform compatibility |
-| `domains/compliance.md` | Regulatory compliance |
-| `domains/concurrency.md` | Concurrency and parallelism |
-| `domains/docs.md` | Documentation quality |
-| `domains/i18n.md` | Internationalization |
-| `domains/infra.md` | Infrastructure and deployment |
-| `domains/migration.md` | Migration and upgrade paths |
-| `domains/observability.md` | Logging, tracing, metrics |
-| `domains/perf.md` | Performance optimization |
-| `domains/security.md` | Security hardening |
-
-## Inheritance Chain
+## Structure
 
 ```
-agents/knowledge/ (this directory)     <- Protocol definitions (stable, adapter-neutral)
-        |
-        v  referenced by
-platform/skills/ (canonical)           <- Protocol-neutral skill definitions + references
-        |
-        v  adapted by (4 equal peers)
-adapters/{claude-code,gemini,codex,openai-compatible}/skills/
-                                       <- Adapter-native tool names + invocation paths
+agents/knowledge/
+├── protocols/          ← Procedural knowledge (25 protocols)
+│   ├── planner.md         Pipeline: 8-phase PRD protocol
+│   ├── orchestrator.md    Pipeline: task distribution + agent dispatch
+│   ├── audit.md           Pipeline: cross-model review trigger
+│   ├── verify.md          Pipeline: 8-check done criteria
+│   ├── status.md          Pipeline: state visibility
+│   ├── merge-worktree.md  Pipeline: squash-merge commit flow
+│   ├── harness-bootstrap.md Pipeline: dynamic team/skill generation
+│   ├── consensus-tools.md Pipeline: 20 MCP tool interface
+│   ├── fde-analyst.md     Requirement: failure-driven analysis
+│   ├── wb-parser.md       Requirement: WB → structured table
+│   ├── designer.md        Requirement: design document generation
+│   ├── implementer.md     Execution: code-only worker protocol
+│   ├── fixer.md           Execution: surgical fix from findings
+│   ├── convergence-loop.md Execution: evaluate→fix cycle
+│   ├── scout.md           Verification: RTM gap analysis
+│   ├── rtm-scanner.md     Verification: tool-based tracing
+│   ├── gap-detector.md    Verification: design↔code comparison
+│   ├── specialist-base.md Verification: domain reviewer base
+│   ├── ui-review.md       Verification: browser-based UI check
+│   ├── parliament-rules.md Governance: deliberation rules
+│   ├── doc-sync.md        Maintenance: 3-layer doc sync
+│   ├── retrospect.md      Maintenance: learning extraction
+│   ├── rollback.md        Maintenance: checkpoint recovery
+│   ├── export.md          Output: multi-format document generation
+│   └── mermaid.md         Output: 13-type diagram generation
+│
+├── domains/            ← Domain expertise (11 domains)
+│   ├── a11y.md            Accessibility
+│   ├── compat.md          Cross-platform compatibility
+│   ├── compliance.md      Regulatory compliance
+│   ├── concurrency.md     Concurrency and parallelism
+│   ├── docs.md            Documentation quality
+│   ├── i18n.md            Internationalization
+│   ├── infra.md           Infrastructure and deployment
+│   ├── migration.md       Migration and upgrade paths
+│   ├── observability.md   Logging, tracing, metrics
+│   ├── perf.md            Performance optimization
+│   └── security.md        Security hardening
+│
+├── tools/              ← Tool catalog
+│   └── inventory.md       26 deterministic analysis tools
+│
+├── references/         ← Progressive Disclosure material
+│   ├── planner/           13 document templates (PRD, WB, MECE, ...)
+│   ├── orchestrator/      5 phase guides (tiers, distribution, ...)
+│   ├── consensus-tools/   21 per-tool references
+│   ├── mermaid/           16 diagram type references
+│   ├── export/            PDF/PPTX/DOCX/HTML format guides
+│   ├── designer/          Design phase templates
+│   ├── doc-sync/          3-layer sync guides
+│   ├── retrospect/        Gathering/execution/candidates
+│   ├── commit-convention/ Types, body guide, split patterns
+│   ├── mcp-builder/       Node/Python MCP server guides
+│   └── verify/            Check details
+│
+└── scripts/            ← Executable assets
+    └── export/            PDF/PPTX/DOCX/HTML generation scripts
 ```
 
-See `platform/skills/ARCHITECTURE.md` for the full inheritance model and wrapper rules.
+## Design Rules
+
+1. **Protocols are self-contained.** A protocol must not require reading another protocol to be useful. Shared concepts (tool invocation, verdict flow) are stated inline, not referenced.
+
+2. **Knowledge changes require audit.** Protocol modifications affect all generated skills. Treat protocol edits with the same rigor as code changes — cross-model review applies.
+
+3. **References are Progressive Disclosure.** Protocols point to `references/` for detailed guides. Agents load references only when needed, keeping base context small.
+
+4. **Domains are additive.** New domain = new file in `domains/`. No other changes needed — harness discovers and composes automatically.
+
+5. **Scripts are executable assets.** Python/Node scripts in `scripts/` are invoked by agents, not loaded into context. They provide deterministic operations (PDF generation, PPTX creation) that LLMs should not attempt inline.
+
+## How Harness Uses This
+
+```
+requirement → harness analyzes domain
+           → selects protocols/ (procedural knowledge)
+           → selects domains/ (domain expertise)
+           → selects references/ (detailed guides, on demand)
+           → composes skill manifest (10-line YAML)
+           → resolves adapter tool names (tool-names.mjs)
+           → agent executes with composed context
+```
+
+## Inheritance (Simplified)
+
+```
+agents/knowledge/     ← Knowledge (this directory)
+        ↓ composed by
+harness-bootstrap     ← Skill generator (dynamic)
+        ↓ produces
+runtime skill         ← Manifest + knowledge refs (ephemeral)
+        ↓ resolved by
+tool-names.mjs        ← Adapter tool mapping (mechanical)
+```

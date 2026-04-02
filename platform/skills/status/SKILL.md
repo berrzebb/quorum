@@ -1,60 +1,12 @@
 ---
 name: quorum:status
-description: "Show current quorum gate status — audit verdicts, pending reviews, retro marker, active locks, agent assignments. All state from SQLite."
+description: "Show quorum status — audit state, skill health, or both. Subcommands: audit (gate verdicts, locks, retro), skills (wrapper parity, trigger conflicts), all (everything). Triggers on 'status', 'skill status', 'gate status', '상태'."
 ---
 
-# Consensus Loop Status
+# Status
 
-Check the current state of the quorum feedback cycle. All state lives in **SQLite** — this skill queries it and presents a summary.
+Unified status reporting.
 
-## Primary Command
+## Knowledge
 
-```
-quorum status
-```
-
-This outputs gate state, pending items, recent verdicts, and active locks from SQLite.
-
-## Fallback
-
-If quorum CLI is unavailable, query the audit history tool directly:
-
-```
-quorum tool audit_history --summary --json
-```
-
-Shows: last verdict, verdict counts, rejection patterns, timestamps.
-
-## Output Format
-
-Present a structured summary:
-
-```markdown
-## Quorum Status
-
-| Item | Value |
-|------|-------|
-| Gate State | approved / pending / idle |
-| Pending Items | N items with [trigger_tag] |
-| Last Verdict | [agree_tag] / [pending_tag] — timestamp |
-| Active Locks | N (list lock holders) |
-| Retro Status | pending / complete |
-```
-
-Do NOT look for verdict.md or gpt.md — verdicts live in SQLite only.
-
-## Interpretation Guide
-
-| State | Meaning | Next Action |
-|-------|---------|-------------|
-| **idle** | No pending audits, clean state | Start new work |
-| **approved** | All items passed audit | Run retrospective, then merge |
-| **pending** | Items awaiting audit or rejected | Fix rejections, re-submit evidence |
-| **locked** | Audit in progress | Wait for completion |
-
-## Execution Context
-
-| Context | Behavior |
-|---------|----------|
-| **Interactive** | Show formatted status, suggest next actions based on state |
-| **Headless** | Output JSON status, exit |
+Read `agents/knowledge/protocols/status.md` for the full protocol.

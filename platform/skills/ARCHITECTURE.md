@@ -1,129 +1,50 @@
-# Skill Architecture
+# Skill Architecture — v0.6.0 Knowledge-Centric Model
 
 ## Directory Structure
 
 ```
-platform/skills/                 ← Protocol-neutral canonical definitions (source of truth)
-  ├── {skill}/SKILL.md           ← What the skill does (no adapter-specific content)
-  ├── {skill}/references/        ← Progressive-disclosure references
+agents/knowledge/                ← Single source of truth for all knowledge
+  ├── protocols/                 ← 25 procedural protocols
+  ├── domains/                   ← 11 domain expertise files
+  ├── tools/                     ← Tool catalog
+  ├── references/                ← Progressive Disclosure material (77 files)
+  └── scripts/                   ← Executable assets (63 files)
+
+platform/skills/                 ← Core skill manifests (11 lightweight files)
+  ├── {skill}/SKILL.md           ← Intent + knowledge refs (~15-30 lines)
   └── ARCHITECTURE.md            ← This file
-
-platform/adapters/claude-code/skills/     ← Claude Code wrappers (Read/Write/Edit/Bash/Glob/Grep)
-platform/adapters/gemini/skills/          ← Gemini wrappers (read_file/write_file/shell/glob/grep)
-platform/adapters/codex/skills/           ← Codex wrappers (read_file/write_file/apply_diff/shell/find_files/search)
-
-agents/knowledge/                ← Retained shared protocol corpus (stable, adapter-neutral)
-  ├── implementer-protocol.md    ← Execution flow, correction, completion gate
-  ├── scout-protocol.md          ← RTM generation 8-phase
-  ├── specialist-base.md         ← JSON output format, judgment criteria
-  ├── ui-review-protocol.md      ← UI-1~8 checklist, report format
-  ├── doc-sync-protocol.md       ← 3-layer sync, fact extraction
-  ├── parliament-rules.md        ← Standing rules for parliamentary deliberation
-  ├── tool-inventory.md          ← 26-tool catalog
-  ├── domains/*.md               ← Domain knowledge (11 domains)
-  └── README.md                  ← Taxonomy, ownership rules, stability contract
 ```
 
-## Inheritance Model
+## Design Principles
+
+### 1. Knowledge Lives in One Place
+
+All procedural knowledge, domain expertise, and reference material lives in `agents/knowledge/`.
+Skills are **manifests** that reference knowledge, not containers that hold it.
 
 ```
-agents/knowledge/ (protocols)     ← Stable protocol corpus, adapter-independent
-        ↓ referenced by
-platform/skills/ (canonical)      ← Protocol-neutral definitions + references
-        ↓ adapted by (all 4 adapters are equal peers)
-platform/adapters/claude-code/skills/      ← Claude Code tool names + adapter paths
-platform/adapters/gemini/skills/           ← Gemini tool names + adapter paths
-platform/adapters/codex/skills/            ← Codex tool names + adapter paths
+Before (v0.5.0):  27 canonical SKILL.md (avg 130 lines) + 108 adapter wrappers = 135 files
+After  (v0.6.0):  11 manifest SKILL.md (avg 20 lines) + 0 adapter wrappers = 11 files
+                   Knowledge: agents/knowledge/ (178 files, one location)
 ```
 
-### Why `agents/knowledge/` Lives at Root
+### 2. Skills are Composition Recipes
 
-`agents/knowledge/` is a **retained shared protocol corpus**, not a residual source tree awaiting
-migration to `platform/`. It stays at root for the same reason `languages/` and `tests/` do:
+A skill manifest defines:
+- **name** — trigger identifier
+- **description** — when to activate (aggressive, pushy)
+- **model** — optimal model tier (haiku/sonnet/opus)
+- **knowledge refs** — which protocols and references to load
 
-- **Not runtime source code.** These are Markdown protocol definitions consumed at prompt-construction
-  time by LLM agents. They are never compiled by `tsc` or executed by Node.js.
-- **Not adapter-specific.** They are referenced equally by all 4 adapters. Placing them under any
-  single adapter or under `platform/` would misrepresent their cross-cutting nature.
-- **Stability contract.** Changes require all-adapter verification. See `agents/knowledge/README.md`
-  for ownership rules and the full protocol index.
+A skill does NOT contain:
+- Protocol steps (→ `agents/knowledge/protocols/`)
+- Domain knowledge (→ `agents/knowledge/domains/`)
+- Reference material (→ `agents/knowledge/references/`)
+- Adapter-specific tool names (→ resolved at runtime via `tool-names.mjs`)
 
-## Protocol Neutrality
+### 3. Adapter Resolution is Dynamic
 
-`platform/skills/` contains **protocol-neutral** canonical skill definitions:
-- Define WHAT the skill does (phases, rules, constraints)
-- NO adapter-specific tool names (not `Read`, not `read_file`, not `apply_diff`)
-- NO adapter-specific paths (not adapter-specific env vars like `CLAUDE_PLUGIN_ROOT`)
-- Use `quorum tool <name>` for generic tool invocation
-- Use `{ADAPTER_ROOT}` as placeholder where adapter path is needed
-- References use local relative paths (`references/xxx.md`)
-
-All three adapters are **equal peers** — each creates its own wrapper with:
-- Adapter-native tool mapping table
-- Adapter-specific invocation paths
-- Protocol references to `agents/knowledge/` and `platform/skills/*/references/`
-
-## Neutrality Contract
-
-Canonical skills (`platform/skills/**`) MUST NOT contain:
-
-| Prohibited | Example | Use instead |
-|------------|---------|-------------|
-| Adapter-specific env vars | `${CLAUDE_PLUGIN_ROOT}`, `${GEMINI_EXTENSION_ROOT}`, `${CODEX_PLUGIN_ROOT}` | `${ADAPTER_ROOT}` (wrapper only) |
-| Direct script paths | `node .../tool-runner.mjs` | `quorum tool <name>` |
-| Adapter-specific tool names | `Read` vs `read_file` vs `apply_diff` | Generic operation names |
-| Adapter directory references | `platform/adapters/claude-code/...` | Allowed only in meta files (ARCHITECTURE.md, doc-sync, skill-authoring) |
-
-Enforced by: `node --test tests/skill-neutrality.test.mjs`
-
-Frozen at zero violations by PLT-11C. Any new canonical skill that introduces adapter-specific
-content will fail CI.
-
-## Wrapper Template
-
-Every adapter wrapper MUST follow this exact structure. **Maximum 35 lines.** Protocol duplication is prohibited -- all protocol content lives in canonical skills and `agents/knowledge/`.
-
-### Required Structure
-
-```markdown
----
-name: quorum:{name}          # CC uses quorum:, Codex/Gemini/OAI use quorum-
-description: "..."           # Preserved from original — do not abbreviate
-[all other frontmatter]      # argument-hint, model, allowed-tools, context, etc.
----
-
-# {Skill Title} ({Adapter Name})
-
-Follow the canonical protocol at `platform/skills/{skill-name}/SKILL.md`.
-[Optional: Core protocol reference, e.g. `agents/knowledge/{protocol}.md`.]
-[Optional: References at `platform/skills/{skill-name}/references/`.]
-
-## Tool Mapping
-
-| Operation | Tool |
-|-----------|------|
-| Read file | `{native name}` |
-| Write file | `{native name}` |
-| ... | ... |
-
-## Setup
-
-{Adapter-specific config paths or invocation commands. Omit if nothing unique.}
-```
-
-### What Belongs Where
-
-| Content | Location | NOT in wrapper |
-|---------|----------|---------------|
-| Protocol phases, rules, constraints | `platform/skills/{name}/SKILL.md` | Never duplicate |
-| Business logic, checklists, gates | `agents/knowledge/*.md` | Never duplicate |
-| Tool parameter details, examples | `platform/skills/{name}/references/` | Never duplicate |
-| Tool name mapping (Read vs read_file) | **Wrapper** | -- |
-| Adapter-specific paths, env vars | **Wrapper** | -- |
-| Adapter-specific invocation commands | **Wrapper** | -- |
-| Browser automation method (if different) | **Wrapper** | -- |
-
-### Adapter Tool Name Reference
+No static adapter wrappers. Tool name mapping is resolved at runtime:
 
 | Operation | Claude Code | Codex | Gemini | OpenAI-Compatible |
 |-----------|-------------|-------|--------|-------------------|
@@ -133,42 +54,44 @@ Follow the canonical protocol at `platform/skills/{skill-name}/SKILL.md`.
 | Run command | `Bash` | `shell` | `shell` | `bash` |
 | Find files | `Glob` | `find_files` | `glob` | `glob` |
 | Search content | `Grep` | `search` | `grep` | `grep` |
-| Spawn agent | `Agent` | `create_agent` | -- | -- |
 
-### Size Budget
+Source: `platform/adapters/shared/tool-names.mjs`
 
-- Target: 20-30 lines
-- Hard maximum: 35 lines (excluding frontmatter)
-- If a wrapper exceeds 35 lines, protocol content has leaked into the wrapper
+### 4. On-Demand Skills via Harness
 
-## Reference Resolution
+Skills not in the core 11 are generated on demand by `harness-bootstrap`:
+1. Analyze requirement domain
+2. Select protocols from `agents/knowledge/protocols/`
+3. Select domain knowledge from `agents/knowledge/domains/`
+4. Compose manifest + resolve adapter tools
+5. Execute → audit → dispose
 
-References live in `platform/skills/{skill-name}/references/`. All adapters reference by project-root path:
+## Core Skills (11)
 
-```
-platform/skills/{skill}/references/xxx.md
-```
+| Skill | Model | Knowledge Protocol |
+|-------|-------|--------------------|
+| planner | opus | `protocols/planner.md` |
+| orchestrator | opus | `protocols/orchestrator.md` |
+| audit | sonnet | `protocols/audit.md` |
+| verify | haiku | `protocols/verify.md` |
+| status | — | `protocols/status.md` |
+| merge-worktree | sonnet | `protocols/merge-worktree.md` |
+| harness-bootstrap | opus | `protocols/harness-bootstrap.md` |
+| consensus-tools | — | `protocols/consensus-tools.md` |
+| fde-analyst | opus | `protocols/fde-analyst.md` |
+| wb-parser | haiku | `protocols/wb-parser.md` |
+| designer | opus | `protocols/designer.md` |
 
-Consistent across all 3 adapters — no special cases.
+## Adding Knowledge
 
-## Adding a New Skill
+New domain: add `agents/knowledge/domains/{domain}.md`. Harness discovers automatically.
 
-1. Create `platform/skills/{name}/SKILL.md` with protocol-neutral content
-2. Create `platform/skills/{name}/references/` if progressive disclosure needed
-3. Create adapter wrappers (all 4) using the **Wrapper Template** above:
-   - `platform/adapters/claude-code/skills/{name}/SKILL.md` (Read/Write/Edit/Bash/Glob/Grep)
-   - `platform/adapters/codex/skills/{name}/SKILL.md` (read_file/write_file/apply_diff/shell/find_files/search)
-   - `platform/adapters/gemini/skills/{name}/SKILL.md` (read_file/write_file/edit_file/shell/glob/grep)
-   - `platform/adapters/openai-compatible/skills/{name}/SKILL.md` (read/write/edit/bash/glob/grep)
-4. Verify each wrapper is under 35 lines (excluding frontmatter)
-5. Update `CLAUDE.md` skill counts
+New protocol: add `agents/knowledge/protocols/{name}.md`. Reference from manifests or harness.
 
-## Adding a New Adapter
+New reference material: add to `agents/knowledge/references/{topic}/`.
 
-1. Create `platform/adapters/{name}/skills/` directory
-2. For each shared skill, create adapter version with:
-   - Adapter-native tool names (from `platform/adapters/shared/tool-names.mjs`)
-   - Protocol references (`agents/knowledge/`)
-   - Shared reference paths (`platform/skills/*/references/`)
-3. Register tool names in `platform/adapters/shared/tool-names.mjs`
-4. Create hooks in `platform/adapters/{name}/hooks/hooks.json`
+## Protocol Rules
+
+1. **Self-contained** — a protocol works without reading other protocols
+2. **Audited changes** — protocol edits affect all generated skills; treat as code changes
+3. **No adapter content** — protocols use `quorum tool <name>`, not adapter-native tool names

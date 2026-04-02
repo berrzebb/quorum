@@ -1,0 +1,82 @@
+# FDE Analyst Protocol (Failure Driven Engineering)
+
+Systematically analyze what can go wrong with each requirement before implementation begins. HIGH severity failures become mandatory Work Breakdown items — catching them before code prevents costly rework.
+
+## When to Use
+
+- After DRM confirmation, before Work Breakdown drafting
+- When adding new P0/P1 requirements to an existing track
+- When audit findings reveal unhandled failure modes
+
+## Input Requirements
+
+1. **PRD** with prioritized FR/NFR (P0/P1 at minimum)
+2. **DRM** (optional — helps scope which tracks to analyze)
+3. **Research results** from `quorum tool blast_radius` and `quorum tool dependency_graph` (optional)
+
+## Workflow
+
+### Phase 1: Requirement Selection
+
+- **Always analyze**: All P0 and P1 FRs
+- **Conditionally analyze**: P2 FRs with external dependencies or persistence
+- **Skip**: P3 FRs, pure documentation FRs
+
+### Phase 2: Failure Scenario Generation
+
+For each selected FR, generate failure scenarios across 4 categories:
+
+| Category | Example Scenarios |
+|----------|------------------|
+| **External Dependencies** | API timeout, rate limiting, auth token expiry, service degradation, version mismatch |
+| **Data & Persistence** | Duplicate records, race conditions, schema migration failure, data corruption, constraint violation |
+| **User Input** | Invalid format, injection attacks, size limits exceeded, encoding issues, concurrent edits |
+| **Infrastructure** | Network partition, disk full, memory exhaustion, container restart, clock skew |
+
+Not every category applies to every FR — skip categories that are genuinely impossible.
+
+### Phase 3: Severity Classification
+
+| Severity | Criteria | Action |
+|----------|----------|--------|
+| **HIGH** | Data loss, security breach, system unavailable, corruption | Mandatory new WB |
+| **MEDIUM** | Degraded experience, partial failure, recovery possible | New WB unless explicitly deferred |
+| **LOW** | Cosmetic, logged warning, self-healing | Note in existing WB as detail |
+
+### Phase 4: Mitigation Strategy
+
+For each HIGH/MEDIUM failure, define:
+- **Detection**: How the failure is detected
+- **Mitigation**: Technical approach to prevent or handle it
+- **Recovery**: Steps to recover if mitigation fails
+- **New WB?**: Whether a new Work Breakdown item is needed
+
+### Phase 5: Output
+
+```markdown
+## FR-{N}: {Title}
+
+| Scenario | Category | Severity | Impact | Mitigation | New WB? |
+|----------|----------|----------|--------|------------|---------|
+| API timeout on payment | External | HIGH | Transaction lost | Retry + idempotency key | ✓ WB-{N} |
+| Duplicate submission | Data | MEDIUM | Double charge | DB unique constraint | ✓ WB-{N} |
+| Invalid currency code | Input | LOW | 400 error | Validation in handler | — |
+```
+
+### Phase 6: Derived WB Summary
+
+Collect all new WBs generated from failure analysis. In interactive mode, present and wait for confirmation. In headless mode, auto-generate for external dependencies and data persistence — mark assumptions as `[FDE-ASSUMPTION]`.
+
+## Rules
+
+- HIGH severity failures always generate a new WB — no exceptions
+- MEDIUM severity failures generate a new WB by default — user can defer with explicit justification
+- Each failure scenario must have a concrete mitigation, not vague advice
+- FDE analysis is additive — it generates WBs but never removes existing ones
+
+## Anti-Patterns
+
+- Do NOT analyze failures without reading the PRD first
+- Do NOT classify everything as HIGH — be honest about severity
+- Do NOT generate WBs for impossible scenarios
+- Do NOT skip infrastructure failures for server-side FRs

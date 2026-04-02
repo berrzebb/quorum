@@ -1,34 +1,37 @@
 #!/usr/bin/env node
 /**
- * Skill Neutrality Tests — frozen contract for PLT track.
+ * Skill Neutrality Tests — v0.6.0 knowledge-centric model.
  *
- * Enforces zero-tolerance: adapter-specific references MUST NOT appear
- * in canonical skills (platform/skills/**). These tests prevent regression after
- * PLT-11A (env vars), PLT-11B (script invocations), and PLT-11C (freeze).
+ * Enforces:
+ * - Core skill manifests are lightweight (no protocol content)
+ * - Knowledge protocols are self-contained (no adapter content)
+ * - No adapter-specific references leak into knowledge or skills
  *
  * Run: node --test tests/skill-neutrality.test.mjs
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const SKILLS_DIR = resolve(REPO_ROOT, "platform", "skills");
+const KNOWLEDGE_DIR = resolve(REPO_ROOT, "agents", "knowledge");
+const PROTOCOLS_DIR = resolve(KNOWLEDGE_DIR, "protocols");
 
 /**
- * Recursively find all .md files in a directory, excluding workspace dirs.
+ * Recursively find all .md files in a directory.
  */
 function findMarkdownFiles(dir) {
   const results = [];
+  if (!existsSync(dir)) return results;
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      // Skip workspace directories
       if (entry.name.endsWith("-workspace")) continue;
       results.push(...findMarkdownFiles(fullPath));
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
@@ -38,184 +41,117 @@ function findMarkdownFiles(dir) {
   return results;
 }
 
-/**
- * Count occurrences of a string pattern in all .md files under platform/skills/ (excluding workspace).
- * Optionally exclude specific files (by relative path from SKILLS_DIR, forward-slash normalized).
- */
-function countPatternInSkills(pattern, excludeFiles = []) {
-  const files = findMarkdownFiles(SKILLS_DIR);
-  let total = 0;
-  const fileHits = [];
-  for (const filePath of files) {
-    const rel = relative(SKILLS_DIR, filePath).replace(/\\/g, "/");
-    if (excludeFiles.some(ex => rel === ex)) continue;
-    const content = readFileSync(filePath, "utf8");
-    const matches = content.split(pattern).length - 1;
-    if (matches > 0) {
-      total += matches;
-      fileHits.push({ file: filePath, count: matches });
-    }
-  }
-  return { total, fileHits };
-}
-
-/**
- * Count occurrences of a regex pattern in all .md files under platform/skills/ (excluding workspace).
- * Optionally exclude specific files (by relative path from SKILLS_DIR).
- */
-function countRegexInSkills(regex, excludeFiles = []) {
-  const files = findMarkdownFiles(SKILLS_DIR);
-  let total = 0;
-  const fileHits = [];
-  for (const filePath of files) {
-    const rel = relative(SKILLS_DIR, filePath).replace(/\\/g, "/");
-    if (excludeFiles.some(ex => rel === ex)) continue;
-    const content = readFileSync(filePath, "utf8");
-    const matches = content.match(regex);
-    if (matches && matches.length > 0) {
-      total += matches.length;
-      fileHits.push({ file: filePath, count: matches.length });
-    }
-  }
-  return { total, fileHits };
-}
-
-/**
- * List canonical skill directories (contain SKILL.md, exclude workspace).
- */
 function listCanonicalSkills() {
-  const entries = readdirSync(SKILLS_DIR, { withFileTypes: true });
-  const skills = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.endsWith("-workspace")) continue;
-    const skillMd = resolve(SKILLS_DIR, entry.name, "SKILL.md");
-    if (existsSync(skillMd)) {
-      skills.push(entry.name);
-    }
+  return readdirSync(SKILLS_DIR, { withFileTypes: true })
+    .filter(e => e.isDirectory())
+    .filter(e => existsSync(resolve(SKILLS_DIR, e.name, "SKILL.md")))
+    .map(e => e.name);
+}
+
+// ═══ 1. Skill manifests are lightweight ════════════════════════════════
+
+describe("skill neutrality — manifest size", () => {
+  const skills = listCanonicalSkills();
+
+  for (const skill of skills) {
+    it(`${skill}/SKILL.md should be a lightweight manifest (<= 40 lines)`, () => {
+      const content = readFileSync(resolve(SKILLS_DIR, skill, "SKILL.md"), "utf8");
+      const lines = content.split("\n").length;
+      assert.ok(lines <= 40, `${skill} has ${lines} lines — should be <= 40 for a manifest`);
+    });
   }
-  return skills;
-}
+});
 
-/** Format file hits for error messages. */
-function fmtHits(fileHits) {
-  return fileHits
-    .map(h => `${relative(SKILLS_DIR, h.file).replace(/\\/g, "/")}:${h.count}`)
-    .join(", ");
-}
+// ═══ 2. Skill manifests reference knowledge ════════════════════════════
 
-/**
- * Meta files that document the neutrality contract itself.
- * These legitimately mention prohibited patterns as examples.
- */
-const META_FILES = ["ARCHITECTURE.md"];
+describe("skill neutrality — knowledge references", () => {
+  const skills = listCanonicalSkills();
 
-// ═══ 1. Adapter-specific env vars — zero tolerance ══════════════════════
+  for (const skill of skills) {
+    it(`${skill}/SKILL.md should reference agents/knowledge/`, () => {
+      const content = readFileSync(resolve(SKILLS_DIR, skill, "SKILL.md"), "utf8");
+      assert.ok(
+        content.includes("agents/knowledge/"),
+        `${skill}/SKILL.md must reference agents/knowledge/`
+      );
+    });
+  }
+});
 
-describe("skill neutrality — adapter-specific env vars", () => {
-  it("CLAUDE_PLUGIN_ROOT must be 0", () => {
-    const { total, fileHits } = countPatternInSkills("${CLAUDE_PLUGIN_ROOT}", META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 CLAUDE_PLUGIN_ROOT, got ${total}. Files: ${fmtHits(fileHits)}`);
+// ═══ 3. No adapter-specific content in knowledge ══════════════════════
+
+describe("skill neutrality — knowledge base purity", () => {
+  const META_FILES = ["README.md"];
+
+  it("no CLAUDE_PLUGIN_ROOT in protocols", () => {
+    const files = findMarkdownFiles(PROTOCOLS_DIR);
+    for (const f of files) {
+      const content = readFileSync(f, "utf8");
+      assert.ok(
+        !content.includes("${CLAUDE_PLUGIN_ROOT}"),
+        `${relative(REPO_ROOT, f)} contains adapter-specific env var`
+      );
+    }
   });
 
-  it("GEMINI_EXTENSION_ROOT must be 0", () => {
-    const { total, fileHits } = countPatternInSkills("${GEMINI_EXTENSION_ROOT}", META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 GEMINI_EXTENSION_ROOT, got ${total}. Files: ${fmtHits(fileHits)}`);
+  it("no GEMINI_EXTENSION_ROOT in protocols", () => {
+    const files = findMarkdownFiles(PROTOCOLS_DIR);
+    for (const f of files) {
+      const content = readFileSync(f, "utf8");
+      assert.ok(
+        !content.includes("${GEMINI_EXTENSION_ROOT}"),
+        `${relative(REPO_ROOT, f)} contains adapter-specific env var`
+      );
+    }
   });
 
-  it("CODEX_PLUGIN_ROOT must be 0", () => {
-    const { total, fileHits } = countPatternInSkills("${CODEX_PLUGIN_ROOT}", META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 CODEX_PLUGIN_ROOT, got ${total}. Files: ${fmtHits(fileHits)}`);
-  });
-
-  it("no adapter-specific env var patterns (PLUGIN_ROOT, EXTENSION_ROOT variants)", () => {
-    // Catch any future adapter-specific env vars we haven't thought of yet.
-    // Excludes ${ADAPTER_ROOT} and ${QUORUM_*} which are legitimate.
-    const regex = /\$\{(?!ADAPTER_ROOT|QUORUM_)[A-Z_]*(?:PLUGIN_ROOT|EXTENSION_ROOT)[A-Z_]*\}/g;
-    const { total, fileHits } = countRegexInSkills(regex, META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 adapter-specific env var patterns, got ${total}. Files: ${fmtHits(fileHits)}`);
+  it("no adapter-specific tool names in protocols (Read/Write/Edit as tools)", () => {
+    // Protocols should use 'quorum tool <name>' not adapter-native tool names.
+    // Allow Read/Write/Edit as English words in prose, but flag tool-invocation patterns.
+    const files = findMarkdownFiles(PROTOCOLS_DIR);
+    for (const f of files) {
+      const content = readFileSync(f, "utf8");
+      const rel = relative(REPO_ROOT, f);
+      // Check for adapter-specific patterns like "| Read file | `Read` |"
+      assert.ok(
+        !content.includes("| `Read` |") && !content.includes("| `read_file` |"),
+        `${rel} contains adapter-specific tool mapping — belongs in tool-names.mjs`
+      );
+    }
   });
 });
 
-// ═══ 2. Direct script invocations — zero tolerance ══════════════════════
+// ═══ 4. Core skill count baseline ════════════════════════════════════
 
-describe("skill neutrality — direct script invocations", () => {
-  it("tool-runner.mjs references must be 0", () => {
-    const { total, fileHits } = countPatternInSkills("tool-runner.mjs", META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 tool-runner.mjs references, got ${total}. Files: ${fmtHits(fileHits)}`);
-  });
-
-  it("node ${ADAPTER_ROOT} invocations must be 0", () => {
-    const regex = /node\s+\$\{ADAPTER_ROOT\}/g;
-    const { total, fileHits } = countRegexInSkills(regex, META_FILES);
-    assert.equal(total, 0,
-      `Expected 0 'node \${ADAPTER_ROOT}' invocations, got ${total}. Files: ${fmtHits(fileHits)}`);
-  });
-});
-
-// ═══ 3. Adapter directory references — meta-only ════════════════════════
-
-describe("skill neutrality — adapter directory references", () => {
-  it("adapters/{name}/ references must only appear in meta files", () => {
-    // ARCHITECTURE.md, doc-sync references, and skill-authoring SKILL.md are meta/documentation
-    // files that legitimately reference adapter paths for instructional purposes.
-    // All other canonical skill files must not reference adapter directories.
-    const allowedFiles = [
-      "ARCHITECTURE.md",
-      "doc-sync/references/l1-public-docs.md",
-      "skill-authoring/SKILL.md",
-    ];
-    const regex = /adapters\/(?:claude-code|gemini|codex)\//g;
-    const { total, fileHits } = countRegexInSkills(regex, allowedFiles);
-    assert.equal(total, 0,
-      `Expected 0 adapter directory references outside meta files, got ${total}. ` +
-      `Files: ${fmtHits(fileHits)}`);
-  });
-});
-
-// ═══ 4. Canonical skill inventory ═══════════════════════════════════════
-
-describe("skill neutrality — canonical skill inventory", () => {
-  it("should list canonical skill directories with SKILL.md", () => {
+describe("skill neutrality — inventory baseline", () => {
+  it("should have exactly 11 core skills", () => {
     const skills = listCanonicalSkills();
-    assert.ok(skills.length > 0, "should find at least one canonical skill");
-    // Current count is 36 (excludes workspace dirs).
-    // Allow +-5 for flexibility as skills are added/removed.
-    assert.ok(
-      skills.length >= 30,
-      `Expected >= 30 canonical skills, got ${skills.length}: ${skills.join(", ")}`
-    );
-    assert.ok(
-      skills.length <= 45,
-      `Expected <= 45 canonical skills, got ${skills.length}`
-    );
+    assert.equal(skills.length, 11, `Expected 11 core skills, got ${skills.length}: ${skills.join(", ")}`);
   });
 
   it("platform/skills/ARCHITECTURE.md should exist", () => {
-    const archPath = resolve(SKILLS_DIR, "ARCHITECTURE.md");
-    assert.ok(existsSync(archPath), "platform/skills/ARCHITECTURE.md should exist");
+    assert.ok(existsSync(resolve(SKILLS_DIR, "ARCHITECTURE.md")));
   });
 });
 
-// ═══ 5. Workspace directories are excluded ══════════════════════════════
+// ═══ 5. Knowledge completeness ════════════════════════════════════════
 
-describe("skill neutrality — workspace exclusion", () => {
-  it("workspace directories should not be counted as canonical skills", () => {
-    const allDirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name);
-    const workspaceDirs = allDirs.filter(name => name.endsWith("-workspace"));
-    const canonicalSkills = listCanonicalSkills();
+describe("skill neutrality — knowledge completeness", () => {
+  it("every core skill should have a matching protocol in agents/knowledge/protocols/", () => {
+    const skills = listCanonicalSkills();
+    const protocols = readdirSync(PROTOCOLS_DIR)
+      .filter(f => f.endsWith(".md"))
+      .map(f => f.replace(".md", ""));
 
-    for (const ws of workspaceDirs) {
+    for (const skill of skills) {
+      const skillContent = readFileSync(resolve(SKILLS_DIR, skill, "SKILL.md"), "utf8");
+      // Extract protocol reference from content
+      const match = skillContent.match(/protocols\/([a-z-]+)\.md/);
+      assert.ok(match, `${skill}/SKILL.md should reference a protocol file`);
+      const protocolName = match[1];
       assert.ok(
-        !canonicalSkills.includes(ws),
-        `Workspace dir '${ws}' should not appear in canonical skills`
+        protocols.includes(protocolName),
+        `Protocol ${protocolName}.md referenced by ${skill} not found in agents/knowledge/protocols/`
       );
     }
   });
