@@ -2,7 +2,7 @@
  * SessionRuntime — interactive session contract for provider-native runtimes.
  *
  * Additive to the one-shot Auditor interface. Provides long-lived session
- * management for Codex App Server (JSON-RPC) and Claude Agent SDK (in-process).
+ * management for Claude Agent SDK (in-process).
  *
  * Key design decisions:
  * - ProviderExecutionMode is a string union (not enum) for wire compatibility
@@ -17,7 +17,6 @@
  */
 export type ProviderExecutionMode =
   | "cli_exec"      // current one-shot CLI spawn (codex exec, claude -p)
-  | "app_server"    // Codex App Server JSON-RPC over stdio
   | "agent_sdk";    // Claude Agent SDK in-process runtime
 
 /**
@@ -112,6 +111,6 @@ export interface ProviderToolBridge {
  * Factory for creating provider runtimes based on execution mode.
  */
 export interface ProviderRuntimeFactory {
-  createCodexRuntime(mode: "cli_exec" | "app_server"): SessionRuntime;
+  createCodexRuntime(mode: "cli_exec"): SessionRuntime;
   createClaudeRuntime(mode: "cli_exec" | "agent_sdk"): SessionRuntime;
 }

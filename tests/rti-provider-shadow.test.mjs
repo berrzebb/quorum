@@ -31,7 +31,7 @@ const {
 function makeRef(provider, sessionId) {
   return {
     provider,
-    executionMode: provider === "codex" ? "app_server" : "agent_sdk",
+    executionMode: provider === "codex" ? "cli_exec" : "agent_sdk",
     providerSessionId: sessionId,
   };
 }

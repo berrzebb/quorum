@@ -28,7 +28,7 @@ const { createProviderSessionRecord } = await import(
 function makeProviderRef(overrides = {}) {
   return {
     provider: 'codex',
-    executionMode: 'app_server',
+    executionMode: 'cli_exec',
     providerSessionId: 'ps-1',
     ...overrides,
   };
@@ -39,7 +39,7 @@ function makeLedgerWithSession(opts = {}) {
   const providerRef = makeProviderRef({
     providerSessionId: opts.providerSessionId ?? 'ps-1',
     provider: opts.provider ?? 'codex',
-    executionMode: opts.executionMode ?? 'app_server',
+    executionMode: opts.executionMode ?? 'cli_exec',
     threadId: opts.threadId,
   });
   const now = Date.now();
@@ -262,7 +262,7 @@ describe('SessionProjection — field completeness', () => {
     const { ledger } = makeLedgerWithSession({
       quorumSessionId: 'qs-fields',
       provider: 'codex',
-      executionMode: 'app_server',
+      executionMode: 'cli_exec',
     });
     const projector = new ProviderSessionProjector(ledger);
 

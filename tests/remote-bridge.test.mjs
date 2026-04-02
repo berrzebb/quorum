@@ -302,7 +302,7 @@ describe("RAI-2: ApprovalController — resolve", () => {
     const ledger = createTestLedger();
     ledger.recordApproval({
       requestId: "r2",
-      providerRef: { provider: "codex", executionMode: "app_server", providerSessionId: "s2" },
+      providerRef: { provider: "codex", executionMode: "cli_exec", providerSessionId: "s2" },
       kind: "network",
       reason: "fetch",
     });
@@ -406,7 +406,7 @@ describe("RAI-1+2: bridge offline fallback", () => {
     const ledger = createTestLedger();
     ledger.recordApproval({
       requestId: "gate-r1",
-      providerRef: { provider: "codex", executionMode: "app_server", providerSessionId: "gs1" },
+      providerRef: { provider: "codex", executionMode: "cli_exec", providerSessionId: "gs1" },
       kind: "command",
       reason: "bash",
     });

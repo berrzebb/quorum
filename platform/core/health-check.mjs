@@ -129,16 +129,6 @@ function checkWorktrees(repoRoot, issues) {
 function checkConfig(repoRoot, issues) {
   const configPath = resolve(repoRoot, ".claude", "quorum", "config.json");
   if (!existsSync(configPath)) {
-    // Try legacy
-    const legacy = resolve(repoRoot, ".claude", "consensus-loop", "config.json");
-    if (existsSync(legacy)) {
-      issues.push({
-        severity: "info",
-        category: "config",
-        message: "Using legacy consensus-loop config — consider running 'quorum migrate'",
-        fix: "quorum migrate",
-      });
-    }
     return;
   }
 
@@ -158,7 +148,6 @@ function checkConfig(repoRoot, issues) {
       }
     }
 
-    // Watch file check removed — evidence is in SQLite via audit_submit tool
   } catch (err) {
     console.error("[health-check] config.json parse failed:", err?.message ?? err);
     issues.push({

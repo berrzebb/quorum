@@ -77,11 +77,10 @@ describe("SDK-3: Type importability", () => {
 // ═══════════════════════════════════════════════════════════════════════
 
 describe("SDK-3: ProviderExecutionMode", () => {
-  const validModes = ["cli_exec", "app_server", "agent_sdk"];
+  const validModes = ["cli_exec", "agent_sdk"];
 
-  it("accepts all 3 valid execution modes", () => {
+  it("accepts all valid execution modes", () => {
     for (const mode of validModes) {
-      // Structural: create a ref with this mode
       const ref = {
         provider: "codex",
         executionMode: mode,
@@ -98,15 +97,6 @@ describe("SDK-3: ProviderExecutionMode", () => {
       providerSessionId: "s1",
     };
     assert.equal(ref.executionMode, "cli_exec");
-  });
-
-  it("app_server represents Codex App Server JSON-RPC", () => {
-    const ref = {
-      provider: "codex",
-      executionMode: "app_server",
-      providerSessionId: "s2",
-    };
-    assert.equal(ref.executionMode, "app_server");
   });
 
   it("agent_sdk represents Claude Agent SDK in-process", () => {
@@ -138,7 +128,7 @@ describe("SDK-3: ProviderSessionRef shape", () => {
   it("provider is 'codex' or 'claude'", () => {
     const codexRef = {
       provider: "codex",
-      executionMode: "app_server",
+      executionMode: "cli_exec",
       providerSessionId: "s1",
     };
     const claudeRef = {
@@ -153,7 +143,7 @@ describe("SDK-3: ProviderSessionRef shape", () => {
   it("supports optional threadId and turnId", () => {
     const ref = {
       provider: "codex",
-      executionMode: "app_server",
+      executionMode: "cli_exec",
       providerSessionId: "s1",
       threadId: "thread-001",
       turnId: "turn-001",
@@ -202,7 +192,7 @@ describe("SDK-3: SessionRuntimeRequest shape", () => {
   it("supports optional resumeFrom with ProviderSessionRef", () => {
     const previousRef = {
       provider: "codex",
-      executionMode: "app_server",
+      executionMode: "cli_exec",
       providerSessionId: "prev-session",
     };
     const req = {
@@ -251,7 +241,7 @@ describe("SDK-3: ProviderRuntimeEvent kind values", () => {
     it(`accepts kind '${kind}'`, () => {
       const ref = {
         provider: "codex",
-        executionMode: "app_server",
+        executionMode: "cli_exec",
         providerSessionId: "s1",
       };
       const event = {
@@ -298,7 +288,7 @@ describe("SDK-3: ProviderApprovalRequest", () => {
     it(`accepts approval kind '${kind}'`, () => {
       const ref = {
         provider: "codex",
-        executionMode: "app_server",
+        executionMode: "cli_exec",
         providerSessionId: "s1",
       };
       const approval = {
@@ -316,7 +306,7 @@ describe("SDK-3: ProviderApprovalRequest", () => {
     const approval = {
       providerRef: {
         provider: "codex",
-        executionMode: "app_server",
+        executionMode: "cli_exec",
         providerSessionId: "s1",
       },
       requestId: "req-001",
@@ -389,7 +379,7 @@ describe("SDK-3: ProviderApprovalDecision", () => {
 describe("SDK-3: createRuntimeEvent()", () => {
   const ref = {
     provider: "codex",
-    executionMode: "app_server",
+    executionMode: "cli_exec",
     providerSessionId: "factory-test-session",
   };
 
@@ -501,9 +491,9 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   }
 
   it("mock runtime has required readonly properties", () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     assert.equal(runtime.provider, "codex");
-    assert.equal(runtime.mode, "app_server");
+    assert.equal(runtime.mode, "cli_exec");
   });
 
   it("start() returns a ProviderSessionRef", async () => {
@@ -519,7 +509,7 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   });
 
   it("status() returns 'running' after start()", async () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     const ref = await runtime.start({
       prompt: "fix bug",
       cwd: "/repo",
@@ -530,7 +520,7 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   });
 
   it("stop() transitions status to 'completed'", async () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     const ref = await runtime.start({
       prompt: "task",
       cwd: "/repo",
@@ -553,10 +543,10 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   });
 
   it("send() throws for unknown session", async () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     const unknownRef = {
       provider: "codex",
-      executionMode: "app_server",
+      executionMode: "cli_exec",
       providerSessionId: "nonexistent",
     };
     await assert.rejects(
@@ -566,7 +556,7 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   });
 
   it("poll() returns ProviderRuntimeEvent array", async () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     const ref = await runtime.start({
       prompt: "task",
       cwd: "/repo",
@@ -581,7 +571,7 @@ describe("SDK-3: SessionRuntime interface contract (mock)", () => {
   });
 
   it("resume() re-activates a stopped session", async () => {
-    const runtime = createMockRuntime("codex", "app_server");
+    const runtime = createMockRuntime("codex", "cli_exec");
     const ref = await runtime.start({
       prompt: "task",
       cwd: "/repo",

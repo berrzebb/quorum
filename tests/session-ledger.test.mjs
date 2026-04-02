@@ -26,7 +26,7 @@ const { InMemorySessionLedger } = await import(
 function makeRef(id = 'provider-session-1') {
   return {
     provider: 'codex',
-    executionMode: 'app_server',
+    executionMode: 'cli_exec',
     providerSessionId: id,
   };
 }

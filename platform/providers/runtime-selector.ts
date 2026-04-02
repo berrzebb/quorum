@@ -6,7 +6,6 @@ import type { ProviderExecutionMode } from "./session-runtime.js";
 //    This is the stable production path with no external dependencies.
 //
 // 2. UPGRADE PATH:
-//    - codex: cli_exec → app_server (requires codex binary with --app-server support)
 //    - claude: cli_exec → agent_sdk (requires @anthropic-ai/claude-agent-sdk peer dep)
 //
 // 3. FALLBACK GUARANTEE: if the requested mode's dependency is missing,
@@ -14,14 +13,12 @@ import type { ProviderExecutionMode } from "./session-runtime.js";
 //    Consumer code never needs mode-specific error handling.
 //
 // 4. OPTIONAL DEPENDENCIES (none required for default behavior):
-//    - codex binary: for app_server mode only
 //    - @anthropic-ai/claude-agent-sdk: for agent_sdk mode only
-//    - codex-plugin-cc: for broker-based auditing (separate from app_server)
+//    - codex-plugin-cc: for broker-based auditing
 //    - revfactory/harness: for team generation meta-skill
 //
 // 5. PRODUCTION BOUNDARIES:
 //    - cli_exec: safe for all environments (subprocess + one-shot)
-//    - app_server: requires persistent subprocess (not suitable for serverless)
 //    - agent_sdk: requires in-process SDK (memory budget consideration)
 //
 // Config source priority: CLI flags > config.json runtime section > defaults
@@ -64,17 +61,6 @@ export function resolveExecutionMode(
 ): { mode: ProviderExecutionMode; fallback: boolean; reason?: string } {
   if (requested === "cli_exec") {
     return { mode: "cli_exec", fallback: false };
-  }
-
-  if (provider === "codex" && requested === "app_server") {
-    if (!capabilities.codexBinaryAvailable) {
-      return {
-        mode: "cli_exec",
-        fallback: true,
-        reason: "Codex binary not available for app_server mode",
-      };
-    }
-    return { mode: "app_server", fallback: false };
   }
 
   if (provider === "claude" && requested === "agent_sdk") {
@@ -122,7 +108,7 @@ export function isSessionRuntimeEnabled(config: ProviderRuntimeConfig): boolean 
 
 /** Valid modes per provider. */
 const VALID_MODES: Record<"codex" | "claude", ProviderExecutionMode[]> = {
-  codex: ["cli_exec", "app_server"],
+  codex: ["cli_exec"],
   claude: ["cli_exec", "agent_sdk"],
 };
 
@@ -138,10 +124,6 @@ export function validateRuntimeConfig(config: ProviderRuntimeConfig): string[] {
   }
   if (!VALID_MODES.claude.includes(config.claude.mode)) {
     warnings.push(`claude.mode "${config.claude.mode}" is not valid (expected: ${VALID_MODES.claude.join(", ")}). Will fall back to cli_exec.`);
-  }
-
-  if (config.codex.mode === "app_server" && !config.codex.binary) {
-    warnings.push("codex.mode is app_server but no binary specified. Will use 'codex' default.");
   }
 
   return warnings;
@@ -164,10 +146,9 @@ export function describeRuntimePolicy(): RuntimePolicy[] {
   return [
     {
       provider: "codex",
-      validModes: ["cli_exec", "app_server"],
+      validModes: ["cli_exec"],
       defaultMode: "cli_exec",
-      optionalDependency: "codex binary (with --app-server)",
-      productionNote: "app_server requires persistent subprocess; not suitable for serverless.",
+      productionNote: "cli_exec is subprocess-based; safe for all environments.",
     },
     {
       provider: "claude",

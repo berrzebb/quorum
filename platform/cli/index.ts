@@ -45,16 +45,6 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "Register MCP server + generate config",
     handler: () => import("./commands/setup.js").then((m) => m.run(args)),
   },
-  interview: {
-    description: "→ orchestrate plan (deprecated: use orchestrate plan <track>)",
-    handler: () => {
-      console.log("\x1b[33mDeprecated:\x1b[0m interview is now 'quorum orchestrate plan <track>'\n");
-      console.log("  quorum orchestrate plan <track> [--provider claude|codex|gemini|ollama|vllm]\n");
-      console.log("Features: LLM-powered Socratic questioning, any language,");
-      console.log("CPS auto-intake from parliament, parliament feedback loop.\n");
-      return Promise.resolve();
-    },
-  },
   daemon: {
     description: "Start TUI dashboard (persistent)",
     handler: () => import("../../daemon/index.js").then((m) => m.default?.(args)),
@@ -112,10 +102,6 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
   doctor: {
     description: "Diagnose issues that could trap agents",
     handler: () => import("./commands/doctor.js").then((m) => m.run(args)),
-  },
-  migrate: {
-    description: "Import consensus-loop data into quorum",
-    handler: () => import("./commands/migrate.js").then((m) => m.run(args)),
   },
   help: {
     description: "Show this help message",

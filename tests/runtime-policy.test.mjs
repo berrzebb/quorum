@@ -38,23 +38,10 @@ describe("validateRuntimeConfig", () => {
   });
 
   it("warns on invalid claude mode", () => {
-    const config = mergeRuntimeConfig({ claude: { mode: "app_server" } });
+    const config = mergeRuntimeConfig({ claude: { mode: "invalid_mode" } });
     const warnings = validateRuntimeConfig(config);
     assert.equal(warnings.length, 1);
     assert.ok(warnings[0].includes("claude.mode"));
-  });
-
-  it("warns on app_server without binary", () => {
-    const config = mergeRuntimeConfig({ codex: { mode: "app_server" } });
-    const warnings = validateRuntimeConfig(config);
-    assert.ok(warnings.some(w => w.includes("binary")));
-  });
-
-  it("no warning for app_server with binary", () => {
-    const config = mergeRuntimeConfig({ codex: { mode: "app_server", binary: "/usr/bin/codex" } });
-    const warnings = validateRuntimeConfig(config);
-    // Only the binary warning should be absent; no invalid mode warnings
-    assert.ok(!warnings.some(w => w.includes("binary")));
   });
 });
 
@@ -68,11 +55,11 @@ describe("describeRuntimePolicy", () => {
     assert.equal(policies[1].provider, "claude");
   });
 
-  it("codex policy has correct valid modes", () => {
+  it("codex policy has cli_exec only", () => {
     const policies = describeRuntimePolicy();
     const codex = policies.find(p => p.provider === "codex");
     assert.ok(codex);
-    assert.deepStrictEqual(codex.validModes, ["cli_exec", "app_server"]);
+    assert.deepStrictEqual(codex.validModes, ["cli_exec"]);
     assert.equal(codex.defaultMode, "cli_exec");
   });
 
@@ -84,10 +71,9 @@ describe("describeRuntimePolicy", () => {
     assert.equal(claude.defaultMode, "cli_exec");
   });
 
-  it("each policy has optional dependency info", () => {
+  it("each policy has production note", () => {
     const policies = describeRuntimePolicy();
     for (const policy of policies) {
-      assert.ok(policy.optionalDependency, `${policy.provider} should have optionalDependency`);
       assert.ok(policy.productionNote, `${policy.provider} should have productionNote`);
     }
   });
@@ -100,13 +86,6 @@ describe("resolveExecutionMode — fallback guarantee", () => {
     const result = resolveExecutionMode("codex", "cli_exec", {});
     assert.equal(result.mode, "cli_exec");
     assert.equal(result.fallback, false);
-  });
-
-  it("app_server falls back when binary unavailable", () => {
-    const result = resolveExecutionMode("codex", "app_server", { codexBinaryAvailable: false });
-    assert.equal(result.mode, "cli_exec");
-    assert.equal(result.fallback, true);
-    assert.ok(result.reason);
   });
 
   it("agent_sdk falls back when SDK unavailable", () => {
@@ -133,8 +112,8 @@ describe("mergeRuntimeConfig", () => {
   });
 
   it("merges partial codex config", () => {
-    const config = mergeRuntimeConfig({ codex: { mode: "app_server", binary: "/opt/codex" } });
-    assert.equal(config.codex.mode, "app_server");
+    const config = mergeRuntimeConfig({ codex: { mode: "cli_exec", binary: "/opt/codex" } });
+    assert.equal(config.codex.mode, "cli_exec");
     assert.equal(config.codex.binary, "/opt/codex");
     assert.equal(config.claude.mode, "cli_exec");
   });
@@ -143,7 +122,7 @@ describe("mergeRuntimeConfig", () => {
     const defaults = defaultRuntimeConfig();
     assert.equal(isSessionRuntimeEnabled(defaults), false);
 
-    const upgraded = mergeRuntimeConfig({ codex: { mode: "app_server" } });
+    const upgraded = mergeRuntimeConfig({ claude: { mode: "agent_sdk" } });
     assert.equal(isSessionRuntimeEnabled(upgraded), true);
   });
 });

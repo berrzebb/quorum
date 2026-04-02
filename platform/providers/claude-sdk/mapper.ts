@@ -5,7 +5,7 @@
  * ProviderRuntimeEvent format used by the quorum bus.
  *
  * SDK-14: Events are enriched with tool capability metadata from the registry,
- * producing the same payload shapes as CodexAppServerMapper. The upper
+ * producing standardized payload shapes. The upper
  * control plane sees identical event structures regardless of provider.
  *
  * @module providers/claude-sdk/mapper

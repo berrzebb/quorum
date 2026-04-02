@@ -2,10 +2,9 @@
 /**
  * SDK-14: Event Normalization — Shared Runtime Model Tests
  *
- * Tests that Codex and Claude events produce identical shapes through:
+ * Tests standard payload extraction and daemon state projection:
  * - Standard payload extraction (approval, item, terminal)
  * - Daemon state projection (provider-agnostic event → state snapshot)
- * - Capability enrichment parity (both mappers annotate tool events)
  *
  * Run: node --test tests/event-normalization.test.mjs
  */
@@ -13,15 +12,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-const { CodexAppServerMapper } = await import(
-  "../dist/platform/providers/codex/app-server/mapper.js"
-);
-const { ClaudeSdkEventMapper } = await import(
-  "../dist/platform/providers/claude-sdk/mapper.js"
-);
-const { CODEX_NOTIFICATIONS } = await import(
-  "../dist/platform/providers/codex/app-server/protocol.js"
-);
 const {
   extractApprovalPayload,
   extractItemPayload,
@@ -32,7 +22,7 @@ const {
 
 const codexRef = {
   provider: "codex",
-  executionMode: "app_server",
+  executionMode: "cli_exec",
   providerSessionId: "codex-session-1",
   threadId: "thread-1",
 };
@@ -42,93 +32,7 @@ const claudeRef = {
   providerSessionId: "claude-session-1",
 };
 
-// ═══ 1. Mapper Parity ═══════════════════════════════════════════════════
-
-describe("Event normalization — mapper parity", () => {
-  const codexMapper = new CodexAppServerMapper();
-  const claudeMapper = new ClaudeSdkEventMapper();
-
-  it("both mappers produce same event kind set", () => {
-    const codexKinds = new Set();
-    const claudeKinds = new Set();
-
-    // Codex events
-    for (const method of Object.values(CODEX_NOTIFICATIONS)) {
-      const event = codexMapper.normalize(
-        { method, params: { threadId: "t1", requestId: "r1", kind: "tool", reason: "test" } },
-        codexRef,
-      );
-      if (event) codexKinds.add(event.kind);
-    }
-
-    // Claude events
-    const claudeTypes = [
-      "session_start", "message_start", "tool_use_start", "content_block_delta",
-      "tool_use_complete", "message_complete", "permission_request",
-      "session_complete", "session_error",
-    ];
-    for (const type of claudeTypes) {
-      const event = claudeMapper.normalize({ type }, claudeRef);
-      if (event) claudeKinds.add(event.kind);
-    }
-
-    // Both should produce the same 9 kinds
-    assert.deepStrictEqual([...codexKinds].sort(), [...claudeKinds].sort());
-  });
-
-  it("both mappers enrich tool-related events with capability metadata", () => {
-    // Codex: approval_requested for known tool
-    const codexApproval = codexMapper.normalize(
-      {
-        method: CODEX_NOTIFICATIONS.APPROVAL_REQUESTED,
-        params: { requestId: "r1", threadId: "t1", kind: "tool", reason: "code_map" },
-      },
-      codexRef,
-    );
-
-    // Claude: permission_request for known tool
-    const claudeApproval = claudeMapper.normalize(
-      { type: "permission_request", name: "code_map" },
-      claudeRef,
-    );
-
-    // Both should have toolCapability
-    assert.ok(codexApproval.payload.toolCapability, "Codex should enrich approval");
-    assert.ok(claudeApproval.payload.toolCapability, "Claude should enrich approval");
-
-    // Same shape
-    assert.equal(codexApproval.payload.toolCapability.isReadOnly, true);
-    assert.equal(claudeApproval.payload.toolCapability.isReadOnly, true);
-    assert.equal(codexApproval.payload.toolCapability.isDestructive, false);
-    assert.equal(claudeApproval.payload.toolCapability.isDestructive, false);
-  });
-
-  it("both mappers enrich tool_use events with capability metadata", () => {
-    // Codex item_completed with tool_call
-    const codexItem = codexMapper.normalize(
-      {
-        method: CODEX_NOTIFICATIONS.ITEM_COMPLETED,
-        params: { itemId: "i1", turnId: "tn1", threadId: "t1", kind: "tool_call", content: "perf_scan" },
-      },
-      codexRef,
-    );
-
-    // Claude tool_use_complete
-    const claudeItem = claudeMapper.normalize(
-      { type: "tool_use_complete", name: "perf_scan" },
-      claudeRef,
-    );
-
-    assert.ok(codexItem.payload.toolCapability, "Codex should enrich item");
-    assert.ok(claudeItem.payload.toolCapability, "Claude should enrich item");
-
-    // Same enrichment
-    assert.equal(codexItem.payload.toolCapability.isReadOnly, true);
-    assert.equal(claudeItem.payload.toolCapability.isReadOnly, true);
-  });
-});
-
-// ═══ 2. Standard Payload Extractors ═════════════════════════════════════
+// ═══ 1. Standard Payload Extractors ═════════════════════════════════════
 
 describe("Standard payload extractors", () => {
   it("extractApprovalPayload normalizes both formats", () => {
@@ -186,7 +90,7 @@ describe("Standard payload extractors", () => {
   });
 });
 
-// ═══ 3. Daemon State Projection ═════════════════════════════════════════
+// ═══ 2. Daemon State Projection ═════════════════════════════════════════
 
 describe("projectEventsToState — provider-agnostic", () => {
   it("projects Codex events to state", () => {

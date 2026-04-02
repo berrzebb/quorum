@@ -10,7 +10,7 @@
  *
  * RTI-1A: Approval telemetry — every approval request/decision is recorded
  * as a replay-compatible telemetry record with normalized fields. Both
- * Claude SDK and Codex App Server produce the same telemetry shape.
+ * All providers produce the same telemetry shape.
  */
 
 import type {
@@ -26,7 +26,7 @@ import { classify, telemetryToInput } from "./approval-classifier.js";
 
 /**
  * Replay-compatible telemetry record for approval decisions.
- * Shape is identical regardless of provider (Claude SDK or Codex App Server).
+ * Shape is identical regardless of provider.
  */
 export interface ApprovalTelemetryRecord {
   /** Timestamp of the decision. */

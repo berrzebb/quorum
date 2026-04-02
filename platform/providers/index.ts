@@ -221,13 +221,6 @@ export type {
   ToolPermissionResult,
 } from "./claude-sdk/permissions.js";
 
-// ── Codex App Server ────────────────────────────────
-export { CodexAppServerRuntime } from "./codex/app-server/runtime.js";
-export type { CodexRuntimeOptions } from "./codex/app-server/runtime.js";
-export { CodexAppServerClient } from "./codex/app-server/client.js";
-export { CodexAppServerMapper } from "./codex/app-server/mapper.js";
-export * from "./codex/app-server/protocol.js";
-
 // ── Codex Plugin (codex-plugin-cc) ──────────────────
 export { CodexPluginAuditor } from "./codex/plugin-auditor.js";
 export type { CodexPluginAuditorConfig } from "./codex/plugin-auditor.js";

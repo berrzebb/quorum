@@ -1,7 +1,7 @@
 /**
  * ProviderEventMapper — normalizes provider-native events to ProviderRuntimeEvent.
  *
- * Each provider (Codex App Server, Claude Agent SDK) implements their own mapper.
+ * Each provider implements their own mapper.
  * This module provides the interface, utility functions, and standard payload shapes.
  *
  * SDK-14: Standard payload shapes ensure the upper control plane sees identical
@@ -49,7 +49,7 @@ export interface SessionTerminalPayload {
 
 /**
  * Maps provider-native events to normalized ProviderRuntimeEvent.
- * Each provider (codex app-server, claude sdk) implements their own mapper.
+ * Each provider implements their own mapper.
  */
 export interface ProviderEventMapper {
   readonly provider: "codex" | "claude";

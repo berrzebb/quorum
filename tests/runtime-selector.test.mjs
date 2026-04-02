@@ -54,31 +54,6 @@ describe('resolveExecutionMode', () => {
     assert.equal(result.reason, undefined);
   });
 
-  it('codex + app_server + binary available → app_server', () => {
-    const result = resolveExecutionMode('codex', 'app_server', {
-      codexBinaryAvailable: true,
-    });
-    assert.equal(result.mode, 'app_server');
-    assert.equal(result.fallback, false);
-    assert.equal(result.reason, undefined);
-  });
-
-  it('codex + app_server + binary NOT available → cli_exec fallback', () => {
-    const result = resolveExecutionMode('codex', 'app_server', {
-      codexBinaryAvailable: false,
-    });
-    assert.equal(result.mode, 'cli_exec');
-    assert.equal(result.fallback, true);
-    assert.ok(result.reason, 'should have a fallback reason');
-    assert.match(result.reason, /codex/i);
-  });
-
-  it('codex + app_server + capabilities empty → cli_exec fallback', () => {
-    const result = resolveExecutionMode('codex', 'app_server', {});
-    assert.equal(result.mode, 'cli_exec');
-    assert.equal(result.fallback, true);
-  });
-
   it('claude + agent_sdk + SDK available → agent_sdk', () => {
     const result = resolveExecutionMode('claude', 'agent_sdk', {
       claudeSdkAvailable: true,
@@ -115,16 +90,6 @@ describe('resolveExecutionMode', () => {
     assert.match(result.reason, /invalid/i);
   });
 
-  it('claude requesting app_server → fallback with reason', () => {
-    // claude requesting app_server (only valid for codex)
-    const result = resolveExecutionMode('claude', 'app_server', {
-      codexBinaryAvailable: true,
-    });
-    assert.equal(result.mode, 'cli_exec');
-    assert.equal(result.fallback, true);
-    assert.ok(result.reason);
-    assert.match(result.reason, /invalid/i);
-  });
 });
 
 // ═══ 3. mergeRuntimeConfig ══════════════════════════════════════════════
@@ -144,9 +109,9 @@ describe('mergeRuntimeConfig', () => {
 
   it('partial codex only → codex merged, claude defaults', () => {
     const config = mergeRuntimeConfig({
-      codex: { mode: 'app_server', binary: '/usr/bin/codex', timeout: 30000 },
+      codex: { mode: 'cli_exec', binary: '/usr/bin/codex', timeout: 30000 },
     });
-    assert.equal(config.codex.mode, 'app_server');
+    assert.equal(config.codex.mode, 'cli_exec');
     assert.equal(config.codex.binary, '/usr/bin/codex');
     assert.equal(config.codex.timeout, 30000);
     assert.equal(config.claude.mode, 'cli_exec');
@@ -163,10 +128,10 @@ describe('mergeRuntimeConfig', () => {
 
   it('full override → both merged', () => {
     const config = mergeRuntimeConfig({
-      codex: { mode: 'app_server', binary: '/opt/codex' },
+      codex: { mode: 'cli_exec', binary: '/opt/codex' },
       claude: { mode: 'agent_sdk', binary: '/opt/claude', timeout: 45000 },
     });
-    assert.equal(config.codex.mode, 'app_server');
+    assert.equal(config.codex.mode, 'cli_exec');
     assert.equal(config.codex.binary, '/opt/codex');
     assert.equal(config.claude.mode, 'agent_sdk');
     assert.equal(config.claude.binary, '/opt/claude');
@@ -182,14 +147,6 @@ describe('isSessionRuntimeEnabled', () => {
     assert.equal(isSessionRuntimeEnabled(config), false);
   });
 
-  it('codex app_server → true', () => {
-    const config = {
-      codex: { mode: 'app_server' },
-      claude: { mode: 'cli_exec' },
-    };
-    assert.equal(isSessionRuntimeEnabled(config), true);
-  });
-
   it('claude agent_sdk → true', () => {
     const config = {
       codex: { mode: 'cli_exec' },
@@ -200,7 +157,7 @@ describe('isSessionRuntimeEnabled', () => {
 
   it('both non-default → true', () => {
     const config = {
-      codex: { mode: 'app_server' },
+      codex: { mode: 'cli_exec' },
       claude: { mode: 'agent_sdk' },
     };
     assert.equal(isSessionRuntimeEnabled(config), true);

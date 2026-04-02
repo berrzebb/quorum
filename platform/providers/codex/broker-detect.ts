@@ -2,7 +2,7 @@
  * Codex Plugin Broker Detection — detects codex-plugin-cc availability.
  *
  * codex-plugin-cc (openai/codex-plugin-cc) provides a persistent broker
- * process that multiplexes Codex app-server sessions. This module detects
+ * process that multiplexes Codex sessions. This module detects
  * whether that broker is reachable.
  *
  * Detection strategy:

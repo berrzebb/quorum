@@ -110,7 +110,7 @@ describe("reviewPlan structural validation", () => {
   it("fails: empty", () => assert.ok(reviewPlan([]).errors.some(e => e.includes("No work items"))));
   it("fails: no Action", () => assert.ok(reviewPlan([{ id: "W-1", targetFiles: ["a"], verify: "t" }]).errors.some(e => e.includes("Action"))));
   it("fails: no Verify", () => assert.ok(reviewPlan([{ id: "W-1", targetFiles: ["a"], action: "d" }]).errors.some(e => e.includes("Verify"))));
-  it("fails: >5 files", () => assert.ok(reviewPlan([{ id: "W-1", targetFiles: ["a","b","c","d","e","f"], action: "d", verify: "t" }]).errors.length > 0));
+  it("fails: >10 files", () => assert.ok(reviewPlan([{ id: "W-1", targetFiles: ["a","b","c","d","e","f","g","h","i","j","k"], action: "d", verify: "t" }]).errors.length > 0));
 
   it("parent skips Action/Verify; error if no children", () => {
     const withChild = reviewPlan([{ id: "P", targetFiles: [], isParent: true }, { ...ok, parentId: "P" }]);

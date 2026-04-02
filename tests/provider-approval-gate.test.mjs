@@ -36,7 +36,7 @@ const {
 function makeProviderRef(providerSessionId = 'ps-1') {
   return {
     provider: 'codex',
-    executionMode: 'app_server',
+    executionMode: 'cli_exec',
     providerSessionId,
   };
 }

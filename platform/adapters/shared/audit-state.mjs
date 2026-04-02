@@ -46,9 +46,6 @@ export function readRetroMarker(adapterDir) {
   }
 }
 
-// readWatchContent removed — evidence is now in SQLite via audit_submit tool.
-// Legacy hooks read from tool_input.content, not from file.
-
 /**
  * Build resume actions for interrupted audit cycles.
  * Returns an array of action descriptions (strings) and context lines.
