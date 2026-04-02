@@ -19,7 +19,7 @@ skills:
 
 # Implementer Protocol (Claude Code)
 
-**Read the full protocol**: `${CLAUDE_PLUGIN_ROOT}/../../../agents/knowledge/implementer-protocol.md`
+**Read the full protocol**: `${CLAUDE_PLUGIN_ROOT}/../../../agents/knowledge/protocols/implementer.md`
 
 This file contains only Claude Code-specific bindings. All execution flow, completion gate, and anti-patterns are in the shared protocol.
 

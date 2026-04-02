@@ -27,13 +27,6 @@ const {
   formatCompactContext,
 } = await import("../dist/platform/orchestrate/execution/wave-compact.js");
 const {
-  selectGateProfileWithTelemetry,
-  onGateProfileTelemetry,
-  FULL_PROFILE,
-  STANDARD_PROFILE,
-  MINIMAL_PROFILE,
-} = await import("../dist/platform/orchestrate/governance/adaptive-gate-profile.js");
-const {
   emitTranscriptWorkload,
   onTranscriptWorkload,
 } = await import("../dist/platform/bus/provider-session-projector.js");
@@ -168,31 +161,6 @@ describe("RTI-1B: Compact telemetry", () => {
     const summary = generateFallbackSummary(2, "track-b", ["file.ts"], 0.7);
     assert.equal(summary.source, "fallback");
     assert.equal(summary.waveIndex, 2);
-  });
-});
-
-describe("RTI-1B: Gate profile telemetry", () => {
-  it("selectGateProfileWithTelemetry emits telemetry", () => {
-    const records = [];
-    onGateProfileTelemetry((r) => records.push(r));
-
-    const profile = selectGateProfileWithTelemetry(["security"]);
-    assert.equal(profile.profileId, "full");
-    assert.ok(records.length >= 1);
-    const r = records[records.length - 1];
-    assert.equal(r.profileId, "full");
-    assert.ok(r.inputTriggers.includes("security"));
-    assert.equal(r.usedDefault, false);
-  });
-
-  it("records default fallback", () => {
-    const records = [];
-    onGateProfileTelemetry((r) => records.push(r));
-
-    const profile = selectGateProfileWithTelemetry(["unknown-trigger-xyz"]);
-    assert.equal(profile.profileId, "standard");
-    const r = records[records.length - 1];
-    assert.equal(r.usedDefault, true);
   });
 });
 

@@ -245,16 +245,16 @@ export function validateToolAccess(result: TeamMappingResult): string[] {
  */
 export function getProtocolPath(role: QuorumRole): string | null {
   switch (role) {
-    case "implementer": return "agents/knowledge/implementer-protocol.md";
-    case "scout": return "agents/knowledge/scout-protocol.md";
-    case "self-checker": return "agents/knowledge/specialist-base.md";
-    case "fixer": return "agents/knowledge/implementer-protocol.md";
-    case "designer": return null; // designer uses skill-specific protocol
-    case "fde-analyst": return null;
-    case "wb-parser": return null;
-    case "rtm-scanner": return "agents/knowledge/scout-protocol.md";
-    case "gap-detector": return "agents/knowledge/scout-protocol.md";
-    case "generic-specialist": return "agents/knowledge/specialist-base.md";
+    case "implementer": return "agents/knowledge/protocols/implementer.md";
+    case "scout": return "agents/knowledge/protocols/scout.md";
+    case "self-checker": return "agents/knowledge/protocols/specialist-base.md";
+    case "fixer": return "agents/knowledge/protocols/fixer.md";
+    case "designer": return "agents/knowledge/protocols/designer.md";
+    case "fde-analyst": return "agents/knowledge/protocols/fde-analyst.md";
+    case "wb-parser": return "agents/knowledge/protocols/wb-parser.md";
+    case "rtm-scanner": return "agents/knowledge/protocols/rtm-scanner.md";
+    case "gap-detector": return "agents/knowledge/protocols/gap-detector.md";
+    case "generic-specialist": return "agents/knowledge/protocols/specialist-base.md";
     default: return null;
   }
 }

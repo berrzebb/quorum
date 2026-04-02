@@ -65,11 +65,11 @@ describe("implementer persona", () => {
 
   it("references shared protocol", () => {
     const persona = loader.load("implementer");
-    assert.ok(persona.content.includes("agents/knowledge/implementer-protocol.md"));
+    assert.ok(persona.content.includes("agents/knowledge/protocols/implementer.md"));
   });
 
   it("shared protocol has Setup and Input sections", () => {
-    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/implementer-protocol.md"), "utf8");
+    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/protocols/implementer.md"), "utf8");
     assert.ok(protocol.includes("## Setup"), "Setup section missing in shared protocol");
     assert.ok(protocol.includes("Worktree Environment Check"));
     assert.ok(protocol.includes("## Input (provided by orchestrator)"), "Input section missing in shared protocol");
@@ -112,8 +112,8 @@ describe("scout persona", () => {
 
   it("references shared protocol with Tool-First Principle", () => {
     const persona = loader.load("scout");
-    assert.ok(persona.content.includes("agents/knowledge/scout-protocol.md"));
-    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/scout-protocol.md"), "utf8");
+    assert.ok(persona.content.includes("agents/knowledge/protocols/scout.md"));
+    const protocol = readFileSync(resolve(QUORUM_ROOT, "agents/knowledge/protocols/scout.md"), "utf8");
     assert.ok(protocol.includes("## Tool-First Principle"), "Tool-First Principle missing in shared protocol");
     assert.ok(protocol.includes("deterministic tools before LLM reasoning"));
   });
@@ -177,9 +177,9 @@ describe("shared knowledge integrity", () => {
   const knowledgeDir = resolve(QUORUM_ROOT, "agents", "knowledge");
 
   it("core protocol files exist", () => {
-    assert.ok(existsSync(resolve(knowledgeDir, "implementer-protocol.md")));
-    assert.ok(existsSync(resolve(knowledgeDir, "scout-protocol.md")));
-    assert.ok(existsSync(resolve(knowledgeDir, "specialist-base.md")));
+    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "implementer.md")));
+    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "scout.md")));
+    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "specialist-base.md")));
   });
 
   it("all 9 domain knowledge files exist", () => {

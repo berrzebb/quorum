@@ -15,7 +15,7 @@ skills:
 
 # Scout Protocol (OpenAI-Compatible)
 
-**Read the full protocol**: `${ADAPTER_ROOT}/../../../agents/knowledge/scout-protocol.md`
+**Read the full protocol**: `${ADAPTER_ROOT}/../../../agents/knowledge/protocols/scout.md`
 
 This file contains only adapter-specific bindings. All phases, output rules, and anti-patterns are in the shared protocol.
 

@@ -21,7 +21,7 @@ What are you doing?
 │
 ├─► Implementing code?
 │   └─► /quorum:orchestrator
-│       Uses: agents/knowledge/implementer-protocol.md
+│       Uses: agents/knowledge/protocols/implementer.md
 │       Wave execution with audit gates
 │
 ├─► Submitting evidence for review?

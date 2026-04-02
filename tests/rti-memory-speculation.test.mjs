@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * RTI-6: Session Memory Carryover + RTI-7: Speculation Predictor Tests
+ * RTI-6: Session Memory Carryover Tests
  *
  * Run: node --test tests/rti-memory-speculation.test.mjs
  */
@@ -15,12 +15,6 @@ const {
   formatMemoryContext,
   generateCompactSummary,
 } = await import("../dist/platform/orchestrate/execution/wave-compact.js");
-
-const {
-  speculatePassLikelihood,
-  onSpeculationTelemetry,
-  emitSpeculation,
-} = await import("../dist/platform/orchestrate/governance/adaptive-gate-profile.js");
 
 // ═══ RTI-6: Memory Digest ═══════════════════════════════════════════════
 
@@ -151,137 +145,3 @@ describe("RTI-6: formatMemoryContext", () => {
   });
 });
 
-// ═══ RTI-7: Speculation Predictor ═══════════════════════════════════════
-
-describe("RTI-7: speculatePassLikelihood", () => {
-  it("returns enforce: false (shadow mode invariant)", () => {
-    const result = speculatePassLikelihood({
-      fitnessTrend: [0.8, 0.85, 0.9],
-      correctionRounds: 0,
-      approvalDensity: 1,
-      transcriptChurn: 100,
-      changedFileCount: 2,
-      domains: [],
-      currentProfile: "standard",
-    });
-    assert.equal(result.enforce, false);
-  });
-
-  it("high fitness + no corrections → high pass likelihood", () => {
-    const result = speculatePassLikelihood({
-      fitnessTrend: [0.85, 0.88, 0.92],
-      correctionRounds: 0,
-      approvalDensity: 1,
-      transcriptChurn: 50,
-      changedFileCount: 2,
-      domains: [],
-      currentProfile: "standard",
-    });
-    assert.ok(result.passLikelihood >= 0.7, `Expected >= 0.7, got ${result.passLikelihood}`);
-  });
-
-  it("low fitness + many corrections → low pass likelihood", () => {
-    const result = speculatePassLikelihood({
-      fitnessTrend: [0.5, 0.45, 0.4],
-      correctionRounds: 5,
-      approvalDensity: 15,
-      transcriptChurn: 1000,
-      changedFileCount: 20,
-      domains: ["security"],
-      currentProfile: "full",
-    });
-    assert.ok(result.passLikelihood < 0.5, `Expected < 0.5, got ${result.passLikelihood}`);
-  });
-
-  it("security domain reduces likelihood", () => {
-    const base = {
-      fitnessTrend: [0.8],
-      correctionRounds: 0,
-      approvalDensity: 2,
-      transcriptChurn: 100,
-      changedFileCount: 3,
-      currentProfile: "standard",
-    };
-    const safe = speculatePassLikelihood({ ...base, domains: [] });
-    const risky = speculatePassLikelihood({ ...base, domains: ["security"] });
-    assert.ok(safe.passLikelihood > risky.passLikelihood);
-  });
-
-  it("recommends lighter profile for high-likelihood tasks", () => {
-    const result = speculatePassLikelihood({
-      fitnessTrend: [0.9, 0.92, 0.95],
-      correctionRounds: 0,
-      approvalDensity: 0,
-      transcriptChurn: 10,
-      changedFileCount: 1,
-      domains: [],
-      currentProfile: "full",
-    });
-    assert.ok(
-      result.recommendedProfile === "minimal" || result.recommendedProfile === "standard",
-      `Expected lighter profile, got ${result.recommendedProfile}`,
-    );
-  });
-
-  it("confidence increases with more data points", () => {
-    const few = speculatePassLikelihood({
-      fitnessTrend: [0.8],
-      correctionRounds: 0,
-      approvalDensity: 1,
-      transcriptChurn: 50,
-      changedFileCount: 2,
-      domains: [],
-      currentProfile: "standard",
-    });
-    const many = speculatePassLikelihood({
-      fitnessTrend: [0.7, 0.75, 0.8, 0.82, 0.85],
-      correctionRounds: 1,
-      approvalDensity: 3,
-      transcriptChurn: 200,
-      changedFileCount: 5,
-      domains: [],
-      currentProfile: "standard",
-    });
-    assert.ok(many.confidence >= few.confidence, `More data → higher confidence`);
-  });
-
-  it("has reason string", () => {
-    const result = speculatePassLikelihood({
-      fitnessTrend: [0.8],
-      correctionRounds: 0,
-      approvalDensity: 1,
-      transcriptChurn: 50,
-      changedFileCount: 2,
-      domains: [],
-      currentProfile: "standard",
-    });
-    assert.equal(typeof result.reason, "string");
-    assert.ok(result.reason.length > 0);
-  });
-});
-
-describe("RTI-7: Speculation telemetry", () => {
-  it("emitSpeculation notifies callbacks", () => {
-    const records = [];
-    onSpeculationTelemetry((input, result, outcome) => {
-      records.push({ input, result, outcome });
-    });
-
-    const input = {
-      fitnessTrend: [0.8],
-      correctionRounds: 0,
-      approvalDensity: 1,
-      transcriptChurn: 50,
-      changedFileCount: 2,
-      domains: [],
-      currentProfile: "standard",
-    };
-    const result = speculatePassLikelihood(input);
-    emitSpeculation(input, result, "pass");
-
-    assert.ok(records.length >= 1);
-    const last = records[records.length - 1];
-    assert.equal(last.outcome, "pass");
-    assert.equal(last.result.enforce, false);
-  });
-});

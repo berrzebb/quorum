@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
  * RTI-8: Classifier Enforce Mode
- * RTI-9: Speculation Fast-Lane
  * RTI-10: Renderer Benchmark
  *
  * Run: node --test tests/rti-enforce-fastlane-bench.test.mjs
@@ -15,14 +14,6 @@ const {
   shouldEnforce,
   defaultEnforceConfig,
 } = await import("../dist/platform/bus/approval-classifier.js");
-
-const {
-  speculatePassLikelihood,
-  defaultFastLaneConfig,
-  createCalibrationState,
-  recordCalibration,
-  tryFastLane,
-} = await import("../dist/platform/orchestrate/governance/adaptive-gate-profile.js");
 
 const { runBenchmark } = await import("../dist/daemon/lib/renderer-benchmark.js");
 
@@ -72,91 +63,6 @@ describe("RTI-8: shouldEnforce", () => {
     const decision = classify(input);
     // Most decisions have confidence < 0.99
     assert.equal(shouldEnforce(config, input, decision), false);
-  });
-});
-
-// ═══ RTI-9: Speculation Fast-Lane ═══════════════════════════════════════
-
-describe("RTI-9: Fast-lane config", () => {
-  it("default config is disabled", () => {
-    const config = defaultFastLaneConfig();
-    assert.equal(config.enabled, false);
-    assert.equal(config.minPrecision, 0.85);
-    assert.equal(config.minSamples, 20);
-  });
-});
-
-describe("RTI-9: Calibration tracking", () => {
-  it("starts with zero state", () => {
-    const state = createCalibrationState();
-    assert.equal(state.totalPredictions, 0);
-    assert.equal(state.precision, 0);
-  });
-
-  it("records correct pass prediction", () => {
-    let state = createCalibrationState();
-    const prediction = { passLikelihood: 0.9, recommendedProfile: "minimal", confidence: 0.8, reason: "", enforce: false };
-    state = recordCalibration(state, prediction, "pass");
-    assert.equal(state.totalPredictions, 1);
-    assert.equal(state.correctPassPredictions, 1);
-    assert.equal(state.precision, 1.0);
-  });
-
-  it("records false positive", () => {
-    let state = createCalibrationState();
-    const prediction = { passLikelihood: 0.9, recommendedProfile: "minimal", confidence: 0.8, reason: "", enforce: false };
-    state = recordCalibration(state, prediction, "fail");
-    assert.equal(state.falsePassPredictions, 1);
-    assert.equal(state.precision, 0);
-  });
-
-  it("precision converges with mixed data", () => {
-    let state = createCalibrationState();
-    const high = { passLikelihood: 0.9, recommendedProfile: "minimal", confidence: 0.8, reason: "", enforce: false };
-    // 8 correct, 2 false → precision 0.8
-    for (let i = 0; i < 8; i++) state = recordCalibration(state, high, "pass");
-    for (let i = 0; i < 2; i++) state = recordCalibration(state, high, "fail");
-    assert.equal(state.totalPredictions, 10);
-    assert.equal(state.precision, 0.8);
-  });
-});
-
-describe("RTI-9: tryFastLane", () => {
-  it("returns null when disabled", () => {
-    const config = defaultFastLaneConfig();
-    const calibration = createCalibrationState();
-    const prediction = { passLikelihood: 0.95, recommendedProfile: "minimal", confidence: 0.9, reason: "", enforce: false };
-    assert.equal(tryFastLane(config, calibration, prediction), null);
-  });
-
-  it("returns null when not enough samples", () => {
-    const config = { ...defaultFastLaneConfig(), enabled: true };
-    const calibration = { totalPredictions: 5, correctPassPredictions: 5, falsePassPredictions: 0, precision: 1.0 };
-    const prediction = { passLikelihood: 0.95, recommendedProfile: "minimal", confidence: 0.9, reason: "", enforce: false };
-    assert.equal(tryFastLane(config, calibration, prediction), null);
-  });
-
-  it("returns null when precision too low", () => {
-    const config = { ...defaultFastLaneConfig(), enabled: true };
-    const calibration = { totalPredictions: 30, correctPassPredictions: 15, falsePassPredictions: 15, precision: 0.5 };
-    const prediction = { passLikelihood: 0.95, recommendedProfile: "minimal", confidence: 0.9, reason: "", enforce: false };
-    assert.equal(tryFastLane(config, calibration, prediction), null);
-  });
-
-  it("returns profile when all conditions met", () => {
-    const config = { ...defaultFastLaneConfig(), enabled: true };
-    const calibration = { totalPredictions: 25, correctPassPredictions: 23, falsePassPredictions: 2, precision: 0.92 };
-    const prediction = { passLikelihood: 0.9, recommendedProfile: "minimal", confidence: 0.9, reason: "", enforce: false };
-    const result = tryFastLane(config, calibration, prediction);
-    assert.ok(result, "Should return a profile");
-    assert.equal(typeof result.profileId, "string");
-  });
-
-  it("returns null when likelihood below threshold", () => {
-    const config = { ...defaultFastLaneConfig(), enabled: true };
-    const calibration = { totalPredictions: 25, correctPassPredictions: 23, falsePassPredictions: 2, precision: 0.92 };
-    const prediction = { passLikelihood: 0.5, recommendedProfile: "standard", confidence: 0.6, reason: "", enforce: false };
-    assert.equal(tryFastLane(config, calibration, prediction), null);
   });
 });
 

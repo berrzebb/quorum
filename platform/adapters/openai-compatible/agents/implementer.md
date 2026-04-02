@@ -18,7 +18,7 @@ skills:
 
 # Implementer Protocol (OpenAI-Compatible)
 
-**Read the full protocol**: `${ADAPTER_ROOT}/../../../agents/knowledge/implementer-protocol.md`
+**Read the full protocol**: `${ADAPTER_ROOT}/../../../agents/knowledge/protocols/implementer.md`
 
 This file contains only adapter-specific bindings. All execution flow, completion gate, and anti-patterns are in the shared protocol.
 

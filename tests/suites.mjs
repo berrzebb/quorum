@@ -45,7 +45,6 @@ const SUITE_DEFINITIONS = {
     "handoff-gate.test.mjs",
     "runtime-evaluation-spec.test.mjs",
     "runtime-evaluation-gate.test.mjs",
-    "adaptive-gate-profile.test.mjs",
   ],
   runtime: [
     "bridge.test.mjs",
@@ -96,7 +95,6 @@ const SUITE_DEFINITIONS = {
   ],
   orchestrate: [
     "act-analyze.test.mjs",
-    "adaptive-gate-profile.test.mjs",
     "audit-history.test.mjs",
     "auto-learn.test.mjs",
     "blueprint-lint.test.mjs",

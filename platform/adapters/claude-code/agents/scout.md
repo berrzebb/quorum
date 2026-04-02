@@ -16,7 +16,7 @@ skills:
 
 # Scout Protocol (Claude Code)
 
-**Read the full protocol**: `${CLAUDE_PLUGIN_ROOT}/../../../agents/knowledge/scout-protocol.md`
+**Read the full protocol**: `${CLAUDE_PLUGIN_ROOT}/../../../agents/knowledge/protocols/scout.md`
 
 This file contains only Claude Code-specific bindings. All phases, output rules, and anti-patterns are in the shared protocol.
 

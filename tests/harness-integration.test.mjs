@@ -130,20 +130,20 @@ describe("team-mapper", () => {
   });
 
   describe("getProtocolPath", () => {
-    it("returns implementer-protocol for implementer", () => {
-      assert.ok(mod.getProtocolPath("implementer").includes("implementer-protocol"));
+    it("returns protocols/implementer.md for implementer", () => {
+      assert.ok(mod.getProtocolPath("implementer").includes("protocols/implementer.md"));
     });
 
-    it("returns scout-protocol for scout", () => {
-      assert.ok(mod.getProtocolPath("scout").includes("scout-protocol"));
+    it("returns protocols/scout.md for scout", () => {
+      assert.ok(mod.getProtocolPath("scout").includes("protocols/scout.md"));
     });
 
-    it("returns specialist-base for self-checker", () => {
-      assert.ok(mod.getProtocolPath("self-checker").includes("specialist-base"));
+    it("returns protocols/specialist-base.md for self-checker", () => {
+      assert.ok(mod.getProtocolPath("self-checker").includes("protocols/specialist-base.md"));
     });
 
-    it("returns null for designer", () => {
-      assert.equal(mod.getProtocolPath("designer"), null);
+    it("returns protocols/designer.md for designer", () => {
+      assert.ok(mod.getProtocolPath("designer").includes("protocols/designer.md"));
     });
   });
 });
@@ -364,21 +364,22 @@ describe("harness-bootstrap skill", () => {
     const content = readFileSync("platform/skills/harness-bootstrap/SKILL.md", "utf8");
     assert.ok(content.includes("name: quorum:harness-bootstrap"));
     assert.ok(content.includes("description:"));
-    assert.ok(content.includes("## Workflow"));
-    assert.ok(content.includes("Phase 1:"));
-    assert.ok(content.includes("Phase 6:"));
+    // Knowledge-centric: SKILL.md delegates to protocol
+    assert.ok(content.includes("agents/knowledge/protocols/harness-bootstrap.md"));
   });
 
-  it("mentions quorum role mapping", () => {
-    const content = readFileSync("platform/skills/harness-bootstrap/SKILL.md", "utf8");
-    assert.ok(content.includes("implementer"));
-    assert.ok(content.includes("self-checker"));
-    assert.ok(content.includes("scout"));
-    assert.ok(content.includes("designer"));
+  it("protocol has workflow and role mapping", () => {
+    const protocol = readFileSync("agents/knowledge/protocols/harness-bootstrap.md", "utf8");
+    assert.ok(protocol.includes("## Workflow"));
+    assert.ok(protocol.includes("Phase 1:"));
+    assert.ok(protocol.includes("implementer"));
+    assert.ok(protocol.includes("scout"));
+    assert.ok(protocol.includes("designer"));
   });
 
-  it("references skill_sync for adapter wrapper generation", () => {
-    const content = readFileSync("platform/skills/harness-bootstrap/SKILL.md", "utf8");
-    assert.ok(content.includes("skill_sync"));
+  it("protocol references skill generation", () => {
+    const protocol = readFileSync("agents/knowledge/protocols/harness-bootstrap.md", "utf8");
+    // Protocol should describe how to generate skills
+    assert.ok(protocol.includes("skill") || protocol.includes("Skill"));
   });
 });

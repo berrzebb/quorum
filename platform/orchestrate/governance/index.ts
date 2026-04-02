@@ -32,13 +32,6 @@ export { runE2EVerification } from "./e2e-verification.js";
 export type { RuntimeEvaluationGateResult } from "./runtime-evaluation-gate.js";
 export { runRuntimeEvaluationGate } from "./runtime-evaluation-gate.js";
 
-// Adaptive gate profiles — risk-based gate subset selection
-export type { AdaptiveGateProfile } from "./adaptive-gate-profile.js";
-export {
-  MINIMAL_PROFILE, STANDARD_PROFILE, FULL_PROFILE,
-  selectGateProfile, getEffectiveGates, shouldRunGate, getGateProfile,
-} from "./adaptive-gate-profile.js";
-
 // Iteration budget — consumption tracking + escalation decisions
 export type { IterationState, IterationDecision } from "./iteration-budget.js";
 export { createIterationState, decideNextAction, recordIteration } from "./iteration-budget.js";
