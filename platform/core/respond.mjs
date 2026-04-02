@@ -49,10 +49,10 @@ function parseArgs(argv) {
  * Returns { verdict, codes, agreedIds, pendingIds, track } or null.
  */
 function readLatestVerdict() {
-  const lastProcessed = bridge.getState?.("respond:last_processed");
+  const lastProcessed = bridge.query.getState?.("respond:last_processed");
   const since = lastProcessed?.timestamp ?? 0;
 
-  const events = bridge.queryEvents({ eventType: "audit.verdict", since, limit: 1 });
+  const events = bridge.event.queryEvents({ eventType: "audit.verdict", since, limit: 1 });
   if (!events || events.length === 0) return null;
 
   const e = events[0];
@@ -72,7 +72,7 @@ function readLatestVerdict() {
  * Read current item states from state_transitions table.
  */
 function readItemStates() {
-  const items = bridge.queryItemStates();
+  const items = bridge.event.queryItemStates();
   if (!items || items.length === 0) return { pending: [], approved: [], all: [] };
 
   const pending = items.filter(i => i.currentState === "changes_requested");
@@ -94,7 +94,7 @@ function runAutoFix(codes) {
   // Read latest verdict text from SQLite for auto-fix context
   let verdictText = "";
   try {
-    const events = bridge.queryEvents({ eventType: "audit.verdict", limit: 1 });
+    const events = bridge.event.queryEvents({ eventType: "audit.verdict", limit: 1 });
     verdictText = events?.[0]?.payload?.verdictText ?? "";
   } catch (err) { console.warn("[respond] verdict text read failed:", err?.message ?? err); }
 
@@ -147,7 +147,7 @@ function runRetrospective(sessionId) {
 
 function checkExplainGate() {
   try {
-    const explainState = bridge.getState?.("explain:pending");
+    const explainState = bridge.query.getState?.("explain:pending");
     if (explainState?.required) {
       console.log("[explain-gate] Retro blocked — add explanation to evidence first");
       return true; // blocked
@@ -158,7 +158,7 @@ function checkExplainGate() {
 
 function handleStagnation(track) {
   try {
-    const stagnation = bridge.detectStagnation(REPO_ROOT);
+    const stagnation = bridge.gate.detectStagnation(REPO_ROOT);
     if (!stagnation?.detected) return;
 
     const patterns = stagnation.patterns.map(p => p.type).join(", ");
@@ -170,7 +170,7 @@ function handleStagnation(track) {
       const { all } = readItemStates();
       for (const item of all) {
         if (item.currentState === "review_needed" || item.currentState === "changes_requested") {
-          bridge.recordTransition(
+          bridge.event.recordTransition(
             "audit_item", item.entityId,
             item.currentState, "approved",
             "system",
@@ -178,7 +178,7 @@ function handleStagnation(track) {
           );
         }
       }
-      bridge.emitEvent("stagnation.resolve", "system", { action: "force_approve", track });
+      bridge.event.emitEvent("stagnation.resolve", "system", { action: "force_approve", track });
     }
   } catch (err) { console.warn("[respond] handleStagnation failed:", err?.message ?? err); }
 }
@@ -187,7 +187,7 @@ async function handleTechDebt(track) {
   try {
     const { parseResidualRisk, appendTechDebt } = await import("./enforcement.mjs");
     // Read evidence from the latest evidence.submit event
-    const evidenceEvents = bridge.queryEvents({ eventType: "evidence.submit", limit: 1 });
+    const evidenceEvents = bridge.event.queryEvents({ eventType: "evidence.submit", limit: 1 });
     if (!evidenceEvents?.length) return;
 
     const content = evidenceEvents[0].payload?.content ?? "";
@@ -243,7 +243,7 @@ export async function main() {
   // Record router feedback for tier escalation
   try {
     const taskKey = verdict.track || "default";
-    const escalation = bridge.recordVerdict(taskKey, verdict.verdict === "approved");
+    const escalation = bridge.gate.recordVerdict(taskKey, verdict.verdict === "approved");
     if (escalation?.escalated) {
       console.log(`[respond] Router escalated ${taskKey} → tier ${escalation.tier}`);
     }
@@ -290,7 +290,7 @@ export async function main() {
 
   // Mark verdict as processed
   if (!args.dryRun) {
-    bridge.setState("respond:last_processed", {
+    bridge.query.setState("respond:last_processed", {
       timestamp: verdict.timestamp,
       processedAt: Date.now(),
     });

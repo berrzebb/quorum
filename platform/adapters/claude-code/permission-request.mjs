@@ -12,7 +12,7 @@ if (configMissing) process.exit(0);
 const input = await readStdinJson();
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  const gate = await bridge.checkHookGate("permission.request", {
+  const gate = await bridge.hooks.checkHookGate("permission.request", {
     session_id: input.session_id,
     cwd: REPO_ROOT,
     tool_name: input.tool_name,

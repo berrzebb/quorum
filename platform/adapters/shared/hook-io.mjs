@@ -54,7 +54,7 @@ export async function withBridge(repoRoot, hooksCfg, fn) {
   try {
     const bridge = await import("../../core/bridge.mjs");
     if (await bridge.init(repoRoot)) {
-      await bridge.initHookRunner(repoRoot, hooksCfg);
+      await bridge.hooks.initHookRunner(repoRoot, hooksCfg);
       const result = await fn(bridge);
       bridge.close();
       return result;

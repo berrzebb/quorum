@@ -169,7 +169,7 @@ export function crossCheckGitDiff(listedFiles, repoRoot) {
 
 /**
  * Build trigger evaluation context from evidence content.
- * This creates the context object that bridge.evaluateTrigger() expects.
+ * This creates the context object that bridge.gate.evaluateTrigger() expects.
  *
  * @param {object} params
  * @param {string} params.content — watch file content
@@ -179,7 +179,7 @@ export function crossCheckGitDiff(listedFiles, repoRoot) {
  * @param {number} [params.priorRejections=0] — count of prior rejection verdicts
  * @param {boolean} [params.hasPlanDoc=false] — whether plan docs exist
  * @param {number} [params.blastRadius] — blast radius ratio (0.0-1.0)
- * @returns {object} TriggerContext for bridge.evaluateTrigger()
+ * @returns {object} TriggerContext for bridge.gate.evaluateTrigger()
  */
 export function buildTriggerContext({
   content,

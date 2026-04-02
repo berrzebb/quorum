@@ -85,7 +85,7 @@ try {
   const bridge = await import("../../core/bridge.mjs");
   const { REPO_ROOT } = await import("../../core/context.mjs");
   await bridge.init(REPO_ROOT);
-  bridge.emitEvent("agent.spawn", "claude-code", {
+  bridge.event.emitEvent("agent.spawn", "claude-code", {
     name: input.agent_name || agentType,
     role: agentType,
     sessionId: input.session_id,

@@ -83,22 +83,22 @@ async function orchestrateTrack(
   const bridge = await loadBridge(repoRoot);
   const workItems = parseWorkBreakdown(track.path);
 
-  if (bridge?.selectExecutionMode && workItems.length > 0) {
-    const selection = bridge.selectExecutionMode(workItems);
+  if (bridge?.execution?.selectExecutionMode && workItems.length > 0) {
+    const selection = bridge.execution.selectExecutionMode(workItems);
     if (selection) {
       console.log(`  Mode: ${selection.mode}, Max concurrency: ${selection.maxConcurrency}`);
       if (selection.plan.groups.length > 0) {
         console.log(`\n  Execution groups (${selection.plan.depth} steps):\n`);
-        for (const group of selection.plan.groups) {
-          const ids = group.items.map((i: { id: string }) => i.id).join(", ");
+        for (const group of selection.plan.groups as Array<{ order: number; items: Array<{ id: string }> }>) {
+          const ids = group.items.map((i) => i.id).join(", ");
           console.log(`    Step ${group.order + 1}: [${ids}]  (${group.items.length} parallel)`);
         }
       }
     }
   }
 
-  if (bridge?.emitEvent) {
-    bridge.emitEvent("track.create", "generic", {
+  if (bridge?.event?.emitEvent) {
+    bridge.event.emitEvent("track.create", "generic", {
       trackId: track.name, total: track.items, completed: 0, pending: track.items, blocked: 0,
     });
   }
@@ -122,11 +122,11 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
   const track = tracks.find(t => t.name === trackName);
   const bridge = await loadBridge(repoRoot);
 
-  if (bridge?.claimFiles && track) {
+  if (bridge?.claim?.claimFiles && track) {
     const workItems = parseWorkBreakdown(track.path);
     const allFiles = workItems.flatMap(i => i.targetFiles);
     if (allFiles.length > 0) {
-      const conflicts = bridge.claimFiles(agentName, allFiles, undefined, 600_000);
+      const conflicts = bridge.claim.claimFiles(agentName, allFiles, undefined, 600_000);
       if (conflicts.length > 0) {
         console.log(`\n  \x1b[31m✗ File conflicts:\x1b[0m`);
         for (const c of conflicts) console.log(`    ${c.filePath} → ${c.heldBy}`);
@@ -137,8 +137,8 @@ async function assignTrack(repoRoot: string, trackName: string | undefined, args
     }
   }
 
-  if (bridge?.emitEvent) {
-    bridge.emitEvent("agent.spawn", "generic", { agentId: agentName, role: "implementer", trackId: trackName });
+  if (bridge?.event?.emitEvent) {
+    bridge.event.emitEvent("agent.spawn", "generic", { agentId: agentName, role: "implementer", trackId: trackName });
   }
 
   console.log(`\n  \x1b[36mAssigned ${trackName} → ${agentName}\x1b[0m\n`);
@@ -152,12 +152,12 @@ async function showProgress(repoRoot: string): Promise<void> {
 
   const bridge = await loadBridge(repoRoot);
 
-  if (bridge?.getClaims) {
-    const claims = bridge.getClaims();
+  if (bridge?.claim?.getClaims) {
+    const claims = bridge.claim.getClaims();
     if (claims.length > 0) {
       console.log("  \x1b[1mActive file claims:\x1b[0m\n");
       const byAgent = new Map<string, string[]>();
-      for (const c of claims) {
+      for (const c of claims as Array<{ agentId: string; filePath: string }>) {
         const list = byAgent.get(c.agentId) ?? [];
         list.push(c.filePath);
         byAgent.set(c.agentId, list);
@@ -170,11 +170,11 @@ async function showProgress(repoRoot: string): Promise<void> {
     }
   }
 
-  if (bridge?.analyzeAuditLearnings) {
-    const learnings = bridge.analyzeAuditLearnings();
-    if (learnings?.patterns.length > 0) {
+  if (bridge?.execution?.analyzeAuditLearnings) {
+    const learnings = bridge.execution.analyzeAuditLearnings();
+    if (learnings && learnings.patterns.length > 0) {
       console.log("  \x1b[1mRepeat patterns:\x1b[0m\n");
-      for (const p of learnings.patterns.slice(0, 5)) {
+      for (const p of learnings.patterns.slice(0, 5) as Array<{ key: string; type: string; count: number }>) {
         console.log(`    ${p.key} (${p.type}): ${p.count}×`);
       }
     }

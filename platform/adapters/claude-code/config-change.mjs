@@ -13,7 +13,7 @@ if (configMissing) process.exit(0);
 const input = await readStdinJson();
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  const gate = await bridge.checkHookGate("config.change", {
+  const gate = await bridge.hooks.checkHookGate("config.change", {
     session_id: input.session_id,
     cwd: REPO_ROOT,
     metadata: { source: input.source, file_path: input.file_path },

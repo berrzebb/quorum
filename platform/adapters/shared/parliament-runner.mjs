@@ -4,7 +4,7 @@
  *
  * NOTE: `cfg.consensus.roles` is a Record<string, string> (e.g. {advocate: "openai"}).
  * `parliament-session.ts` expects `ConsensusConfig` with actual Auditor instances.
- * `bridge.runParliamentSession()` passes the config through to parliament-session unchanged,
+ * `bridge.parliament.runParliamentSession()` passes the config through to parliament-session unchanged,
  * so the caller MUST supply pre-constructed auditors via `cfg.consensus.auditors` if available,
  * or this will only work in environments where bridge handles auditor creation externally.
  * When roles are plain strings, the session will fail-open at the deliberation phase
@@ -27,10 +27,10 @@ export async function runParliamentIfEnabled(bridge, cfg, content, source, sessi
   let consensusConfig = consensus.auditors; // Pre-built Auditor instances
   if (!consensusConfig || !consensusConfig.advocate?.audit) {
     // Roles are strings (e.g. "claude") — convert to Auditor instances
-    if (bridge.createConsensusAuditors) {
+    if (bridge.parliament?.createConsensusAuditors) {
       try {
         const roles = cfg.parliament?.roles ?? consensus.roles ?? {};
-        consensusConfig = await bridge.createConsensusAuditors(roles);
+        consensusConfig = await bridge.parliament.createConsensusAuditors(roles);
       } catch (err) {
         if (log) log(`PARLIAMENT: failed to create auditors: ${err.message}`);
         return null; // Strict: cannot proceed without real Auditors
@@ -51,14 +51,14 @@ export async function runParliamentIfEnabled(bridge, cfg, content, source, sessi
   };
 
   try {
-    const sessionResult = await bridge.runParliamentSession(
+    const sessionResult = await bridge.parliament.runParliamentSession(
       { prompt: content, evidence: content, files: [] },
       parliamentCfg,
     );
 
     if (sessionResult?.verdict?.finalVerdict) {
       if (log) log(`PARLIAMENT: verdict=${sessionResult.verdict.finalVerdict} converged=${sessionResult.convergence?.converged ?? false}`);
-      bridge.emitEvent("audit.verdict", source, {
+      bridge.event.emitEvent("audit.verdict", source, {
         itemId: `parliament:${sessionId ?? "session"}`,
         verdict: sessionResult.verdict.finalVerdict,
         summary: sessionResult.verdict.judgeSummary,

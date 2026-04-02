@@ -170,8 +170,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     targetFiles: s.targetFiles, dependsOn: s.dependsOn,
   }));
 
-  if (bridge?.setState) {
-    bridge.setState(`agent:roster:${trackName}`, {
+  if (bridge?.query?.setState) {
+    bridge.query.setState(`agent:roster:${trackName}`, {
       trackName, groupIndex: opts.waveIndex, agents: roster, startedAt: Date.now(),
     });
   }
@@ -187,8 +187,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   const canSpawn = (item: WorkItem): boolean => canSpawnItem(item, groupIds, completedIds);
 
   const spawnItem = async (item: WorkItem): Promise<void> => {
-    if (bridge?.claimFiles && item.targetFiles.length > 0) {
-      bridge.claimFiles(`impl-${item.id}`, item.targetFiles, undefined, 1800_000);
+    if (bridge?.claim?.claimFiles && item.targetFiles.length > 0) {
+      bridge.claim.claimFiles(`impl-${item.id}`, item.targetFiles, undefined, 1800_000);
     }
 
     const handle = await spawnAgent({
@@ -202,8 +202,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       if (handle.tier.domains.length > 0) {
         log(`      \x1b[2mdomains: ${handle.tier.domains.join(", ")} → ${handle.tier.model ?? "default"}\x1b[0m`);
       }
-      if (bridge?.emitEvent) {
-        bridge.emitEvent("agent.spawn", "generic", {
+      if (bridge?.event?.emitEvent) {
+        bridge.event.emitEvent("agent.spawn", "generic", {
           agentId: `impl-${item.id}`, role: "implementer",
           trackId: trackName, wbId: item.id, sessionId: handle.sessionId,
         });
@@ -252,12 +252,12 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       removeAgentState(repoRoot, s.sessionId);
       try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
 
-      if (bridge?.emitEvent) {
-        bridge.emitEvent("agent.complete", "generic", {
+      if (bridge?.event?.emitEvent) {
+        bridge.event.emitEvent("agent.complete", "generic", {
           agentId: `impl-${s.item.id}`, role: "implementer",
           trackId: trackName, wbId: s.item.id,
         });
-        bridge.emitEvent("track.progress", "generic", {
+        bridge.event.emitEvent("track.progress", "generic", {
           trackId: trackName, completed: completedIds.size, pending: active.length,
           total: opts.totalItems ?? wave.items.length,
           blocked: 0, failed: 0,
@@ -284,7 +284,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
   }
   for (const item of wave.items) {
-    if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
+    if (bridge?.claim?.releaseFiles) bridge.claim.releaseFiles(`impl-${item.id}`);
   }
 
   // ── 2.5. Scope enforcement — warn about out-of-scope file changes ──

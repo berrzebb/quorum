@@ -12,7 +12,7 @@ const input = await readStdinJson();
 const signals = buildStatusSignals({ repoRoot: REPO_ROOT, adapterDir: ADAPTER_DIR, cfg });
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  const gate = await bridge.checkHookGate("prompt.submit", {
+  const gate = await bridge.hooks.checkHookGate("prompt.submit", {
     session_id: input.session_id, cwd: REPO_ROOT,
     metadata: { provider: "codex", prompt: input.prompt?.slice(0, 200) },
   });

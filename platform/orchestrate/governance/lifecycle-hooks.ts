@@ -157,8 +157,8 @@ export async function autoRetro(repoRoot: string): Promise<void> {
     // dist/platform/orchestrate/governance/ → up 4 → quorum project root
     const quorumRoot = resolve(__dirname, "..", "..", "..", "..");
     const bridge = await import(toURL(resolve(quorumRoot, "platform", "core", "bridge.mjs")));
-    if (bridge?.emitEvent) {
-      bridge.emitEvent("retro.complete", "generic", { auto: true, timestamp: Date.now() });
+    if (bridge?.event?.emitEvent) {
+      bridge.event.emitEvent("retro.complete", "generic", { auto: true, timestamp: Date.now() });
     }
   } catch (err) { console.warn(`[lifecycle] autoRetro event emission skipped: ${(err as Error).message}`); }
 }
@@ -186,8 +186,8 @@ export async function autoMerge(repoRoot: string, bridge: Bridge | null): Promis
     return;
   }
 
-  if (bridge?.checkParliamentGates) {
-    const gate = bridge.checkParliamentGates();
+  if (bridge?.parliament?.checkParliamentGates) {
+    const gate = bridge.parliament.checkParliamentGates();
     if (!gate.allowed) {
       console.log(`  \x1b[33m⚠ Merge blocked: ${gate.reason}\x1b[0m\n`);
       return;

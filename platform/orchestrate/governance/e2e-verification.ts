@@ -184,8 +184,8 @@ export async function runE2EVerification(
   }
 
   console.log("  \x1b[32m✓ Track complete!\x1b[0m\n");
-  if (bridge?.emitEvent) {
-    bridge.emitEvent("track.complete", "generic", { trackId: trackName, total: totalWBs, e2ePassed });
+  if (bridge?.event?.emitEvent) {
+    bridge.event.emitEvent("track.complete", "generic", { trackId: trackName, total: totalWBs, e2ePassed });
   }
 
   // Auto-learn

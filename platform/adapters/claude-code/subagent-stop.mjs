@@ -76,12 +76,12 @@ try {
   const bridge = await import("../../core/bridge.mjs");
   const { REPO_ROOT } = await import("../../core/context.mjs");
   await bridge.init(REPO_ROOT);
-  bridge.emitEvent("agent.complete", "claude-code", {
+  bridge.event.emitEvent("agent.complete", "claude-code", {
     name: agentName,
     retroDeferred,
   });
   // Release all file claims held by this agent
-  const released = bridge.releaseFiles(agentName);
+  const released = bridge.claim.releaseFiles(agentName);
   if (released > 0) {
     process.stderr.write(`[quorum] Released ${released} file claim(s) for ${agentName}\n`);
   }

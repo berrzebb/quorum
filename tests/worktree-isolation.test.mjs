@@ -154,7 +154,7 @@ describe("audit.mjs worktree isolation invariants", () => {
 
   it("infra_failure verdict is recorded to SQLite on Codex failure", () => {
     assert.match(auditSource, /infra_failure.*auditor exited|mode.*infra_failure/);
-    assert.match(auditSource, /bridge\.recordTransition[\s\S]*?infra_failure/);
+    assert.match(auditSource, /bridge\.event\.recordTransition[\s\S]*?infra_failure/);
   });
 
   it("computeChangedFiles diff basis regex accepts ..HEAD", () => {

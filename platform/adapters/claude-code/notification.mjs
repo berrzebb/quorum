@@ -13,11 +13,11 @@ if (configMissing) process.exit(0);
 const input = await readStdinJson();
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  bridge.emitEvent("notification", "claude-code", {
+  bridge.event.emitEvent("notification", "claude-code", {
     type: input.notification_type,
     message: input.message,
   }, { sessionId: input.session_id });
-  await bridge.fireHook("notification", {
+  await bridge.hooks.fireHook("notification", {
     session_id: input.session_id,
     cwd: REPO_ROOT,
     metadata: { type: input.notification_type, message: input.message },

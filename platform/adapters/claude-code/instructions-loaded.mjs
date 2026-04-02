@@ -13,7 +13,7 @@ if (configMissing) process.exit(0);
 const input = await readStdinJson();
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("instructions.loaded", {
+  await bridge.hooks.fireHook("instructions.loaded", {
     session_id: input.session_id,
     cwd: REPO_ROOT,
     metadata: {

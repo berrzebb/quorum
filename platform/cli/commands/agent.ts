@@ -30,7 +30,7 @@ async function emitAgentEvent(repoRoot: string, type: string, payload: Record<st
     const quorumPkgRoot = resolve(__dirname, "..", "..", "..", "..");
     const bridge = await import(toURL(resolve(quorumPkgRoot, "platform", "core", "bridge.mjs")));
     await bridge.init(repoRoot);
-    bridge.emitEvent(type, "claude-code", payload);
+    bridge.event.emitEvent(type, "claude-code", payload);
     bridge.close();
   } catch (err) { console.warn(`[agent] emitAgentEvent failed: ${(err as Error).message}`); }
 }

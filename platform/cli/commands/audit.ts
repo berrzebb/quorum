@@ -65,12 +65,12 @@ export async function run(args: string[]): Promise<void> {
 
   if (bridge) {
     // Check for pending items via EventStore (SQLite-only, no md file)
-    const events = bridge.queryEvents?.({ eventType: "audit.submit" }) ?? [];
-    const verdicts = bridge.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
+    const events = bridge.event?.queryEvents?.({ eventType: "audit.submit" }) ?? [];
+    const verdicts = bridge.event?.queryEvents?.({ eventType: "audit.verdict" }) ?? [];
     const pendingCount = events.length - verdicts.length;
 
     // Check KV for latest evidence
-    const latestEvidence = bridge.getLatestEvidence?.();
+    const latestEvidence = bridge.query?.getLatestEvidence?.();
     const hasEvidence = pendingCount > 0 || !!latestEvidence?.content;
 
     if (!hasEvidence) {

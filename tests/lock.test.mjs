@@ -354,23 +354,23 @@ describe("Bridge state management", () => {
   it("loads bridge module", async () => {
     bridge = await import("../platform/core/bridge.mjs");
     assert.ok(bridge.init);
-    assert.ok(bridge.acquireLock);
-    assert.ok(bridge.releaseLock);
-    assert.ok(bridge.getState);
-    assert.ok(bridge.setState);
-    assert.ok(bridge.recordTransition);
-    assert.ok(bridge.createUnitOfWork);
+    assert.ok(bridge.lock.acquireLock);
+    assert.ok(bridge.lock.releaseLock);
+    assert.ok(bridge.query.getState);
+    assert.ok(bridge.query.setState);
+    assert.ok(bridge.event.recordTransition);
+    assert.ok(bridge.execution.createUnitOfWork);
   });
 
   it("bridge functions return fail-open defaults before init", () => {
-    assert.equal(bridge.acquireLock("test", 1234), false);
-    assert.equal(bridge.releaseLock("test", 1234), false);
-    assert.equal(bridge.getState("test"), null);
-    assert.equal(bridge.setState("test", "value"), false);
-    assert.equal(bridge.recordTransition("a", "b", null, "c", "d"), null);
-    assert.equal(bridge.createUnitOfWork(), null);
-    assert.equal(bridge.isLockHeld("test").held, false);
-    assert.equal(bridge.currentState("a", "b"), null);
+    assert.equal(bridge.lock.acquireLock("test", 1234), false);
+    assert.equal(bridge.lock.releaseLock("test", 1234), false);
+    assert.equal(bridge.query.getState("test"), null);
+    assert.equal(bridge.query.setState("test", "value"), false);
+    assert.equal(bridge.event.recordTransition("a", "b", null, "c", "d"), null);
+    assert.equal(bridge.execution.createUnitOfWork(), null);
+    assert.equal(bridge.lock.isLockHeld("test").held, false);
+    assert.equal(bridge.event.currentState("a", "b"), null);
   });
 
   it("bridge functions work after init", async () => {
@@ -381,21 +381,21 @@ describe("Bridge state management", () => {
     }
 
     // Lock
-    assert.equal(bridge.acquireLock("test:bridge", process.pid), true);
-    assert.equal(bridge.isLockHeld("test:bridge").held, true);
-    assert.equal(bridge.releaseLock("test:bridge", process.pid), true);
+    assert.equal(bridge.lock.acquireLock("test:bridge", process.pid), true);
+    assert.equal(bridge.lock.isLockHeld("test:bridge").held, true);
+    assert.equal(bridge.lock.releaseLock("test:bridge", process.pid), true);
 
     // KV
-    assert.equal(bridge.setState("bridge:test", { hello: "world" }), true);
-    assert.deepEqual(bridge.getState("bridge:test"), { hello: "world" });
+    assert.equal(bridge.query.setState("bridge:test", { hello: "world" }), true);
+    assert.deepEqual(bridge.query.getState("bridge:test"), { hello: "world" });
 
     // State transition
-    const result = bridge.recordTransition("test", "item-1", null, "active", "bridge");
+    const result = bridge.event.recordTransition("test", "item-1", null, "active", "bridge");
     assert.ok(result !== null);
-    assert.equal(bridge.currentState("test", "item-1"), "active");
+    assert.equal(bridge.event.currentState("test", "item-1"), "active");
 
     // UnitOfWork
-    const uow = bridge.createUnitOfWork();
+    const uow = bridge.execution.createUnitOfWork();
     assert.ok(uow !== null);
 
     bridge.close();

@@ -14,11 +14,11 @@ try {
   const error = input?.error ?? "";
 
   await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-    bridge.emitEvent("tool.failure", "claude-code", {
+    bridge.event.emitEvent("tool.failure", "claude-code", {
       tool: toolName,
       error: typeof error === "string" ? error.slice(0, 500) : String(error).slice(0, 500),
     }, { sessionId: input?.session_id });
-    await bridge.fireHook("tool.failure", {
+    await bridge.hooks.fireHook("tool.failure", {
       session_id: input?.session_id,
       cwd: REPO_ROOT,
       tool_name: toolName,

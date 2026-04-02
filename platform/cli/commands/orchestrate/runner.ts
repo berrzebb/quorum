@@ -171,8 +171,8 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     console.log(`  \x1b[32m✓ RTM exists\x1b[0m (${rtmPath})\n`);
   }
   const bridge = await loadBridge(repoRoot);
-  if (bridge?.checkParliamentGates) {
-    const gate = bridge.checkParliamentGates();
+  if (bridge?.parliament?.checkParliamentGates) {
+    const gate = bridge.parliament.checkParliamentGates();
     if (!gate.allowed) {
       console.log(`  \x1b[31mParliament gate:\x1b[0m ${gate.reason}\n`);
       if (bridge?.close) bridge.close();
@@ -423,7 +423,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       lastFitness: lastFitnessResult?.score, totalWaves: waves.length,
     });
   }
-  if (bridge?.releaseFiles) bridge.releaseFiles("contract-guardian");
+  if (bridge?.claim?.releaseFiles) bridge.claim.releaseFiles("contract-guardian");
   console.log(`\n${"═".repeat(60)}\n`);
   console.log(`  \x1b[1mResult:\x1b[0m ${completedWBs}/${totalWBs} WBs approved`);
   if (failedWBs > 0) {
@@ -461,7 +461,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
 // ── Helpers (presentation + contract protection) ──
 
 function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
-  if (!bridge?.claimFiles) return;
+  if (!bridge?.claim?.claimFiles) return;
   try {
     const isTs = (n: string) => n.endsWith(".ts") || n.endsWith(".tsx");
     const contractDirs = ["types", "contracts", "interfaces"];
@@ -481,7 +481,7 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
     };
     scan(repoRoot);
     if (contractFiles.length > 0) {
-      const conflicts = bridge.claimFiles("contract-guardian", contractFiles, undefined, 3600_000);
+      const conflicts = bridge.claim.claimFiles("contract-guardian", contractFiles, undefined, 3600_000);
       if (conflicts.length > 0) console.log(`  \x1b[33m⚠ ${conflicts.length} contract file(s) held by other agents\x1b[0m`);
       else console.log(`  \x1b[36m🔒 ${contractFiles.length} contract file(s) protected\x1b[0m`);
     }

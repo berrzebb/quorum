@@ -37,7 +37,7 @@ function read_marker() {
   // Try SQLite KV first (atomic, no file race)
   try {
     if (_bridge) {
-      const kv = _bridge.getState(KV_MARKER_KEY);
+      const kv = _bridge.query.getState(KV_MARKER_KEY);
       if (kv !== null) return kv;
     }
   } catch (err) { console.warn(`[session-gate] KV read failed, falling through to file: ${err?.message}`); }
@@ -55,7 +55,7 @@ function write_marker(data) {
   // Write to SQLite KV (primary)
   try {
     if (_bridge) {
-      _bridge.setState(KV_MARKER_KEY, data);
+      _bridge.query.setState(KV_MARKER_KEY, data);
     }
   } catch (err) { console.warn(`[session-gate] KV write failed, falling through to file: ${err?.message}`); }
 

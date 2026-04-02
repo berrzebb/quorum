@@ -26,14 +26,14 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
   try {
     bridge = await import("../../core/bridge.mjs");
     await bridge.init(repoRoot);
-    await bridge.initHookRunner(repoRoot, cfg.hooks);
+    await bridge.hooks.initHookRunner(repoRoot, cfg.hooks);
   } catch (err) {
     log(`BRIDGE_INIT_FAIL: ${err.message}`);
     return { triggerResult: null, spawnAllowed: true, bridge: null };
   }
 
   // 2. Pre-audit hook gate
-  const preGate = await bridge.checkHookGate("audit.submit", {
+  const preGate = await bridge.hooks.checkHookGate("audit.submit", {
     cwd: repoRoot, metadata: { provider: source },
   });
   if (!preGate.allowed) {
@@ -47,13 +47,13 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
   const changedFileCount = changedFiles.length;
 
   const [detectionResult, blastResult] = await Promise.all([
-    bridge.detectDomains(changedFiles, content).catch(() => null),
+    bridge.domain.detectDomains(changedFiles, content).catch(() => null),
     changedFiles.length > 0
-      ? bridge.computeBlastRadius(changedFiles).catch(() => null)
+      ? bridge.gate.computeBlastRadius(changedFiles).catch(() => null)
       : null,
   ]);
   const blastRadius = blastResult?.ratio;
-  const priorRejections = (bridge.queryEvents?.({ eventType: "audit.verdict", limit: 50, descending: true }) ?? [])
+  const priorRejections = (bridge.event.queryEvents?.({ eventType: "audit.verdict", limit: 50, descending: true }) ?? [])
     .filter((e) => e.payload?.verdict === "changes_requested").length;
   const hasPlanDoc = hasPlanDocuments(repoRoot);
 
@@ -62,10 +62,10 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
     content, changedFiles, changedFileCount, detectionResult, priorRejections, hasPlanDoc, blastRadius,
   });
 
-  const triggerResult = bridge.evaluateTrigger(triggerCtx);
+  const triggerResult = bridge.gate.evaluateTrigger(triggerCtx);
   if (triggerResult) {
     log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
-    bridge.emitEvent("audit.submit", source, {
+    bridge.event.emitEvent("audit.submit", source, {
       tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
     });
 
@@ -76,7 +76,7 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
   }
 
   // 5. Spawn gate
-  const spawnGate = await bridge.checkHookGate("audit.spawn", {
+  const spawnGate = await bridge.hooks.checkHookGate("audit.spawn", {
     cwd: repoRoot, metadata: { provider: source },
   });
   bridge.close();

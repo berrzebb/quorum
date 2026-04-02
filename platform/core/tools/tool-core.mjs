@@ -2306,30 +2306,30 @@ export async function toolAgentComm(params) {
   switch (action) {
     case "post": {
       if (!question) return { error: "question is required for post action" };
-      const qid = bridge.postAgentQuery(agent_id, question, to_agent || undefined, context);
+      const qid = bridge.agent.postAgentQuery(agent_id, question, to_agent || undefined, context);
       if (!qid) return { error: "Failed to post query" };
       return { text: `Query posted: ${qid}${to_agent ? ` → ${to_agent}` : " (broadcast)"}`, json: { queryId: qid } };
     }
     case "respond": {
       if (!query_id || !answer) return { error: "query_id and answer are required for respond action" };
-      bridge.respondToAgentQuery(query_id, agent_id, answer, confidence);
+      bridge.agent.respondToAgentQuery(query_id, agent_id, answer, confidence);
       return { text: `Response posted to ${query_id}`, json: { queryId: query_id, status: "responded" } };
     }
     case "poll": {
-      const queries = bridge.pollAgentQueries(agent_id, 0);
+      const queries = bridge.agent.pollAgentQueries(agent_id, 0);
       if (queries.length === 0) return { text: "No pending queries.", json: { queries: [] } };
       const lines = queries.map(q => `[${q.queryId}] from ${q.fromAgent}: ${q.question}`);
       return { text: lines.join("\n"), json: { queries }, summary: `${queries.length} pending query(ies)` };
     }
     case "responses": {
       if (!query_id) return { error: "query_id is required for responses action" };
-      const responses = bridge.getQueryResponses(query_id);
+      const responses = bridge.agent.getQueryResponses(query_id);
       if (responses.length === 0) return { text: `No responses yet for ${query_id}`, json: { responses: [] } };
       const lines = responses.map(r => `[${r.fromAgent}] (confidence: ${r.confidence ?? "N/A"}): ${r.answer}`);
       return { text: lines.join("\n"), json: { responses }, summary: `${responses.length} response(s)` };
     }
     case "roster": {
-      const roster = bridge.getAgentRoster(track_id);
+      const roster = bridge.agent.getAgentRoster(track_id);
       if (!roster) return { text: "No active agent roster.", json: { agents: [] } };
       return { text: JSON.stringify(roster, null, 2), json: roster };
     }
@@ -2371,12 +2371,12 @@ export async function toolAuditSubmit(params) {
   }
 
   // Store evidence in SQLite
-  bridge.emitEvent("evidence.write", source, {
+  bridge.event.emitEvent("evidence.write", source, {
     content: evidence,
     changedFiles,
     triggerTag: "[REVIEW_NEEDED]",
   });
-  bridge.setState("evidence:latest", {
+  bridge.query.setState("evidence:latest", {
     content: evidence,
     changedFiles,
     timestamp: Date.now(),
@@ -2391,12 +2391,12 @@ export async function toolAuditSubmit(params) {
     crossLayerChange: false,
     isRevert: false,
   };
-  const trigger = bridge.evaluateTrigger(ctx);
+  const trigger = bridge.gate.evaluateTrigger(ctx);
   if (!trigger) {
     return { text: "Evidence stored in SQLite. Trigger evaluation unavailable." };
   }
 
-  bridge.emitEvent("audit.submit", source, {
+  bridge.event.emitEvent("audit.submit", source, {
     tier: trigger.tier,
     score: trigger.score,
     mode: trigger.mode,

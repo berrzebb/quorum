@@ -41,7 +41,7 @@ export async function run(args: string[]): Promise<void> {
       try {
         const bridge = await import(pathToFileURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "bridge.mjs")).href);
         await bridge.init(process.cwd());
-        const gate = bridge.checkParliamentGates();
+        const gate = bridge.parliament.checkParliamentGates();
         if (!gate.allowed) {
           console.log(`  \x1b[31m✗ Parliament gate blocked:\x1b[0m ${gate.reason}`);
           console.log(`  \x1b[2mUse --force to bypass\x1b[0m\n`);

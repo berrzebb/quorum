@@ -62,7 +62,7 @@ if (reinforcement) context += `\n${reinforcement}\n`;
 
 // ── 4. Fire user-defined hooks ───────────────────────────────
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("session.start", {
+  await bridge.hooks.fireHook("session.start", {
     cwd: REPO_ROOT, metadata: { provider: "codex" },
   });
 });

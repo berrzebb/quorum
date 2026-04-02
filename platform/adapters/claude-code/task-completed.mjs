@@ -135,7 +135,7 @@ if (failures.length > 0) {
 try {
   const bridge = await import("../../core/bridge.mjs");
   await bridge.init(REPO_ROOT);
-  bridge.emitEvent("agent.complete", "claude-code", {
+  bridge.event.emitEvent("agent.complete", "claude-code", {
     name: teammateName || taskSubject,
     task: taskSubject,
   });

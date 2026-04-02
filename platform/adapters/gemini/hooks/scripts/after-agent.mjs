@@ -10,7 +10,7 @@ if (configMissing) process.exit(0);
 await readStdinJson({ exitOnEmpty: false, fallback: {} });
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("agent.complete", {
+  await bridge.hooks.fireHook("agent.complete", {
     cwd: REPO_ROOT, metadata: { provider: "gemini" },
   });
 });

@@ -135,7 +135,7 @@ async function main() {
   // Read evidence from SQLite (single source of truth)
   let claudeMd;
   try {
-    const evidence = bridge.getLatestEvidence();
+    const evidence = bridge.query.getLatestEvidence();
     if (evidence?.content) {
       claudeMd = evidence.content;
     }
@@ -176,7 +176,7 @@ async function main() {
     const parsed = parseVerdictText(verdictText);
     // Record verdict to SQLite (single source of truth)
     try {
-      bridge.recordTransition(
+      bridge.event.recordTransition(
         "gate", "audit",
         "pending", parsed.status === "approved" ? "approved" : "changes_requested",
         "system",
@@ -248,7 +248,7 @@ async function main() {
       const fallbackText = generateSoloVerdict(preVerified);
       parsed = parseVerdictText(fallbackText);
       try {
-        bridge.recordTransition(
+        bridge.event.recordTransition(
           "gate", "audit",
           "pending", parsed.status === "approved" ? "approved" : "changes_requested",
           "system",
@@ -262,7 +262,7 @@ async function main() {
 
     // Record infra_failure to SQLite — worker unblocked but NOT approved
     try {
-      bridge.recordTransition(
+      bridge.event.recordTransition(
         "gate", "audit",
         "pending", "infra_failure",
         "system",
@@ -275,7 +275,7 @@ async function main() {
     // Parse verdict from captured response text
     parsed = parseVerdictText(verdictText);
     try {
-      bridge.recordTransition(
+      bridge.event.recordTransition(
         "gate", "audit",
         "pending", parsed.status === "approved" ? "approved" : "changes_requested",
         "system",

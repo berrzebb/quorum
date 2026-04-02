@@ -14,7 +14,7 @@ try {
   const error = input?.error ?? "unknown";
 
   await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-    bridge.emitEvent("session.stop_failure", "claude-code", {
+    bridge.event.emitEvent("session.stop_failure", "claude-code", {
       error,
       timestamp: new Date().toISOString(),
     }, { sessionId: input?.session_id });

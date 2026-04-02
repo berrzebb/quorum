@@ -65,17 +65,82 @@ export type WaveGroup = Wave;
 
 /**
  * Bridge type — wraps dynamically loaded MJS bridge module.
- * Named methods for type safety; index signature retained for backward compat.
+ * Namespace-grouped methods for type safety; index signature retained for backward compat.
  */
 export interface Bridge {
-  [key: string]: Function | undefined;
-  setState: (key: string, value: unknown) => void;
-  getState: (key: string) => unknown;
-  emitEvent: (type: string, subType: string, payload: Record<string, unknown>) => void;
+  [key: string]: unknown;
+  init: (repoRoot: string) => Promise<boolean>;
+  close: () => void;
+  query: {
+    getState: (key: string) => unknown;
+    setState: (key: string, value: unknown) => void;
+    getLatestEvidence: () => { content: string; changedFiles: string[]; timestamp: number } | null;
+    getMessageBus: () => unknown;
+  };
+  event: {
+    emitEvent: (type: string, subType: string, payload: Record<string, unknown>) => void;
+    recordTransition: (entityType: string, entityId: string, fromState: string, toState: string, source: string, metadata?: Record<string, unknown>) => string | null;
+    currentState: (entityType: string, entityId: string) => string | null;
+    queryEvents: (filter?: Record<string, unknown>) => unknown[];
+    queryItemStates: () => unknown[];
+  };
+  gate: {
+    evaluateTrigger: (context: Record<string, unknown>) => { mode: string; tier: string; score: number; reasons: string[] } | null;
+    recordVerdict: (taskKey: string, success: boolean) => { escalated: boolean; tier: string } | null;
+    currentTier: (taskKey: string) => string | null;
+    detectStagnation: (repoRoot: string) => { detected: boolean; patterns: unknown[]; recommendation: string } | null;
+    computeFitness: (signals: unknown, config?: unknown) => unknown;
+    getFitnessLoop: () => unknown;
+    computeBlastRadius: (changedFiles: string[]) => Promise<{ affected: number; total: number; ratio: number; files: unknown[] } | null>;
+  };
+  claim: {
+    claimFiles: (ownerId: string, files: string[], owner?: string, ttlMs?: number) => Array<{ filePath: string; heldBy: string }>;
+    releaseFiles: (ownerId: string) => number;
+    checkConflicts: (agentId: string, files: string[]) => unknown[];
+    getClaims: (agentId?: string) => unknown[];
+  };
+  parliament: {
+    runParliamentSession: (request: unknown, config: unknown) => Promise<unknown>;
+    checkParliamentGates: (options?: Record<string, unknown>) => { allowed: boolean; reason?: string };
+    checkAmendmentGate: () => { allowed: boolean; reason?: string };
+    checkVerdictGate: () => { allowed: boolean; reason?: string };
+    checkConfluenceGate: () => { allowed: boolean; reason?: string };
+    checkDesignGate: (planningDir: string, trackName: string) => { allowed: boolean; reason?: string };
+    createConsensusAuditors: (roles: Record<string, string>, cwd?: string) => Promise<unknown>;
+    checkParliamentConvergence: (agendaId: string) => Promise<unknown>;
+    proposeAmendment: (options: Record<string, unknown>) => Promise<unknown>;
+    verifyConfluence: (input: unknown) => Promise<unknown>;
+    getConvergenceReport: () => Promise<unknown>;
+  };
+  execution: {
+    planExecution: (items: unknown[]) => unknown;
+    selectExecutionMode: (items: unknown[]) => { mode: string; plan: { groups: unknown[]; depth: number }; maxConcurrency: number } | null;
+    validatePlanClaims: (plan: unknown, agentId: string) => Map<string, unknown>;
+    analyzeAuditLearnings: () => { patterns: unknown[]; suggestions: unknown[]; eventsAnalyzed: number } | null;
+    createUnitOfWork: () => unknown;
+  };
+  agent: {
+    postAgentQuery: (fromAgent: string, question: string, toAgent?: string, context?: unknown) => string | null;
+    respondToAgentQuery: (queryId: string, fromAgent: string, answer: string, confidence?: number) => void;
+    pollAgentQueries: (agentId: string, since?: number) => unknown[];
+    getQueryResponses: (queryId: string) => unknown[];
+    getAgentRoster: (trackId?: string) => unknown;
+    setAgentRoster: (trackId: string, roster: unknown) => void;
+  };
+  hooks: {
+    initHookRunner: (repoRoot: string, hooksCfg?: unknown) => Promise<unknown>;
+    getHookRunner: () => unknown;
+    fireHook: (event: string, input?: Record<string, unknown>) => Promise<unknown[]>;
+    checkHookGate: (event: string, input?: Record<string, unknown>) => Promise<{ allowed: boolean; reason?: string; additional_context?: string }>;
+  };
+  domain: {
+    detectDomains: (changedFiles: string[], diff: string) => Promise<unknown>;
+    selectReviewers: (domains: unknown, tier: string) => Promise<unknown>;
+    runSpecialistTools: (selection: unknown, evidence: unknown, cwd: string) => Promise<unknown>;
+    enrichEvidence: (evidence: unknown, toolResults: unknown, opinions: unknown) => Promise<unknown>;
+    parseToolFindings: (toolResult: unknown) => unknown[];
+  };
   store?: any;
-  claimFiles?: (ownerId: string, files: string[], owner?: string, ttlMs?: number) => Array<{ filePath: string; heldBy: string }>;
-  releaseFiles?: (ownerId: string) => void;
-  checkParliamentGates?: () => { allowed: boolean; reason?: string };
 }
 
 /** Minimal mux interface — methods used by orchestrate execution modules. */

@@ -23,7 +23,7 @@ for (const f of artifacts) {
 }
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("session.end", {
+  await bridge.hooks.fireHook("session.end", {
     session_id: input.session_id,
     cwd: REPO_ROOT,
     metadata: { reason: input.reason },

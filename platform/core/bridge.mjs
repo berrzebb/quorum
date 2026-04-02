@@ -187,7 +187,7 @@ export async function init(repoRoot) {
 /**
  * Emit an event to the SQLite EventStore.
  */
-export function emitEvent(type, source, payload = {}, meta = {}) {
+function emitEvent(type, source, payload = {}, meta = {}) {
   if (!_svc.modules || !_svc.store) return null;
   const { createEvent } = _svc.modules.eventsMod;
   const event = createEvent(type, source, payload, meta);
@@ -199,7 +199,7 @@ export function emitEvent(type, source, payload = {}, meta = {}) {
  * Returns { mode: "skip"|"simple"|"deliberative", tier, score, reasons }
  * Returns null if modules unavailable (legacy mode → always audit).
  */
-export function evaluateTrigger(context) {
+function evaluateTrigger(context) {
   if (!_svc.modules) return null;
   const { evaluateTrigger: evaluate } = _svc.modules.triggerMod;
   return evaluate(context);
@@ -209,7 +209,7 @@ export function evaluateTrigger(context) {
  * Record an audit verdict result for router escalation tracking.
  * Returns { escalated, tier } or null.
  */
-export function recordVerdict(taskKey, success) {
+function recordVerdict(taskKey, success) {
   const router = getRouter();
   if (!router) return null;
   return router.recordResult(taskKey, success);
@@ -218,7 +218,7 @@ export function recordVerdict(taskKey, success) {
 /**
  * Get router's current tier for a task.
  */
-export function currentTier(taskKey) {
+function currentTier(taskKey) {
   const router = getRouter();
   if (!router) return null;
   return router.currentTier(taskKey);
@@ -228,7 +228,7 @@ export function currentTier(taskKey) {
  * Detect stagnation in recent audit verdicts.
  * Returns { detected, patterns, recommendation } or null.
  */
-export function detectStagnation(repoRoot) {
+function detectStagnation(repoRoot) {
   if (!_svc.modules || !_svc.store) return null;
   const { detectStagnation: detect } = _svc.modules.stagnationMod;
   return withFallback(() => {
@@ -241,7 +241,7 @@ export function detectStagnation(repoRoot) {
 /**
  * Query recent events from the store.
  */
-export function queryEvents(filter = {}) {
+function queryEvents(filter = {}) {
   if (!_svc.store) return [];
   return withFallback(() => _svc.store.query(filter), [], "queryEvents");
 }
@@ -252,7 +252,7 @@ export function queryEvents(filter = {}) {
  * Acquire a named lock atomically. No TOCTOU.
  * Returns true if acquired, false if held by another PID.
  */
-export function acquireLock(lockName, pid, sessionId, ttlMs) {
+function acquireLock(lockName, pid, sessionId, ttlMs) {
   const svc = getLockService();
   if (!svc) return false;
   return withFallback(() => svc.acquire(lockName, pid, sessionId, ttlMs), false, "acquireLock");
@@ -261,7 +261,7 @@ export function acquireLock(lockName, pid, sessionId, ttlMs) {
 /**
  * Release a named lock. Only owner PID can release.
  */
-export function releaseLock(lockName, pid) {
+function releaseLock(lockName, pid) {
   const svc = getLockService();
   if (!svc) return false;
   return withFallback(() => svc.release(lockName, pid), false, "releaseLock");
@@ -270,7 +270,7 @@ export function releaseLock(lockName, pid) {
 /**
  * Check if a lock is held.
  */
-export function isLockHeld(lockName) {
+function isLockHeld(lockName) {
   const svc = getLockService();
   if (!svc) return { held: false };
   return withFallback(() => svc.isHeld(lockName), { held: false }, "isLockHeld");
@@ -281,7 +281,7 @@ export function isLockHeld(lockName) {
 /**
  * Read a KV state entry. Returns parsed JSON or null.
  */
-export function getState(key) {
+function getState(key) {
   if (!_svc.store) return null;
   return withFallback(() => _svc.store.getKV(key), null, "getState");
 }
@@ -289,7 +289,7 @@ export function getState(key) {
 /**
  * Write a KV state entry.
  */
-export function setState(key, value) {
+function setState(key, value) {
   if (!_svc.store) return false;
   return withFallback(() => { _svc.store.setKV(key, value); return true; }, false, "setState");
 }
@@ -298,7 +298,7 @@ export function setState(key, value) {
  * Get the latest submitted evidence content from KV store.
  * Returns { content, changedFiles, timestamp } or null.
  */
-export function getLatestEvidence() {
+function getLatestEvidence() {
   return getState("evidence:latest");
 }
 
@@ -308,7 +308,7 @@ export function getLatestEvidence() {
  * Record a state transition.
  * Returns the transition ID or null on failure.
  */
-export function recordTransition(entityType, entityId, fromState, toState, source, metadata = {}) {
+function recordTransition(entityType, entityId, fromState, toState, source, metadata = {}) {
   if (!_svc.store) return null;
   return withFallback(() => {
     _svc.store.commitTransaction([], [{ entityType, entityId, fromState, toState, source, metadata }], []);
@@ -319,7 +319,7 @@ export function recordTransition(entityType, entityId, fromState, toState, sourc
 /**
  * Get current state for an entity.
  */
-export function currentState(entityType, entityId) {
+function currentState(entityType, entityId) {
   if (!_svc.store) return null;
   return withFallback(() => _svc.store.currentState(entityType, entityId), null, "currentState");
 }
@@ -329,7 +329,7 @@ export function currentState(entityType, entityId) {
  * Returns array of { entityId, currentState, source, metadata, updatedAt } or empty array.
  */
 // stmtItemStates in _svc
-export function queryItemStates() {
+function queryItemStates() {
   if (!_svc.store) return [];
   try {
     if (!_svc.stmtItemStates) {
@@ -366,7 +366,7 @@ export function queryItemStates() {
 /**
  * Atomically claim files for an agent. Returns conflicts or empty array on success.
  */
-export function claimFiles(agentId, files, sessionId, ttlMs) {
+function claimFiles(agentId, files, sessionId, ttlMs) {
   const svc = getClaimService();
   if (!svc) return [];
   return withFallback(() => svc.claimFiles(agentId, files, sessionId, ttlMs), [], "claimFiles");
@@ -375,7 +375,7 @@ export function claimFiles(agentId, files, sessionId, ttlMs) {
 /**
  * Release all file claims held by an agent.
  */
-export function releaseFiles(agentId) {
+function releaseFiles(agentId) {
   const svc = getClaimService();
   if (!svc) return 0;
   return withFallback(() => svc.releaseFiles(agentId), 0, "releaseFiles");
@@ -384,7 +384,7 @@ export function releaseFiles(agentId) {
 /**
  * Check which files would conflict if an agent claimed them (read-only).
  */
-export function checkConflicts(agentId, files) {
+function checkConflicts(agentId, files) {
   const svc = getClaimService();
   if (!svc) return [];
   return withFallback(() => svc.checkConflicts(agentId, files), [], "checkConflicts");
@@ -393,7 +393,7 @@ export function checkConflicts(agentId, files) {
 /**
  * Get all active file claims, optionally filtered by agent.
  */
-export function getClaims(agentId) {
+function getClaims(agentId) {
   const svc = getClaimService();
   if (!svc) return [];
   return withFallback(() => svc.getClaims(agentId), [], "getClaims");
@@ -405,7 +405,7 @@ export function getClaims(agentId) {
  * Plan parallel execution groups from work items.
  * Returns { groups, depth, maxWidth, unschedulable }.
  */
-export function planExecution(items) {
+function planExecution(items) {
   if (!_svc.modules?.parallelMod) return null;
   return withFallback(() => _svc.modules.parallelMod.planParallel(items), null, "planExecution");
 }
@@ -414,7 +414,7 @@ export function planExecution(items) {
  * Auto-select orchestration mode for work items.
  * Returns { mode, plan, reasons, maxConcurrency }.
  */
-export function selectExecutionMode(items) {
+function selectExecutionMode(items) {
   if (!_svc.modules?.orchestratorMod) return null;
   return withFallback(() => _svc.modules.orchestratorMod.selectMode(items), null, "selectExecutionMode");
 }
@@ -422,7 +422,7 @@ export function selectExecutionMode(items) {
 /**
  * Validate a plan against live file claims.
  */
-export function validatePlanClaims(plan, agentId) {
+function validatePlanClaims(plan, agentId) {
   if (!_svc.modules?.parallelMod) return new Map();
   const svc = getClaimService();
   if (!svc) return new Map();
@@ -435,7 +435,7 @@ export function validatePlanClaims(plan, agentId) {
  * Analyze audit history for repeat patterns and generate CLAUDE.md rule suggestions.
  * Returns { patterns, suggestions, eventsAnalyzed }.
  */
-export function analyzeAuditLearnings() {
+function analyzeAuditLearnings() {
   if (!_svc.modules?.autoLearnMod || !_svc.store) return null;
   return withFallback(() => _svc.modules.autoLearnMod.analyzeAndSuggest(_svc.store), null, "analyzeAuditLearnings");
 }
@@ -446,7 +446,7 @@ export function analyzeAuditLearnings() {
  * Create a new TransactionalUnitOfWork for atomic multi-store commits.
  * Returns null if store unavailable.
  */
-export function createUnitOfWork() {
+function createUnitOfWork() {
   if (!_svc.modules || !_svc.store) return null;
   return withFallback(() => new _svc.modules.storeMod.TransactionalUnitOfWork(_svc.store), null, "createUnitOfWork");
 }
@@ -478,7 +478,7 @@ async function loadDomainModules() {
  * Detect active domains from changed files and diff content.
  * Returns null if modules unavailable.
  */
-export async function detectDomains(changedFiles, diff) {
+async function detectDomains(changedFiles, diff) {
   const mods = await loadDomainModules();
   if (!mods?.domainMod) return null;
   return withFallback(() => mods.domainMod.detectDomains(changedFiles, diff), null, "detectDomains");
@@ -488,7 +488,7 @@ export async function detectDomains(changedFiles, diff) {
  * Select specialist reviewers based on detected domains and audit tier.
  * Returns null if modules unavailable.
  */
-export async function selectReviewers(domains, tier) {
+async function selectReviewers(domains, tier) {
   const mods = await loadDomainModules();
   if (!mods?.routerMod2) return null;
   return withFallback(() => mods.routerMod2.selectReviewers(domains, tier), null, "selectReviewers");
@@ -498,7 +498,7 @@ export async function selectReviewers(domains, tier) {
  * Run specialist deterministic tools and return results.
  * Returns null if modules unavailable.
  */
-export async function runSpecialistTools(selection, evidence, cwd) {
+async function runSpecialistTools(selection, evidence, cwd) {
   const mods = await loadDomainModules();
   if (!mods?.specialistMod) return null;
   return withAsyncFallback(() => mods.specialistMod.runSpecialistReviews(selection, evidence, cwd), null, "runSpecialistTools");
@@ -508,7 +508,7 @@ export async function runSpecialistTools(selection, evidence, cwd) {
  * Enrich evidence with specialist review section.
  * Returns original evidence if modules unavailable.
  */
-export async function enrichEvidence(evidence, toolResults, opinions) {
+async function enrichEvidence(evidence, toolResults, opinions) {
   const mods = await loadDomainModules();
   if (!mods?.specialistMod) return evidence;
   return withFallback(() => mods.specialistMod.enrichEvidence(evidence, toolResults, opinions), evidence, "enrichEvidence");
@@ -522,7 +522,7 @@ export async function enrichEvidence(evidence, toolResults, opinions) {
  * Get or create a MessageBus instance for finding-level communication.
  * Returns null if store unavailable.
  */
-export function getMessageBus() {
+function getMessageBus() {
   if (!_svc.store) return null;
   if (_svc.messageBus) return _svc.messageBus;
   return withFallback(() => {
@@ -536,40 +536,40 @@ export function getMessageBus() {
 // ── Agent Communication (query/response) ────
 
 /** Post a query to another agent (or broadcast). Returns queryId or null. */
-export function postAgentQuery(fromAgent, question, toAgent, context) {
+function postAgentQuery(fromAgent, question, toAgent, context) {
   const mb = getMessageBus();
   if (!mb) return null;
   return withFallback(() => mb.postQuery({ fromAgent, question, toAgent, context }), null, "postAgentQuery");
 }
 
 /** Respond to an agent query. */
-export function respondToAgentQuery(queryId, fromAgent, answer, confidence) {
+function respondToAgentQuery(queryId, fromAgent, answer, confidence) {
   const mb = getMessageBus();
   if (!mb) return;
   withFallback(() => mb.respondToQuery({ queryId, fromAgent, answer, confidence }), undefined, "respondToAgentQuery");
 }
 
 /** Poll for queries addressed to this agent (or broadcast). */
-export function pollAgentQueries(agentId, since) {
+function pollAgentQueries(agentId, since) {
   const mb = getMessageBus();
   if (!mb) return [];
   return withFallback(() => mb.pollQueries(agentId, since), [], "pollAgentQueries");
 }
 
 /** Get all responses to a specific query. */
-export function getQueryResponses(queryId) {
+function getQueryResponses(queryId) {
   const mb = getMessageBus();
   if (!mb) return [];
   return withFallback(() => mb.getResponses(queryId), [], "getQueryResponses");
 }
 
 /** Get the agent roster for a track. */
-export function getAgentRoster(trackId) {
+function getAgentRoster(trackId) {
   return getState(`agent:roster:${trackId ?? "default"}`);
 }
 
 /** Set the agent roster for a track. */
-export function setAgentRoster(trackId, roster) {
+function setAgentRoster(trackId, roster) {
   return setState(`agent:roster:${trackId ?? "default"}`, roster);
 }
 
@@ -577,7 +577,7 @@ export function setAgentRoster(trackId, roster) {
  * Parse specialist ToolResult into Finding objects.
  * Returns empty array if modules unavailable.
  */
-export function parseToolFindings(toolResult) {
+function parseToolFindings(toolResult) {
   return withFallback(() => {
     if (_svc.specialistMod?.parseToolFindings) return _svc.specialistMod.parseToolFindings(toolResult);
     return [];
@@ -591,7 +591,7 @@ export function parseToolFindings(toolResult) {
 /**
  * Get or create a FitnessLoop instance. Fail-safe: returns null if modules unavailable.
  */
-export function getFitnessLoop() {
+function getFitnessLoop() {
   if (_svc.fitnessLoop) return _svc.fitnessLoop;
   if (!_svc.modules?.fitnessLoopMod || !_svc.store) return null;
   return withFallback(() => {
@@ -603,7 +603,7 @@ export function getFitnessLoop() {
 /**
  * Compute a fitness score from signals. Fail-safe: returns null.
  */
-export function computeFitness(signals, config) {
+function computeFitness(signals, config) {
   if (!_svc.modules?.fitnessMod) return null;
   return withFallback(() => _svc.modules.fitnessMod.computeFitness(signals, config), null, "computeFitness");
 }
@@ -625,7 +625,7 @@ async function _getToolCore() {
  * @param {string[]} changedFiles - relative or absolute paths
  * @returns {Promise<{affected: number, total: number, ratio: number, files: any[]}|null>}
  */
-export async function computeBlastRadius(changedFiles) {
+async function computeBlastRadius(changedFiles) {
   return withAsyncFallback(async () => {
     const tc = await _getToolCore();
     return tc.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
@@ -647,7 +647,7 @@ export async function computeBlastRadius(changedFiles) {
  * @param {object} [hooksCfg] — hooks section from config.json (optional)
  * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
-export async function initHookRunner(repoRoot, hooksCfg) {
+async function initHookRunner(repoRoot, hooksCfg) {
   if (_svc.hookRunner) return _svc.hookRunner;
   return withAsyncFallback(async () => {
     const { HookRunner } = await import("../adapters/shared/hook-runner.mjs");
@@ -664,7 +664,7 @@ export async function initHookRunner(repoRoot, hooksCfg) {
  * Get the current HookRunner instance (null if not initialized).
  * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
-export function getHookRunner() {
+function getHookRunner() {
   return _svc.hookRunner;
 }
 
@@ -676,7 +676,7 @@ export function getHookRunner() {
  * @param {object} input — HookInput fields
  * @returns {Promise<import("../adapters/shared/hook-runner.mjs").HookExecutionResult[]>}
  */
-export async function fireHook(event, input = {}) {
+async function fireHook(event, input = {}) {
   if (!_svc.hookRunner) return [];
   return withAsyncFallback(() => _svc.hookRunner.fire(event, { hook_event_name: event, ...input }), [], "fireHook");
 }
@@ -689,7 +689,7 @@ export async function fireHook(event, input = {}) {
  * @param {object} input
  * @returns {Promise<{ allowed: boolean, reason?: string, additional_context?: string }>}
  */
-export async function checkHookGate(event, input = {}) {
+async function checkHookGate(event, input = {}) {
   const results = await fireHook(event, input);
   for (const r of results) {
     if (r.output.decision === "deny") {
@@ -706,7 +706,7 @@ export async function checkHookGate(event, input = {}) {
  * Run a full parliament session (diverge-converge + meeting log + amendments + confluence + normal form).
  * Returns null if modules unavailable.
  */
-export async function runParliamentSession(request, config) {
+async function runParliamentSession(request, config) {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.parliamentSessionMod) return null;
@@ -719,7 +719,7 @@ export async function runParliamentSession(request, config) {
 /**
  * Check convergence status for a standing committee agenda.
  */
-export async function checkParliamentConvergence(agendaId) {
+async function checkParliamentConvergence(agendaId) {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.meetingLogMod) return null;
@@ -730,7 +730,7 @@ export async function checkParliamentConvergence(agendaId) {
  * Propose an amendment.
  * @param {object} options - { target, change, sponsor, sponsorRole, justification }
  */
-export async function proposeAmendment(options) {
+async function proposeAmendment(options) {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.amendmentMod) return null;
@@ -740,7 +740,7 @@ export async function proposeAmendment(options) {
 /**
  * Verify confluence (post-audit integrity).
  */
-export async function verifyConfluence(input) {
+async function verifyConfluence(input) {
   const pMods = await loadParliamentModules();
   if (!pMods?.confluenceMod) return null;
   return withFallback(() => pMods.confluenceMod.verifyConfluence(input), null, "verifyConfluence");
@@ -749,7 +749,7 @@ export async function verifyConfluence(input) {
 /**
  * Get normal form convergence report.
  */
-export async function getConvergenceReport() {
+async function getConvergenceReport() {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.normalFormMod) return null;
@@ -762,27 +762,27 @@ export async function getConvergenceReport() {
  * Check all parliament gates: amendments, verdict, confluence.
  * Returns { allowed: boolean, reason?: string } — fail-open on error.
  */
-export function checkParliamentGates(options = {}) {
+function checkParliamentGates(options = {}) {
   if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
   return withFallback(() => _svc.modules.parliamentGateMod.checkAllGates(_svc.store, options), { allowed: true }, "checkParliamentGates");
 }
 
-export function checkAmendmentGate() {
+function checkAmendmentGate() {
   if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
   return withFallback(() => _svc.modules.parliamentGateMod.checkAmendmentGate(_svc.store), { allowed: true }, "checkAmendmentGate");
 }
 
-export function checkVerdictGate() {
+function checkVerdictGate() {
   if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
   return withFallback(() => _svc.modules.parliamentGateMod.checkVerdictGate(_svc.store), { allowed: true }, "checkVerdictGate");
 }
 
-export function checkConfluenceGate() {
+function checkConfluenceGate() {
   if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
   return withFallback(() => _svc.modules.parliamentGateMod.checkConfluenceGate(_svc.store), { allowed: true }, "checkConfluenceGate");
 }
 
-export function checkDesignGate(planningDir, trackName) {
+function checkDesignGate(planningDir, trackName) {
   if (!_svc.modules?.parliamentGateMod) return { allowed: true };
   return withFallback(() => _svc.modules.parliamentGateMod.checkDesignGate(planningDir, trackName), { allowed: true }, "checkDesignGate");
 }
@@ -791,7 +791,7 @@ export function checkDesignGate(planningDir, trackName) {
  * Create Auditor instances from role→provider string mappings.
  * Bridges adapters/shared/parliament-runner.mjs → providers/auditors/factory.ts.
  */
-export function createConsensusAuditors(roles, cwd) {
+function createConsensusAuditors(roles, cwd) {
   return withFallback(() => {
     const toURL = (p) => pathToFileURL(p).href;
     const factoryPath = resolve(DIST, "providers", "auditors", "factory.js");
@@ -808,8 +808,8 @@ export function close() {
   for (const k of Object.keys(_svc)) _svc[k] = null;
 }
 
-// ── Namespace exports (BRIDGE-2) ─────────────────
-// Semantic grouping of the 56 flat exports. Flat exports remain for backward compat.
+// ── Namespace exports (BRIDGE-2 → BRIDGE-4: flat exports removed) ─────────────────
+// All functions accessible via namespaces only. init() and close() remain flat.
 
 export const claim = { claimFiles, releaseFiles, checkConflicts, getClaims };
 export const lock = { acquireLock, releaseLock, isLockHeld };

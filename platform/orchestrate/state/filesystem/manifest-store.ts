@@ -2,7 +2,7 @@
  * Filesystem-backed wave manifest store.
  *
  * Implements ManifestPort — reads/writes wave manifests via SQLite KV
- * (bridge.setState / bridge.getState with key `wave:manifest:{track}:{index}`).
+ * (bridge.query.setState / bridge.query.getState with key `wave:manifest:{track}:{index}`).
  *
  * Mirrors the exact I/O from runner.ts recordWaveManifest / readPreviousManifests.
  */

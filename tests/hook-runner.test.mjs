@@ -650,7 +650,7 @@ describe("bridge.mjs HookRunner integration", () => {
     const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
 
-    const runner = await bridge.initHookRunner(process.cwd(), {
+    const runner = await bridge.hooks.initHookRunner(process.cwd(), {
       "audit.submit": [
         { name: "gate", handler: { type: "command", command: `node ${hookScript}` } },
       ],
@@ -664,13 +664,13 @@ describe("bridge.mjs HookRunner integration", () => {
   it("checkHookGate allow — receives additional_context from hook stdin", async () => {
     const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
-    await bridge.initHookRunner(process.cwd(), {
+    await bridge.hooks.initHookRunner(process.cwd(), {
       "audit.submit": [
         { name: "gate", handler: { type: "command", command: `node ${hookScript}` } },
       ],
     });
 
-    const result = await bridge.checkHookGate("audit.submit", {
+    const result = await bridge.hooks.checkHookGate("audit.submit", {
       metadata: { provider: "claude-code", freeze: false },
     });
 
@@ -682,13 +682,13 @@ describe("bridge.mjs HookRunner integration", () => {
   it("checkHookGate deny — hook exits with code 2", async () => {
     const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
-    await bridge.initHookRunner(process.cwd(), {
+    await bridge.hooks.initHookRunner(process.cwd(), {
       "audit.submit": [
         { name: "gate", handler: { type: "command", command: `node ${hookScript}` } },
       ],
     });
 
-    const result = await bridge.checkHookGate("audit.submit", {
+    const result = await bridge.hooks.checkHookGate("audit.submit", {
       metadata: { provider: "claude-code", freeze: true },
     });
 
@@ -701,19 +701,19 @@ describe("bridge.mjs HookRunner integration", () => {
     const bridge = await import("../platform/core/bridge.mjs");
     bridge.close(); // ensure clean state
 
-    const results = await bridge.fireHook("audit.submit");
+    const results = await bridge.hooks.fireHook("audit.submit");
     assert.deepEqual(results, []);
 
-    const gate = await bridge.checkHookGate("audit.submit");
+    const gate = await bridge.hooks.checkHookGate("audit.submit");
     assert.equal(gate.allowed, true);
   });
 
   it("unregistered events pass through", async () => {
     const bridge = await import("../platform/core/bridge.mjs");
     await bridge.init(process.cwd());
-    await bridge.initHookRunner(process.cwd(), {});
+    await bridge.hooks.initHookRunner(process.cwd(), {});
 
-    const gate = await bridge.checkHookGate("nonexistent.event");
+    const gate = await bridge.hooks.checkHookGate("nonexistent.event");
     assert.equal(gate.allowed, true);
     bridge.close();
   });

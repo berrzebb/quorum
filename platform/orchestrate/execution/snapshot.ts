@@ -56,7 +56,7 @@ export function recordWaveManifest(
       } catch (err) { console.warn(`[snapshot] could not read exports from ${file}: ${(err as Error).message}`); }
     }
 
-    bridge.setState(`wave:manifest:${trackName}:${waveIndex}`, {
+    bridge.query.setState(`wave:manifest:${trackName}:${waveIndex}`, {
       trackName, waveIndex,
       completedItems: completedItems.map(i => i.id),
       changedFiles, fileExports, recordedAt: Date.now(),
@@ -71,11 +71,11 @@ export function recordWaveManifest(
 export function readPreviousManifests(
   bridge: Bridge | null, trackName: string, currentWaveIndex: number,
 ): WaveManifest[] {
-  if (!bridge?.getState) return [];
+  if (!bridge?.query?.getState) return [];
   const manifests: WaveManifest[] = [];
   for (let i = 0; i < currentWaveIndex; i++) {
     try {
-      const m = bridge.getState(`wave:manifest:${trackName}:${i}`);
+      const m = bridge.query.getState(`wave:manifest:${trackName}:${i}`);
       if (m) manifests.push(m as WaveManifest);
     } catch (err) { console.warn(`[snapshot] readPreviousManifests failed for wave ${i}: ${(err as Error).message}`); }
   }

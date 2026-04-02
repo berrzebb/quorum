@@ -28,7 +28,7 @@ export function sessionKVKey() {
 export function readSavedSession() {
   // Try SQLite KV first (worktree-isolated)
   try {
-    const kv = bridge.getState(sessionKVKey());
+    const kv = bridge.query.getState(sessionKVKey());
     if (kv && typeof kv === "object" && kv.id) return kv.id;
     if (typeof kv === "string" && kv) return kv;
   } catch (err) { console.warn("[session] KV read failed:", err?.message ?? err); }
@@ -49,7 +49,7 @@ export function readSavedSession() {
 export function writeSavedSession(sessionId) {
   // Write to SQLite KV (primary, worktree-isolated)
   try {
-    bridge.setState(sessionKVKey(), { id: sessionId });
+    bridge.query.setState(sessionKVKey(), { id: sessionId });
   } catch (err) { console.warn("[session] KV write failed:", err?.message ?? err); }
 
   // Also write to JSON file (backward compatibility)
@@ -61,7 +61,7 @@ export function writeSavedSession(sessionId) {
 export function deleteSavedSessionId() {
   // Delete from SQLite KV
   try {
-    bridge.setState(sessionKVKey(), null);
+    bridge.query.setState(sessionKVKey(), null);
   } catch (err) { console.warn("[session] KV delete failed:", err?.message ?? err); }
 
   // Also delete JSON file

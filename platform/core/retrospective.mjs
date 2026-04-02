@@ -46,7 +46,7 @@ export async function main() {
   // Read evidence from SQLite (single source of truth)
   let claudeMd;
   try {
-    const evidence = bridge.getLatestEvidence?.();
+    const evidence = bridge.query.getLatestEvidence?.();
     if (evidence?.content) claudeMd = evidence.content;
   } catch (err) { console.warn("[retrospective] evidence read failed:", err?.message ?? err); }
 

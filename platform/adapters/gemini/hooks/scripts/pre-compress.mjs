@@ -8,7 +8,7 @@ const { REPO_ROOT, cfg, configMissing } = createHookContext(import.meta.url);
 if (configMissing) process.exit(0);
 
 await withBridge(REPO_ROOT, cfg.hooks, async (bridge) => {
-  await bridge.fireHook("session.compress", {
+  await bridge.hooks.fireHook("session.compress", {
     cwd: REPO_ROOT, metadata: { provider: "gemini" },
   });
 });

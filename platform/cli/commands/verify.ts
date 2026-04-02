@@ -200,7 +200,7 @@ async function runScopeCheck(repoRoot: string, baseBranch?: string): Promise<boo
   try {
     const bridge = await import(toURL(resolve(__dirname, "..", "..", "..", "..", "platform", "core", "bridge.mjs")));
     if (!bridge._store) await bridge.init(repoRoot);
-    const evidence = bridge.getLatestEvidence?.();
+    const evidence = bridge.query?.getLatestEvidence?.();
     if (evidence?.content) {
       evidenceArg = evidence.content;  // Pass content directly (no file read)
     }
