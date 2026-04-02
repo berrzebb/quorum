@@ -11,6 +11,9 @@
 
 import type { WorkItem, WBSize } from './types.js';
 
+/** Backtick-quoted file paths: `foo.js`, `src/db/schema.js`, `.gitignore`, `.env.example` */
+const FILE_PATH_RE = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
+
 // ── Individual field extractors ──────────────────
 
 /**
@@ -30,12 +33,9 @@ export function extractTargetFiles(body: string): string[] {
   const end = ends.length > 0 ? Math.min(...ends) : Math.min(fieldStart + 500, body.length);
   const fileBlock = body.slice(fieldStart, end);
 
-  // Match backtick-quoted paths:
-  //  - files with extensions: `foo.js`, `src/db/schema.js`, `.env.example`
-  //  - dotfiles without extensions: `.gitignore`, `.gitkeep`, `.env`
-  const fileRegex = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
+  const re = new RegExp(FILE_PATH_RE.source, FILE_PATH_RE.flags);
   let m: RegExpExecArray | null;
-  while ((m = fileRegex.exec(fileBlock)) !== null) {
+  while ((m = re.exec(fileBlock)) !== null) {
     files.push(m[1]!);
   }
   return files;
@@ -72,10 +72,9 @@ export function extractFilesFromAction(body: string): string[] {
   if (!actionText) return [];
 
   const files: string[] = [];
-  // Same regex as extractTargetFiles — backtick-quoted paths with extensions or dotfiles
-  const fileRegex = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
+  const re = new RegExp(FILE_PATH_RE.source, FILE_PATH_RE.flags);
   let m: RegExpExecArray | null;
-  while ((m = fileRegex.exec(actionText)) !== null) {
+  while ((m = re.exec(actionText)) !== null) {
     const path = m[1]!;
     // Filter out common false positives: npm commands, flags, version strings
     if (path.startsWith("--") || path.startsWith("npm ") || path.startsWith("npx ")) continue;

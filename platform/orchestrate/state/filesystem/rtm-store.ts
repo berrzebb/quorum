@@ -9,6 +9,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseTableCells } from "../../../core/markdown-table-parser.mjs";
 import type { RTMPort } from "../state-port.js";
 import type { RTMEntry, RTMState, RTMStatus } from "../state-types.js";
 
@@ -101,7 +102,7 @@ function parseTableSection(lines: string[], sectionName: string): RTMEntry[] {
     }
     if (!headerSkipped || !line.startsWith("|")) continue;
 
-    const cols = line.split("|").map(c => c.trim()).filter(Boolean);
+    const cols = parseTableCells(line).filter(Boolean);
     if (cols.length < 6) continue;
     // Skip placeholder rows
     if (cols[0]!.startsWith("_")) continue;
@@ -134,7 +135,7 @@ function parseBackwardTrace(lines: string[]): RTMState["backwardTrace"] {
     }
     if (!headerSkipped || !line.startsWith("|")) continue;
 
-    const cols = line.split("|").map(c => c.trim()).filter(Boolean);
+    const cols = parseTableCells(line).filter(Boolean);
     if (cols.length < 4 || cols[0]!.startsWith("_")) continue;
 
     entries.push({

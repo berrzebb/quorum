@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import { addEntity, getEntity } from "./graph-schema.js";
 import { addRelation } from "./graph-relations.js";
+import { parseTableCells } from "../core/markdown-table-parser.mjs";
 import type { EntityType } from "./graph-schema.js";
 import type { RelationType } from "./graph-relations.js";
 
@@ -71,7 +72,7 @@ function parseMarkdownTable(lines: string[], headerPattern: RegExp): { headers: 
 }
 
 function splitTableRow(line: string): string[] {
-  return line.split("|").map(c => c.trim()).filter((_, idx, a) => idx > 0 && idx < a.length);
+  return parseTableCells(line);
 }
 
 // ── Bootstrap function ──────────────────────

@@ -13,6 +13,7 @@
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, extname } from "node:path";
+import { parseTableCells } from "../core/markdown-table-parser.mjs";
 
 // Optional vendor: marked for structured markdown parsing (fail-safe)
 let _marked: { lexer: (md: string) => any[] } | null = null;
@@ -139,7 +140,7 @@ function extractNamingRulesRegex(content: string, source: string): NamingRule[] 
       if (/^\s*\|[\s\-:|]+\|/.test(line)) continue;
 
       if (headerFound && /^\s*\|/.test(line)) {
-        const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+        const cells = parseTableCells(line).filter(Boolean);
         if (cells.length >= 2) {
           const concept = cells[0]!;
           const name = cells[1]!.replace(/`/g, "");

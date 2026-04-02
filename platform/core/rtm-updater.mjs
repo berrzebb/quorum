@@ -16,6 +16,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { parseTableCells } from "./markdown-table-parser.mjs";
 
 /**
  * Update RTM file statuses based on current filesystem state.
@@ -37,7 +38,7 @@ function updateRtmStatus(rtmPath, repoRoot) {
     const line = lines[i];
     if (!line.startsWith("|") || line.includes("---")) continue;
 
-    const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+    const cells = parseTableCells(line).filter(Boolean);
     if (cells.length < 6) continue;
 
     const reqId = cells[0];
@@ -174,7 +175,7 @@ function updateRtmWithCommitHistory(rtmPath, repoRoot, since) {
     const line = lines[i];
     if (!line.startsWith("|") || line.includes("---")) continue;
 
-    const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+    const cells = parseTableCells(line).filter(Boolean);
     if (cells.length < 6) continue;
 
     const reqId = cells[0];
@@ -257,7 +258,7 @@ function getProgressFromGit(repoRoot, rtmPaths) {
       if (trackMatch) { currentTrack = trackMatch[1]; continue; }
 
       if (!line.startsWith("|") || line.includes("---")) continue;
-      const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+      const cells = parseTableCells(line).filter(Boolean);
       if (cells.length < 2 || !/^[A-Z]{2,}-\d+/.test(cells[0])) continue;
 
       const status = cells[cells.length - 1].toLowerCase();

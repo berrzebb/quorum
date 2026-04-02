@@ -34,7 +34,7 @@
   },
   "scripts": {
     "clean:dist": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
-    "build": "npm run clean:dist && tsc",
+    "build": "npm run clean:dist && tsc && node --input-type=module -e \"import{cpSync}from'node:fs';cpSync('platform/core/markdown-table-parser.mjs','dist/platform/core/markdown-table-parser.mjs');\"",
     "preversion": "npm run version-sync",
     "postversion": "npm run version-sync",
     "prepublishOnly": "npm run build",

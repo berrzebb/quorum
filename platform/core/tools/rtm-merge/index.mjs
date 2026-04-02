@@ -5,6 +5,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import { safePathOrError } from "../tool-utils.mjs";
+import { parseTableCells } from "../../markdown-table-parser.mjs";
 
 function parseRtmTable(content) {
   const rows = new Map();
@@ -15,7 +16,7 @@ function parseRtmTable(content) {
   for (const line of lines) {
     if (!line.startsWith("|")) { inTable = false; continue; }
 
-    const cells = line.split("|").map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length);
+    const cells = parseTableCells(line);
 
     if (!inTable && cells.some(c => /Req\s*ID/i.test(c))) {
       headerCols = cells;

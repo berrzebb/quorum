@@ -5,6 +5,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { _langRegistry, runPatternScan } from "../tool-utils.mjs";
+import { parseTableCells } from "../../markdown-table-parser.mjs";
 
 /**
  * Check source code against Blueprint naming conventions.
@@ -106,7 +107,7 @@ function _extractNamingRulesInline(content, source) {
       if (/^\s*\|.*Concept.*Name.*\|/i.test(line)) { headerFound = true; continue; }
       if (/^\s*\|[\s\-:|]+\|/.test(line)) continue;
       if (headerFound && /^\s*\|/.test(line)) {
-        const cells = line.split("|").map(c => c.trim()).filter(Boolean);
+        const cells = parseTableCells(line).filter(Boolean);
         if (cells.length >= 2) {
           const concept = cells[0];
           const name = cells[1].replace(/`/g, "");

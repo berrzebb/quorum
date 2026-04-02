@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 import { findTracks, parseWorkBreakdown } from '../../orchestrate/planning/index.js';
+import { parseTableCells } from "../../core/markdown-table-parser.mjs";
 
 interface TaskItem {
   id: string;
@@ -221,7 +222,7 @@ function parseRtmFile(path: string, status: Map<string, TaskItem["status"]>): vo
   for (const line of content.split(/\r?\n/)) {
     if (!line.startsWith("|") || line.includes("---")) continue;
 
-    const cells = line.split("|").map((c) => c.trim()).filter(Boolean);
+    const cells = parseTableCells(line).filter(Boolean);
     if (cells.length < 2) continue;
 
     // Detect header row (contains "Req ID" or "Status")

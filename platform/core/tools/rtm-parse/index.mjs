@@ -5,6 +5,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { safePathOrError } from "../tool-utils.mjs";
+import { parseTableCells } from "../../markdown-table-parser.mjs";
 
 export function toolRtmParse(params) {
   const { path: targetPath, matrix = "forward", req_id, status: statusFilter } = params;
@@ -42,7 +43,7 @@ export function toolRtmParse(params) {
     if (i > searchStart && /^##\s+/.test(line) && sectionStart >= 0) break;
 
     if (!line.startsWith("|")) continue;
-    const cells = line.split("|").map(c => c.trim()).filter((_, idx, a) => idx > 0 && idx < a.length);
+    const cells = parseTableCells(line);
 
     if (headerLine < 0 && cells.some(c => /Req\s*ID|Test\s*File/i.test(c))) {
       headerCols = cells;
