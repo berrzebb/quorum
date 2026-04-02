@@ -125,7 +125,7 @@ export interface WaveResult {
 const POLL_INTERVAL = 5000;
 const TIMEOUT = 600_000;
 const MAX_OUTPUT_BYTES = 2_000_000;
-const STALL_THRESHOLD = 120_000;
+const STALL_THRESHOLD = 300_000;  // 5 min — agents use tools (Read/Edit) which can pause output
 
 // ── Main Entry Point ────────────────────────
 
