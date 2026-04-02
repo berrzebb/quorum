@@ -13,7 +13,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve, extname, relative } from "node:path";
-import { walkDir } from "./tools/tool-core.mjs";
+import { walkDir } from "./tools/tool-utils.mjs";
 
 // ── OWASP patterns (built-in fallback) ────────────────
 

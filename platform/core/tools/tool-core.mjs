@@ -91,20 +91,7 @@ import { runFvmValidation } from "./fvm-validator.mjs";
 
 export { generateFvm, runFvmValidation };
 
-// ═══ Tool name registry ═══════════════════════════════════════════════
+// ═══ Tool name registry (canonical source: registry.mjs) ══════════════
+// Re-exported here for backward compatibility.
 
-export const TOOL_NAMES = [
-  "code_map", "audit_scan", "coverage_map",
-  "dependency_graph", "blast_radius", "rtm_parse", "rtm_merge",
-  "audit_history", "fvm_generate", "fvm_validate",
-  "act_analyze",
-  // Specialist domain tools
-  "perf_scan", "compat_check", "a11y_scan", "license_scan",
-  "i18n_validate", "infra_scan", "observability_check", "doc_coverage",
-  // Enforcement tools
-  "blueprint_lint",
-  // Synthesis tools
-  "ai_guide",
-  // Agent communication
-  "agent_comm",
-];
+export { TOOL_NAMES } from "./registry.mjs";

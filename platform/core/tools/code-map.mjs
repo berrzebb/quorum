@@ -21,7 +21,7 @@
  */
 import { statSync } from "node:fs";
 import { resolve, relative } from "node:path";
-import { parseFile as _parseFile, findEndLine, walkDir } from "./tool-core.mjs";
+import { parseFile as _parseFile, findEndLine, walkDir } from "./tool-utils.mjs";
 
 // Try to load language registry for default extensions
 let _defaultExt = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"]);

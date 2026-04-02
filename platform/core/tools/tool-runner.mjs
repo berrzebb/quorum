@@ -20,32 +20,7 @@
  * Output: tool result text to stdout, summary to stderr.
  * Exit code: 0 on success, 1 on error.
  */
-import {
-  toolCodeMap,
-  toolAuditScan,
-  toolCoverageMap,
-  toolDependencyGraph,
-  toolBlastRadius,
-  toolRtmParse,
-  toolRtmMerge,
-  toolAuditHistory,
-  generateFvm,
-  runFvmValidation,
-  toolPerfScan,
-  toolCompatCheck,
-  toolA11yScan,
-  toolLicenseScan,
-  toolI18nValidate,
-  toolInfraScan,
-  toolObservabilityCheck,
-  toolDocCoverage,
-  toolAiGuide,
-  toolBlueprintLint,
-  toolAgentComm,
-  toolAuditSubmit,
-  toolActAnalyze,
-  TOOL_NAMES,
-} from "./tool-core.mjs";
+import { TOOL_NAMES, getTool, executeTool } from "./registry.mjs";
 
 // ═══ CLI argument parser ════════════════════════════════════════════════
 
@@ -78,35 +53,6 @@ function parseArgs(args) {
   }
   return params;
 }
-
-// ═══ Tool dispatcher ════════════════════════════════════════════════════
-
-const DISPATCH = {
-  code_map:            (p) => toolCodeMap(p),
-  audit_scan:          (p) => toolAuditScan(p),
-  coverage_map:        (p) => toolCoverageMap(p),
-  dependency_graph:    (p) => toolDependencyGraph(p),
-  blast_radius:        (p) => toolBlastRadius(p),
-  rtm_parse:           (p) => toolRtmParse(p),
-  rtm_merge:           (p) => toolRtmMerge(p),
-  audit_history:       (p) => toolAuditHistory(p),
-  fvm_generate:        (p) => generateFvm(p.path, p.format),
-  fvm_validate:        (p) => runFvmValidation(p),
-  // Specialist domain tools
-  perf_scan:           (p) => toolPerfScan(p),
-  compat_check:        (p) => toolCompatCheck(p),
-  a11y_scan:           (p) => toolA11yScan(p),
-  license_scan:        (p) => toolLicenseScan(p),
-  i18n_validate:       (p) => toolI18nValidate(p),
-  infra_scan:          (p) => toolInfraScan(p),
-  observability_check: (p) => toolObservabilityCheck(p),
-  doc_coverage:        (p) => toolDocCoverage(p),
-  ai_guide:            (p) => toolAiGuide(p),
-  blueprint_lint:      (p) => toolBlueprintLint(p),
-  agent_comm:          async (p) => toolAgentComm(p),
-  audit_submit:        async (p) => toolAuditSubmit(p),
-  act_analyze:         (p) => toolActAnalyze(p),
-};
 
 // ═══ Help text ══════════════════════════════════════════════════════════
 
@@ -193,7 +139,7 @@ async function main() {
   }
 
   const toolName = args[0];
-  if (!DISPATCH[toolName]) {
+  if (!getTool(toolName)) {
     console.error(`Unknown tool: ${toolName}`);
     console.error(`Available: ${TOOL_NAMES.join(", ")}`);
     process.exit(1);
@@ -203,7 +149,7 @@ async function main() {
   const jsonOutput = params.json;
   delete params.json;
 
-  const result = await DISPATCH[toolName](params);
+  const result = await executeTool(toolName, params);
 
   if (result.error) {
     console.error(`Error: ${result.error}`);
