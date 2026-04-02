@@ -125,7 +125,8 @@ export interface WaveResult {
 const POLL_INTERVAL = 5000;
 const TIMEOUT = 600_000;
 const MAX_OUTPUT_BYTES = 2_000_000;
-const STALL_THRESHOLD = 300_000;  // 5 min — agents use tools (Read/Edit) which can pause output
+// STALL_THRESHOLD removed — agents legitimately pause output during tool calls.
+// Overall TIMEOUT is sufficient.
 
 // ── Main Entry Point ────────────────────────
 
@@ -182,7 +183,6 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   const spawned = new Set<string>();
   const localCompleted = new Set<string>();
   const timedOutIds: string[] = [];
-  const lastOutputSize = new Map<string, { size: number; at: number }>();
 
   const canSpawn = (item: WorkItem): boolean => canSpawnItem(item, groupIds, completedIds);
 
@@ -240,18 +240,8 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         continue;
       }
 
-      const prev = lastOutputSize.get(s.sessionId);
-      if (prev && prev.size === outputBytes && Date.now() - prev.at > STALL_THRESHOLD) {
-        log(`\n    \x1b[31m!\x1b[0m ${s.item.id} stalled (no output for ${Math.round(STALL_THRESHOLD / 1000)}s) — killing`);
-        try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
-        active.splice(si, 1);
-        removeAgentState(repoRoot, s.sessionId);
-        continue;
-      }
-      lastOutputSize.set(s.sessionId, {
-        size: outputBytes,
-        at: prev?.size !== outputBytes ? Date.now() : (prev?.at ?? Date.now()),
-      });
+      // No stall detection — agents pause output during tool use (Read/Edit).
+      // The overall TIMEOUT (10 min) is sufficient to catch truly stuck agents.
 
       if (!isAgentComplete(pollOutput)) continue;
 

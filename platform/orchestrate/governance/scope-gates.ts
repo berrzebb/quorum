@@ -491,6 +491,8 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
 
     if (deletions < 10) continue;
     if (!trackedSet.has(file)) continue;
+    // Skip orchestrator internal files — these are managed by quorum, not agents
+    if (file.startsWith(".claude/") || file.startsWith("docs/plan/")) continue;
 
     let currentLines = 0;
     try {
