@@ -160,6 +160,12 @@ When working in parallel with other agents, use `agent_comm` for coordination:
 
 **Do NOT block** waiting for responses. Post → continue → check later.
 
+## File Modification Rules
+- **Existing files**: ALWAYS use Edit (partial replacement). NEVER use Write to overwrite an existing file — this destroys other agents' work and triggers regression detection.
+- **New files**: Use Write only for files that do not exist yet.
+- **Shared files** (e.g. `index.ts`, `app.ts`): Edit to ADD your section. Do NOT rewrite the entire file.
+- Before modifying a file, Read it first to understand the current content.
+
 ## Anti-Patterns
 - Do NOT commit before [agree_tag]
 - Do NOT exit without submitting evidence — the orchestrator will force re-entry
