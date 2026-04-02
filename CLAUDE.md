@@ -171,8 +171,14 @@ platform/core/
   ├→ audit/             ← split audit modules (args, session, scope, pre-verify, codex-runner, solo-verdict, index)
   ├→ respond.mjs        ← Event Reactor (SQLite verdict → side-effects only, no markdown)
   ├→ enforcement.mjs    ← structural enforcement
-  ├→ tools/             ← 26 MCP tools (code_map, blast_radius, rtm_parse, fvm_generate, perf_scan, a11y_scan, blueprint_lint, ai_guide, audit_submit, ...)
-  ├→ tools/ast-bridge.mjs ← Fail-safe MJS↔AST bridge (hybrid scanning)
+  ├→ markdown-table-parser.mjs ← Shared pipe-split table parser (8 consumers)
+  ├→ tools/             ← 26 MCP tools, each in own directory
+  │   ├→ registry.mjs    ← Tool registry: getAllTools, getTool, executeTool, categories
+  │   ├→ tool-utils.mjs  ← Shared utilities (safePath, walkDir, parseFile, runPatternScan, cache)
+  │   ├→ tool-core.mjs   ← Re-export shim (deprecated, 0 active consumers)
+  │   ├→ mcp-server.mjs  ← MCP JSON-RPC transport (schema + dispatch from registry)
+  │   ├→ {tool-name}/index.mjs ← 24 individual tool directories
+  │   └→ ast-bridge.mjs  ← Fail-safe MJS↔AST bridge (hybrid scanning)
   └→ harness/           ← Execution contracts (8 modules)
       ├→ contract-ledger.ts      ← Contract lifecycle tracking
       ├→ evaluation-contract.ts  ← Evaluation criteria contracts
@@ -231,7 +237,8 @@ platform/adapters/shared/
 
 ## Key Patterns
 
-- **Bridge**: `platform/core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe — hooks run in legacy mode if dist/ is unavailable.
+- **Bridge**: `platform/core/bridge.mjs` connects MJS hooks to compiled TS modules. Fail-safe via `withFallback(fn, default, context)` pattern. 10 namespace exports (claim, lock, agent, parliament, domain, event, query, gate, hooks, execution). Single `_svc` service container for 14 lazy singletons. Callers use `bridge.event.emitEvent()` namespace API.
+- **Tool Registry**: `platform/core/tools/registry.mjs` — single entry point for 26 MCP tools. `getAllTools()`, `getTool(name)`, `executeTool(name, args)`. Each tool lives in `tools/{name}/index.mjs`. Heavy tools (fvm-generate, fvm-validate, contract-drift) lazy-loaded on first call. Schemas + dispatch unified. `tool-core.mjs` retained as deprecated re-export shim (0 active consumers).
 - **Consensus Gate**: evidence → trigger eval → domain detection → specialist tools → T1 skip / T2 simple / T3 deliberative → verdict → retro → commit.
 - **SQLite Unified State**: `state_transitions`, `locks`, `kv_state` tables + `events` — single source of truth. No verdict files (verdict.md/gpt.md eliminated). `audit-status.json` marker for fast-path hook detection.
 - **Domain Specialists**: Zero-cost file pattern matching → 22 deterministic tools + domain-specific LLM agents activated conditionally per domain × tier. 11 domains: perf, a11y, compat, compliance, concurrency, docs, i18n, infra, observability, migration, security.
