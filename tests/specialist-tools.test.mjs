@@ -11,18 +11,16 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const {
-  toolPerfScan,
-  toolCompatCheck,
-  toolA11yScan,
-  toolLicenseScan,
-  toolI18nValidate,
-  toolInfraScan,
-  toolObservabilityCheck,
-  toolDocCoverage,
-  toolAiGuide,
-  TOOL_NAMES,
-} = await import("../platform/core/tools/tool-core.mjs");
+const { getTool, TOOL_NAMES } = await import("../platform/core/tools/registry.mjs");
+const toolPerfScan = getTool("perf_scan").execute;
+const toolCompatCheck = getTool("compat_check").execute;
+const toolA11yScan = getTool("a11y_scan").execute;
+const toolLicenseScan = getTool("license_scan").execute;
+const toolI18nValidate = getTool("i18n_validate").execute;
+const toolInfraScan = getTool("infra_scan").execute;
+const toolObservabilityCheck = getTool("observability_check").execute;
+const toolDocCoverage = getTool("doc_coverage").execute;
+const toolAiGuide = getTool("ai_guide").execute;
 
 let tmpDir;
 

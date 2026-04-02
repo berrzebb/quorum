@@ -4,8 +4,7 @@
  * Extracted from tool-core.mjs to reduce monolith size and enable reuse.
  * All functions are side-effect-free: params → result.
  *
- * Consumers should import from here directly, or via tool-core.mjs
- * which re-exports everything for backward compatibility.
+ * Consumers should import from here directly.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, relative, extname } from "node:path";

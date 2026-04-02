@@ -16,12 +16,12 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { resolve } from "node:path";
 
+const { buildRawGraph } = await import("../platform/core/tools/dependency-graph/index.mjs");
 const {
-  buildRawGraph,
   computeBlastRadiusFromGraph,
   computeBlastRadius,
   toolBlastRadius,
-} = await import("../platform/core/tools/tool-core.mjs");
+} = await import("../platform/core/tools/blast-radius/index.mjs");
 
 const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
 

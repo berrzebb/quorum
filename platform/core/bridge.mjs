@@ -57,7 +57,7 @@ const _svc = {
   specialistMod: null,
   messageBus: null,
   fitnessLoop: null,
-  toolCoreMod: null,
+  blastRadiusMod: null,
   hookRunner: null,
 };
 
@@ -610,14 +610,14 @@ function computeFitness(signals, config) {
 
 // ── Blast Radius ─────────────────────────────
 
-// toolCoreMod in _svc
+// blastRadiusMod in _svc
 
 /** Lazy-load blast-radius tool (cached after first call). */
 async function _getBlastRadiusMod() {
-  if (_svc.toolCoreMod) return _svc.toolCoreMod;
+  if (_svc.blastRadiusMod) return _svc.blastRadiusMod;
   const toURL = (p) => pathToFileURL(p).href;
-  _svc.toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "blast-radius", "index.mjs")));
-  return _svc.toolCoreMod;
+  _svc.blastRadiusMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "blast-radius", "index.mjs")));
+  return _svc.blastRadiusMod;
 }
 
 /**

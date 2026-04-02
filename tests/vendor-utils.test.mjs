@@ -42,8 +42,8 @@ describe("enhancedGlob", () => {
     assert.ok(results !== null, "globby should return results");
     assert.ok(results.length > 0, "should find at least one .mjs file");
     assert.ok(
-      results.some(f => f.includes("tool-core.mjs")),
-      "should find tool-core.mjs"
+      results.some(f => f.includes("tool-utils.mjs")),
+      "should find tool-utils.mjs"
     );
   });
 

@@ -11,8 +11,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CORE_URL = pathToFileURL(resolve(__dirname, "..", "platform", "core", "tools", "tool-core.mjs")).href;
-const { toolActAnalyze } = await import(CORE_URL);
+const { toolActAnalyze } = await import("../platform/core/tools/act-analyze/index.mjs");
 
 describe("act_analyze — no data", () => {
   it("returns empty items when no audit history exists", () => {

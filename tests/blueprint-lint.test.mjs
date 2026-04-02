@@ -169,7 +169,7 @@ describe("parseBlueprints", () => {
 
 describe("toolBlueprintLint", () => {
   it("returns no-rules message for empty design dir", async () => {
-    const { toolBlueprintLint } = await import("../platform/core/tools/tool-core.mjs");
+    const { toolBlueprintLint } = await import("../platform/core/tools/blueprint-lint/index.mjs");
     const result = toolBlueprintLint({ design_dir: "/nonexistent/path" });
     assert.ok(result.text.includes("No naming conventions found"));
     assert.equal(result.json.total, 0);

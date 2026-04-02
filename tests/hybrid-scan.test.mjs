@@ -16,7 +16,7 @@ import { writeFileSync, mkdtempSync, rmSync, existsSync, mkdirSync } from "node:
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const { runPatternScan } = await import("../platform/core/tools/tool-core.mjs");
+const { runPatternScan } = await import("../platform/core/tools/tool-utils.mjs");
 const { createAstRefineCallback, isAstAvailable, getAstLoadError } = await import("../platform/core/tools/ast-bridge.mjs");
 
 if (!isAstAvailable()) {
