@@ -94,6 +94,17 @@ export function createConsensusAuditors(
 }
 
 /**
+ * Create a single auditor for default (non-parliament) audit mode.
+ * Uses the judge role from config — the single cross-model reviewer.
+ */
+export function createSingleAuditor(
+  roles: Record<string, string>,
+  cwd?: string,
+): Auditor {
+  return createAuditor(roles.judge ?? roles.default ?? "codex", cwd);
+}
+
+/**
  * List all available auditor providers.
  */
 export function listAuditorProviders(): string[] {

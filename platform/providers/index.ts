@@ -26,8 +26,9 @@ export type {
   Tier,
 } from "./router.js";
 
-export { DeliberativeConsensus } from "./consensus.js";
+export { DeliberativeConsensus, runAudit, runParliamentAudit, selectAuditMode } from "./consensus.js";
 export type {
+  SimpleAuditResult,
   ConsensusConfig,
   ConsensusVerdict,
   ConsensusRole,

@@ -124,5 +124,34 @@ export function runFitnessGate(repoRoot: string, changedFiles: string[], store: 
   };
 }
 
+// ── v0.6.0 Simplified Fitness Interface ─────
+
+/** v0.6.0 simplified fitness result — pass/fail only by default. */
+export interface FitnessResult {
+  pass: boolean;
+  score?: number;
+  components?: Array<{ name: string; score: number }>;
+}
+
+/**
+ * Check fitness as pass/fail (v0.6.0 default mode).
+ * Mapping: proceed → pass, self-correct/auto-reject → fail.
+ * With verbose=true, includes score and 7-component details.
+ */
+export function checkFitnessPassFail(
+  repoRoot: string,
+  changedFiles: string[],
+  store: any,
+  options?: { verbose?: boolean; precomputed?: PrecomputedSignals },
+): FitnessResult {
+  const gate = runFitnessGate(repoRoot, changedFiles, store, options?.precomputed);
+  const pass = gate.decision === "proceed";
+
+  if (options?.verbose) {
+    return { pass, score: gate.score, components: gate.components };
+  }
+  return { pass };
+}
+
 // Re-export computeFitness for pre-flight baseline
 export { computeFitness };

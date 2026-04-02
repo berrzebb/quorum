@@ -87,10 +87,15 @@ export async function run(args: string[]): Promise<void> {
       const auditScript = resolveMod("core", "audit", "index.mjs");
       if (existsSync(auditScript)) {
         const { spawnSync } = await import("node:child_process");
+        const parliament = args.includes("--parliament");
         const result = spawnSync(process.execPath, [auditScript], {
           stdio: "inherit",
           cwd: repoRoot,
-          env: { ...process.env, FEEDBACK_HOOK_DRY_RUN: args.includes("--dry-run") ? "1" : "" },
+          env: {
+            ...process.env,
+            FEEDBACK_HOOK_DRY_RUN: args.includes("--dry-run") ? "1" : "",
+            QUORUM_PARLIAMENT: parliament ? "1" : "",
+          },
           windowsHide: true,
         });
         if (result.status === 0) {

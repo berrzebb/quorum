@@ -5,9 +5,9 @@ export { generateSkeletalRTM } from "./rtm-generator.js";
 export { updateRTM, updateRTMContent } from "./rtm-updater.js";
 export { verifyPhaseCompletion, isWaveFullyCompleted, getRetryItems } from "./phase-gates.js";
 export { shouldTriggerRetro, buildWaveCommitMessage, waveCommit, amendWaveCommit, autoRetro, autoMerge } from "./lifecycle-hooks.js";
-export { collectFitnessSignals, runFitnessGate, computeFitness, runTscCached, invalidateTscCache } from "./fitness-gates.js";
+export { collectFitnessSignals, runFitnessGate, checkFitnessPassFail, computeFitness, runTscCached, invalidateTscCache } from "./fitness-gates.js";
 export type { TscCacheEntry } from "./fitness-gates.js";
-export type { FitnessGateResult } from "./fitness-gates.js";
+export type { FitnessGateResult, FitnessResult } from "./fitness-gates.js";
 export {
   STUB_PATTERNS, PERF_PATTERNS,
   scanLines, scanForStubs, scanForPerfAntiPatterns,

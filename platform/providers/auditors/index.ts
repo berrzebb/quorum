@@ -10,6 +10,6 @@ export { OllamaAuditor } from "./ollama.js";
 export type { OllamaAuditorConfig } from "./ollama.js";
 export { VllmAuditor } from "./vllm.js";
 export type { VllmAuditorConfig } from "./vllm.js";
-export { createAuditor, createConsensusAuditors, parseSpec, listAuditorProviders } from "./factory.js";
+export { createAuditor, createConsensusAuditors, createSingleAuditor, parseSpec, listAuditorProviders } from "./factory.js";
 export type { AuditorSpec } from "./factory.js";
 export { parseAuditResponse, extractJson } from "./parse.js";

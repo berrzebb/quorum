@@ -48,15 +48,17 @@ function parseRunArgs(args: string[]) {
   const explicitAuditor = opt("--auditor");
   const auditor = explicitAuditor ?? _defaultAuditor(provider);
   const maxConcurrency = parseInt(opt("--concurrency") ?? "3", 10) || 3;
+  const parliament = args.includes("--parliament");
+  const verboseFitness = args.includes("--verbose-fitness");
   const optValues = new Set([opt("--provider"), opt("--auditor"), opt("--concurrency")].filter(Boolean));
   const trackInput = args.find(a => !a.startsWith("--") && !optValues.has(a));
-  return { provider, auditor, maxConcurrency, resumeMode: args.includes("--resume"), trackInput };
+  return { provider, auditor, maxConcurrency, resumeMode: args.includes("--resume"), parliament, verboseFitness, trackInput };
 }
 
 // ── Main entry point (CLI-specific presentation) ──
 
 export async function runImplementationLoop(repoRoot: string, args: string[]): Promise<void> {
-  const { provider, auditor, maxConcurrency, resumeMode, trackInput } = parseRunArgs(args);
+  const { provider, auditor, maxConcurrency, resumeMode, parliament, verboseFitness, trackInput } = parseRunArgs(args);
   const maxRetries = 3;
 
   const resolved = resolveTrack(trackInput, repoRoot);
@@ -77,7 +79,8 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
 
   const trackName = resolved.name;
   console.log(`\n\x1b[36mquorum orchestrate run\x1b[0m — implementation loop\n`);
-  console.log(`  Track: ${trackName}  Provider: ${provider}  Auditor: ${auditor}  Concurrency: ${maxConcurrency}`);
+  const auditMode = parliament ? "parliament (3-role)" : "single";
+  console.log(`  Track: ${trackName}  Provider: ${provider}  Auditor: ${auditor}  Audit: ${auditMode}  Concurrency: ${maxConcurrency}`);
   if (provider === auditor) {
     console.log(`  \x1b[33m⚠ Auditor = Provider (same model). Use --auditor <model> for cross-model review.\x1b[0m`);
   }

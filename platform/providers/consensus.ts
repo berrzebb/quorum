@@ -75,6 +75,74 @@ export interface DivergeConvergeOptions {
   implementerTestimony?: string;
 }
 
+// ── v0.6.0 Simplified Audit Interface ────────
+
+/** v0.6.0 simplified audit result — pass/fail with findings. */
+export interface SimpleAuditResult {
+  pass: boolean;
+  findings: string[];
+  model: string;
+}
+
+/** Convert a ConsensusVerdict to the simplified result. */
+function verdictToSimpleResult(verdict: ConsensusVerdict, model: string): SimpleAuditResult {
+  return {
+    pass: verdict.finalVerdict === "approved",
+    findings: verdict.opinions
+      .filter(o => o.verdict === "changes_requested")
+      .flatMap(o => o.codes.length > 0 ? o.codes : [o.reasoning.slice(0, 200)]),
+    model,
+  };
+}
+
+/**
+ * Run a single cross-model audit (default mode).
+ * Uses one auditor — the judge role from config.
+ */
+export async function runAudit(
+  auditor: Auditor,
+  request: AuditRequest,
+  model: string,
+): Promise<SimpleAuditResult> {
+  try {
+    const result = await auditor.audit(request);
+    return {
+      pass: result.verdict === "approved",
+      findings: result.verdict === "approved" ? [] : result.codes,
+      model,
+    };
+  } catch (err) {
+    return {
+      pass: false,
+      findings: [`Audit failed: ${err instanceof Error ? err.message : String(err)}`],
+      model,
+    };
+  }
+}
+
+/**
+ * Run parliament 3-role audit (--parliament mode).
+ * Wraps existing DeliberativeConsensus.runDivergeConverge().
+ */
+export async function runParliamentAudit(
+  config: ConsensusConfig,
+  request: AuditRequest,
+  model: string,
+  options?: DivergeConvergeOptions,
+): Promise<SimpleAuditResult> {
+  const consensus = new DeliberativeConsensus(config);
+  const verdict = await consensus.runDivergeConverge(request, options);
+  return verdictToSimpleResult(verdict, model);
+}
+
+/**
+ * Select audit function based on CLI flags.
+ * Default: single cross-model review. --parliament: 3-role deliberation.
+ */
+export function selectAuditMode(options: { parliament?: boolean }): "single" | "parliament" {
+  return options.parliament ? "parliament" : "single";
+}
+
 // ── Prompt builders ───────────────────────────
 
 function buildAdvocatePrompt(request: AuditRequest): AuditRequest {
