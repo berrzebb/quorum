@@ -116,7 +116,10 @@ export function getChangedFiles(repoRoot: string, snapshotRef = "HEAD"): string[
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     }).trim();
     const newFiles = untracked ? untracked.split("\n").filter(Boolean) : [];
-    return [...new Set([...tracked, ...newFiles])];
+    // Filter out dirs that should never appear in changed-file analysis (even without .gitignore)
+    const EXCLUDE_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/"];
+    const all = [...new Set([...tracked, ...newFiles])];
+    return all.filter(f => !EXCLUDE_PREFIXES.some(p => f.startsWith(p)));
   } catch (err) {
     console.error(`[scope-gates] getChangedFiles failed: ${(err as Error).message}`);
     return [];

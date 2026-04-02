@@ -156,7 +156,7 @@ export async function runWaveAuditLLM(
     input: spawn.stdinInput,
     stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
     env: { ...process.env },
-    timeout: 300_000,
+    timeout: Math.max(300_000, items.length * 300_000),  // 5 min per item, minimum 5 min
     encoding: "utf8",
     windowsHide: true,
   });

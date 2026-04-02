@@ -57,7 +57,7 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
   },
   daemon: {
     description: "Start TUI dashboard (persistent)",
-    handler: () => import("../../daemon/index.js").then((m) => m.default?.()),
+    handler: () => import("../../daemon/index.js").then((m) => m.default?.(args)),
   },
   status: {
     description: "Show current audit gate status",

@@ -22,13 +22,14 @@ import { initializeStore, loadConfig, bootstrapFromState, startConfigRefresh } f
 import { startProviders } from "./services/provider-lifecycle.js";
 import { tryWrapInMuxSession, initializeMux } from "./services/mux-lifecycle.js";
 
-export default async function startDaemon(): Promise<void> {
+export default async function startDaemon(args: string[] = []): Promise<void> {
   const repoRoot = process.cwd();
 
-  // ── 1. Mux session wrapper ──
-  // Re-launch inside tmux/psmux for remote attach if possible
-  const { wrapped } = await tryWrapInMuxSession(repoRoot);
-  if (wrapped) return;
+  // ── 1. Mux session wrapper (opt-in via --mux flag) ──
+  if (args.includes("--mux")) {
+    const { wrapped } = await tryWrapInMuxSession(repoRoot);
+    if (wrapped) return;
+  }
 
   // ── 2. Init store + bus ──
   const dbPath = resolve(repoRoot, ".claude", "quorum-events.db");

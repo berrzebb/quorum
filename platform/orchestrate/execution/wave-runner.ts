@@ -297,63 +297,26 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     if (bridge?.releaseFiles) bridge.releaseFiles(`impl-${item.id}`);
   }
 
-  // ── 2.5. Scope enforcement — revert out-of-scope file changes ──
+  // ── 2.5. Scope enforcement — warn about out-of-scope file changes ──
+  // NOTE: We only WARN here, not revert. Agents legitimately modify files beyond targetFiles
+  // (test files, config, infrastructure). Actual scope violations are detected by
+  // detectFileScopeViolations() in the audit gate and reported as warnings.
   const allowedFiles = new Set(wave.items.flatMap(i => i.targetFiles));
   if (allowedFiles.size > 0) {
     try {
       const diffRaw = execSync("git diff --name-only HEAD", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
-      const untrackedRaw = execSync("git ls-files --others --exclude-standard", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
-      const allChanged = [...diffRaw.split("\n"), ...untrackedRaw.split("\n")].filter(Boolean);
-      const outOfScope = allChanged.filter(f =>
+      const trackedChanged = diffRaw ? diffRaw.split("\n").filter(Boolean) : [];
+      const SCOPE_EXCLUDE_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/", ".claude/", "docs/plan/"];
+      const outOfScope = trackedChanged.filter(f =>
         !allowedFiles.has(f) &&
-        !f.startsWith(".claude/") &&
+        !SCOPE_EXCLUDE_PREFIXES.some(p => f.startsWith(p)) &&
         !f.endsWith(".lock") &&
-        !f.startsWith("docs/plan/") &&       // RTM + plan docs managed by orchestrator
-        f !== "package.json" &&               // deps install modifies this
+        f !== "package.json" &&
         f !== "package-lock.json",
       );
       if (outOfScope.length > 0) {
-        log(`\n  \x1b[33m◈ Scope enforcement:\x1b[0m reverting ${outOfScope.length} out-of-scope file(s)`);
-        for (const f of outOfScope) {
-          log(`    \x1b[2m↩ ${f}\x1b[0m`);
-          try { execSync(`git checkout -- "${f}"`, { cwd: repoRoot, timeout: 5_000, stdio: "pipe", windowsHide: true }); }
-          catch { try { execSync(`git rm -f "${f}"`, { cwd: repoRoot, timeout: 5_000, stdio: "pipe", windowsHide: true }); } catch { /* untracked file cleanup */ } }
-        }
-        // Clean untracked out-of-scope files
-        for (const f of outOfScope) {
-          try {
-            const fullPath = resolve(repoRoot, f);
-            if (existsSync(fullPath)) unlinkSync(fullPath);
-          } catch { /* ignore */ }
-        }
-
-        // Remove broken imports in allowed files that reference deleted out-of-scope modules
-        const deletedModules = new Set(outOfScope.map(f => {
-          const base = f.replace(/\.[^/.]+$/, ""); // strip extension
-          return "./" + base.replace(/\\/g, "/");
-        }));
-        for (const af of allowedFiles) {
-          const afPath = resolve(repoRoot, af);
-          if (!existsSync(afPath)) continue;
-          try {
-            const content = readFileSync(afPath, "utf8");
-            const lines = content.split("\n");
-            let changed = false;
-            const cleaned = lines.filter(line => {
-              // Match: require('./commands/foo') or import ... from './commands/foo'
-              const reqMatch = line.match(/require\s*\(\s*['"]([^'"]+)['"]\s*\)/);
-              const impMatch = line.match(/from\s+['"]([^'"]+)['"]/);
-              const modPath = reqMatch?.[1] ?? impMatch?.[1];
-              if (modPath && deletedModules.has(modPath)) {
-                log(`    \x1b[2m✂ removed broken import: ${line.trim()}\x1b[0m`);
-                changed = true;
-                return false;
-              }
-              return true;
-            });
-            if (changed) writeFileSync(afPath, cleaned.join("\n"), "utf8");
-          } catch { /* ignore read/write errors */ }
-        }
+        log(`\n  \x1b[33m◈ Scope note:\x1b[0m ${outOfScope.length} file(s) modified beyond targetFiles (kept)`);
+        for (const f of outOfScope) log(`    \x1b[2m• ${f}\x1b[0m`);
       }
     } catch (err) { log(`  \x1b[33m⚠ scope enforcement failed: ${(err as Error).message}\x1b[0m`); }
   }

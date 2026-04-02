@@ -180,7 +180,7 @@ Each WB item MUST include these fields. The goal: a sub-agent can complete this 
 \`\`\`markdown
 ## ${prefix}-N: Title (Size: XS|S|M)
 
-- **First touch files**: \`path/file.ext\` — reason for each
+- **First touch files**: \`path/file.ext\` — reason for each (list ALL files created or modified, including test files and config)
 - **Prerequisite**: ${prefix}-X (or none)
 - **Action**: Concrete steps. NOT "implement X" — instead: "Add function Y to file Z that does W. Call it from Q."
 - **Context budget**:

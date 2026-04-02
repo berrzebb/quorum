@@ -63,6 +63,29 @@ export function extractAction(body: string): string | undefined {
 }
 
 /**
+ * Extract backtick-quoted file paths from the Action block.
+ * Agents create files mentioned in Action that may not be in "First touch files".
+ * Filters out non-file patterns (commands, flags, package names without paths).
+ */
+export function extractFilesFromAction(body: string): string[] {
+  const actionText = extractAction(body);
+  if (!actionText) return [];
+
+  const files: string[] = [];
+  // Same regex as extractTargetFiles — backtick-quoted paths with extensions or dotfiles
+  const fileRegex = /`((?:[^`]*\/)?(?:[^`/]+\.[a-z][a-z0-9]*|\.[a-z][a-z0-9]*))`/g;
+  let m: RegExpExecArray | null;
+  while ((m = fileRegex.exec(actionText)) !== null) {
+    const path = m[1]!;
+    // Filter out common false positives: npm commands, flags, version strings
+    if (path.startsWith("--") || path.startsWith("npm ") || path.startsWith("npx ")) continue;
+    if (/^\d+\.\d+/.test(path)) continue;  // version numbers like 1.0.0
+    files.push(path);
+  }
+  return files;
+}
+
+/**
  * Extract context budget — Read and Skip file lists.
  */
 export function extractContextBudget(
@@ -161,7 +184,10 @@ export function extractIntegrationTarget(body: string): string | undefined {
  * (id, title, isParent, parentId, heading-level size).
  */
 export function parseFields(sectionBody: string): Partial<WorkItem> {
-  const targetFiles = extractTargetFiles(sectionBody);
+  // Merge files from First touch files + Action block (agents create files in Action too)
+  const firstTouchFiles = extractTargetFiles(sectionBody);
+  const actionFiles = extractFilesFromAction(sectionBody);
+  const targetFiles = [...new Set([...firstTouchFiles, ...actionFiles])];
   const dependsOn = extractDependsOn(sectionBody);
   const action = extractAction(sectionBody);
   const contextBudget = extractContextBudget(sectionBody);
