@@ -228,6 +228,40 @@ export class EventStore {
       CREATE INDEX IF NOT EXISTS idx_relations_type
         ON relations (type);
 
+      -- Graph history: changeset tracking for entity/relation modifications
+      CREATE TABLE IF NOT EXISTS changesets (
+        id          TEXT PRIMARY KEY,
+        source      TEXT NOT NULL DEFAULT 'manual',
+        description TEXT,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS entity_changes (
+        id            TEXT PRIMARY KEY,
+        changeset_id  TEXT NOT NULL,
+        entity_id     TEXT NOT NULL,
+        action        TEXT NOT NULL,
+        before_data   TEXT,
+        after_data    TEXT,
+        FOREIGN KEY (changeset_id) REFERENCES changesets(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_entity_changes_changeset
+        ON entity_changes (changeset_id);
+      CREATE INDEX IF NOT EXISTS idx_entity_changes_entity
+        ON entity_changes (entity_id);
+      CREATE TABLE IF NOT EXISTS relation_changes (
+        id            TEXT PRIMARY KEY,
+        changeset_id  TEXT NOT NULL,
+        relation_id   TEXT NOT NULL,
+        action        TEXT NOT NULL,
+        before_data   TEXT,
+        after_data    TEXT,
+        FOREIGN KEY (changeset_id) REFERENCES changesets(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_relation_changes_changeset
+        ON relation_changes (changeset_id);
+      CREATE INDEX IF NOT EXISTS idx_relation_changes_relation
+        ON relation_changes (relation_id);
+
       -- File claims: per-file ownership for worktree conflict prevention
       CREATE TABLE IF NOT EXISTS file_claims (
         file_path     TEXT PRIMARY KEY,
