@@ -193,6 +193,41 @@ export class EventStore {
         updated_at    INTEGER NOT NULL
       );
 
+      -- Graph entities: semantic impact graph nodes (v0.6.0 GRAPH track)
+      CREATE TABLE IF NOT EXISTS entities (
+        id          TEXT PRIMARY KEY,
+        type        TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        description TEXT,
+        status      TEXT NOT NULL DEFAULT 'draft',
+        metadata    TEXT NOT NULL DEFAULT '{}',
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_entities_type
+        ON entities (type);
+      CREATE INDEX IF NOT EXISTS idx_entities_status
+        ON entities (status);
+
+      -- Graph relations: typed edges between entities (v0.6.0 GRAPH track)
+      CREATE TABLE IF NOT EXISTS relations (
+        id          TEXT PRIMARY KEY,
+        from_id     TEXT NOT NULL,
+        to_id       TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        weight      REAL NOT NULL DEFAULT 1.0,
+        metadata    TEXT NOT NULL DEFAULT '{}',
+        created_at  INTEGER NOT NULL,
+        FOREIGN KEY (from_id) REFERENCES entities(id),
+        FOREIGN KEY (to_id) REFERENCES entities(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_relations_from
+        ON relations (from_id);
+      CREATE INDEX IF NOT EXISTS idx_relations_to
+        ON relations (to_id);
+      CREATE INDEX IF NOT EXISTS idx_relations_type
+        ON relations (type);
+
       -- File claims: per-file ownership for worktree conflict prevention
       CREATE TABLE IF NOT EXISTS file_claims (
         file_path     TEXT PRIMARY KEY,
