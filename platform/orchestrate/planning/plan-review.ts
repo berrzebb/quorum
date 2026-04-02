@@ -76,7 +76,8 @@ export function reviewPlan(items: WorkItem[]): PlanReviewResult {
     }
 
     // Guard: too many target files suggests WB is too large
-    if (item.targetFiles.length > 5) {
+    // Threshold 10: Action block extraction adds referenced files beyond primary targets
+    if (item.targetFiles.length > 10) {
       errors.push(`${prefix} ${item.targetFiles.length} target files — split this WB`);
     }
   }
