@@ -9,7 +9,7 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
 const { detectDomains, formatDomainSummary } = await import("../dist/platform/providers/domain-detect.js");
-const { selectReviewers, getActiveRejectionCodes, listDomainReviewers } = await import("../dist/platform/providers/domain-router.js");
+const { selectReviewers, getActiveRejectionCodes, listDomainReviewers, runDomainCheck } = await import("../dist/platform/providers/domain-router.js");
 const { evaluateTrigger } = await import("../dist/platform/providers/trigger.js");
 const { enrichEvidence, buildSpecialistSection } = await import("../dist/platform/providers/specialist.js");
 
@@ -559,5 +559,60 @@ describe("end-to-end: detect → route → enrich", () => {
     assert.ok(selection.tools.includes("doc_coverage"));
     // But no LLM agent at T1 (doc-steward requires T3)
     assert.equal(selection.agents.length, 0);
+  });
+});
+
+// ═══ GATE-5: runDomainCheck (tool-only domain check) ═══════════════════
+
+describe("runDomainCheck", () => {
+  const mockRunTool = async (tool, domain) => ({
+    status: "pass",
+    output: `${tool}: all clear`,
+  });
+
+  it("runs tools for detected domains", async () => {
+    const domains = { performance: true, accessibility: false, security: false, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", mockRunTool);
+    assert.equal(result.totalChecked, 1);
+    assert.equal(result.passed, 1);
+    assert.equal(result.results[0].tool, "perf_scan");
+  });
+
+  it("handles multiple domains", async () => {
+    const domains = { performance: true, accessibility: true, security: false, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", mockRunTool);
+    assert.equal(result.totalChecked, 2);
+    assert.equal(result.passed, 2);
+  });
+
+  it("skips domains without dedicated tool", async () => {
+    const domains = { performance: false, accessibility: false, security: true, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", mockRunTool);
+    // security has no dedicated tool → skipped
+    assert.equal(result.results[0].status, "skipped");
+    assert.equal(result.totalChecked, 0);
+  });
+
+  it("handles tool failure", async () => {
+    const failTool = async () => ({ status: "fail", output: "violations found" });
+    const domains = { performance: true, accessibility: false, security: false, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", failTool);
+    assert.equal(result.failed, 1);
+    assert.equal(result.results[0].status, "fail");
+  });
+
+  it("handles tool error", async () => {
+    const errorTool = async () => { throw new Error("timeout"); };
+    const domains = { performance: true, accessibility: false, security: false, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", errorTool);
+    assert.equal(result.results[0].status, "error");
+    assert.ok(result.results[0].output.includes("timeout"));
+  });
+
+  it("returns empty summary for no detected domains", async () => {
+    const domains = { performance: false, accessibility: false, security: false, migration: false, compliance: false, observability: false, documentation: false, concurrency: false, i18n: false, infrastructure: false };
+    const result = await runDomainCheck(domains, "/tmp", mockRunTool);
+    assert.equal(result.totalChecked, 0);
+    assert.equal(result.results.length, 0);
   });
 });

@@ -21,8 +21,10 @@ export function selectEvaluator(
 }
 
 /**
- * Run all scenarios for a spec using available evaluators.
+ * @deprecated Use runRuntimeEvaluationGate() from governance/runtime-evaluation-gate.ts instead.
+ * It provides blocking/non-blocking surface classification and gate result.
  *
+ * Run all scenarios for a spec using available evaluators.
  * For each unique surface in the spec's scenarios, finds the matching
  * evaluator and runs it.  Returns `null` result when no evaluator is
  * available for a surface.

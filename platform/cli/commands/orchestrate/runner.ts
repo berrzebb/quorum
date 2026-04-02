@@ -50,15 +50,16 @@ function parseRunArgs(args: string[]) {
   const maxConcurrency = parseInt(opt("--concurrency") ?? "3", 10) || 3;
   const parliament = args.includes("--parliament");
   const verboseFitness = args.includes("--verbose-fitness");
+  const fullGates = args.includes("--full-gates");
   const optValues = new Set([opt("--provider"), opt("--auditor"), opt("--concurrency")].filter(Boolean));
   const trackInput = args.find(a => !a.startsWith("--") && !optValues.has(a));
-  return { provider, auditor, maxConcurrency, resumeMode: args.includes("--resume"), parliament, verboseFitness, trackInput };
+  return { provider, auditor, maxConcurrency, resumeMode: args.includes("--resume"), parliament, verboseFitness, fullGates, trackInput };
 }
 
 // ── Main entry point (CLI-specific presentation) ──
 
 export async function runImplementationLoop(repoRoot: string, args: string[]): Promise<void> {
-  const { provider, auditor, maxConcurrency, resumeMode, parliament, verboseFitness, trackInput } = parseRunArgs(args);
+  const { provider, auditor, maxConcurrency, resumeMode, parliament, verboseFitness, fullGates, trackInput } = parseRunArgs(args);
   const maxRetries = 3;
 
   const resolved = resolveTrack(trackInput, repoRoot);

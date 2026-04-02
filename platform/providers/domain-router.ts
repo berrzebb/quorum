@@ -23,9 +23,9 @@ export interface DomainReviewer {
   displayName: string;
   /** Deterministic MCP tool to run (zero cost, always runs if domain active). */
   tool?: string;
-  /** LLM agent persona name (loaded via AgentLoader, costs API calls). */
+  /** @deprecated LLM agent persona name — prefer tool-only via runDomainCheck(). */
   agent?: string;
-  /** Minimum tier required to activate the LLM agent. */
+  /** @deprecated Minimum tier required to activate the LLM agent. */
   agentMinTier: ReviewerTier;
   /** Rejection codes this reviewer can emit. */
   codes: string[];
@@ -196,4 +196,82 @@ export function getActiveRejectionCodes(selection: ReviewerSelection): string[] 
  */
 export function listDomainReviewers(): readonly DomainReviewer[] {
   return DOMAIN_REVIEWERS;
+}
+
+// ── Tool-only domain check (GATE-5) ────────
+
+export interface DomainCheckResult {
+  domain: string;
+  tool: string;
+  status: 'pass' | 'fail' | 'error' | 'skipped';
+  output?: string;
+}
+
+export interface DomainCheckSummary {
+  results: DomainCheckResult[];
+  totalChecked: number;
+  passed: number;
+  failed: number;
+}
+
+/**
+ * Run domain-specific MCP tools directly (no LLM agents).
+ *
+ * Replaces the agent-based specialist review path with deterministic tool calls.
+ * Each detected domain maps to an MCP tool via the reviewer registry.
+ *
+ * @param domains - Domain detection result from detectDomains().
+ * @param cwd - Working directory for tool execution.
+ * @param runTool - Callback to invoke an MCP tool. Injected for testability.
+ */
+export async function runDomainCheck(
+  domains: DetectedDomains,
+  cwd: string,
+  runTool: (tool: string, domain: string, cwd: string) => Promise<{ status: string; output: string }>,
+): Promise<DomainCheckSummary> {
+  const results: DomainCheckResult[] = [];
+
+  const promises: Promise<void>[] = [];
+  for (const reviewer of DOMAIN_REVIEWERS) {
+    if (!domains[reviewer.domain]) continue;
+
+    if (!reviewer.tool) {
+      // Domain has no dedicated tool — skip
+      results.push({
+        domain: reviewer.domain,
+        tool: 'none',
+        status: 'skipped',
+      });
+      continue;
+    }
+
+    const tool = reviewer.tool;
+    const domain = reviewer.domain;
+    promises.push(
+      runTool(tool, domain, cwd).then(r => {
+        results.push({
+          domain,
+          tool,
+          status: r.status === 'fail' ? 'fail' : r.status === 'error' ? 'error' : 'pass',
+          output: r.output,
+        });
+      }).catch(err => {
+        results.push({
+          domain,
+          tool,
+          status: 'error',
+          output: err instanceof Error ? err.message : String(err),
+        });
+      }),
+    );
+  }
+
+  await Promise.all(promises);
+
+  return {
+    results,
+    totalChecked: results.filter(r => r.status !== 'skipped').length,
+    passed: results.filter(r => r.status === 'pass').length,
+    failed: results.filter(r => r.status === 'fail').length,
+  };
 }

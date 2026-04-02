@@ -24,6 +24,7 @@ import {
   checkTestFileCreation,
   checkWBConstraints,
 } from "../governance/scope-gates.js";
+import { GateConfig, createDefaultGateConfig } from "../governance/gate-config.js";
 
 /** Pre-merged patterns + description set — module-level constants. */
 const STUB_PERF_PATTERNS = [...STUB_PATTERNS, ...PERF_PATTERNS];
@@ -82,6 +83,8 @@ export interface WaveAuditOptions {
   blueprintRules: NamingRule[];
   /** Bridge instance (for EventStore access). */
   bridge: Bridge | null;
+  /** Gate configuration (controls which gates run). Defaults to essential-only. */
+  gateConfig?: GateConfig;
 }
 
 // ── Main Entry Point ────────────────────────
@@ -105,19 +108,24 @@ export interface WaveAuditOptions {
  */
 export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
   const { repoRoot, wave, completedIds, snapshotRef, blueprintRules, bridge } = opts;
+  const gc = opts.gateConfig ?? createDefaultGateConfig();
 
   // Identify completed items and their target files
   const completedItems = wave.items.filter(i => completedIds.has(i.id));
   const waveFiles = [...new Set(completedItems.flatMap(i => i.targetFiles))];
 
-  // 1. Changed files + dependency audit
-  const changedFiles = getChangedFiles(repoRoot, snapshotRef);
-  const dependencyIssues = waveFiles.length > 0
+  // 1. Changed files + dependency audit (essential: changed-files)
+  const changedFiles = gc.isEnabled('changed-files')
+    ? getChangedFiles(repoRoot, snapshotRef)
+    : [];
+  const dependencyIssues = gc.isEnabled('changed-files') && waveFiles.length > 0
     ? auditNewDependencies(repoRoot, snapshotRef)
     : [];
 
-  // 2. Regression detection
-  const regressions = detectRegressions(repoRoot, waveFiles, snapshotRef);
+  // 2. Regression detection (optional: regression)
+  const regressions = gc.isEnabled('regression')
+    ? detectRegressions(repoRoot, waveFiles, snapshotRef)
+    : [];
 
   // Early return if no completed items
   if (completedItems.length === 0) {
@@ -140,34 +148,48 @@ export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
     };
   }
 
-  // 3-4. Combined stub + perf scan (single file read pass instead of two)
-  const stubPerfFindings = scanLines(repoRoot, waveFiles, STUB_PERF_PATTERNS);
+  // 3-4. Combined stub + perf scan
   const stubs: string[] = [];
   const perfFindings: string[] = [];
-  for (const f of stubPerfFindings) {
-    const desc = f.slice(f.indexOf(" — ") + 3);
-    (PERF_DESCS.has(desc) ? perfFindings : stubs).push(f);
+  if (gc.isEnabled('stub-scan') || gc.isEnabled('perf-scan')) {
+    const patterns = [
+      ...(gc.isEnabled('stub-scan') ? STUB_PATTERNS : []),
+      ...(gc.isEnabled('perf-scan') ? PERF_PATTERNS : []),
+    ];
+    const findings = scanLines(repoRoot, waveFiles, patterns);
+    for (const f of findings) {
+      const desc = f.slice(f.indexOf(" — ") + 3);
+      (PERF_DESCS.has(desc) ? perfFindings : stubs).push(f);
+    }
   }
 
-  // 5. Blueprint naming lint
-  const blueprintViolations = blueprintRules.length > 0
+  // 5. Blueprint naming lint (optional: blueprint-lint)
+  const blueprintViolations = gc.isEnabled('blueprint-lint') && blueprintRules.length > 0
     ? scanBlueprintViolations(repoRoot, waveFiles, blueprintRules)
     : [];
 
-  // 6. File scope enforcement
-  const scopeViolations = detectFileScopeViolations(repoRoot, completedItems, changedFiles);
+  // 6. File scope enforcement (essential: scope-check)
+  const scopeViolations = gc.isEnabled('scope-check')
+    ? detectFileScopeViolations(repoRoot, completedItems, changedFiles)
+    : [];
 
-  // 7. Fitness gate (pass precomputed stub count to avoid re-scanning files)
+  // 7. Fitness gate (optional: fitness)
   const store = bridge?.store ?? null;
-  const fg = runFitnessGate(repoRoot, waveFiles, store, { stubCount: stubs.length });
+  const fg = gc.isEnabled('fitness')
+    ? runFitnessGate(repoRoot, waveFiles, store, { stubCount: stubs.length })
+    : { decision: "proceed" as const, score: 0, reason: "gate disabled" };
   const blueprintBlocked = blueprintViolations.length > 0;
   const fitnessDecision = blueprintBlocked ? "auto-reject" as const : fg.decision;
 
-  // 8. Test file creation check
-  const missingTests = checkTestFileCreation(repoRoot, completedItems, changedFiles);
+  // 8. Test file creation check (optional: test-file-check)
+  const missingTests = gc.isEnabled('test-file-check')
+    ? checkTestFileCreation(repoRoot, completedItems, changedFiles)
+    : [];
 
-  // 9. WB constraint check
-  const constraintViolations = checkWBConstraints(repoRoot, completedItems, dependencyIssues);
+  // 9. WB constraint check (optional: wb-constraints)
+  const constraintViolations = gc.isEnabled('wb-constraints')
+    ? checkWBConstraints(repoRoot, completedItems, dependencyIssues)
+    : [];
 
   // Determine overall pass: blocking gates must be clear
   const passed = regressions.length === 0

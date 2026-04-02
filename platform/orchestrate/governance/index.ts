@@ -36,12 +36,16 @@ export { runRuntimeEvaluationGate } from "./runtime-evaluation-gate.js";
 export type { AdaptiveGateProfile } from "./adaptive-gate-profile.js";
 export {
   MINIMAL_PROFILE, STANDARD_PROFILE, FULL_PROFILE,
-  selectGateProfile, getEffectiveGates, shouldRunGate,
+  selectGateProfile, getEffectiveGates, shouldRunGate, getGateProfile,
 } from "./adaptive-gate-profile.js";
 
 // Iteration budget — consumption tracking + escalation decisions
 export type { IterationState, IterationDecision } from "./iteration-budget.js";
 export { createIterationState, decideNextAction, recordIteration } from "./iteration-budget.js";
+
+// [GATE CONFIG] Essential/optional/disabled gate classification
+export { GateConfig, createDefaultGateConfig, createFullGateConfig, createGateConfigFromClassification, loadGateConfigFromJson, DEFAULT_CLASSIFICATION } from "./gate-config.js";
+export type { GateTier, GateName, GateClassification } from "./gate-config.js";
 
 // [CONTRACT CONTROL PLANE] Re-export contract types for phase-gate consumers
 export type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";

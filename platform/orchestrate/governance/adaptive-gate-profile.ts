@@ -43,6 +43,9 @@ export const FULL_PROFILE: AdaptiveGateProfile = {
 // ── Profile Selection ───────────────────────────────────────────────────────
 
 /**
+ * @deprecated Use getGateProfile() instead. Adaptive per-trigger selection is
+ * superseded by the unified GateConfig (essential/optional/disabled tiers).
+ *
  * Select the appropriate gate profile based on detected triggers.
  * Returns the highest-priority matching profile (most gates first).
  * Falls back to STANDARD_PROFILE when no trigger matches.
@@ -63,6 +66,24 @@ export function selectGateProfile(
     }
   }
   return STANDARD_PROFILE; // default
+}
+
+/**
+ * Get the unified gate profile. Always returns STANDARD_PROFILE.
+ * Per-track adaptive tuning is removed — all tracks use the same profile.
+ * Override via config.json `gates.profile` section for specific tracks.
+ */
+export function getGateProfile(
+  configOverride?: Partial<AdaptiveGateProfile>,
+): AdaptiveGateProfile {
+  if (!configOverride) return STANDARD_PROFILE;
+  return {
+    ...STANDARD_PROFILE,
+    ...configOverride,
+    profileId: configOverride.profileId ?? STANDARD_PROFILE.profileId,
+    requiredGates: configOverride.requiredGates ?? STANDARD_PROFILE.requiredGates,
+    optionalGates: configOverride.optionalGates ?? STANDARD_PROFILE.optionalGates,
+  };
 }
 
 // ── Gate Queries ─────────────────────────────────────────────────────────────
