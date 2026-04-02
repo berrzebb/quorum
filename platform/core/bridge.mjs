@@ -26,15 +26,43 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUORUM_ROOT = resolve(__dirname, "..", "..");
 const DIST = resolve(QUORUM_ROOT, "dist", "platform");
 
-// ── Lazy singletons ───────────────────────────
+// ── Fail-safe wrappers ──────────────────────────
 
-let _store = null;
-let _router = null;
-let _lockService = null;
-let _modules = null;
+/** Wrap a sync function with try-catch, logging + fail-open default. */
+function withFallback(fn, defaultValue, context) {
+  try { return fn(); }
+  catch (err) { console.warn(`[bridge] ${context} failed:`, err?.message ?? err); return defaultValue; }
+}
+
+/** Wrap an async function with try-catch, logging + fail-open default. */
+async function withAsyncFallback(fn, defaultValue, context) {
+  try { return await fn(); }
+  catch (err) { console.warn(`[bridge] ${context} failed:`, err?.message ?? err); return defaultValue; }
+}
+
+// ── Service container ───────────────────────────
+// Single object holding all lazily-initialized services.
+// init() is the only creation path; services resolve on first access.
+
+const _svc = {
+  store: null,
+  router: null,
+  lockService: null,
+  modules: null,
+  parliamentModules: null,
+  claimService: null,
+  stmtItemStates: null,
+  domainMod: null,
+  routerMod2: null,
+  specialistMod: null,
+  messageBus: null,
+  fitnessLoop: null,
+  toolCoreMod: null,
+  hookRunner: null,
+};
 
 async function loadModules() {
-  if (_modules) return _modules;
+  if (_svc.modules) return _svc.modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
     const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod] = await Promise.all([
@@ -53,8 +81,8 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "parliament-gate.js"))).catch(() => null),
     ]);
-    _modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
-    return _modules;
+    _svc.modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
+    return _svc.modules;
   } catch (err) {
     console.warn("[bridge] loadModules failed:", err?.message ?? err);
     return null;
@@ -64,10 +92,10 @@ async function loadModules() {
 // ── Parliament lazy-load (meeting-log, amendment, confluence, normal-form, parliament-session) ──
 // These 5 modules are only needed for T3 deliberative sessions, not every hook invocation.
 
-let _parliamentModules = null;
+// parliamentModules in _svc
 
 async function loadParliamentModules() {
-  if (_parliamentModules) return _parliamentModules;
+  if (_svc.parliamentModules) return _svc.parliamentModules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
     const [meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod] = await Promise.all([
@@ -77,8 +105,8 @@ async function loadParliamentModules() {
       import(toURL(resolve(DIST, "bus", "normal-form.js"))),
       import(toURL(resolve(DIST, "bus", "parliament-session.js"))),
     ]);
-    _parliamentModules = { meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
-    return _parliamentModules;
+    _svc.parliamentModules = { meetingLogMod, amendmentMod, confluenceMod, normalFormMod, parliamentSessionMod };
+    return _svc.parliamentModules;
   } catch (err) {
     console.warn("[bridge] loadParliamentModules failed:", err?.message ?? err);
     return null;
@@ -86,15 +114,15 @@ async function loadParliamentModules() {
 }
 
 function getStore(repoRoot) {
-  if (_store) return _store;
+  if (_svc.store) return _svc.store;
   try {
     const dbDir = resolve(repoRoot, ".claude");
     if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
     const dbPath = resolve(dbDir, "quorum-events.db");
     // Synchronous import for store (SQLite adapter: bun:sqlite or better-sqlite3)
-    const { EventStore } = _modules.storeMod;
-    _store = new EventStore({ dbPath });
-    return _store;
+    const { EventStore } = _svc.modules.storeMod;
+    _svc.store = new EventStore({ dbPath });
+    return _svc.store;
   } catch (err) {
     console.warn("[bridge] getStore failed:", err?.message ?? err);
     return null;
@@ -102,11 +130,11 @@ function getStore(repoRoot) {
 }
 
 function getRouter() {
-  if (_router) return _router;
+  if (_svc.router) return _svc.router;
   try {
-    const { TierRouter } = _modules.routerMod;
-    _router = new TierRouter();
-    return _router;
+    const { TierRouter } = _svc.modules.routerMod;
+    _svc.router = new TierRouter();
+    return _svc.router;
   } catch (err) {
     console.warn("[bridge] getRouter failed:", err?.message ?? err);
     return null;
@@ -114,27 +142,27 @@ function getRouter() {
 }
 
 function getLockService() {
-  if (_lockService) return _lockService;
-  if (!_modules || !_store) return null;
+  if (_svc.lockService) return _svc.lockService;
+  if (!_svc.modules || !_svc.store) return null;
   try {
-    const { LockService } = _modules.lockMod;
-    _lockService = new LockService(_store.getDb());
-    return _lockService;
+    const { LockService } = _svc.modules.lockMod;
+    _svc.lockService = new LockService(_svc.store.getDb());
+    return _svc.lockService;
   } catch (err) {
     console.warn("[bridge] getLockService failed:", err?.message ?? err);
     return null;
   }
 }
 
-let _claimService = null;
+// claimService in _svc
 
 function getClaimService() {
-  if (_claimService) return _claimService;
-  if (!_modules?.claimMod || !_store) return null;
+  if (_svc.claimService) return _svc.claimService;
+  if (!_svc.modules?.claimMod || !_svc.store) return null;
   try {
-    const { ClaimService } = _modules.claimMod;
-    _claimService = new ClaimService(_store.getDb());
-    return _claimService;
+    const { ClaimService } = _svc.modules.claimMod;
+    _svc.claimService = new ClaimService(_svc.store.getDb());
+    return _svc.claimService;
   } catch (err) {
     console.warn("[bridge] getClaimService failed:", err?.message ?? err);
     return null;
@@ -160,15 +188,10 @@ export async function init(repoRoot) {
  * Emit an event to the SQLite EventStore.
  */
 export function emitEvent(type, source, payload = {}, meta = {}) {
-  if (!_modules || !_store) return null;
-  const { createEvent } = _modules.eventsMod;
+  if (!_svc.modules || !_svc.store) return null;
+  const { createEvent } = _svc.modules.eventsMod;
   const event = createEvent(type, source, payload, meta);
-  try {
-    return _store.append(event);
-  } catch (err) {
-    console.warn("[bridge] emitEvent failed:", err?.message ?? err);
-    return null;
-  }
+  return withFallback(() => _svc.store.append(event), null, "emitEvent");
 }
 
 /**
@@ -177,8 +200,8 @@ export function emitEvent(type, source, payload = {}, meta = {}) {
  * Returns null if modules unavailable (legacy mode → always audit).
  */
 export function evaluateTrigger(context) {
-  if (!_modules) return null;
-  const { evaluateTrigger: evaluate } = _modules.triggerMod;
+  if (!_svc.modules) return null;
+  const { evaluateTrigger: evaluate } = _svc.modules.triggerMod;
   return evaluate(context);
 }
 
@@ -206,29 +229,21 @@ export function currentTier(taskKey) {
  * Returns { detected, patterns, recommendation } or null.
  */
 export function detectStagnation(repoRoot) {
-  if (!_modules || !_store) return null;
-  const { detectStagnation: detect } = _modules.stagnationMod;
-  try {
-    const verdictEvents = _store.query({ eventType: "audit.verdict", limit: 50, descending: true }).reverse();
+  if (!_svc.modules || !_svc.store) return null;
+  const { detectStagnation: detect } = _svc.modules.stagnationMod;
+  return withFallback(() => {
+    const verdictEvents = _svc.store.query({ eventType: "audit.verdict", limit: 50, descending: true }).reverse();
     if (verdictEvents.length < 3) return { detected: false, patterns: [], recommendation: "continue" };
     return detect(verdictEvents, {}, undefined, { mode: "advanced" });
-  } catch (err) {
-    console.warn("[bridge] detectStagnation failed:", err?.message ?? err);
-    return null;
-  }
+  }, null, "detectStagnation");
 }
 
 /**
  * Query recent events from the store.
  */
 export function queryEvents(filter = {}) {
-  if (!_store) return [];
-  try {
-    return _store.query(filter);
-  } catch (err) {
-    console.warn("[bridge] queryEvents failed:", err?.message ?? err);
-    return [];
-  }
+  if (!_svc.store) return [];
+  return withFallback(() => _svc.store.query(filter), [], "queryEvents");
 }
 
 // ── Lock management (replaces JSON lock files) ──
@@ -240,12 +255,7 @@ export function queryEvents(filter = {}) {
 export function acquireLock(lockName, pid, sessionId, ttlMs) {
   const svc = getLockService();
   if (!svc) return false;
-  try {
-    return svc.acquire(lockName, pid, sessionId, ttlMs);
-  } catch (err) {
-    console.warn("[bridge] acquireLock failed:", err?.message ?? err);
-    return false;
-  }
+  return withFallback(() => svc.acquire(lockName, pid, sessionId, ttlMs), false, "acquireLock");
 }
 
 /**
@@ -254,12 +264,7 @@ export function acquireLock(lockName, pid, sessionId, ttlMs) {
 export function releaseLock(lockName, pid) {
   const svc = getLockService();
   if (!svc) return false;
-  try {
-    return svc.release(lockName, pid);
-  } catch (err) {
-    console.warn("[bridge] releaseLock failed:", err?.message ?? err);
-    return false;
-  }
+  return withFallback(() => svc.release(lockName, pid), false, "releaseLock");
 }
 
 /**
@@ -268,12 +273,7 @@ export function releaseLock(lockName, pid) {
 export function isLockHeld(lockName) {
   const svc = getLockService();
   if (!svc) return { held: false };
-  try {
-    return svc.isHeld(lockName);
-  } catch (err) {
-    console.warn("[bridge] isLockHeld failed:", err?.message ?? err);
-    return { held: false };
-  }
+  return withFallback(() => svc.isHeld(lockName), { held: false }, "isLockHeld");
 }
 
 // ── KV state (replaces JSON marker/session files) ──
@@ -282,27 +282,16 @@ export function isLockHeld(lockName) {
  * Read a KV state entry. Returns parsed JSON or null.
  */
 export function getState(key) {
-  if (!_store) return null;
-  try {
-    return _store.getKV(key);
-  } catch (err) {
-    console.warn("[bridge] getState failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.store) return null;
+  return withFallback(() => _svc.store.getKV(key), null, "getState");
 }
 
 /**
  * Write a KV state entry.
  */
 export function setState(key, value) {
-  if (!_store) return false;
-  try {
-    _store.setKV(key, value);
-    return true;
-  } catch (err) {
-    console.warn("[bridge] setState failed:", err?.message ?? err);
-    return false;
-  }
+  if (!_svc.store) return false;
+  return withFallback(() => { _svc.store.setKV(key, value); return true; }, false, "setState");
 }
 
 /**
@@ -320,46 +309,31 @@ export function getLatestEvidence() {
  * Returns the transition ID or null on failure.
  */
 export function recordTransition(entityType, entityId, fromState, toState, source, metadata = {}) {
-  if (!_store) return null;
-  try {
-    _store.commitTransaction([], [{
-      entityType,
-      entityId,
-      fromState,
-      toState,
-      source,
-      metadata,
-    }], []);
+  if (!_svc.store) return null;
+  return withFallback(() => {
+    _svc.store.commitTransaction([], [{ entityType, entityId, fromState, toState, source, metadata }], []);
     return "ok";
-  } catch (err) {
-    console.warn("[bridge] recordTransition failed:", err?.message ?? err);
-    return null;
-  }
+  }, null, "recordTransition");
 }
 
 /**
  * Get current state for an entity.
  */
 export function currentState(entityType, entityId) {
-  if (!_store) return null;
-  try {
-    return _store.currentState(entityType, entityId);
-  } catch (err) {
-    console.warn("[bridge] currentState failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.store) return null;
+  return withFallback(() => _svc.store.currentState(entityType, entityId), null, "currentState");
 }
 
 /**
  * Query current states for all audit items.
  * Returns array of { entityId, currentState, source, metadata, updatedAt } or empty array.
  */
-let _stmtItemStates = null;
+// stmtItemStates in _svc
 export function queryItemStates() {
-  if (!_store) return [];
+  if (!_svc.store) return [];
   try {
-    if (!_stmtItemStates) {
-      _stmtItemStates = _store.getDb().prepare(`
+    if (!_svc.stmtItemStates) {
+      _svc.stmtItemStates = _svc.store.getDb().prepare(`
         SELECT entity_id, to_state, source, metadata, created_at
         FROM state_transitions st1
         WHERE entity_type = 'audit_item'
@@ -373,7 +347,7 @@ export function queryItemStates() {
         ORDER BY created_at DESC
       `);
     }
-    const rows = _stmtItemStates.all();
+    const rows = _svc.stmtItemStates.all();
     return rows.map(r => ({
       entityId: r.entity_id,
       currentState: r.to_state,
@@ -395,12 +369,7 @@ export function queryItemStates() {
 export function claimFiles(agentId, files, sessionId, ttlMs) {
   const svc = getClaimService();
   if (!svc) return [];
-  try {
-    return svc.claimFiles(agentId, files, sessionId, ttlMs);
-  } catch (err) {
-    console.warn("[bridge] claimFiles failed:", err?.message ?? err);
-    return [];
-  }
+  return withFallback(() => svc.claimFiles(agentId, files, sessionId, ttlMs), [], "claimFiles");
 }
 
 /**
@@ -409,12 +378,7 @@ export function claimFiles(agentId, files, sessionId, ttlMs) {
 export function releaseFiles(agentId) {
   const svc = getClaimService();
   if (!svc) return 0;
-  try {
-    return svc.releaseFiles(agentId);
-  } catch (err) {
-    console.warn("[bridge] releaseFiles failed:", err?.message ?? err);
-    return 0;
-  }
+  return withFallback(() => svc.releaseFiles(agentId), 0, "releaseFiles");
 }
 
 /**
@@ -423,12 +387,7 @@ export function releaseFiles(agentId) {
 export function checkConflicts(agentId, files) {
   const svc = getClaimService();
   if (!svc) return [];
-  try {
-    return svc.checkConflicts(agentId, files);
-  } catch (err) {
-    console.warn("[bridge] checkConflicts failed:", err?.message ?? err);
-    return [];
-  }
+  return withFallback(() => svc.checkConflicts(agentId, files), [], "checkConflicts");
 }
 
 /**
@@ -437,12 +396,7 @@ export function checkConflicts(agentId, files) {
 export function getClaims(agentId) {
   const svc = getClaimService();
   if (!svc) return [];
-  try {
-    return svc.getClaims(agentId);
-  } catch (err) {
-    console.warn("[bridge] getClaims failed:", err?.message ?? err);
-    return [];
-  }
+  return withFallback(() => svc.getClaims(agentId), [], "getClaims");
 }
 
 // ── Execution Planning (orchestrator + parallel planner) ──
@@ -452,13 +406,8 @@ export function getClaims(agentId) {
  * Returns { groups, depth, maxWidth, unschedulable }.
  */
 export function planExecution(items) {
-  if (!_modules?.parallelMod) return null;
-  try {
-    return _modules.parallelMod.planParallel(items);
-  } catch (err) {
-    console.warn("[bridge] planExecution failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.modules?.parallelMod) return null;
+  return withFallback(() => _svc.modules.parallelMod.planParallel(items), null, "planExecution");
 }
 
 /**
@@ -466,28 +415,18 @@ export function planExecution(items) {
  * Returns { mode, plan, reasons, maxConcurrency }.
  */
 export function selectExecutionMode(items) {
-  if (!_modules?.orchestratorMod) return null;
-  try {
-    return _modules.orchestratorMod.selectMode(items);
-  } catch (err) {
-    console.warn("[bridge] selectExecutionMode failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.modules?.orchestratorMod) return null;
+  return withFallback(() => _svc.modules.orchestratorMod.selectMode(items), null, "selectExecutionMode");
 }
 
 /**
  * Validate a plan against live file claims.
  */
 export function validatePlanClaims(plan, agentId) {
-  if (!_modules?.parallelMod) return new Map();
+  if (!_svc.modules?.parallelMod) return new Map();
   const svc = getClaimService();
   if (!svc) return new Map();
-  try {
-    return _modules.parallelMod.validateAgainstClaims(plan, svc, agentId);
-  } catch (err) {
-    console.warn("[bridge] validatePlanClaims failed:", err?.message ?? err);
-    return new Map();
-  }
+  return withFallback(() => _svc.modules.parallelMod.validateAgainstClaims(plan, svc, agentId), new Map(), "validatePlanClaims");
 }
 
 // ── Auto-Learning (audit pattern detection) ──
@@ -497,13 +436,8 @@ export function validatePlanClaims(plan, agentId) {
  * Returns { patterns, suggestions, eventsAnalyzed }.
  */
 export function analyzeAuditLearnings() {
-  if (!_modules?.autoLearnMod || !_store) return null;
-  try {
-    return _modules.autoLearnMod.analyzeAndSuggest(_store);
-  } catch (err) {
-    console.warn("[bridge] analyzeAuditLearnings failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.modules?.autoLearnMod || !_svc.store) return null;
+  return withFallback(() => _svc.modules.autoLearnMod.analyzeAndSuggest(_svc.store), null, "analyzeAuditLearnings");
 }
 
 // ── TransactionalUnitOfWork factory ──
@@ -513,24 +447,16 @@ export function analyzeAuditLearnings() {
  * Returns null if store unavailable.
  */
 export function createUnitOfWork() {
-  if (!_modules || !_store) return null;
-  try {
-    const { TransactionalUnitOfWork } = _modules.storeMod;
-    return new TransactionalUnitOfWork(_store);
-  } catch (err) {
-    console.warn("[bridge] createUnitOfWork failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.modules || !_svc.store) return null;
+  return withFallback(() => new _svc.modules.storeMod.TransactionalUnitOfWork(_svc.store), null, "createUnitOfWork");
 }
 
 // ── Domain detection + specialist routing ────
 
-let _domainMod = null;
-let _routerMod2 = null;
-let _specialistMod = null;
+// domainMod, routerMod2, specialistMod in _svc
 
 async function loadDomainModules() {
-  if (_domainMod) return { _domainMod, _routerMod2, _specialistMod };
+  if (_svc.domainMod) return _svc;
   try {
     const toURL = (p) => pathToFileURL(p).href;
     const [dm, rm, sm] = await Promise.all([
@@ -538,10 +464,10 @@ async function loadDomainModules() {
       import(toURL(resolve(DIST, "providers", "domain-router.js"))),
       import(toURL(resolve(DIST, "providers", "specialist.js"))),
     ]);
-    _domainMod = dm;
-    _routerMod2 = rm;
-    _specialistMod = sm;
-    return { _domainMod, _routerMod2, _specialistMod };
+    _svc.domainMod = dm;
+    _svc.routerMod2 = rm;
+    _svc.specialistMod = sm;
+    return _svc;
   } catch (err) {
     console.warn("[bridge] loadDomainModules failed:", err?.message ?? err);
     return null;
@@ -554,13 +480,8 @@ async function loadDomainModules() {
  */
 export async function detectDomains(changedFiles, diff) {
   const mods = await loadDomainModules();
-  if (!mods?._domainMod) return null;
-  try {
-    return mods._domainMod.detectDomains(changedFiles, diff);
-  } catch (err) {
-    console.warn("[bridge] detectDomains failed:", err?.message ?? err);
-    return null;
-  }
+  if (!mods?.domainMod) return null;
+  return withFallback(() => mods.domainMod.detectDomains(changedFiles, diff), null, "detectDomains");
 }
 
 /**
@@ -569,13 +490,8 @@ export async function detectDomains(changedFiles, diff) {
  */
 export async function selectReviewers(domains, tier) {
   const mods = await loadDomainModules();
-  if (!mods?._routerMod2) return null;
-  try {
-    return mods._routerMod2.selectReviewers(domains, tier);
-  } catch (err) {
-    console.warn("[bridge] selectReviewers failed:", err?.message ?? err);
-    return null;
-  }
+  if (!mods?.routerMod2) return null;
+  return withFallback(() => mods.routerMod2.selectReviewers(domains, tier), null, "selectReviewers");
 }
 
 /**
@@ -584,13 +500,8 @@ export async function selectReviewers(domains, tier) {
  */
 export async function runSpecialistTools(selection, evidence, cwd) {
   const mods = await loadDomainModules();
-  if (!mods?._specialistMod) return null;
-  try {
-    return await mods._specialistMod.runSpecialistReviews(selection, evidence, cwd);
-  } catch (err) {
-    console.warn("[bridge] runSpecialistTools failed:", err?.message ?? err);
-    return null;
-  }
+  if (!mods?.specialistMod) return null;
+  return withAsyncFallback(() => mods.specialistMod.runSpecialistReviews(selection, evidence, cwd), null, "runSpecialistTools");
 }
 
 /**
@@ -599,35 +510,27 @@ export async function runSpecialistTools(selection, evidence, cwd) {
  */
 export async function enrichEvidence(evidence, toolResults, opinions) {
   const mods = await loadDomainModules();
-  if (!mods?._specialistMod) return evidence;
-  try {
-    return mods._specialistMod.enrichEvidence(evidence, toolResults, opinions);
-  } catch (err) {
-    console.warn("[bridge] enrichEvidence failed:", err?.message ?? err);
-    return evidence;
-  }
+  if (!mods?.specialistMod) return evidence;
+  return withFallback(() => mods.specialistMod.enrichEvidence(evidence, toolResults, opinions), evidence, "enrichEvidence");
 }
 
 // ── MessageBus (finding-level communication) ─
 
-let _messageBus = null;
+// messageBus in _svc
 
 /**
  * Get or create a MessageBus instance for finding-level communication.
  * Returns null if store unavailable.
  */
 export function getMessageBus() {
-  if (!_store) return null;
-  if (_messageBus) return _messageBus;
-  try {
+  if (!_svc.store) return null;
+  if (_svc.messageBus) return _svc.messageBus;
+  return withFallback(() => {
     if (_modules?.messageBusMod?.MessageBus) {
-      _messageBus = new _modules.messageBusMod.MessageBus(_store);
+      _svc.messageBus = new _svc.modules.messageBusMod.MessageBus(_svc.store);
     }
-    return _messageBus;
-  } catch (err) {
-    console.warn("[bridge] getMessageBus failed:", err?.message ?? err);
-    return null;
-  }
+    return _svc.messageBus;
+  }, null, "getMessageBus");
 }
 
 // ── Agent Communication (query/response) ────
@@ -636,28 +539,28 @@ export function getMessageBus() {
 export function postAgentQuery(fromAgent, question, toAgent, context) {
   const mb = getMessageBus();
   if (!mb) return null;
-  try { return mb.postQuery({ fromAgent, question, toAgent, context }); } catch (err) { console.warn("[bridge] postAgentQuery failed:", err?.message ?? err); return null; }
+  return withFallback(() => mb.postQuery({ fromAgent, question, toAgent, context }), null, "postAgentQuery");
 }
 
 /** Respond to an agent query. */
 export function respondToAgentQuery(queryId, fromAgent, answer, confidence) {
   const mb = getMessageBus();
   if (!mb) return;
-  try { mb.respondToQuery({ queryId, fromAgent, answer, confidence }); } catch (err) { console.warn("[bridge] respondToAgentQuery failed:", err?.message ?? err); }
+  withFallback(() => mb.respondToQuery({ queryId, fromAgent, answer, confidence }), undefined, "respondToAgentQuery");
 }
 
 /** Poll for queries addressed to this agent (or broadcast). */
 export function pollAgentQueries(agentId, since) {
   const mb = getMessageBus();
   if (!mb) return [];
-  try { return mb.pollQueries(agentId, since); } catch (err) { console.warn("[bridge] pollAgentQueries failed:", err?.message ?? err); return []; }
+  return withFallback(() => mb.pollQueries(agentId, since), [], "pollAgentQueries");
 }
 
 /** Get all responses to a specific query. */
 export function getQueryResponses(queryId) {
   const mb = getMessageBus();
   if (!mb) return [];
-  try { return mb.getResponses(queryId); } catch (err) { console.warn("[bridge] getQueryResponses failed:", err?.message ?? err); return []; }
+  return withFallback(() => mb.getResponses(queryId), [], "getQueryResponses");
 }
 
 /** Get the agent roster for a track. */
@@ -675,61 +578,46 @@ export function setAgentRoster(trackId, roster) {
  * Returns empty array if modules unavailable.
  */
 export function parseToolFindings(toolResult) {
-  try {
-    const mods = _specialistMod;
-    if (mods?.parseToolFindings) {
-      return mods.parseToolFindings(toolResult);
-    }
+  return withFallback(() => {
+    if (_svc.specialistMod?.parseToolFindings) return _svc.specialistMod.parseToolFindings(toolResult);
     return [];
-  } catch (err) {
-    console.warn("[bridge] parseToolFindings failed:", err?.message ?? err);
-    return [];
-  }
+  }, [], "parseToolFindings");
 }
 
 // ── Fitness ─────────────────────────────────────
 
-let _fitnessLoop = null;
+// fitnessLoop in _svc
 
 /**
  * Get or create a FitnessLoop instance. Fail-safe: returns null if modules unavailable.
  */
 export function getFitnessLoop() {
-  if (_fitnessLoop) return _fitnessLoop;
-  if (!_modules?.fitnessLoopMod) return null;
-  try {
-    if (!_store) return null;
-    _fitnessLoop = new _modules.fitnessLoopMod.FitnessLoop(_store);
-    return _fitnessLoop;
-  } catch (err) {
-    console.warn("[bridge] getFitnessLoop failed:", err?.message ?? err);
-    return null;
-  }
+  if (_svc.fitnessLoop) return _svc.fitnessLoop;
+  if (!_svc.modules?.fitnessLoopMod || !_svc.store) return null;
+  return withFallback(() => {
+    _svc.fitnessLoop = new _svc.modules.fitnessLoopMod.FitnessLoop(_svc.store);
+    return _svc.fitnessLoop;
+  }, null, "getFitnessLoop");
 }
 
 /**
  * Compute a fitness score from signals. Fail-safe: returns null.
  */
 export function computeFitness(signals, config) {
-  if (!_modules?.fitnessMod) return null;
-  try {
-    return _modules.fitnessMod.computeFitness(signals, config);
-  } catch (err) {
-    console.warn("[bridge] computeFitness failed:", err?.message ?? err);
-    return null;
-  }
+  if (!_svc.modules?.fitnessMod) return null;
+  return withFallback(() => _svc.modules.fitnessMod.computeFitness(signals, config), null, "computeFitness");
 }
 
 // ── Blast Radius ─────────────────────────────
 
-let _toolCoreMod = null;
+// toolCoreMod in _svc
 
 /** Lazy-load tool-core.mjs (cached after first call). */
 async function _getToolCore() {
-  if (_toolCoreMod) return _toolCoreMod;
+  if (_svc.toolCoreMod) return _svc.toolCoreMod;
   const toURL = (p) => pathToFileURL(p).href;
-  _toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "tool-core.mjs")));
-  return _toolCoreMod;
+  _svc.toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "tool-core.mjs")));
+  return _svc.toolCoreMod;
 }
 
 /**
@@ -738,10 +626,10 @@ async function _getToolCore() {
  * @returns {Promise<{affected: number, total: number, ratio: number, files: any[]}|null>}
  */
 export async function computeBlastRadius(changedFiles) {
-  try {
+  return withAsyncFallback(async () => {
     const tc = await _getToolCore();
     return tc.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
-  } catch (err) { console.warn("[bridge] computeBlastRadius failed:", err?.message ?? err); return null; }
+  }, null, "computeBlastRadius");
 }
 
 /**
@@ -749,7 +637,7 @@ export async function computeBlastRadius(changedFiles) {
  */
 // ── HookRunner integration ────────────────────
 
-let _hookRunner = null;
+// hookRunner in _svc
 
 /**
  * Initialize the HookRunner from config and/or HOOK.md.
@@ -760,21 +648,16 @@ let _hookRunner = null;
  * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
 export async function initHookRunner(repoRoot, hooksCfg) {
-  if (_hookRunner) return _hookRunner;
-  try {
+  if (_svc.hookRunner) return _svc.hookRunner;
+  return withAsyncFallback(async () => {
     const { HookRunner } = await import("../adapters/shared/hook-runner.mjs");
     const { loadHooksFromFile, mergeHooksConfigs, hooksConfigFromJson } = await import("../adapters/shared/hook-loader.mjs");
-
     const fileConfig = loadHooksFromFile(repoRoot, "HOOK.md");
     const jsonConfig = hooksCfg ? hooksConfigFromJson({ hooks: hooksCfg }) : { hooks: {} };
     const merged = mergeHooksConfigs(fileConfig, jsonConfig);
-
-    _hookRunner = new HookRunner(repoRoot, merged);
-    return _hookRunner;
-  } catch (err) {
-    console.warn("[bridge] initHookRunner failed:", err?.message ?? err);
-    return null;
-  }
+    _svc.hookRunner = new HookRunner(repoRoot, merged);
+    return _svc.hookRunner;
+  }, null, "initHookRunner");
 }
 
 /**
@@ -782,7 +665,7 @@ export async function initHookRunner(repoRoot, hooksCfg) {
  * @returns {import("../adapters/shared/hook-runner.mjs").HookRunner|null}
  */
 export function getHookRunner() {
-  return _hookRunner;
+  return _svc.hookRunner;
 }
 
 /**
@@ -794,13 +677,8 @@ export function getHookRunner() {
  * @returns {Promise<import("../adapters/shared/hook-runner.mjs").HookExecutionResult[]>}
  */
 export async function fireHook(event, input = {}) {
-  if (!_hookRunner) return [];
-  try {
-    return await _hookRunner.fire(event, { hook_event_name: event, ...input });
-  } catch (err) {
-    console.warn("[bridge] fireHook failed:", err?.message ?? err);
-    return [];
-  }
+  if (!_svc.hookRunner) return [];
+  return withAsyncFallback(() => _svc.hookRunner.fire(event, { hook_event_name: event, ...input }), [], "fireHook");
 }
 
 /**
@@ -829,27 +707,23 @@ export async function checkHookGate(event, input = {}) {
  * Returns null if modules unavailable.
  */
 export async function runParliamentSession(request, config) {
-  if (!_store) return null;
+  if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.parliamentSessionMod) return null;
-  try {
-    return await pMods.parliamentSessionMod.runParliamentSession(_store, request, config);
-  } catch (err) {
-    if (process.env.QUORUM_DEBUG) console.error("[bridge] Parliament session failed:", err.message);
-    return null;
-  }
+  return withAsyncFallback(
+    () => pMods.parliamentSessionMod.runParliamentSession(_svc.store, request, config),
+    null, "runParliamentSession"
+  );
 }
 
 /**
  * Check convergence status for a standing committee agenda.
  */
 export async function checkParliamentConvergence(agendaId) {
-  if (!_store) return null;
+  if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.meetingLogMod) return null;
-  try {
-    return pMods.meetingLogMod.checkConvergence(_store, agendaId);
-  } catch (err) { console.warn("[bridge] checkParliamentConvergence failed:", err?.message ?? err); return null; }
+  return withFallback(() => pMods.meetingLogMod.checkConvergence(_svc.store, agendaId), null, "checkParliamentConvergence");
 }
 
 /**
@@ -857,12 +731,10 @@ export async function checkParliamentConvergence(agendaId) {
  * @param {object} options - { target, change, sponsor, sponsorRole, justification }
  */
 export async function proposeAmendment(options) {
-  if (!_store) return null;
+  if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.amendmentMod) return null;
-  try {
-    return pMods.amendmentMod.proposeAmendment(_store, options);
-  } catch (err) { console.warn("[bridge] proposeAmendment failed:", err?.message ?? err); return null; }
+  return withFallback(() => pMods.amendmentMod.proposeAmendment(_svc.store, options), null, "proposeAmendment");
 }
 
 /**
@@ -871,21 +743,17 @@ export async function proposeAmendment(options) {
 export async function verifyConfluence(input) {
   const pMods = await loadParliamentModules();
   if (!pMods?.confluenceMod) return null;
-  try {
-    return pMods.confluenceMod.verifyConfluence(input);
-  } catch (err) { console.warn("[bridge] verifyConfluence failed:", err?.message ?? err); return null; }
+  return withFallback(() => pMods.confluenceMod.verifyConfluence(input), null, "verifyConfluence");
 }
 
 /**
  * Get normal form convergence report.
  */
 export async function getConvergenceReport() {
-  if (!_store) return null;
+  if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.normalFormMod) return null;
-  try {
-    return pMods.normalFormMod.generateConvergenceReport(_store);
-  } catch (err) { console.warn("[bridge] getConvergenceReport failed:", err?.message ?? err); return null; }
+  return withFallback(() => pMods.normalFormMod.generateConvergenceReport(_svc.store), null, "getConvergenceReport");
 }
 
 // ── Parliament Enforcement Gates ─────────────
@@ -895,37 +763,28 @@ export async function getConvergenceReport() {
  * Returns { allowed: boolean, reason?: string } — fail-open on error.
  */
 export function checkParliamentGates(options = {}) {
-  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
-  try {
-    return _modules.parliamentGateMod.checkAllGates(_store, options);
-  } catch (err) { console.warn("[bridge] checkParliamentGates failed:", err?.message ?? err); return { allowed: true }; }
+  if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
+  return withFallback(() => _svc.modules.parliamentGateMod.checkAllGates(_svc.store, options), { allowed: true }, "checkParliamentGates");
 }
 
-/**
- * Check individual gates for fine-grained control.
- */
 export function checkAmendmentGate() {
-  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
-  try { return _modules.parliamentGateMod.checkAmendmentGate(_store); }
-  catch (err) { console.warn("[bridge] checkAmendmentGate failed:", err?.message ?? err); return { allowed: true }; }
+  if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
+  return withFallback(() => _svc.modules.parliamentGateMod.checkAmendmentGate(_svc.store), { allowed: true }, "checkAmendmentGate");
 }
 
 export function checkVerdictGate() {
-  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
-  try { return _modules.parliamentGateMod.checkVerdictGate(_store); }
-  catch (err) { console.warn("[bridge] checkVerdictGate failed:", err?.message ?? err); return { allowed: true }; }
+  if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
+  return withFallback(() => _svc.modules.parliamentGateMod.checkVerdictGate(_svc.store), { allowed: true }, "checkVerdictGate");
 }
 
 export function checkConfluenceGate() {
-  if (!_store || !_modules?.parliamentGateMod) return { allowed: true };
-  try { return _modules.parliamentGateMod.checkConfluenceGate(_store); }
-  catch (err) { console.warn("[bridge] checkConfluenceGate failed:", err?.message ?? err); return { allowed: true }; }
+  if (!_svc.store || !_svc.modules?.parliamentGateMod) return { allowed: true };
+  return withFallback(() => _svc.modules.parliamentGateMod.checkConfluenceGate(_svc.store), { allowed: true }, "checkConfluenceGate");
 }
 
 export function checkDesignGate(planningDir, trackName) {
-  if (!_modules?.parliamentGateMod) return { allowed: true };
-  try { return _modules.parliamentGateMod.checkDesignGate(planningDir, trackName); }
-  catch (err) { console.warn("[bridge] checkDesignGate failed:", err?.message ?? err); return { allowed: true }; }
+  if (!_svc.modules?.parliamentGateMod) return { allowed: true };
+  return withFallback(() => _svc.modules.parliamentGateMod.checkDesignGate(planningDir, trackName), { allowed: true }, "checkDesignGate");
 }
 
 /**
@@ -933,31 +792,32 @@ export function checkDesignGate(planningDir, trackName) {
  * Bridges adapters/shared/parliament-runner.mjs → providers/auditors/factory.ts.
  */
 export function createConsensusAuditors(roles, cwd) {
-  try {
+  return withFallback(() => {
     const toURL = (p) => pathToFileURL(p).href;
     const factoryPath = resolve(DIST, "providers", "auditors", "factory.js");
     return import(toURL(factoryPath)).then(mod =>
       mod.createConsensusAuditors(roles, cwd ?? process.cwd())
     );
-  } catch (err) { console.warn("[bridge] createConsensusAuditors failed:", err?.message ?? err); return null; }
+  }, null, "createConsensusAuditors");
 }
 
 export function close() {
-  if (_store) {
-    try { _store.close(); } catch (err) { console.warn("[bridge] close failed:", err?.message ?? err); }
-    _store = null;
+  if (_svc.store) {
+    withFallback(() => _svc.store.close(), undefined, "close");
   }
-  _router = null;
-  _lockService = null;
-  _modules = null;
-  _parliamentModules = null;
-  _domainMod = null;
-  _routerMod2 = null;
-  _specialistMod = null;
-  _messageBus = null;
-  _fitnessLoop = null;
-  _claimService = null;
-  _stmtItemStates = null;
-  _toolCoreMod = null;
-  _hookRunner = null;
+  for (const k of Object.keys(_svc)) _svc[k] = null;
 }
+
+// ── Namespace exports (BRIDGE-2) ─────────────────
+// Semantic grouping of the 56 flat exports. Flat exports remain for backward compat.
+
+export const claim = { claimFiles, releaseFiles, checkConflicts, getClaims };
+export const lock = { acquireLock, releaseLock, isLockHeld };
+export const agent = { postAgentQuery, respondToAgentQuery, pollAgentQueries, getQueryResponses, getAgentRoster, setAgentRoster };
+export const parliament = { runParliamentSession, checkParliamentConvergence, proposeAmendment, verifyConfluence, getConvergenceReport, checkParliamentGates, checkAmendmentGate, checkVerdictGate, checkConfluenceGate, checkDesignGate, createConsensusAuditors };
+export const domain = { detectDomains, selectReviewers, runSpecialistTools, enrichEvidence, parseToolFindings };
+export const event = { emitEvent, recordTransition, currentState, queryEvents, queryItemStates };
+export const query = { getState, setState, getLatestEvidence, getMessageBus };
+export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius };
+export const hooks = { initHookRunner, getHookRunner, fireHook, checkHookGate };
+export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork };
