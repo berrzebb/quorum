@@ -9,9 +9,9 @@ import { extractChangedFilesFromEvidence, extractTestCommands } from "./scope.mj
 // Blast radius — fail-safe top-level import (non-critical)
 let _computeBlastRadius = null;
 try {
-  const tc = await import("../tools/tool-core.mjs");
-  _computeBlastRadius = tc.computeBlastRadius;
-} catch (err) { console.warn("[pre-verify] tool-core import failed:", err?.message ?? err); }
+  const mod = await import("../tools/blast-radius/index.mjs");
+  _computeBlastRadius = mod.computeBlastRadius;
+} catch (err) { console.warn("[pre-verify] blast-radius import failed:", err?.message ?? err); }
 
 /**
  * Run all deterministic verifications LOCALLY before invoking the auditor.

@@ -204,58 +204,42 @@ const AUDIT_TOOLS: ToolDefinition[] = [
   },
 ];
 
-// ── Default tool executor (loads quorum tool-core lazily) ─
+// ── Default tool executor (loads registry lazily) ─
 
-let _toolCore: Record<string, Function> | null = null;
+let _registry: { getTool: Function; executeTool: Function } | null = null;
 
-async function loadToolCore(): Promise<Record<string, Function>> {
-  if (_toolCore) return _toolCore;
+async function loadRegistry(): Promise<{ getTool: Function; executeTool: Function }> {
+  if (_registry) return _registry;
 
-  // Resolve tool-core.mjs relative to this module's compiled location
-  // dist/platform/providers/auditors/openai-compatible.js → ../../../../platform/core/tools/tool-core.mjs
   const { fileURLToPath } = await import("node:url");
   const { dirname, join } = await import("node:path");
   const here = dirname(fileURLToPath(import.meta.url));
-  const toolCorePath = join(here, "..", "..", "..", "..", "platform", "core", "tools", "tool-core.mjs");
+  const registryPath = join(here, "..", "..", "..", "..", "platform", "core", "tools", "registry.mjs");
 
   try {
-    _toolCore = await import(toolCorePath);
-    return _toolCore!;
+    _registry = await import(registryPath);
+    return _registry!;
   } catch (err) {
-    // Fallback: try relative path from source location
-    console.warn(`[openai-compatible] tool-core load failed at ${toolCorePath}: ${(err as Error).message}`);
+    console.warn(`[openai-compatible] registry load failed at ${registryPath}: ${(err as Error).message}`);
     try {
       // @ts-expect-error — MJS module without type declarations
-      _toolCore = await import("../../core/tools/tool-core.mjs");
-      return _toolCore!;
+      _registry = await import("../../core/tools/registry.mjs");
+      return _registry!;
     } catch (err2) {
-      console.warn(`[openai-compatible] tool-core fallback load also failed: ${(err2 as Error).message}`);
-      _toolCore = {};
-      return _toolCore;
+      console.warn(`[openai-compatible] registry fallback load also failed: ${(err2 as Error).message}`);
+      _registry = { getTool: () => null, executeTool: async () => ({ error: "registry unavailable" }) };
+      return _registry;
     }
   }
 }
 
-const TOOL_FN_MAP: Record<string, string> = {
-  code_map:            "toolCodeMap",
-  blast_radius:        "toolBlastRadius",
-  audit_scan:          "toolAuditScan",
-  dependency_graph:    "toolDependencyGraph",
-  perf_scan:           "toolPerfScan",
-  a11y_scan:           "toolA11yScan",
-  license_scan:        "toolLicenseScan",
-  observability_check: "toolObservabilityCheck",
-};
-
 async function defaultToolExecutor(name: string, args: Record<string, unknown>): Promise<string> {
-  const core = await loadToolCore();
-  const fnName = TOOL_FN_MAP[name];
-  if (!fnName || typeof core[fnName] !== "function") {
-    return JSON.stringify({ error: `Unknown tool: ${name}` });
-  }
+  const reg = await loadRegistry();
+  const tool = reg.getTool(name);
+  if (!tool) return JSON.stringify({ error: `Unknown tool: ${name}` });
 
   try {
-    const result = core[fnName](args);
+    const result = tool.async ? await tool.execute(args) : tool.execute(args);
     if (result.error) return `Error: ${result.error}`;
     const tag = result.cached ? " [cached]" : "";
     return `${result.text ?? ""}${result.summary ? `\n\n(${result.summary}${tag})` : ""}`;

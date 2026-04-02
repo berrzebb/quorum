@@ -612,11 +612,11 @@ function computeFitness(signals, config) {
 
 // toolCoreMod in _svc
 
-/** Lazy-load tool-core.mjs (cached after first call). */
-async function _getToolCore() {
+/** Lazy-load blast-radius tool (cached after first call). */
+async function _getBlastRadiusMod() {
   if (_svc.toolCoreMod) return _svc.toolCoreMod;
   const toURL = (p) => pathToFileURL(p).href;
-  _svc.toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "tool-core.mjs")));
+  _svc.toolCoreMod = await import(toURL(resolve(QUORUM_ROOT, "platform", "core", "tools", "blast-radius", "index.mjs")));
   return _svc.toolCoreMod;
 }
 
@@ -627,8 +627,8 @@ async function _getToolCore() {
  */
 async function computeBlastRadius(changedFiles) {
   return withAsyncFallback(async () => {
-    const tc = await _getToolCore();
-    return tc.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
+    const mod = await _getBlastRadiusMod();
+    return mod.computeBlastRadius(process.cwd(), changedFiles.map(f => resolve(process.cwd(), f)));
   }, null, "computeBlastRadius");
 }
 

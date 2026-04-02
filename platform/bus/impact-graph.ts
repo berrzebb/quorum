@@ -77,12 +77,17 @@ interface SQLiteDatabase {
 // ── Default tool loader ─────────────────────
 
 async function loadDefaultTools(): Promise<ImpactTools> {
-  const mod = await import("../core/tools/tool-core.mjs" as any);
+  const [br, dg, rp, cm] = await Promise.all([
+    import("../core/tools/blast-radius/index.mjs" as any),
+    import("../core/tools/dependency-graph/index.mjs" as any),
+    import("../core/tools/rtm-parse/index.mjs" as any),
+    import("../core/tools/coverage-map/index.mjs" as any),
+  ]);
   return {
-    blastRadius: mod.toolBlastRadius,
-    dependencyGraph: mod.toolDependencyGraph,
-    rtmParse: mod.toolRtmParse,
-    coverageMap: mod.toolCoverageMap,
+    blastRadius: br.toolBlastRadius,
+    dependencyGraph: dg.toolDependencyGraph,
+    rtmParse: rp.toolRtmParse,
+    coverageMap: cm.toolCoverageMap,
   };
 }
 
