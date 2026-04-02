@@ -317,11 +317,11 @@ quorum tool contract_drift --contract_dirs types,interfaces
 
 ## skill_sync
 
-Detect and fix mismatches between canonical skills (`platform/skills/`) and adapter wrappers (`platform/adapters/*/skills/`). Reports missing wrappers, stale references, and count discrepancies.
+Verify skill manifest integrity and knowledge protocol references. Reports missing protocols, stale references, and structural issues.
 
 ```bash
 quorum tool skill_sync
-quorum tool skill_sync --fix
+quorum tool skill_sync --mode check
 ```
 
 ---

@@ -191,19 +191,16 @@ platform/core/languages/
   ├→ rust/               ← spec.mjs + verify + 7 fragments
   └→ java/               ← spec.mjs + verify + 7 fragments
 
-agents/knowledge/          ← Retained shared protocol corpus (stable, adapter-neutral — NOT a migration residual)
-  ├→ implementer-protocol.md  ← code-only execution (self-check → self-checker, correction → fixer delegation)
-  ├→ scout-protocol.md        ← Phase 5-8 RTM gap analyzer (upstream: wb-parser + rtm-scanner)
-  ├→ specialist-base.md       ← JSON output format, confidence ≥ 0.8 filter, max 10 findings
-  ├→ ui-review-protocol.md    ← UI-1~8 verification checklist, report format, completion gate
-  ├→ doc-sync-protocol.md     ← 3-layer fact extraction, numeric mismatch, section parity
-  ├→ parliament-rules.md      ← Standing rules for parliamentary sessions (consensus, amendment, confluence)
-  ├→ tool-inventory.md        ← 26-tool catalog (codebase, domain, RTM/FVM, audit, guide)
-  └→ domains/{perf,a11y,security,migration,...}.md ← 11 domain knowledge files
+agents/knowledge/          ← Single source of truth for all domain knowledge (178 files)
+  ├→ protocols/              ← 25 procedural protocols (planner, orchestrator, verify, fixer, ...)
+  ├→ domains/                ← 11 domain expertise files (perf, a11y, security, ...)
+  ├→ tools/inventory.md      ← 26-tool catalog
+  ├→ references/             ← Progressive Disclosure material (77 files)
+  └→ scripts/                ← Executable assets (export scripts, 63 files)
 
-platform/skills/          ← Canonical skill definitions (36 skills)
-  ├→ ARCHITECTURE.md     ← Skill inheritance: agents/knowledge/ → platform/skills/ → 4 adapter wrappers
-  └→ {skill}/            ← SKILL.md + references/ + scripts/ per skill
+platform/skills/          ← Core skill manifests (11 lightweight files, avg ~20 lines)
+  ├→ ARCHITECTURE.md     ← Knowledge-centric architecture (v0.6.0)
+  └→ {skill}/SKILL.md   ← Intent + knowledge refs (no protocol content)
 
 platform/adapters/shared/  ← Adapter-agnostic business logic (20 modules)
 
@@ -211,27 +208,25 @@ platform/adapters/claude-code/
   ├→ index.mjs          ← PostToolUse hook (trigger eval + domain routing + specialist tools + bridge)
   ├→ session-gate.mjs   ← PreToolUse (retro enforcement, SQLite KV + JSON fallback)
   ├→ hooks/hooks.json   ← 22 hook registrations (full spec: incl. PermissionRequest, Notification, ConfigChange, Elicitation)
-  ├→ skills/            ← 29 skills (adapter wrappers; see platform/skills/ARCHITECTURE.md)
   ├→ agents/            ← 13 agents (incl. doc-sync; reference agents/knowledge/ + Claude Code tool bindings)
   └→ commands/          ← 10 CLI shortcuts (incl. cl-docs)
 
 platform/adapters/gemini/
   ├→ gemini-extension.json ← extension manifest (MCP server registration)
   ├→ hooks/hooks.json      ← 11 hook registrations (full spec: incl. AfterAgent, BeforeModel, AfterModel, PreCompress, Notification)
-  ├→ skills/               ← 33 skills (shared wrappers)
   └→ commands/             ← 4 TOML commands
 
 platform/adapters/codex/
   ├→ hooks/hooks.json      ← 5 hook registrations (SessionStart, Stop, UserPromptSubmit, AfterAgent, AfterToolUse)
   ├→ hooks/plugin-hooks.json ← codex-plugin-cc integration hooks (Stop review gate, appended after quorum hooks)
-  ├→ hooks/scripts/stop-review-gate.mjs ← Codex stop-time review gate (fitness check → codex companion → ALLOW/BLOCK)
-  └→ skills/               ← 33 skills (shared wrappers)
-
-platform/skills/harness-bootstrap/ ← Meta-skill: auto-generate quorum-governed agent teams via Harness
+  └→ hooks/scripts/stop-review-gate.mjs ← Codex stop-time review gate (fitness check → codex companion → ALLOW/BLOCK)
 
 platform/adapters/openai-compatible/
-  ├→ agents/               ← 13 agents (mirror of claude-code agents)
-  └→ skills/               ← 33 skills (shared wrappers)
+  └→ agents/               ← 13 agents (mirror of claude-code agents)
+
+platform/adapters/shared/
+  ├→ skill-resolver.mjs   ← Dynamic skill composition (manifest + protocol + tool mapping)
+  └→ tool-names.mjs       ← Adapter tool name registry (canonical → native)
 ```
 
 ## Key Patterns
@@ -256,7 +251,7 @@ platform/adapters/openai-compatible/
 - **Auto-Learning**: `analyzeAndSuggest()` detects repeat rejection patterns (3+ occurrences) from audit history and generates CLAUDE.md rule suggestions. `learnFromStagnation()` feeds stagnation patterns back into trigger scoring (FDE feedback loop).
 - **Blast Radius**: BFS on reverse import graph (`inEdges`) computes transitive dependents of changed files. `buildRawGraph()` extracted from `dependency_graph` for reuse. Trigger factor (ratio > 0.1 → score += up to 0.15). Pre-verify evidence includes blast radius section.
 - **3-Layer Adapter**: I/O (adapter-specific stdin/stdout) + Business logic (`platform/adapters/shared/`) + Bridge (`platform/core/`). New adapter = I/O wrappers only (~650 lines vs ~2,000).
-- **Shared Agent Knowledge**: `agents/knowledge/` is a retained shared protocol corpus (not a migration residual). Protocol definitions referenced by all 4 adapters. Protocol change → 1 file edit → all adapters reflect. Agents keep only tool-name bindings + path variables. Changes require all-adapter verification. See `agents/knowledge/README.md`.
+- **Knowledge-Centric Skills**: `agents/knowledge/` is the single source of truth for all protocols, domains, and references (178 files). Skills are lightweight manifests (~20 lines) that reference knowledge. `skill-resolver.mjs` composes protocol + tool mapping at runtime. No static adapter wrappers — 4 adapters resolved dynamically via `tool-names.mjs`. See `agents/knowledge/README.md`.
 - **Fragment-Only Language Specs**: `platform/core/languages/registry.mjs` enforces `CORE_FIELDS` whitelist. `spec.mjs` = metadata only. Domain data (symbols, imports, qualityRules) MUST be in `spec.{domain}.mjs` fragments. No inline fallback.
 - **Adapter Env Fallback**: `platform/core/context.mjs` resolves `QUORUM_ADAPTER_ROOT` → `CLAUDE_PLUGIN_ROOT` → `GEMINI_EXTENSION_ROOT` for config, locales, plugin paths.
 - **Tool Name Mapping**: `platform/adapters/shared/tool-names.mjs` maps canonical operations (bash, read, write) to adapter-native names (Bash/shell, Read/read_file, Write/write_file).
@@ -265,8 +260,8 @@ platform/adapters/openai-compatible/
 - **JSON-RPC Client**: `jsonrpc-client.mjs` — stdio JSON-RPC 2.0 client for Codex app-server mode. Bidirectional: client requests + server-initiated requests + notifications. 10MB buffer guard, request timeout, auto-reject on process exit.
 - **SDK Tool Bridge**: `sdk-tool-bridge.mjs` — JSON Schema → Zod conversion for Claude Agent SDK native tool loops. Optional dependency (`@anthropic-ai/claude-agent-sdk` + `zod`). Returns null if unavailable.
 - **MuxAdapter**: `mux-adapter.mjs` — bridges ProcessMux (tmux/psmux) sessions with CliAdapter/NdjsonParser. `spawn()` creates a CLI session per model, `send()` writes prompts via mux, `capture()` parses NDJSON output. `spawnConsensus()` + `awaitConsensus()` for 3-model deliberative protocol.
-- **Doc-Sync**: `agents/knowledge/doc-sync-protocol.md` — extracts facts from code (hook counts, tool counts, test counts, versions) and fixes numeric mismatches + section parity gaps in 8 doc files. 3-adapter aware (counts all adapters). Runs automatically in merge-worktree Phase 2.5 before squash commit. `/quorum:doc-sync` for manual invocation.
-- **Skill Architecture**: `platform/skills/ARCHITECTURE.md` — protocol-neutral inheritance: `agents/knowledge/` (protocols) → `platform/skills/` (shared canonical + references) → 4 equal adapter wrappers (Claude Code / Gemini / Codex / OpenAI-Compatible). Each adapter skill = tool mapping + protocol ref. References resolve via `platform/skills/*/references/` paths.
+- **Doc-Sync**: `agents/knowledge/protocols/doc-sync.md` — extracts facts from code (hook counts, tool counts, test counts, versions) and fixes numeric mismatches + section parity gaps in 8 doc files. 3-adapter aware (counts all adapters). Runs automatically in merge-worktree Phase 2.5 before squash commit.
+- **Skill Architecture**: `platform/skills/ARCHITECTURE.md` — knowledge-centric model: `agents/knowledge/` (single source) → `platform/skills/` (11 core manifests) → `skill-resolver.mjs` (dynamic adapter composition). No static adapter wrappers. On-demand skills generated by `harness-bootstrap` from knowledge base.
 - **Diverge-Converge Consensus**: `consensus.ts` `runDivergeConverge()` — Parliament-style deliberation. Phase A: free divergence (no role constraints, all speak freely). Phase B: Judge converges into 4 MECE registers (statusChanges, decisions, requirementChanges, risks). Phase C: 5-classification analysis (gap/strength/out/buy/build). Implementer testimony via `DivergeConvergeOptions`.
 - **Meeting Log**: `meeting-log.ts` — accumulates N session logs per standing committee → 3-path convergence detection → CPS generation (Context-Problem-Solution). 6 standing committees: Principles, Definitions, Structure, Architecture, Scope, Research Questions. Three convergence paths (any triggers): **exact** (delta=0, mature projects), **no-new-items** (item set subset, greenfield), **relaxed** (delta ≤ 30% of items, LLM non-determinism). `filterNoiseLogs()` skips parse-fallback rounds (>50% item drop). `logTimestamp` in event payload preserves insertion order.
 - **Amendment Protocol**: `amendment.ts` — legislative change management. `proposeAmendment()` → `voteOnAmendment()` → `resolveAmendment()`. Majority voting (>50% of eligible). Implementer has testimony but no vote. All amendments stored as parliament.amendment.* events.

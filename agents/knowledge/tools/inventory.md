@@ -60,12 +60,12 @@ Language-aware scans using `languages/{lang}/spec.{domain}.mjs` fragments. Auto-
 
 | Tool | Purpose |
 |------|---------|
-| `skill_sync` | Detect/fix mismatches between canonical skills and adapter wrappers. `--mode fix` auto-generates missing wrappers |
+| `skill_sync` | Verify skill manifest integrity and knowledge protocol references. `--mode check` validates structure |
 | `track_archive` | Archive completed track artifacts (PRD, DRM, WB, RTM, design, wave state) to `.claude/quorum/archive/` |
 
 ## Detailed References
 
-For parameters, examples, and output format of each tool, see: `platform/skills/consensus-tools/references/`
+For parameters, examples, and output format of each tool, see: `agents/knowledge/references/consensus-tools/`
 
 ## Error Handling
 

@@ -6,7 +6,7 @@
  * 1. Validates frontmatter (name, description required)
  * 2. Enforces protocol neutrality (no adapter-specific tool names)
  * 3. Applies Progressive Disclosure (body ≤500 lines)
- * 4. Prepares for skill_sync to generate adapter wrappers
+ * 4. Validates knowledge protocol references (agents/knowledge/protocols/)
  */
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
