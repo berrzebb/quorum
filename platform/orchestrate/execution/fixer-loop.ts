@@ -31,6 +31,9 @@ export interface FixerResult {
   completed: boolean;
 }
 
+/** Default max fix rounds — can be overridden via config or CLI. */
+export const DEFAULT_MAX_FIX_ROUNDS = 3;
+
 /** Options for the full fix-retry cycle. */
 export interface FixCycleOptions {
   repoRoot: string;
@@ -39,7 +42,8 @@ export interface FixCycleOptions {
   provider: string;
   /** Fixer provider — used for spawning fix agents. Defaults to provider if not set. */
   fixerProvider?: string;
-  maxRounds: number;
+  /** Max fix rounds. Defaults to DEFAULT_MAX_FIX_ROUNDS (3). */
+  maxRounds?: number;
   fitnessContext?: FitnessGateResult;
   /** Function to run the LLM audit and return findings. */
   auditFn: (repoRoot: string, files: string[], items: WorkItem[], provider: string) => Promise<{ passed: boolean; findings: string[] }>;
@@ -132,9 +136,10 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
  */
 export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult> {
   const {
-    repoRoot, files, provider, maxRounds,
+    repoRoot, files, provider,
     fitnessContext, auditFn, completedItems, detectStagnation,
   } = opts;
+  const maxRounds = opts.maxRounds ?? DEFAULT_MAX_FIX_ROUNDS;
   const fixer = opts.fixerProvider ?? provider;
 
   // Collect all in-scope file paths for filtering out-of-scope findings

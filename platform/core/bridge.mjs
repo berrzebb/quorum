@@ -211,7 +211,7 @@ export function detectStagnation(repoRoot) {
   try {
     const verdictEvents = _store.query({ eventType: "audit.verdict", limit: 50, descending: true }).reverse();
     if (verdictEvents.length < 3) return { detected: false, patterns: [], recommendation: "continue" };
-    return detect(verdictEvents);
+    return detect(verdictEvents, {}, undefined, { mode: "advanced" });
   } catch (err) {
     console.warn("[bridge] detectStagnation failed:", err?.message ?? err);
     return null;

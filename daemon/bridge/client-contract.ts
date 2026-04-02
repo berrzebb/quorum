@@ -7,6 +7,7 @@
  *
  * @module daemon/bridge/client-contract
  * @since RAI-8
+ * @experimental Not part of v0.6.0 simplified flow — retained for future integration.
  */
 
 import type { RemoteSessionState, PendingAction, RemoteTrackInfo, RemoteEvent, DreamStatus } from "./server.js";

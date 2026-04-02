@@ -8,6 +8,7 @@
  *
  * @module autonomy/cache-envelope
  * @since RAI-5
+ * @experimental Not part of v0.6.0 simplified flow — retained for future integration.
  */
 
 import { djb2Hash as simpleHash } from "./hash-util.js";

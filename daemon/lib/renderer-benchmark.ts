@@ -13,6 +13,7 @@
  *
  * @since RTI-10
  * @module daemon/lib/renderer-benchmark
+ * @experimental Not part of v0.6.0 simplified flow — retained for future integration.
  */
 
 import { extractVisibleText, TranscriptIndex } from "../../platform/bus/transcript-index.js";

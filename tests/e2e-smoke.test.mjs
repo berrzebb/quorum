@@ -171,7 +171,7 @@ describe("E2E: full audit cycle", () => {
 
   it("step 6: stagnation detection identifies spinning pattern", () => {
     const verdictEvents = store.query({ eventType: "audit.verdict" });
-    const stagnation = detectStagnation(verdictEvents);
+    const stagnation = detectStagnation(verdictEvents, {}, undefined, { mode: "advanced" });
 
     assert.ok(stagnation.detected);
     assert.ok(stagnation.patterns.some((p) => p.type === "spinning" || p.type === "no-drift"));

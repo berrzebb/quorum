@@ -11,6 +11,7 @@
  *
  * @since RTI-4
  * @module daemon/lib/transcript-search
+ * @experimental Not part of v0.6.0 simplified flow — retained for future integration.
  */
 
 import { TranscriptIndex } from "../../platform/bus/transcript-index.js";

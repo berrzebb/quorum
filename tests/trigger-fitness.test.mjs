@@ -84,7 +84,7 @@ describe("stagnation: fitness-plateau", () => {
   it("detects plateau when fitness scores are flat", () => {
     const events = makeVerdictEvents(5);
     const flatHistory = [0.65, 0.65, 0.65, 0.65, 0.65];
-    const result = detectStagnation(events, {}, flatHistory);
+    const result = detectStagnation(events, {}, flatHistory, { mode: "advanced" });
     const plateau = result.patterns.find(p => p.type === "fitness-plateau");
     assert.ok(plateau, "Should detect fitness-plateau");
     assert.ok(plateau.confidence > 0.5);
@@ -94,7 +94,7 @@ describe("stagnation: fitness-plateau", () => {
   it("does not detect plateau when improving", () => {
     const events = makeVerdictEvents(5);
     const improvingHistory = [0.5, 0.55, 0.6, 0.65, 0.7];
-    const result = detectStagnation(events, {}, improvingHistory);
+    const result = detectStagnation(events, {}, improvingHistory, { mode: "advanced" });
     const plateau = result.patterns.find(p => p.type === "fitness-plateau");
     assert.ok(!plateau, "Should NOT detect plateau on improving trend");
   });
@@ -102,9 +102,22 @@ describe("stagnation: fitness-plateau", () => {
   it("does not detect plateau with insufficient data", () => {
     const events = makeVerdictEvents(5);
     const shortHistory = [0.65, 0.65];
-    const result = detectStagnation(events, {}, shortHistory);
+    const result = detectStagnation(events, {}, shortHistory, { mode: "advanced" });
     const plateau = result.patterns.find(p => p.type === "fitness-plateau");
     assert.ok(!plateau, "Should NOT detect plateau with < 5 data points");
+  });
+
+  it("simple mode detects consecutive failures", () => {
+    const events = makeVerdictEvents(6);
+    const result = detectStagnation(events, {}, undefined, { mode: "simple", maxRetries: 5 });
+    assert.equal(result.detected, true, "Should detect stagnation after 5+ failures");
+    assert.equal(result.recommendation, "halt");
+  });
+
+  it("simple mode passes when below threshold", () => {
+    const events = makeVerdictEvents(3);
+    const result = detectStagnation(events, {}, undefined, { mode: "simple", maxRetries: 5 });
+    assert.equal(result.detected, false, "Should not detect stagnation with only 3 failures");
   });
 
   it("works without fitnessHistory (backward compatible)", () => {

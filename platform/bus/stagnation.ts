@@ -61,15 +61,50 @@ const DEFAULTS: Required<StagnationConfig> = {
   divergenceWindow: 3,
 };
 
+/** Stagnation detection mode. */
+export type StagnationMode = "simple" | "advanced";
+
 /**
  * Analyze audit verdict events for stagnation patterns.
+ *
+ * Modes:
+ * - "simple" (v0.6.0 default): only checks consecutive failure count.
+ *   If consecutiveFailures >= maxRetries, returns { detected: true, recommendation: "halt" }.
+ * - "advanced" (--advanced-stagnation): full 7-pattern detection.
+ *
  * Pass the full event history (or recent slice) of audit.verdict events.
  */
 export function detectStagnation(
   verdictEvents: QuorumEvent[],
   config: StagnationConfig = {},
   fitnessHistory?: number[],
+  options?: { mode?: StagnationMode; maxRetries?: number },
 ): StagnationResult {
+  const mode = options?.mode ?? "simple";
+
+  // ── Simple mode: retry count only ──
+  if (mode === "simple") {
+    const maxRetries = options?.maxRetries ?? 5;
+    // Count consecutive non-approved verdicts from the end
+    let consecutive = 0;
+    for (let i = verdictEvents.length - 1; i >= 0; i--) {
+      if (verdictEvents[i]!.payload.verdict !== "approved") {
+        consecutive++;
+      } else {
+        break;
+      }
+    }
+    if (consecutive >= maxRetries) {
+      return {
+        detected: true,
+        patterns: [{ type: "spinning", confidence: 1.0, detail: `${consecutive} consecutive failures (limit: ${maxRetries})` }],
+        recommendation: "halt",
+      };
+    }
+    return { detected: false, patterns: [], recommendation: "continue" };
+  }
+
+  // ── Advanced mode: full 7-pattern detection ──
   const cfg = { ...DEFAULTS, ...config };
   const patterns: DetectedPattern[] = [];
 

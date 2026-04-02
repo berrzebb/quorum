@@ -11,6 +11,7 @@
  *
  * @module daemon/bridge/approval-controller
  * @since RAI-2
+ * @experimental Not part of v0.6.0 simplified flow — retained for future integration.
  */
 
 import type { SessionLedger } from "../../platform/providers/session-ledger.js";

@@ -28,7 +28,7 @@ describe("spinning detection", () => {
       verdict("changes_requested", ["lint-gap"]),
       verdict("changes_requested", ["lint-gap"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(result.detected);
     assert.ok(result.patterns.some((p) => p.type === "spinning"));
   });
@@ -39,7 +39,7 @@ describe("spinning detection", () => {
       verdict("changes_requested", ["test-gap"]),
       verdict("changes_requested", ["lint-gap"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(!result.patterns.some((p) => p.type === "spinning"));
   });
 
@@ -48,7 +48,7 @@ describe("spinning detection", () => {
       verdict("changes_requested", ["lint-gap"]),
       verdict("changes_requested", ["lint-gap"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(!result.detected);
   });
 });
@@ -64,7 +64,7 @@ describe("oscillation detection", () => {
       verdict("changes_requested", ["test-gap"]),
       verdict("approved"),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(result.patterns.some((p) => p.type === "oscillation"));
   });
 
@@ -75,7 +75,7 @@ describe("oscillation detection", () => {
       verdict("changes_requested", ["scope-mismatch"]),
       verdict("approved"),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(!result.patterns.some((p) => p.type === "oscillation"));
   });
 });
@@ -89,7 +89,7 @@ describe("no-drift detection", () => {
       verdict("changes_requested", ["scope-mismatch"]),
       verdict("changes_requested", ["scope-mismatch"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(result.patterns.some((p) => p.type === "no-drift"));
   });
 
@@ -99,7 +99,7 @@ describe("no-drift detection", () => {
       verdict("approved"),
       verdict("approved"),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(!result.patterns.some((p) => p.type === "no-drift"));
   });
 });
@@ -114,7 +114,7 @@ describe("diminishing returns detection", () => {
       verdict("changes_requested", ["a", "b", "c"]),         // 3 codes (improved by 0)
       verdict("changes_requested", ["a", "b", "c", "d"]),   // 4 codes (regressed)
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(result.patterns.some((p) => p.type === "diminishing-returns"));
   });
 
@@ -125,7 +125,7 @@ describe("diminishing returns detection", () => {
       verdict("changes_requested", ["a"]),
       verdict("approved"),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.ok(!result.patterns.some((p) => p.type === "diminishing-returns"));
   });
 });
@@ -139,7 +139,7 @@ describe("stagnation recommendations", () => {
       verdict("changes_requested", ["test-gap"]),
       verdict("approved"),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.equal(result.recommendation, "continue");
   });
 
@@ -154,7 +154,7 @@ describe("stagnation recommendations", () => {
       verdict("changes_requested", ["lint-gap"]),
       verdict("changes_requested", ["lint-gap"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     if (result.patterns.some((p) => p.type === "spinning") &&
         result.patterns.some((p) => p.type === "oscillation")) {
       assert.equal(result.recommendation, "halt");
@@ -167,7 +167,7 @@ describe("stagnation recommendations", () => {
       verdict("changes_requested", ["scope-mismatch"]),
       verdict("changes_requested", ["scope-mismatch"]),
     ];
-    const result = detectStagnation(events);
+    const result = detectStagnation(events, {}, undefined, { mode: "advanced" });
     assert.equal(result.recommendation, "escalate");
   });
 });

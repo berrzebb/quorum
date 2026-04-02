@@ -75,6 +75,19 @@ export {
   readPreviousManifests,
 } from "./snapshot.js";
 
+export {
+  createParentContext,
+  forkChild,
+  childAddFile,
+  childAddFinding,
+  childSetState,
+  childGetState,
+  collectChildren,
+  type ParentContext,
+  type ChildContext,
+  type ChildOverlay,
+} from "./context-fork.js";
+
 // [CONTRACT CONTROL PLANE] Re-export contract types for wave-runner consumers
 export type { ContractLedger } from "../../core/harness/contract-ledger.js";
 export type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
