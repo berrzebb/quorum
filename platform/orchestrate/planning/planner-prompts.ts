@@ -206,7 +206,7 @@ Each WB item MUST include these fields. The goal: a sub-agent can complete this 
 - **Done**: Machine-checkable condition. e.g. "test X passes AND tsc clean"
 \`\`\`
 
-**Sizing rule**: If a WB needs >3 files or >250 lines of changes, split it.
+**HARD SIZING RULE (BLOCKING — orchestrator rejects violations)**: Each WB must touch at most 5 files in "First touch files". If a WB lists 6+ files, SPLIT it into smaller WBs. This is enforced by a gate that BLOCKS execution. Count test files too.
 **Action rule**: Write actions as if giving instructions to a new team member on their first day.
 **Context budget rule**: List ONLY files needed — less is more. Agents use \`code_map\`/\`blast_radius\` for discovery.
 **Verify rule**: Must be a runnable command, not "verify it works."
