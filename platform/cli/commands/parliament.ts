@@ -487,19 +487,10 @@ export async function run(args: string[]): Promise<void> {
 
           writeCPSFile(bestEffortCps, committee);
 
-          // Auto-launch planner
-          if (!parsed.noPlan) {
-            // Release parliament mux sessions BEFORE planner creates its own
-            if (mux) {
-              try { await mux.cleanup(); } catch (err) { console.warn(`[parliament] mux cleanup before best-effort planner failed: ${(err as Error).message}`); }
-              mux = null as unknown as typeof mux;
-            }
-            console.log(`\n${C.cyan}${C.bold}═══ Planning Phase ═══${C.reset}`);
-            console.log(`${C.dim}Best-effort CPS ready. Launching planner for "${parsed.topic}"...${C.reset}\n`);
-            const planArgs = [parsed.topic, "--auto"];
-            if (parsed.mux) planArgs.push("--mux");
-            await interactivePlanner(cwd, planArgs);
-          }
+          // Do NOT auto-launch planner on best-effort CPS.
+          // Unconverged requirements produce incomplete WBs — waste of time.
+          console.log(`\n${C.yellow}Planner skipped — CPS did not converge.${C.reset}`);
+          console.log(`${C.dim}Options: increase --rounds, narrow the topic, or run 'quorum orchestrate plan <track>' manually after review.${C.reset}\n`);
         } else {
           console.log(`${C.red}No meeting logs found — cannot generate CPS.${C.reset}`);
         }
@@ -545,7 +536,11 @@ function buildDeliberationPrompt(topic: string, committee: string, round: number
       previousContext += `\n### Judge synthesis\n${v.judgeSummary}\n`;
     }
     previousContext += `\nBuild on these findings. Refine, challenge, or extend — do NOT simply repeat them.\n`;
-    previousContext += `IMPORTANT: Do NOT introduce new items. Work with the existing set of items from previous rounds. Refine their classifications, sharpen their actions, or merge redundant items — but do not expand the item set.\n`;
+    previousContext += `CRITICAL CONVERGENCE RULE: You MUST use the EXACT SAME items and classifications as the previous round. You may ONLY:\n`;
+    previousContext += `1. Sharpen the "action" field for existing items\n`;
+    previousContext += `2. Change a classification ONLY with explicit justification (e.g., "Reclassify X from GAP to BUILD because...")\n`;
+    previousContext += `3. Merge two items into one (with justification)\n`;
+    previousContext += `You MUST NOT add new items, split existing items, or rephrase item names. The item set is FROZEN.\n`;
   }
 
   return `# Parliamentary Deliberation

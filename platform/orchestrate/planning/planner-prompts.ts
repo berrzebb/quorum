@@ -77,7 +77,18 @@ export function buildAutoPrompt(opts: AutoPromptOpts): string {
 export function buildInlineAutoPrompt(opts: AutoPromptOpts): string {
   const { trackName, planDir, prefix, trackSlug } = opts;
 
+  // Extract binding decisions from CPS so they appear as hard constraints
+  const bindingConstraints = extractBindingDecisions(opts.cpsContent);
+
   return `Plan track "${trackName}" using the CPS provided. Generate ALL documents now without asking questions.
+
+## BINDING CONSTRAINTS (from Parliament CPS — DO NOT override)
+
+These decisions were made by parliament deliberation and are NON-NEGOTIABLE:
+
+${bindingConstraints}
+
+Any WB that contradicts these constraints is INVALID. Use exactly the dependencies, tools, and approaches specified above.
 
 Each document MUST be a separate file with a SINGLE responsibility. Do NOT merge.
 
@@ -215,6 +226,54 @@ Wave 0 is also for architectural prerequisites that MUST complete before any imp
 Rules: Design MANDATORY. Blueprint naming = law. Ask before assuming. User's language.
 
 ${protocol}`;
+}
+
+/**
+ * Extract BUY/BUILD/OUT decisions from CPS content.
+ * These are parliament's binding decisions that the planner must follow exactly.
+ */
+function extractBindingDecisions(cpsContent: string): string {
+  if (!cpsContent) return "(No CPS decisions available — make reasonable choices.)";
+
+  const lines: string[] = [];
+
+  // Extract from Context section — contains "Decisions made:" block
+  const decisionsMatch = cpsContent.match(/Decisions made:(.+?)(?=\n##|\n---|\n\n\n)/s);
+  if (decisionsMatch) {
+    const decisions = decisionsMatch[1]!.trim()
+      .split(/;\s*/)
+      .filter(d => d.length > 10)
+      .slice(0, 15); // Cap to avoid prompt bloat
+    if (decisions.length > 0) {
+      lines.push("### Decisions (binding)");
+      for (const d of decisions) lines.push(`- ${d.trim()}`);
+      lines.push("");
+    }
+  }
+
+  // Extract Build Items section
+  const buildMatch = cpsContent.match(/## Build Items \(\d+\)\n([\s\S]*?)(?=\n---|\n## |$)/);
+  if (buildMatch) {
+    const items = buildMatch[1]!.trim().split("\n").filter(l => l.startsWith("- ")).slice(0, 20);
+    if (items.length > 0) {
+      lines.push("### Must Build (parliament-approved scope)");
+      for (const item of items) lines.push(item);
+      lines.push("");
+    }
+  }
+
+  // Extract Gaps section
+  const gapsMatch = cpsContent.match(/## Gaps \(\d+\)\n([\s\S]*?)(?=\n## |$)/);
+  if (gapsMatch) {
+    const gaps = gapsMatch[1]!.trim().split("\n").filter(l => l.startsWith("- ")).slice(0, 10);
+    if (gaps.length > 0) {
+      lines.push("### Known Gaps (address or explicitly defer)");
+      for (const g of gaps) lines.push(g);
+      lines.push("");
+    }
+  }
+
+  return lines.length > 0 ? lines.join("\n") : "(CPS provided but no structured decisions found — follow CPS Context section.)";
 }
 
 /** Derive a WB ID prefix from a track name (uppercase, max 3 chars). */

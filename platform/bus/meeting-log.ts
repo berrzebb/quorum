@@ -230,16 +230,18 @@ export function checkConvergence(
   }
 
   // ── Path 2: No-new-items (greenfield convergence) ──
-  // If the item set in round N is a subset of round N-1 (no new discoveries),
+  // If the item set in round N has at most minor growth from round N-1,
   // the deliberation has stabilized even if classifications shift.
+  // Allow up to 20% new items per round — LLMs rephrase/split items non-deterministically.
   let noNewItemsRounds = 0;
 
   for (let i = logs.length - 1; i > 0; i--) {
     const currItems = new Set(logs[i]!.classifications.map(c => normalizeItemKey(c.item)));
     const prevItems = new Set(logs[i - 1]!.classifications.map(c => normalizeItemKey(c.item)));
     const newItems = [...currItems].filter(item => !prevItems.has(item));
+    const maxNewItems = Math.floor(prevItems.size * 0.2);
 
-    if (newItems.length === 0 && currItems.size > 0) {
+    if (newItems.length <= maxNewItems && currItems.size > 0) {
       noNewItemsRounds++;
     } else {
       break;
@@ -248,11 +250,13 @@ export function checkConvergence(
 
   // ── Path 3: Relaxed delta (proportional tolerance) ──
   // LLM non-determinism causes item count fluctuations even when semantically stable.
-  // Allow delta within 30% of total item count (min 3) to count as stable.
-  // Calibrated from dogfooding: 20+ items × 30% = 6, covers typical LLM rephrasing noise.
+  // Allow delta within 50% of total item count (min 3), plus half the item growth.
+  // Use sliding window: count relaxed rounds in last N transitions (not consecutive).
+  // This handles LLM jitter where delta oscillates around the tolerance boundary.
   let relaxedRounds = 0;
+  const windowSize = Math.min(logs.length - 1, 4); // Check last 4 transitions
 
-  for (let i = logs.length - 1; i > 0; i--) {
+  for (let i = logs.length - 1; i > 0 && i >= logs.length - windowSize; i--) {
     const curr = countClassifications(logs[i]!.classifications);
     const prev = countClassifications(logs[i - 1]!.classifications);
     const delta = classificationDelta(curr, prev);
@@ -261,13 +265,13 @@ export function checkConvergence(
       logs[i - 1]!.classifications.length,
       1,
     );
-    const tolerance = Math.max(3, Math.floor(totalItems * 0.3));
+    const itemGrowth = Math.abs(logs[i]!.classifications.length - logs[i - 1]!.classifications.length);
+    const tolerance = Math.max(3, Math.floor(totalItems * 0.3) + Math.floor(itemGrowth * 0.5));
 
     if (delta <= tolerance && logs[i]!.classifications.length > 0) {
       relaxedRounds++;
-    } else {
-      break;
     }
+    // No break — count all qualifying rounds in the window
   }
 
   // Empty classifications (e.g. from parse failures) must NOT count as converged.
@@ -351,10 +355,15 @@ function filterNoiseLogs(logs: MeetingLog[]): MeetingLog[] {
   return filtered;
 }
 
+const KNOWN_CLASSIFICATIONS: readonly MeetingClassification[] = ["gap", "strength", "out", "buy", "build"] as const;
+
 function countClassifications(items: ClassifiedItem[]): Record<MeetingClassification, number> {
   const counts: Record<MeetingClassification, number> = { gap: 0, strength: 0, out: 0, buy: 0, build: 0 };
   for (const item of items) {
-    counts[item.classification]++;
+    // Guard: skip unknown classifications to prevent NaN poisoning
+    if (KNOWN_CLASSIFICATIONS.includes(item.classification)) {
+      counts[item.classification]++;
+    }
   }
   return counts;
 }
@@ -364,8 +373,9 @@ function classificationDelta(
   b: Record<MeetingClassification, number>,
 ): number {
   let delta = 0;
-  for (const key of Object.keys(a) as MeetingClassification[]) {
-    delta += Math.abs(a[key] - b[key]);
+  // Use known keys only — Object.keys(a) could include NaN-poisoned unknown keys
+  for (const key of KNOWN_CLASSIFICATIONS) {
+    delta += Math.abs((a[key] ?? 0) - (b[key] ?? 0));
   }
   return delta;
 }

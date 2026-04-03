@@ -3,7 +3,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { findTracks, trackRef } from "./shared.js";
-import { runPlannerSession } from "../../../orchestrate/planning/planner-session.js";
+import { runPlannerSession, slugify } from "../../../orchestrate/planning/planner-session.js";
 
 // ── Re-exports from orchestrate/planning/ ────
 export { autoGenerateWBs, autoFixDesignDiagrams } from "../../../orchestrate/planning/auto-planner.js";
@@ -35,12 +35,13 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
 
   console.log(`\n\x1b[36mquorum orchestrate plan\x1b[0m\n`);
 
-  await runPlannerSession({ repoRoot, trackName, provider, useMux, useAuto });
+  const result = await runPlannerSession({ repoRoot, trackName, provider, useMux, useAuto });
 
   const planDir = resolve(repoRoot, "docs", "plan");
-  const wbPath = resolve(planDir, trackName, "work-breakdown.md");
+  const slug = result.trackSlug;
+  const wbPath = resolve(planDir, slug, "work-breakdown.md");
   if (existsSync(wbPath)) {
-    const ref = trackRef(trackName, repoRoot);
+    const ref = trackRef(slug, repoRoot);
     const arg = ref ? ` ${ref}` : "";
     console.log(`\n  \x1b[32m✓ WBs generated.\x1b[0m Next: quorum orchestrate run${arg}\n`);
   }

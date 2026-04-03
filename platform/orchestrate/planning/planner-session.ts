@@ -6,6 +6,7 @@
  */
 
 import { resolve } from "node:path";
+import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { loadCPS, loadPlannerProtocol } from "./cps-loader.js";
 import { buildPlannerSystemPrompt, buildSocraticPrompt, buildInlineAutoPrompt, derivePrefix } from "./planner-prompts.js";
 import { determinePlannerMode } from "./planner-mode.js";
@@ -30,6 +31,8 @@ export interface PlannerSessionResult {
   provider: string;
   /** Track name. */
   trackName: string;
+  /** Slugified track name (used for file paths). */
+  trackSlug: string;
 }
 
 /**
@@ -66,48 +69,84 @@ export async function runPlannerSession(opts: PlannerSessionOptions): Promise<Pl
 
   // Build CLI args
   const initialPrompt = autoMode ? autoPrompt : socraticPrompt;
-  const cliArgs = buildCLIArgs(provider, systemPrompt, initialPrompt, autoMode);
+  const { args: cliArgs, tempFiles } = buildCLIArgs(provider, systemPrompt, initialPrompt, autoMode, repoRoot);
 
   // Execute — planner needs long timeout (8 files × ~2min each ≈ 16min)
   const plannerTimeout = 20 * 60_000; // 20 minutes
 
-  if (useMux) {
-    if (provider === "claude") cliArgs.push("--dangerously-skip-permissions");
-    await executeMux(repoRoot, provider, cliArgs, trackName, autoMode, plannerTimeout);
-  } else {
-    await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout: plannerTimeout });
+  try {
+    if (useMux) {
+      if (provider === "claude") cliArgs.push("--dangerously-skip-permissions");
+      await executeMux(repoRoot, provider, cliArgs, trackName, autoMode, plannerTimeout);
+    } else {
+      await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout: plannerTimeout });
+    }
+  } finally {
+    // Clean up temp files
+    for (const f of tempFiles) {
+      try { unlinkSync(f); } catch { /* ignore */ }
+    }
   }
 
-  return { autoMode, provider, trackName };
+  return { autoMode, provider, trackName, trackSlug };
 }
 
 // ── Internal helpers ──────────────────────────
 
-function slugify(name: string): string {
-  return name
+/** Slugify a track name for use as directory name. Max 60 chars, cut on word boundary. */
+export function slugify(name: string): string {
+  let slug = name
     .toLowerCase()
     .replace(/[^\w\s-]/g, "")
     .replace(/[\s_]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     || "track";
+
+  // Cap at 60 chars, cutting on word boundary
+  if (slug.length > 60) {
+    slug = slug.slice(0, 60).replace(/-[^-]*$/, "");
+  }
+  return slug || "track";
 }
 
-function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: string, autoMode: boolean): string[] {
+/**
+ * Build CLI args. If the system prompt exceeds 16KB, write it to a temp file
+ * and pass the file path instead — avoids OS command-line length limits.
+ */
+function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: string, autoMode: boolean, repoRoot: string): { args: string[]; tempFiles: string[] } {
   const args: string[] = [];
+  const tempFiles: string[] = [];
+
+  // Write large system prompts to file to avoid CLI arg length limits
+  let systemArg = systemPrompt;
+  if (systemPrompt.length > 16_000) {
+    const tmpDir = resolve(repoRoot, ".claude", "tmp");
+    mkdirSync(tmpDir, { recursive: true });
+    const tmpPath = resolve(tmpDir, `planner-system-${Date.now()}.md`);
+    writeFileSync(tmpPath, systemPrompt, "utf8");
+    tempFiles.push(tmpPath);
+    systemArg = `See system prompt in file: ${tmpPath}`;
+  }
+
   if (provider === "claude") {
     if (autoMode) {
-      args.push("-p", initialPrompt, "--append-system-prompt", systemPrompt, "--dangerously-skip-permissions");
+      // For large prompts, combine into -p so Claude reads both
+      if (tempFiles.length > 0) {
+        args.push("-p", `Read the system instructions from ${tempFiles[0]} first, then:\n\n${initialPrompt}`, "--dangerously-skip-permissions");
+      } else {
+        args.push("-p", initialPrompt, "--append-system-prompt", systemArg, "--dangerously-skip-permissions");
+      }
     } else {
-      args.push("--append-system-prompt", systemPrompt, initialPrompt);
+      args.push("--append-system-prompt", systemArg, initialPrompt);
     }
   } else if (provider === "codex") {
-    args.push("--instructions", systemPrompt);
+    args.push("--instructions", systemArg);
     if (autoMode) args.push("--full-auto");
   } else {
-    args.push("--system-prompt", systemPrompt);
+    args.push("--system-prompt", systemArg);
   }
-  return args;
+  return { args, tempFiles };
 }
 
 async function executeMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string, autoMode: boolean, timeout?: number): Promise<void> {
