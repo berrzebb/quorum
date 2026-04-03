@@ -21,6 +21,10 @@ import type { SessionLedger } from "../providers/session-ledger.js";
 import type { ContractLedger } from "../core/harness/contract-ledger.js";
 import type { ClassifierDecision, ClassifierInput } from "./approval-classifier.js";
 import { classify, telemetryToInput } from "./approval-classifier.js";
+import type { PermissionDecision, ToolInput } from "./permission-rules.js";
+import { RulesEngine } from "./permission-rules.js";
+import type { PermissionMode, ModeDecision } from "./permission-modes.js";
+import { evaluateMode, getMode, isReadOnlyTool, isWriteEditTool } from "./permission-modes.js";
 
 // ── RTI-1A: Approval Telemetry ──────────────────
 
@@ -57,6 +61,10 @@ export interface ApprovalTelemetryRecord {
   contractId?: string;
   /** RTI-2B: Shadow classifier decision (advisory only). */
   classifierDecision?: ClassifierDecision;
+  /** v0.6.2: Permission rule decision (if any rule matched). */
+  ruleDecision?: PermissionDecision;
+  /** v0.6.2: Permission mode used. */
+  permissionMode?: PermissionMode;
 }
 
 /** Callback for telemetry consumers. */
@@ -125,10 +133,32 @@ export class ProviderApprovalGate {
   private telemetryCallbacks: ApprovalTelemetryCallback[] = [];
   private shadowCallbacks: ShadowClassifierCallback[] = [];
 
+  /** v0.6.2: Rules engine for permission evaluation. */
+  private rulesEngine?: RulesEngine;
+
+  /** v0.6.2: Safe tool checker (injected). */
+  private safeToolChecker?: (tool: string, input?: Record<string, unknown>) => boolean;
+
   constructor(
     private readonly sessionLedger: SessionLedger,
     private readonly contractLedger?: ContractLedger
   ) {}
+
+  /**
+   * v0.6.2: Set the rules engine for permission evaluation.
+   * When set, rules are evaluated before the policy chain.
+   */
+  setRulesEngine(engine: RulesEngine): void {
+    this.rulesEngine = engine;
+  }
+
+  /**
+   * v0.6.2: Set safe tool checker.
+   * When set, safe tools skip the classifier.
+   */
+  setSafeToolChecker(checker: (tool: string, input?: Record<string, unknown>) => boolean): void {
+    this.safeToolChecker = checker;
+  }
 
   /**
    * Register a telemetry callback. Called for every approval decision.
@@ -200,7 +230,7 @@ export class ProviderApprovalGate {
   /**
    * Process a full approval lifecycle:
    * 1. Record the request in session ledger
-   * 2. Evaluate through policy chain
+   * 2. v0.6.2: Evaluate through integrated pipeline (rules → mode → policy chain)
    * 3. Resolve the approval in session ledger
    * 4. Update session state if needed
    */
@@ -226,8 +256,18 @@ export class ProviderApprovalGate {
     const classifierInput = this.buildClassifierInput(request);
     const classifierDecision = classify(classifierInput);
 
-    // 3. Evaluate through gate (classifier does NOT affect this)
-    const result = this.evaluate(request);
+    // v0.6.2: Integrated pipeline (rules → mode → policy chain)
+    let result: ApprovalGateResult;
+    let ruleDecision: PermissionDecision | undefined;
+
+    if (this.rulesEngine) {
+      const integrated = this.evaluateIntegrated(request, classifierInput);
+      result = integrated.result;
+      ruleDecision = integrated.ruleDecision ?? undefined;
+    } else {
+      // Fallback: legacy policy chain only
+      result = this.evaluate(request);
+    }
 
     // RTI-2B: Emit shadow classifier results for calibration
     this.emitShadowClassifier(classifierInput, classifierDecision, result.decision);
@@ -243,13 +283,104 @@ export class ProviderApprovalGate {
       );
     }
 
-    // RTI-1A: Emit telemetry record (now includes classifier decision)
-    this.emitTelemetry(request, result, classifierDecision);
+    // RTI-1A: Emit telemetry record (now includes classifier + rule decision)
+    this.emitTelemetry(request, result, classifierDecision, ruleDecision);
 
     return {
       requestId: request.requestId,
       decision: result.decision,
     };
+  }
+
+  /**
+   * v0.6.2: Integrated evaluation pipeline.
+   *
+   * 9-step short-circuit:
+   * 1. Deny rules → DENY (bypass-immune)
+   * 2. Ask rules → ASK (bypass-immune)
+   * 3. Safe tool check → skip classifier flag
+   * 4. Safety checks (.git, .claude) → ASK
+   * 5. Mode-based gating → ALLOW (bypass/plan/auto)
+   * 6. Allow rules → ALLOW
+   * 7. Policy chain (existing)
+   * 8. Classifier (if not safe)
+   * 9. Default → ASK (fail-closed)
+   */
+  private evaluateIntegrated(
+    request: ProviderApprovalRequest,
+    _classifierInput: ClassifierInput,
+  ): { result: ApprovalGateResult; ruleDecision: PermissionDecision | null } {
+    const toolInput: ToolInput = {
+      tool: request.reason,
+      input: (request as unknown as Record<string, unknown>).toolInput as Record<string, unknown> | undefined,
+    };
+
+    // Step 1: Deny rules (bypass-immune)
+    const denyResult = this.rulesEngine!.evaluateBehavior(toolInput, "deny");
+    if (denyResult) {
+      return {
+        result: {
+          decision: "deny",
+          decidedBy: "rules-engine:deny",
+          reason: `Deny rule matched: ${denyResult.reason.detail ?? toolInput.tool}`,
+        },
+        ruleDecision: denyResult,
+      };
+    }
+
+    // Step 2: Ask rules (bypass-immune)
+    const askResult = this.rulesEngine!.evaluateBehavior(toolInput, "ask");
+    // Note: ask result is recorded but may be overridden by mode (dontAsk)
+
+    // Step 3: Safe tool check
+    const isSafe = this.safeToolChecker?.(toolInput.tool, toolInput.input) ?? false;
+
+    // Step 4: Safety checks (.git, .claude protection)
+    // Delegated to existing ScopeBasedPolicy in the policy chain
+
+    // Step 5: Mode-based gating
+    const mode = getMode();
+    const modeResult = evaluateMode(mode, {
+      tool: toolInput.tool,
+      isSafe,
+      isReadOnly: isReadOnlyTool(toolInput.tool),
+      isWriteTool: isWriteEditTool(toolInput.tool),
+      rulesResult: askResult,
+    });
+
+    if (modeResult === "allow") {
+      return {
+        result: {
+          decision: "allow",
+          decidedBy: `mode:${mode}`,
+          reason: `Mode "${mode}" auto-allowed ${toolInput.tool}`,
+        },
+        ruleDecision: askResult,
+      };
+    }
+
+    // Step 6: Allow rules
+    const allowResult = this.rulesEngine!.evaluateBehavior(toolInput, "allow");
+    if (allowResult) {
+      return {
+        result: {
+          decision: "allow",
+          decidedBy: "rules-engine:allow",
+          reason: `Allow rule matched: ${allowResult.reason.detail ?? toolInput.tool}`,
+        },
+        ruleDecision: allowResult,
+      };
+    }
+
+    // Step 7: Policy chain (existing — unchanged)
+    const policyResult = this.evaluate(request);
+    if (policyResult.decision !== "deny" || policyResult.decidedBy !== "default") {
+      // Policy chain made a decision (not the fail-closed default)
+      return { result: policyResult, ruleDecision: askResult };
+    }
+
+    // Step 8+9: Default → deny (fail-closed)
+    return { result: policyResult, ruleDecision: askResult };
   }
 
   /** Build classifier input from an approval request. @since RTI-2B */
@@ -281,11 +412,12 @@ export class ProviderApprovalGate {
     }
   }
 
-  /** Emit a normalized telemetry record (RTI-1A + RTI-2B classifier). */
+  /** Emit a normalized telemetry record (RTI-1A + RTI-2B classifier + v0.6.2 rules). */
   private emitTelemetry(
     request: ProviderApprovalRequest,
     result: ApprovalGateResult,
     classifierDecision?: ClassifierDecision,
+    ruleDecision?: PermissionDecision,
   ): void {
     if (this.telemetryCallbacks.length === 0) return;
 
@@ -310,6 +442,8 @@ export class ProviderApprovalGate {
         request.providerRef.providerSessionId,
       )?.contractId,
       classifierDecision,
+      ruleDecision,
+      permissionMode: this.rulesEngine ? getMode() : undefined,
     };
 
     for (const cb of this.telemetryCallbacks) {
