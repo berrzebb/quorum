@@ -46,7 +46,12 @@ export interface TriggerResult {
   activeDomains: (keyof DetectedDomains)[];
   /** True when T3 audit has no plan doc — enforcement may block. */
   requiresPlan: boolean;
+  /** Per-factor contribution scores (for learning feedback loop). */
+  factors: Record<string, number>;
 }
+
+/** Optional learned weights to apply to factor scores. */
+export type LearnedWeights = Record<string, number>;
 
 /**
  * Determine consensus mode based on change context.
@@ -56,46 +61,54 @@ export interface TriggerResult {
  *   0.3 - 0.7  → T2 simple (single auditor)
  *   0.7 - 1.0  → T3 deliberative (3-role protocol)
  */
-export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
+export function evaluateTrigger(ctx: TriggerContext, learnedWeights?: LearnedWeights): TriggerResult {
   const reasons: string[] = [];
+  const factors: Record<string, number> = {};
   let score = 0;
+
+  const w = (factor: string, base: number): number => {
+    const weight = learnedWeights?.[factor] ?? 1.0;
+    const adjusted = base * weight;
+    factors[factor] = adjusted;
+    return adjusted;
+  };
 
   // 1. File count (0-0.3)
   const fileCount = typeof ctx.changedFiles === "number" ? ctx.changedFiles : 0;
   if (fileCount <= 2) {
-    score += 0.1;
+    score += w("fileCount", 0.1);
   } else if (fileCount <= 8) {
-    score += 0.25;
+    score += w("fileCount", 0.25);
     reasons.push(`${fileCount} files changed`);
   } else {
-    score += 0.3;
+    score += w("fileCount", 0.3);
     reasons.push(`${fileCount} files changed (large scope)`);
   }
 
   // 2. Security sensitivity (0-0.25)
   if (ctx.securitySensitive) {
-    score += 0.25;
+    score += w("security", 0.25);
     reasons.push("security-sensitive files modified");
   }
 
   // 3. Prior rejections (0-0.2)
   if (ctx.priorRejections >= 2) {
-    score += 0.2;
+    score += w("priorRejections", 0.2);
     reasons.push(`${ctx.priorRejections} prior rejections (repeated failure)`);
   } else if (ctx.priorRejections === 1) {
-    score += 0.1;
+    score += w("priorRejections", 0.1);
     reasons.push("1 prior rejection");
   }
 
   // 4. API surface change (0-0.15)
   if (ctx.apiSurfaceChanged) {
-    score += 0.15;
+    score += w("apiSurface", 0.15);
     reasons.push("public API surface modified");
   }
 
   // 5. Cross-layer contract (0-0.1)
   if (ctx.crossLayerChange) {
-    score += 0.1;
+    score += w("crossLayer", 0.1);
     reasons.push("cross-layer contract affected");
   }
 
@@ -143,28 +156,28 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
 
   // 9. Fitness score — low fitness pushes toward stricter audit (0-0.15)
   if (ctx.fitnessScore !== undefined && ctx.fitnessScore < 0.5) {
-    const fitnessContribution = 0.15 * (1 - ctx.fitnessScore / 0.5);
+    const fitnessContribution = w("fitness", 0.15 * (1 - ctx.fitnessScore / 0.5));
     score += fitnessContribution;
     reasons.push(`low fitness score (${ctx.fitnessScore.toFixed(2)}) — stricter audit`);
   }
 
   // 10. Blast radius — wide impact pushes toward stricter audit (0-0.15)
   if (ctx.blastRadius !== undefined && ctx.blastRadius > 0.1) {
-    const blastContribution = Math.min(0.15, ctx.blastRadius * 0.3);
+    const blastContribution = w("blastRadius", Math.min(0.15, ctx.blastRadius * 0.3));
     score += blastContribution;
     reasons.push(`blast radius ${(ctx.blastRadius * 100).toFixed(0)}% — wide impact`);
   }
 
   // 11. Change velocity — frequently changed files are higher risk (0-0.1)
   if (ctx.changeVelocity !== undefined && ctx.changeVelocity >= 3) {
-    const velocityContribution = Math.min(0.1, ctx.changeVelocity * 0.02);
+    const velocityContribution = w("changeVelocity", Math.min(0.1, ctx.changeVelocity * 0.02));
     score += velocityContribution;
     reasons.push(`change velocity ${ctx.changeVelocity} (hot spot)`);
   }
 
   // 12. Stagnation history — past stagnation on similar files → auto-escalate (0-0.15)
   if (ctx.stagnationHistory !== undefined && ctx.stagnationHistory > 0) {
-    const stagnationContribution = Math.min(0.15, ctx.stagnationHistory * 0.05);
+    const stagnationContribution = w("stagnation", Math.min(0.15, ctx.stagnationHistory * 0.05));
     score += stagnationContribution;
     reasons.push(`${ctx.stagnationHistory} past stagnation events on similar files`);
   }
@@ -229,5 +242,5 @@ export function evaluateTrigger(ctx: TriggerContext): TriggerResult {
 
   const requiresPlan = tier === "T3" && ctx.hasPlanDoc === false;
 
-  return { mode, tier, reasons, score, activeDomains, requiresPlan };
+  return { mode, tier, reasons, score, activeDomains, requiresPlan, factors };
 }

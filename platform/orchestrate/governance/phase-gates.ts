@@ -66,8 +66,11 @@ export function verifyPhaseCompletion(
         cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true,
         shell: process.platform === "win32",
       });
-    } catch {
-      failures.push(`${item.id} verify failed: ${item.verify}`);
+    } catch (err) {
+      const stderr = (err as { stderr?: Buffer | string })?.stderr;
+      const stdout = (err as { stdout?: Buffer | string })?.stdout;
+      const output = (stderr?.toString() || stdout?.toString() || (err as Error).message || "").slice(0, 500);
+      failures.push(`${item.id} verify failed: ${item.verify}\n      Output: ${output}`);
     }
   }
 

@@ -19,6 +19,8 @@ import { runWave, type WaveResult } from "../../../orchestrate/execution/wave-ru
 import { runWaveAuditLLM } from "../../../orchestrate/execution/wave-audit-llm.js";
 import { captureSnapshot, recordWaveManifest, readPreviousManifests } from "../../../orchestrate/execution/snapshot.js";
 import type { FitnessGateResult } from "../../../orchestrate/governance/fitness-gates.js";
+import { runFixer, DEFAULT_MAX_FIX_ROUNDS } from "../../../orchestrate/execution/fixer-loop.js";
+import { TriggerLearner } from "../../../bus/trigger-learner.js";
 import { verifyPhaseCompletion as _verifyPhaseCompletion } from "../../../orchestrate/governance/phase-gates.js";
 import { generateSkeletalRTM } from "../../../orchestrate/governance/rtm-generator.js";
 import { runE2EVerification } from "../../../orchestrate/governance/e2e-verification.js";
@@ -185,6 +187,13 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   // ── Contract Control Plane (PLT-6F) ─────────
   const contractLedger = new InMemoryContractLedger();
   const promotionGate = new PromotionGate(contractLedger);
+
+  // ── Trigger Learning Loop (LEARN-1~3) ─────────
+  const triggerLearner = new TriggerLearner(
+    bridge?.store ? { get: (k: string) => bridge.store.getKV(k) ?? null, set: (k: string, v: string) => bridge.store.setKV(k, v), delete: (k: string) => bridge.store.setKV(k, null as unknown as string) } : undefined,
+    bridge?.store ? { emit: (type: string, payload: Record<string, unknown>) => { try { bridge.event.emitEvent(type, "generic", payload); } catch { /* fail-open */ } } } : undefined,
+  );
+  const learnedWeights = triggerLearner.loadWeights();
   const handoffGate = new HandoffGate(contractLedger);
   const iterationPolicy = createIterationPolicy({ maxAttempts: maxRetries, escalationAt: 2, amendAfter: 3 });
 
@@ -284,13 +293,52 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
           : undefined,
       );
       if (!phaseResult.passed) {
-        console.log(`  \x1b[31m✗ Phase gate FAILED\x1b[0m`);
-        for (const f of phaseResult.failures) console.log(`    ✗ ${f}`);
-        console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
-        checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
-        await mux.cleanup();
-        if (bridge?.close) bridge.close();
-        return;
+        // Extract verify failures — these can be fixed by fixer agent
+        const verifyFailures = phaseResult.failures.filter(f => f.includes("verify failed:"));
+        const otherFailures = phaseResult.failures.filter(f => !f.includes("verify failed:"));
+
+        if (verifyFailures.length > 0 && otherFailures.length === 0) {
+          // All failures are verify-related — try fixer before giving up
+          const failedFiles = prevPhaseItems
+            .filter(i => verifyFailures.some(f => f.startsWith(i.id)))
+            .flatMap(i => i.targetFiles);
+
+          let fixAttempt = 0;
+          let retryResult = phaseResult;
+          while (fixAttempt < DEFAULT_MAX_FIX_ROUNDS && !retryResult.passed) {
+            fixAttempt++;
+            console.log(`  \x1b[33m◈ Phase verify fix attempt ${fixAttempt}/${DEFAULT_MAX_FIX_ROUNDS}\x1b[0m`);
+            const findings = retryResult.failures.filter(f => f.includes("verify failed:"));
+            await runFixer({ repoRoot, findings, files: failedFiles, provider, fitnessContext: lastFitnessResult ?? undefined });
+            retryResult = _verifyPhaseCompletion(
+              repoRoot, currentPhaseId, prevPhaseItems, completedIds, detectRegressions,
+              hasPromotionData
+                ? { evaluationContractId: phaseContractId, promotionGate, scores: { fitness: lastFitnessResult!.score } }
+                : undefined,
+            );
+          }
+
+          if (retryResult.passed) {
+            console.log(`  \x1b[32m✓ Phase gate passed after ${fixAttempt} fix attempt(s)\x1b[0m — ${currentPhaseId} verified\n`);
+          } else {
+            console.log(`  \x1b[31m✗ Phase gate FAILED\x1b[0m (after ${fixAttempt} fix attempts)`);
+            for (const f of retryResult.failures) console.log(`    ✗ ${f}`);
+            console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
+            checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
+            await mux.cleanup();
+            if (bridge?.close) bridge.close();
+            return;
+          }
+        } else {
+          // Non-verify failures (contract, regression) — cannot auto-fix
+          console.log(`  \x1b[31m✗ Phase gate FAILED\x1b[0m`);
+          for (const f of phaseResult.failures) console.log(`    ✗ ${f}`);
+          console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
+          checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
+          await mux.cleanup();
+          if (bridge?.close) bridge.close();
+          return;
+        }
       }
       console.log(`  \x1b[32m✓ Phase gate passed\x1b[0m — ${currentPhaseId} verified\n`);
     }
@@ -393,6 +441,25 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         nextAction: gi < waves.length - 1 ? `Proceed to wave ${gi + 2}` : "Track complete — run E2E verification",
       });
       contractLedger.storeHandoffArtifact(handoff);
+    }
+
+    // ── Learning feedback: record audit outcome (LEARN-2) ─────────
+    const waveEvalId = `${trackName}/wave-${gi}`;
+    triggerLearner.recordEvaluation({
+      id: waveEvalId,
+      score: waveResult.fitnessResult?.score ?? 0,
+      tier: wave.items.length > 3 ? "T3" : wave.items.length > 1 ? "T2" : "T1",
+      factors: {},  // wave-level factors (not per-trigger, simplified)
+      timestamp: Date.now(),
+    });
+    triggerLearner.recordOutcome(waveEvalId, waveResult.passed ? "agree" : "reject");
+
+    // Adjust weights every 5 waves (LEARN-3)
+    if ((gi + 1) % 5 === 0) {
+      const adjustments = triggerLearner.adjustWeights(5);
+      if (adjustments.length > 0) {
+        console.log(`  \x1b[36m◈ Learning:\x1b[0m ${adjustments.length} weight adjustment(s)`);
+      }
     }
 
     completedWBs += waveResult.completedItemIds.length;
