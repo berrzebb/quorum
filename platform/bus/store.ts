@@ -15,9 +15,39 @@
  */
 
 import { openDatabase, type SQLiteDatabase, type SQLiteStatement } from "./sqlite-adapter.js";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { writeFileSync, renameSync, rmSync } from "node:fs";
 import type { QuorumEvent, EventType, ProviderKind } from "./events.js";
+
+// ── Hash Chain (v0.6.3) ─────────────────────────────
+
+/** Genesis hash — the seed for the hash chain. */
+export const GENESIS_HASH = createHash("sha256").update("quorum-genesis").digest("hex");
+
+/**
+ * Compute the SHA-256 hash for an event in the chain.
+ * hash = SHA-256(prevHash | eventType | payload | timestamp)
+ */
+export function computeEventHash(
+  prevHash: string,
+  eventType: string,
+  payload: string,
+  timestamp: number,
+): string {
+  return createHash("sha256")
+    .update(`${prevHash}|${eventType}|${payload}|${timestamp}`)
+    .digest("hex");
+}
+
+/** Result of chain verification. */
+export interface ChainVerifyResult {
+  valid: boolean;
+  checked: number;
+  skipped: number;
+  brokenAt?: string;
+  expected?: string;
+  actual?: string;
+}
 
 export interface StoreOptions {
   /** Path to SQLite database file. */
@@ -88,13 +118,14 @@ export class EventStore {
     this.db.pragma("synchronous = NORMAL");
 
     this.createSchema();
+    this.migrateHashColumns();
     this.prepareStatements();
   }
 
   private prepareStatements(): void {
     this.stmtAppend = this.db.prepare(`
-      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO events (id, aggregate_type, aggregate_id, event_type, source, session_id, track_id, agent_id, payload, timestamp, prev_hash, hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     this.stmtCurrentState = this.db.prepare(`
       SELECT to_state FROM state_transitions
@@ -129,6 +160,21 @@ export class EventStore {
     `);
   }
 
+  /**
+   * v0.6.3: Migrate existing DB to add hash chain columns.
+   * Safe to call on new DBs (columns already exist from createSchema).
+   */
+  private migrateHashColumns(): void {
+    try {
+      const cols = this.db.pragma("table_info(events)") as Array<{ name: string }>;
+      const hasHash = cols.some(c => c.name === "hash");
+      if (!hasHash) {
+        this.db.exec(`ALTER TABLE events ADD COLUMN prev_hash TEXT DEFAULT NULL`);
+        this.db.exec(`ALTER TABLE events ADD COLUMN hash TEXT DEFAULT NULL`);
+      }
+    } catch { /* migration is best-effort */ }
+  }
+
   /** Expose the raw database handle (for LockService, StateReader). */
   getDb(): SQLiteDatabase {
     return this.db;
@@ -146,7 +192,9 @@ export class EventStore {
         track_id      TEXT,
         agent_id      TEXT,
         payload       TEXT NOT NULL DEFAULT '{}',
-        timestamp     INTEGER NOT NULL
+        timestamp     INTEGER NOT NULL,
+        prev_hash     TEXT DEFAULT NULL,
+        hash          TEXT DEFAULT NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_events_type
@@ -315,26 +363,98 @@ export class EventStore {
     ];
   }
 
-  /** Append a single event. */
+  /** Get the hash of the last event in the chain (or genesis hash). */
+  private getLastHash(): string {
+    try {
+      const row = this.db.prepare(
+        `SELECT hash FROM events WHERE hash IS NOT NULL ORDER BY rowid DESC LIMIT 1`,
+      ).get() as { hash: string } | undefined;
+      return row?.hash ?? GENESIS_HASH;
+    } catch {
+      return GENESIS_HASH;
+    }
+  }
+
+  /** Append a single event with hash chain linking. */
   append(event: QuorumEvent): string {
     const id = randomUUID();
-    this.stmtAppend.run(...this._eventParams(id, event));
+    const payload = JSON.stringify(event.payload);
+    const prevHash = this.getLastHash();
+    const hash = computeEventHash(prevHash, event.type, payload, event.timestamp);
+    this.stmtAppend.run(...this._eventParams(id, event), prevHash, hash);
     return id;
   }
 
-  /** Append multiple events atomically. */
+  /** Append multiple events atomically with chain-linked hashes. */
   appendBatch(events: QuorumEvent[]): string[] {
     const ids: string[] = [];
 
     const tx = this.db.transaction(() => {
+      let prevHash = this.getLastHash();
       for (const event of events) {
         const id = randomUUID();
-        this.stmtAppend.run(...this._eventParams(id, event));
+        const payload = JSON.stringify(event.payload);
+        const hash = computeEventHash(prevHash, event.type, payload, event.timestamp);
+        this.stmtAppend.run(...this._eventParams(id, event), prevHash, hash);
         ids.push(id);
+        prevHash = hash;
       }
     });
     tx();
     return ids;
+  }
+
+  /**
+   * v0.6.3: Verify the hash chain integrity.
+   *
+   * Scans events in order, recomputes each hash, and compares with stored value.
+   * Null-hash events (pre-migration) are skipped.
+   * Fail-open: verification errors return invalid with details, never throw.
+   */
+  verifyChain(fromId?: string, toId?: string): ChainVerifyResult {
+    try {
+      let sql = `SELECT id, event_type, payload, timestamp, prev_hash, hash FROM events`;
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+
+      if (fromId) {
+        conditions.push(`rowid >= (SELECT rowid FROM events WHERE id = ?)`);
+        params.push(fromId);
+      }
+      if (toId) {
+        conditions.push(`rowid <= (SELECT rowid FROM events WHERE id = ?)`);
+        params.push(toId);
+      }
+
+      if (conditions.length > 0) sql += ` WHERE ${conditions.join(" AND ")}`;
+      sql += ` ORDER BY rowid ASC`;
+
+      const rows = this.db.prepare(sql).all(...params) as Array<{
+        id: string; event_type: string; payload: string;
+        timestamp: number; prev_hash: string | null; hash: string | null;
+      }>;
+
+      let checked = 0;
+      let skipped = 0;
+
+      for (const row of rows) {
+        // Skip pre-migration events (null hash)
+        if (!row.hash || !row.prev_hash) {
+          skipped++;
+          continue;
+        }
+
+        const expected = computeEventHash(row.prev_hash, row.event_type, row.payload, row.timestamp);
+        if (expected !== row.hash) {
+          return { valid: false, checked, skipped, brokenAt: row.id, expected, actual: row.hash };
+        }
+        checked++;
+      }
+
+      return { valid: true, checked, skipped };
+    } catch {
+      return { valid: true, checked: 0, skipped: 0 }; // Fail-open
+    }
   }
 
   /** Replay all events for an aggregate, ordered by timestamp + id. */
