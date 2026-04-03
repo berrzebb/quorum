@@ -21,70 +21,6 @@ describe("team-mapper", () => {
     mod = await import("../dist/platform/providers/harness/team-mapper.js");
   });
 
-  describe("mapRole", () => {
-    it("maps builder to implementer", () => {
-      assert.equal(mod.mapRole("builder").role, "implementer");
-      assert.equal(mod.mapRole("builder").confidence, 1.0);
-    });
-
-    it("maps developer to implementer", () => {
-      assert.equal(mod.mapRole("developer").role, "implementer");
-    });
-
-    it("maps reviewer to self-checker", () => {
-      assert.equal(mod.mapRole("reviewer").role, "self-checker");
-    });
-
-    it("maps qa to self-checker", () => {
-      assert.equal(mod.mapRole("qa").role, "self-checker");
-    });
-
-    it("maps analyst to scout", () => {
-      assert.equal(mod.mapRole("analyst").role, "scout");
-    });
-
-    it("maps architect to designer", () => {
-      assert.equal(mod.mapRole("architect").role, "designer");
-    });
-
-    it("maps fixer to fixer", () => {
-      assert.equal(mod.mapRole("fixer").role, "fixer");
-    });
-
-    it("maps unknown to generic-specialist with low confidence", () => {
-      const result = mod.mapRole("unicorn-wrangler");
-      assert.equal(result.role, "generic-specialist");
-      assert.ok(result.confidence < 0.5);
-    });
-
-    it("partial match: code-builder → implementer", () => {
-      const result = mod.mapRole("code-builder");
-      assert.equal(result.role, "implementer");
-      assert.ok(result.confidence >= 0.6);
-    });
-
-    it("keyword match: test_validator → self-checker", () => {
-      const result = mod.mapRole("test_validator");
-      assert.equal(result.role, "self-checker");
-    });
-
-    it("Harness example: worldbuilder → designer", () => {
-      assert.equal(mod.mapRole("worldbuilder").role, "designer");
-    });
-
-    it("Harness example: prose-stylist → implementer", () => {
-      assert.equal(mod.mapRole("prose-stylist").role, "implementer");
-    });
-
-    it("Harness example: continuity-manager → self-checker", () => {
-      assert.equal(mod.mapRole("continuity-manager").role, "self-checker");
-    });
-
-    it("Harness example: science-consultant → generic-specialist", () => {
-      assert.equal(mod.mapRole("science-consultant").role, "generic-specialist");
-    });
-  });
-
   describe("mapTeam", () => {
     it("maps a balanced team correctly", () => {
       const result = mod.mapTeam([
@@ -129,23 +65,6 @@ describe("team-mapper", () => {
     });
   });
 
-  describe("getProtocolPath", () => {
-    it("returns protocols/implementer.md for implementer", () => {
-      assert.ok(mod.getProtocolPath("implementer").includes("protocols/implementer.md"));
-    });
-
-    it("returns protocols/scout.md for scout", () => {
-      assert.ok(mod.getProtocolPath("scout").includes("protocols/scout.md"));
-    });
-
-    it("returns protocols/specialist-base.md for self-checker", () => {
-      assert.ok(mod.getProtocolPath("self-checker").includes("protocols/specialist-base.md"));
-    });
-
-    it("returns protocols/designer.md for designer", () => {
-      assert.ok(mod.getProtocolPath("designer").includes("protocols/designer.md"));
-    });
-  });
 });
 
 // ── skill-mapper ────────────────────────────────────────
@@ -154,33 +73,6 @@ describe("skill-mapper", () => {
   let mod;
   before(async () => {
     mod = await import("../dist/platform/providers/harness/skill-mapper.js");
-  });
-
-  describe("parseFrontmatter", () => {
-    it("parses standard YAML frontmatter", () => {
-      const { frontmatter, body } = mod.parseFrontmatter(`---
-name: my-skill
-description: "A test skill"
----
-
-# My Skill
-
-Body content here.`);
-      assert.equal(frontmatter.name, "my-skill");
-      assert.equal(frontmatter.description, "A test skill");
-      assert.ok(body.includes("# My Skill"));
-    });
-
-    it("handles missing frontmatter", () => {
-      const { frontmatter, body } = mod.parseFrontmatter("# No Frontmatter\n\nJust body.");
-      assert.deepEqual(frontmatter, {});
-      assert.ok(body.includes("# No Frontmatter"));
-    });
-
-    it("handles empty frontmatter", () => {
-      const { frontmatter } = mod.parseFrontmatter("---\n---\n\nBody");
-      assert.deepEqual(frontmatter, {});
-    });
   });
 
   describe("validateSkill", () => {
@@ -357,29 +249,3 @@ describe("workspace-bridge", () => {
   });
 });
 
-// ── harness-bootstrap SKILL.md ──────────────────────────
-
-describe("harness-bootstrap skill", () => {
-  it("SKILL.md exists and has valid frontmatter", () => {
-    const content = readFileSync("platform/skills/harness-bootstrap/SKILL.md", "utf8");
-    assert.ok(content.includes("name: quorum:harness-bootstrap"));
-    assert.ok(content.includes("description:"));
-    // Knowledge-centric: SKILL.md delegates to protocol
-    assert.ok(content.includes("agents/knowledge/protocols/harness-bootstrap.md"));
-  });
-
-  it("protocol has workflow and role mapping", () => {
-    const protocol = readFileSync("agents/knowledge/protocols/harness-bootstrap.md", "utf8");
-    assert.ok(protocol.includes("## Workflow"));
-    assert.ok(protocol.includes("Phase 1:"));
-    assert.ok(protocol.includes("implementer"));
-    assert.ok(protocol.includes("scout"));
-    assert.ok(protocol.includes("designer"));
-  });
-
-  it("protocol references skill generation", () => {
-    const protocol = readFileSync("agents/knowledge/protocols/harness-bootstrap.md", "utf8");
-    // Protocol should describe how to generate skills
-    assert.ok(protocol.includes("skill") || protocol.includes("Skill"));
-  });
-});

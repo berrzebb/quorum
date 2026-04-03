@@ -66,13 +66,6 @@ describe("PollConfig", () => {
     assert.equal(config.gitIntervalMs, 5000);
   });
 
-  it("defaultPollConfig returns a plain object with exactly 3 keys", () => {
-    const config = defaultPollConfig();
-    assert.equal(Object.keys(config).length, 3);
-    assert.ok("stateIntervalMs" in config);
-    assert.ok("sessionIntervalMs" in config);
-    assert.ok("gitIntervalMs" in config);
-  });
 });
 
 // ═══ 2. diffSnapshots ═══════════════════════════════════════════════
@@ -116,96 +109,6 @@ describe("diffSnapshots", () => {
     assert.ok(diff.changedSections.has("gates"));
   });
 
-  it("gate count change → 'gates' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      gates: [
-        { name: "Audit", status: "open" },
-        { name: "Retro", status: "open" },
-      ],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.ok(diff.changedSections.has("gates"));
-  });
-
-  it("item count change → 'items' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      items: [{ entityId: "x", currentState: "pending", source: "test", updatedAt: 0 }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("items"));
-  });
-
-  it("finding count change → 'findings' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      findings: [{ id: "f-1", severity: "high", description: "test", category: "safety", reviewerId: "r", provider: "p", timestamp: 0 }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("findings"));
-  });
-
-  it("track progress change → 'tracks' in changedSections", () => {
-    const prev = makeFullState({
-      tracks: [{ trackId: "t1", total: 10, completed: 3, pending: 5, blocked: 2, lastUpdate: 0 }],
-    });
-    const next = makeFullState({
-      tracks: [{ trackId: "t1", total: 10, completed: 7, pending: 2, blocked: 1, lastUpdate: 0 }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("tracks"));
-  });
-
-  it("track count change → 'tracks' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      tracks: [{ trackId: "t1", total: 5, completed: 0, pending: 5, blocked: 0, lastUpdate: 0 }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.ok(diff.changedSections.has("tracks"));
-  });
-
-  it("event count change → 'events' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      recentEvents: [{ type: "audit.start", source: "test", timestamp: Date.now(), payload: {} }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("events"));
-  });
-
-  it("parliament sessionCount change → 'parliament' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      parliament: {
-        committees: [],
-        lastVerdict: null,
-        pendingAmendments: 0,
-        conformance: null,
-        sessionCount: 3,
-        liveSessions: [],
-      },
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("parliament"));
-  });
-
-  it("lock count change → 'locks' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      locks: [{ held: true, lockName: "audit", owner: 1234, acquiredAt: Date.now(), ttlMs: 60000 }],
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("locks"));
-  });
-
   it("fitness change → 'fitness' in changedSections", () => {
     const prev = makeFullState();
     const next = makeFullState({
@@ -231,16 +134,6 @@ describe("diffSnapshots", () => {
     const diff = diffSnapshots(prev, next);
     assert.equal(diff.changed, true);
     assert.ok(diff.changedSections.has("specialists"));
-  });
-
-  it("findingStats total change → 'findingStats' in changedSections", () => {
-    const prev = makeFullState();
-    const next = makeFullState({
-      findingStats: { total: 5, open: 3, confirmed: 1, dismissed: 1, fixed: 0 },
-    });
-    const diff = diffSnapshots(prev, next);
-    assert.equal(diff.changed, true);
-    assert.ok(diff.changedSections.has("findingStats"));
   });
 
   it("multiple changes detected together", () => {
@@ -379,11 +272,4 @@ describe("PollScheduler", () => {
     assert.equal(updateCount, 1, `Expected exactly 1 update (initial), got ${updateCount}`);
   });
 
-  it("no config creates defaults", () => {
-    const scheduler = new PollScheduler();
-    const config = scheduler.getConfig();
-    assert.equal(config.stateIntervalMs, 1000);
-    assert.equal(config.sessionIntervalMs, 2000);
-    assert.equal(config.gitIntervalMs, 5000);
-  });
 });

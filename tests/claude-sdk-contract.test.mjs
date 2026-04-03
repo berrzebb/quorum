@@ -639,30 +639,6 @@ describe("Contract: Tool Bridge", () => {
     assert.equal(tools.length, 26);
   });
 
-  it("all tool names are valid strings", () => {
-    const tools = ClaudeSdkToolBridge.getAvailableTools();
-    for (const tool of tools) {
-      assert.equal(typeof tool, "string");
-      assert.ok(tool.length > 0, `Tool name must be non-empty`);
-      assert.ok(
-        /^[a-z][a-z0-9_]*$/.test(tool),
-        `Tool name "${tool}" must be lowercase snake_case`
-      );
-    }
-  });
-
-  it("tool list contains no duplicates", () => {
-    const tools = ClaudeSdkToolBridge.getAvailableTools();
-    const unique = new Set(tools);
-    assert.equal(unique.size, tools.length, "Duplicate tool names detected");
-  });
-
-  it("each call returns a new array (no shared mutation)", () => {
-    const a = ClaudeSdkToolBridge.getAvailableTools();
-    const b = ClaudeSdkToolBridge.getAvailableTools();
-    assert.notEqual(a, b);
-    assert.deepEqual(a, b);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

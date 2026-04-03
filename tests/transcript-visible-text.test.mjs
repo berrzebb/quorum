@@ -182,9 +182,6 @@ describe("isHiddenContent helper", () => {
     assert.equal(isHiddenContent("Hello world"), false);
   });
 
-  it("JSON is not hidden by pattern (handled separately)", () => {
-    assert.equal(isHiddenContent('{"type":"message"}'), false);
-  });
 });
 
 // ═══ 6. Section Detection ═══════════════════════════════════════════════

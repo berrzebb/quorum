@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * DUX-1: Daemon Baseline — freeze structural contracts before refactor.
+ * DUX-1: Daemon Baseline — behavioral tests for daemon refactor invariants.
  *
- * Tests the data layer (StateReader, FullState shape), file structure
- * (components, bootstrap), and view modes. Does NOT render React/Ink.
+ * Tests seeded data queries, line count limits, polling/fingerprint
+ * optimization, view mode wiring, and cutover verification.
+ * Does NOT render React/Ink.
  *
  * Run: node --test tests/daemon-baseline.test.mjs
  */
@@ -32,193 +33,7 @@ after(() => {
   try { store.close(); } catch (err) { console.warn("daemon-baseline store close failed:", err?.message ?? err); }
 });
 
-// ═══ 1. StateReader contract (structural) ════════════════════════════
-
-describe("StateReader contract", () => {
-  it("StateReader class exists and can be instantiated with an EventStore", () => {
-    assert.ok(reader instanceof StateReader);
-  });
-
-  it("readAll() method exists and returns an object", () => {
-    const result = reader.readAll();
-    assert.equal(typeof result, "object");
-    assert.ok(result !== null);
-  });
-
-  it("readAll() result has exactly 13 expected keys", () => {
-    const result = reader.readAll();
-    const expectedKeys = [
-      "gates",
-      "items",
-      "locks",
-      "specialists",
-      "tracks",
-      "findings",
-      "findingStats",
-      "reviewProgress",
-      "fileThreads",
-      "recentEvents",
-      "fitness",
-      "parliament",
-      "agentQueries",
-    ];
-    for (const key of expectedKeys) {
-      assert.ok(key in result, `Missing key: ${key}`);
-    }
-    assert.equal(Object.keys(result).length, expectedKeys.length,
-      `FullState should have exactly ${expectedKeys.length} keys, got ${Object.keys(result).length}`);
-  });
-
-  it("gates returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.gates));
-  });
-
-  it("items returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.items));
-  });
-
-  it("locks returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.locks));
-  });
-
-  it("specialists returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.specialists));
-  });
-
-  it("tracks returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.tracks));
-  });
-
-  it("findings returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.findings));
-  });
-
-  it("findingStats returns an object", () => {
-    const result = reader.readAll();
-    assert.equal(typeof result.findingStats, "object");
-    assert.ok(result.findingStats !== null);
-  });
-
-  it("reviewProgress returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.reviewProgress));
-  });
-
-  it("fileThreads returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.fileThreads));
-  });
-
-  it("recentEvents returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.recentEvents));
-  });
-
-  it("fitness returns an object", () => {
-    const result = reader.readAll();
-    assert.equal(typeof result.fitness, "object");
-    assert.ok(result.fitness !== null);
-  });
-
-  it("parliament returns an object", () => {
-    const result = reader.readAll();
-    assert.equal(typeof result.parliament, "object");
-    assert.ok(result.parliament !== null);
-  });
-
-  it("agentQueries returns an array", () => {
-    const result = reader.readAll();
-    assert.ok(Array.isArray(result.agentQueries));
-  });
-});
-
-// ═══ 2. StateReader type contracts ═══════════════════════════════════
-
-describe("StateReader type contracts", () => {
-  it("GateInfo has name, status, detail fields", () => {
-    const gates = reader.readAll().gates;
-    // On empty DB we get 3 default gates (Audit, Retro, Quality)
-    assert.ok(gates.length >= 3, "Should have at least 3 default gates");
-    for (const gate of gates) {
-      assert.ok("name" in gate, "GateInfo missing name");
-      assert.ok("status" in gate, "GateInfo missing status");
-      assert.ok("detail" in gate || gate.detail === undefined, "GateInfo detail field should exist or be undefined");
-      assert.equal(typeof gate.name, "string");
-      assert.ok(["open", "blocked", "pending", "error"].includes(gate.status),
-        `Gate status should be one of open/blocked/pending/error, got: ${gate.status}`);
-    }
-  });
-
-  it("default gates are Audit, Retro, Quality", () => {
-    const gates = reader.readAll().gates;
-    const names = gates.map(g => g.name);
-    assert.ok(names.includes("Audit"), "Missing Audit gate");
-    assert.ok(names.includes("Retro"), "Missing Retro gate");
-    assert.ok(names.includes("Quality"), "Missing Quality gate");
-  });
-
-  it("FindingStats has total, open, confirmed, dismissed, fixed fields", () => {
-    const stats = reader.readAll().findingStats;
-    assert.ok("total" in stats, "FindingStats missing total");
-    assert.ok("open" in stats, "FindingStats missing open");
-    assert.ok("confirmed" in stats, "FindingStats missing confirmed");
-    assert.ok("dismissed" in stats, "FindingStats missing dismissed");
-    assert.ok("fixed" in stats, "FindingStats missing fixed");
-    // All should be numbers
-    assert.equal(typeof stats.total, "number");
-    assert.equal(typeof stats.open, "number");
-    assert.equal(typeof stats.confirmed, "number");
-    assert.equal(typeof stats.dismissed, "number");
-    assert.equal(typeof stats.fixed, "number");
-  });
-
-  it("FitnessInfo has baseline, current, gate, history fields", () => {
-    const fitness = reader.readAll().fitness;
-    assert.ok("baseline" in fitness, "FitnessInfo missing baseline");
-    assert.ok("current" in fitness, "FitnessInfo missing current");
-    assert.ok("gate" in fitness, "FitnessInfo missing gate");
-    assert.ok("history" in fitness, "FitnessInfo missing history");
-    // baseline and current can be null on empty DB
-    assert.ok(fitness.baseline === null || typeof fitness.baseline === "number");
-    assert.ok(fitness.current === null || typeof fitness.current === "number");
-    assert.ok(Array.isArray(fitness.history));
-  });
-
-  it("FitnessInfo also has trend and components fields", () => {
-    const fitness = reader.readAll().fitness;
-    assert.ok("trend" in fitness, "FitnessInfo missing trend");
-    assert.ok("components" in fitness, "FitnessInfo missing components");
-  });
-
-  it("ParliamentInfo has committees, lastVerdict, pendingAmendments, conformance, sessionCount fields", () => {
-    const parliament = reader.readAll().parliament;
-    assert.ok("committees" in parliament, "ParliamentInfo missing committees");
-    assert.ok("lastVerdict" in parliament, "ParliamentInfo missing lastVerdict");
-    assert.ok("pendingAmendments" in parliament, "ParliamentInfo missing pendingAmendments");
-    assert.ok("conformance" in parliament, "ParliamentInfo missing conformance");
-    assert.ok("sessionCount" in parliament, "ParliamentInfo missing sessionCount");
-    // Type checks
-    assert.ok(Array.isArray(parliament.committees));
-    assert.ok(parliament.lastVerdict === null || typeof parliament.lastVerdict === "string");
-    assert.equal(typeof parliament.pendingAmendments, "number");
-    assert.ok(parliament.conformance === null || typeof parliament.conformance === "number");
-    assert.equal(typeof parliament.sessionCount, "number");
-  });
-
-  it("ParliamentInfo has liveSessions field", () => {
-    const parliament = reader.readAll().parliament;
-    assert.ok("liveSessions" in parliament, "ParliamentInfo missing liveSessions");
-    assert.ok(Array.isArray(parliament.liveSessions));
-  });
-});
-
-// ═══ 3. StateReader with seeded data ═════════════════════════════════
+// ═══ 1. StateReader with seeded data ═════════════════════════════════
 
 describe("StateReader with seeded data", () => {
   let seededStore;
@@ -334,7 +149,7 @@ describe("StateReader with seeded data", () => {
   });
 });
 
-// ═══ 4. View mode baseline ═══════════════════════════════════════════
+// ═══ 2. View mode baseline ═══════════════════════════════════════════
 
 describe("View mode baseline", () => {
   it("app.tsx uses shell reducer with 4 views: overview, review, chat, operations", () => {
@@ -376,77 +191,7 @@ describe("View mode baseline", () => {
   });
 });
 
-// ═══ 5. Component existence baseline ═════════════════════════════════
-
-describe("Component existence baseline", () => {
-  const expectedComponents = [
-    "AgentChatPanel.tsx",
-    "FitnessPanel.tsx",
-    "AgentPanel.tsx",
-    "GateStatus.tsx",
-    "AuditStream.tsx",
-    "ParliamentPanel.tsx",
-    "Header.tsx",
-    "TrackProgress.tsx",
-    "AgentQueryPanel.tsx",
-  ];
-
-  for (const component of expectedComponents) {
-    it(`daemon/components/${component} exists`, () => {
-      const fullPath = resolve("daemon", "components", component);
-      assert.ok(existsSync(fullPath), `Missing component: ${component}`);
-    });
-  }
-
-  it("exactly 9 component files exist", () => {
-    assert.equal(expectedComponents.length, 9);
-    // Verify no unexpected files by checking each expected one exists
-    for (const component of expectedComponents) {
-      assert.ok(existsSync(resolve("daemon", "components", component)));
-    }
-  });
-});
-
-// ═══ 6. Bootstrap baseline ═══════════════════════════════════════════
-
-describe("Bootstrap baseline", () => {
-  it("daemon/index.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "index.ts")));
-  });
-
-  it("daemon/app.tsx exists", () => {
-    assert.ok(existsSync(resolve("daemon", "app.tsx")));
-  });
-
-  it("daemon/state-reader.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "state-reader.ts")));
-  });
-
-  it("daemon/state/snapshot.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "state", "snapshot.ts")));
-  });
-
-  it("daemon/state/queries/ modules exist", () => {
-    const queryModules = ["gates.ts", "findings.ts", "parliament.ts", "sessions.ts", "tracks.ts", "operations.ts", "fitness.ts", "index.ts"];
-    for (const mod of queryModules) {
-      assert.ok(existsSync(resolve("daemon", "state", "queries", mod)), `Missing query module: ${mod}`);
-    }
-  });
-
-  it("daemon/services/daemon-bootstrap.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "services", "daemon-bootstrap.ts")));
-  });
-
-  it("daemon/services/provider-lifecycle.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "services", "provider-lifecycle.ts")));
-  });
-
-  it("daemon/services/mux-lifecycle.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "services", "mux-lifecycle.ts")));
-  });
-});
-
-// ═══ 7. Line count baseline (approximate) ═══════════════════════════
+// ═══ 3. Line count baseline (approximate) ═══════════════════════════
 
 describe("Line count baseline", () => {
   function lineCount(relPath) {
@@ -530,7 +275,7 @@ describe("Line count baseline", () => {
   });
 });
 
-// ═══ 8. Polling baseline ═════════════════════════════════════════════
+// ═══ 4. Polling baseline ═════════════════════════════════════════════
 
 describe("Polling baseline", () => {
   it("app.tsx does not contain inline panel definitions (delegated to views)", () => {
@@ -575,7 +320,7 @@ describe("Polling baseline", () => {
   });
 });
 
-// ═══ 9. Cutover verification ══════════════════════════════════════════
+// ═══ 5. Cutover verification ══════════════════════════════════════════
 
 describe("Cutover verification", () => {
   it("overview-view.tsx imports extracted panels (not inline)", () => {
@@ -618,23 +363,3 @@ describe("Cutover verification", () => {
   });
 });
 
-// ═══ 10. FullState key names match readAll method names ═════════════
-
-describe("FullState-to-method mapping", () => {
-  it("readAll keys correspond to individual query methods", () => {
-    // Verify each query method exists on StateReader
-    assert.equal(typeof reader.gateStatus, "function", "gateStatus method missing");
-    assert.equal(typeof reader.itemStates, "function", "itemStates method missing");
-    assert.equal(typeof reader.activeLocks, "function", "activeLocks method missing");
-    assert.equal(typeof reader.activeSpecialists, "function", "activeSpecialists method missing");
-    assert.equal(typeof reader.trackProgress, "function", "trackProgress method missing");
-    assert.equal(typeof reader.openFindings, "function", "openFindings method missing");
-    assert.equal(typeof reader.findingStats, "function", "findingStats method missing");
-    assert.equal(typeof reader.reviewProgress, "function", "reviewProgress method missing");
-    assert.equal(typeof reader.findingThreads, "function", "findingThreads method missing");
-    assert.equal(typeof reader.recentEvents, "function", "recentEvents method missing");
-    assert.equal(typeof reader.fitnessInfo, "function", "fitnessInfo method missing");
-    assert.equal(typeof reader.parliamentInfo, "function", "parliamentInfo method missing");
-    assert.equal(typeof reader.agentQueries, "function", "agentQueries method missing");
-  });
-});

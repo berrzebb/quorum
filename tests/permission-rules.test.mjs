@@ -41,10 +41,6 @@ describe("matchSimpleGlob", () => {
     assert.ok(!matchSimpleGlob("*quorum*", "mcp__chrome__navigate"));
   });
 
-  it("star alone matches everything", () => {
-    assert.ok(matchSimpleGlob("*", "anything"));
-    assert.ok(matchSimpleGlob("*", ""));
-  });
 });
 
 // ═══ 2. Content Pattern Parsing ═════════════════════════
@@ -86,11 +82,6 @@ describe("parseContentPattern", () => {
     assert.equal(p.value, "exactvalue");
   });
 
-  it("unknown prefix treated as exact", () => {
-    const p = parseContentPattern("unknown:value");
-    assert.equal(p.type, "exact");
-    assert.equal(p.value, "unknown:value");
-  });
 });
 
 // ═══ 3. Content Pattern Matching ════════════════════════

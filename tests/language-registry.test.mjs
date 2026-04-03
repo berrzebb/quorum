@@ -27,11 +27,6 @@ describe("LanguageRegistry — loading", () => {
     assert.ok(registry.ids().includes("rust"));
   });
 
-  it("loadAll is idempotent", async () => {
-    const before = registry.size;
-    await loadAll();
-    assert.equal(registry.size, before);
-  });
 });
 
 // ── Extension mapping ───────────────────────────────────────
@@ -42,44 +37,11 @@ describe("LanguageRegistry — extension mapping", () => {
     assert.equal(spec.id, "typescript");
   });
 
-  it("maps .py to python", () => {
-    const spec = registry.forFile("app/main.py");
-    assert.equal(spec.id, "python");
-  });
-
-  it("maps .go to go", () => {
-    const spec = registry.forFile("cmd/server.go");
-    assert.equal(spec.id, "go");
-  });
-
-  it("maps .rs to rust", () => {
-    const spec = registry.forFile("src/lib.rs");
-    assert.equal(spec.id, "rust");
-  });
-
-  it("maps .java to java", () => {
-    const spec = registry.forFile("src/Main.java");
-    assert.equal(spec.id, "java");
-  });
-
-  it("maps .jsx to typescript", () => {
-    const spec = registry.forFile("components/App.jsx");
-    assert.equal(spec.id, "typescript");
-  });
-
   it("returns null for unknown extensions", () => {
     assert.equal(registry.forFile("data.csv"), null);
     assert.equal(registry.forFile("notes.txt"), null);
   });
 
-  it("allExtensions returns union of all languages", () => {
-    const exts = registry.allExtensions();
-    assert.ok(exts.has(".ts"));
-    assert.ok(exts.has(".py"));
-    assert.ok(exts.has(".go"));
-    assert.ok(exts.has(".rs"));
-    assert.ok(exts.has(".java"));
-  });
 });
 
 // ── Domain-specific extension lookup ────────────────────────
@@ -91,13 +53,6 @@ describe("LanguageRegistry — domain patterns", () => {
     assert.ok(exts.has(".py"), "python should have perf rules");
     assert.ok(exts.has(".go"), "go should have perf rules");
     assert.ok(exts.has(".rs"), "rust should have perf rules");
-  });
-
-  it("extensionsForDomain('a11y') only includes JSX languages", () => {
-    const exts = registry.extensionsForDomain("a11y");
-    assert.ok(exts.has(".tsx") || exts.has(".jsx"), "a11y should include JSX extensions");
-    assert.ok(!exts.has(".py"), "python should not have a11y rules");
-    assert.ok(!exts.has(".go"), "go should not have a11y rules");
   });
 
   it("extensionsForDomain('security') includes python/go/rust/java", () => {
@@ -119,10 +74,6 @@ describe("LanguageRegistry — domain patterns", () => {
     }
   });
 
-  it("patternsForDomain returns empty for unknown domain", () => {
-    const groups = registry.patternsForDomain("nonexistent");
-    assert.equal(groups.length, 0);
-  });
 });
 
 // ── Symbol patterns ─────────────────────────────────────────

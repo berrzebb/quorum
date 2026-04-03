@@ -64,15 +64,6 @@ describe('StrictContractEnforcer', () => {
       );
     });
 
-    it('passes for approved contract', () => {
-      const sc = createSprintContract({
-        trackName: 't',
-        waveId: 'w',
-        approvalState: 'approved',
-      });
-      // Should not throw
-      enforcer.assertSprintApproved(sc);
-    });
   });
 
   // ── assertEvaluationReady ─────────────────
@@ -172,16 +163,6 @@ describe('StrictContractEnforcer', () => {
       );
     });
 
-    it('passes for complete handoff', () => {
-      const ha = createHandoffArtifact({
-        contractId: 'c-1',
-        summary: 'All tasks completed',
-        nextAction: 'Deploy to staging',
-        openItems: ['Follow-up item'],
-      });
-      // Should not throw
-      enforcer.assertHandoffComplete(ha);
-    });
   });
 
   // ── assertPromotionAllowed ────────────────

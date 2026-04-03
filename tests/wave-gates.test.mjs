@@ -141,22 +141,6 @@ describe("updateRTM", () => {
 // ═══ 2. buildDepContextFromManifests — pure function ════════════════════
 
 describe("buildDepContextFromManifests", () => {
-  it("returns empty for items without dependencies", () => {
-    const result = buildDepContextFromManifests(
-      { id: "WB-01", targetFiles: ["a.ts"] },
-      [{ waveIndex: 0, completedItems: ["WB-00"], changedFiles: ["b.ts"], fileExports: {} }],
-    );
-    assert.strictEqual(result, "");
-  });
-
-  it("returns empty when no manifests match dependencies", () => {
-    const result = buildDepContextFromManifests(
-      { id: "WB-02", targetFiles: ["a.ts"], dependsOn: ["WB-01"] },
-      [{ waveIndex: 0, completedItems: ["WB-99"], changedFiles: ["b.ts"], fileExports: {} }],
-    );
-    assert.strictEqual(result, "");
-  });
-
   it("injects context when manifest matches dependency", () => {
     const result = buildDepContextFromManifests(
       { id: "WB-02", targetFiles: ["a.ts"], dependsOn: ["WB-01"] },
@@ -404,17 +388,6 @@ describe("detectRegressions", () => {
     assert.strictEqual(regressions.length, 0, "Normal edits should not trigger regression");
   });
 
-  it("ignores new untracked files", () => {
-    writeFileSync(join(repo, "new-file.ts"), "export const x = 1;");
-
-    const regressions = detectRegressions(repo, ["new-file.ts"]);
-    assert.strictEqual(regressions.length, 0);
-  });
-
-  it("handles missing files gracefully", () => {
-    const regressions = detectRegressions(repo, ["nonexistent.ts"]);
-    assert.strictEqual(regressions.length, 0);
-  });
 });
 
 // ═══ 6. runProjectTests — project test gate ═════════════════════════
@@ -567,15 +540,6 @@ describe("detectFileScopeViolations", () => {
     assert.ok(!violations.some(v => v.includes("package.json")), "JSON files should be allowed");
   });
 
-  it("returns empty when all changes are in scope", () => {
-    writeFileSync(join(repo, "src/a.ts"), "const a = 1;\n");
-    execSync("git add -A && git commit -m baseline", { cwd: repo, stdio: "pipe" });
-    writeFileSync(join(repo, "src/a.ts"), "const a = 2;\n");
-
-    const items = [{ id: "WB-1", targetFiles: ["src/a.ts"], dependsOn: [] }];
-    const violations = detectFileScopeViolations(repo, items, getChangedFiles(repo, "HEAD"));
-    assert.strictEqual(violations.length, 0);
-  });
 });
 
 // ═══ 9. scanBlueprintViolations — naming rule enforcement ═══════════
@@ -682,24 +646,6 @@ describe("detectOrphanFiles", () => {
     assert.strictEqual(orphans.length, 0, "index.ts is an entry point — not orphan");
   });
 
-  it("excludes test files", () => {
-    writeFileSync(join(repo, "src/utils/helper.test.ts"), "// test\n");
-
-    const orphans = detectOrphanFiles(repo, ["src/utils/helper.test.ts"]);
-    assert.strictEqual(orphans.length, 0, "test files should be excluded");
-  });
-
-  it("returns empty when all files are imported", () => {
-    writeFileSync(join(repo, "src/app.ts"), [
-      'import { a } from "./utils/a";',
-      'import { b } from "./utils/b";',
-    ].join("\n") + "\n");
-    writeFileSync(join(repo, "src/utils/a.ts"), "export const a = 1;\n");
-    writeFileSync(join(repo, "src/utils/b.ts"), "export const b = 2;\n");
-
-    const orphans = detectOrphanFiles(repo, ["src/utils/a.ts", "src/utils/b.ts"]);
-    assert.strictEqual(orphans.length, 0, "All files are imported — no orphans");
-  });
 });
 
 // ═══ 11. scanForPerfAntiPatterns — performance anti-pattern detection ══

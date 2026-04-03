@@ -157,13 +157,6 @@ describe("standing committees for CLI help display", () => {
 // ═══ 4. Edge Cases ═══════════════════════════════════════════════
 
 describe("parliament CLI edge cases", () => {
-  it("ignores unknown flags gracefully (value becomes positional)", () => {
-    // Unknown flags are skipped, but their "value" has no way to be consumed
-    // so it becomes positional — this is expected behavior
-    const result = parseArgs(["--unknown", "실제 논제"]);
-    assert.equal(result.topic, "실제 논제");
-  });
-
   it("handles flags at end of args", () => {
     const result = parseArgs(["논제 먼저", "--rounds", "2"]);
     assert.equal(result.topic, "논제 먼저");

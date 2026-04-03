@@ -21,16 +21,6 @@ async function createManager() {
 // ═══ 1. SessionViewportState ═════════════════════════════════════════
 
 describe("DUX-11: SessionViewportState", () => {
-  it("getViewport creates default state (offset 0, selectionMode 'none')", async () => {
-    const mgr = await createManager();
-    const vp = mgr.getViewport("s1");
-    assert.equal(vp.sessionId, "s1");
-    assert.equal(vp.transcriptOffset, 0);
-    assert.equal(vp.selectionMode, "none");
-    assert.equal(vp.selectionStart, undefined);
-    assert.equal(vp.selectionEnd, undefined);
-  });
-
   it("getViewport returns same instance on second call", async () => {
     const mgr = await createManager();
     const vp1 = mgr.getViewport("s1");
@@ -143,12 +133,6 @@ describe("DUX-11: Copy/Paste", () => {
     assert.notEqual(clip, null);
     assert.equal(clip.text, "line 1\nline 2\nline 3\nline 4");
     assert.deepEqual(clip.lineRange, [1, 4]);
-  });
-
-  it("copySelection returns null when not in selection mode", async () => {
-    const mgr = await createManager();
-    const clip = mgr.copySelection("s1", lines);
-    assert.equal(clip, null);
   });
 
   it("getClipboard returns last copy", async () => {

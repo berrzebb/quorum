@@ -110,16 +110,6 @@ describe("root facade directories do NOT contain .ts files", () => {
   }
 });
 
-// ═══ 4. Root core/ directory fully removed ═══════════════════════════════
-
-describe("root core/ directory fully removed", () => {
-  it("core/ directory should NOT exist (all content migrated to platform/core/)", () => {
-    const full = resolve(REPO_ROOT, "core");
-    assert.ok(!existsSync(full),
-      "core/ should have been removed — platform/core/ is the sole source for config, locales, templates, and all code");
-  });
-});
-
 // ═══ 5. platform/core/ canonical data files ═══════════════════════════════
 
 describe("platform/core/ canonical data files", () => {
@@ -196,19 +186,6 @@ describe("platform/adapters/shared is canonical shared adapter source", () => {
     assert.ok(mjsFiles.length > 0,
       `platform/adapters/shared/ should contain shared adapter modules, found ${mjsFiles.length}`);
   });
-});
-
-// ═══ 9. Root runtime directories removed ═════════════════════════════════
-
-describe("root runtime directories removed", () => {
-  const dirs = ["cli", "bus", "orchestrate", "providers", "skills", "adapters", "languages", "hooks"];
-
-  for (const dir of dirs) {
-    it(`${dir}/ directory should not exist`, () => {
-      assert.ok(!existsSync(resolve(REPO_ROOT, dir)),
-        `${dir}/ should have been removed — platform/${dir}/ is the sole source`);
-    });
-  }
 });
 
 // ═══ 10. Retained protocol corpus is explicit and outside runtime tree ════

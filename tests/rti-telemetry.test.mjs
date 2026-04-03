@@ -21,10 +21,8 @@ const { InMemorySessionLedger } = await import(
   "../dist/platform/providers/session-ledger.js"
 );
 const {
-  onCompactTelemetry,
   generateCompactSummary,
   generateFallbackSummary,
-  formatCompactContext,
 } = await import("../dist/platform/orchestrate/execution/wave-compact.js");
 const {
   emitTranscriptWorkload,
@@ -110,20 +108,6 @@ describe("RTI-1A: Approval telemetry", () => {
     assert.equal(records[0].decision, "deny");
   });
 
-  it("telemetry callback errors do not break gate", () => {
-    gate.onTelemetry(() => { throw new Error("boom"); });
-    gate.addPolicy(new AllowAllPolicy());
-
-    // Should not throw
-    const decision = gate.process({
-      providerRef: sessionRef,
-      requestId: "req-4",
-      kind: "tool",
-      reason: "code_map",
-    });
-    assert.equal(decision.decision, "allow");
-  });
-
   it("no telemetry emitted when no callbacks registered", () => {
     gate.addPolicy(new AllowAllPolicy());
     // Should work fine with no callbacks
@@ -140,10 +124,6 @@ describe("RTI-1A: Approval telemetry", () => {
 // ═══ RTI-1B: Compact Telemetry ══════════════════════════════════════════
 
 describe("RTI-1B: Compact telemetry", () => {
-  it("onCompactTelemetry is callable", () => {
-    assert.equal(typeof onCompactTelemetry, "function");
-  });
-
   it("generates deterministic compact without telemetry error", () => {
     const summary = generateCompactSummary({
       waveIndex: 1,

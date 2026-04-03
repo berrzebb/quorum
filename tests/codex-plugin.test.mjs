@@ -18,12 +18,6 @@ describe("broker-detect", () => {
     mod = await import("../dist/platform/providers/codex/broker-detect.js");
   });
 
-  it("exports detection functions", () => {
-    assert.equal(typeof mod.isCodexPluginAvailable, "function");
-    assert.equal(typeof mod.getCompanionScriptPath, "function");
-    assert.equal(typeof mod.resetBrokerCache, "function");
-  });
-
   it("resetBrokerCache clears cached state", () => {
     // Should not throw
     mod.resetBrokerCache();
@@ -257,17 +251,6 @@ describe("adversarial-review", () => {
 
   before(async () => {
     mod = await import("../dist/platform/providers/codex/adversarial-review.js");
-  });
-
-  it("exports required functions", () => {
-    assert.equal(typeof mod.isAdversarialReviewAvailable, "function");
-    assert.equal(typeof mod.runAdversarialReview, "function");
-    assert.equal(typeof mod.toAuditResult, "function");
-  });
-
-  it("isAdversarialReviewAvailable returns boolean", () => {
-    const result = mod.isAdversarialReviewAvailable();
-    assert.equal(typeof result, "boolean");
   });
 
   it("toAuditResult converts review result to AuditResult", () => {

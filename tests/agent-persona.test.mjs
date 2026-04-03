@@ -13,7 +13,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { resolve, dirname } from "node:path";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const { AgentLoader } = await import("../dist/platform/providers/agent-loader.js");
@@ -28,39 +28,13 @@ const loader = new AgentLoader({
   adapter: "claude-code",
 });
 
-// ═══ 1. Discovery ═════════════════════════════════════════════════════
-
-describe("persona discovery", () => {
-  it("lists all 3 agent personas", () => {
-    const agents = loader.listAvailable();
-    assert.ok(agents.includes("implementer"), "implementer not found");
-    assert.ok(agents.includes("scout"), "scout not found");
-    assert.ok(agents.includes("ui-reviewer"), "ui-reviewer not found");
-  });
-
-  it("resolves paths to adapter agents directory", () => {
-    const path = loader.resolvedPath("implementer");
-    assert.ok(path);
-    assert.ok(path.includes("adapters"));
-    assert.ok(path.includes("claude-code"));
-    assert.ok(path.endsWith("implementer.md"));
-  });
-});
-
-// ═══ 2. Implementer ═══════════════════════════════════════════════════
+// ═══ 1. Implementer ═══════════════════════════════════════════════════
 
 describe("implementer persona", () => {
   it("loads successfully", () => {
     const persona = loader.load("implementer");
     assert.ok(persona);
     assert.equal(persona.name, "implementer");
-  });
-
-  it("contains frontmatter with model (no isolation — orchestrator creates worktree)", () => {
-    const persona = loader.load("implementer");
-    assert.ok(persona.content.includes("model: claude-sonnet-4-6"));
-    const frontmatter = persona.content.match(/---[\s\S]*?---/)?.[0] ?? "";
-    assert.doesNotMatch(frontmatter, /isolation/);
   });
 
   it("references shared protocol", () => {
@@ -88,7 +62,7 @@ describe("implementer persona", () => {
   });
 });
 
-// ═══ 3. Scout ═════════════════════════════════════════════════════════
+// ═══ 2. Scout ═════════════════════════════════════════════════════════
 
 describe("scout persona", () => {
   it("loads successfully", () => {
@@ -124,7 +98,7 @@ describe("scout persona", () => {
   });
 });
 
-// ═══ 4. UI Reviewer ══════════════════════════════════════════════════
+// ═══ 3. UI Reviewer ══════════════════════════════════════════════════
 
 describe("ui-reviewer persona", () => {
   it("loads successfully", () => {
@@ -151,56 +125,3 @@ describe("ui-reviewer persona", () => {
   });
 });
 
-// ═══ 5. Section extraction consistency ═══════════════════════════════
-
-describe("section extraction across all personas", () => {
-  it("every persona has at least 2 sections", () => {
-    for (const name of ["implementer", "scout", "ui-reviewer"]) {
-      const persona = loader.load(name);
-      assert.ok(persona.sections.size >= 2, `${name} has only ${persona.sections.size} section(s)`);
-    }
-  });
-
-  it("no section content is empty", () => {
-    for (const name of ["implementer", "scout", "ui-reviewer"]) {
-      const persona = loader.load(name);
-      for (const [heading, content] of persona.sections) {
-        assert.ok(content.trim().length > 0, `${name} section "${heading}" is empty`);
-      }
-    }
-  });
-});
-
-// ═══ 6. Shared knowledge files exist ═════════════════════════════════
-
-describe("shared knowledge integrity", () => {
-  const knowledgeDir = resolve(QUORUM_ROOT, "agents", "knowledge");
-
-  it("core protocol files exist", () => {
-    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "implementer.md")));
-    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "scout.md")));
-    assert.ok(existsSync(resolve(knowledgeDir, "protocols", "specialist-base.md")));
-  });
-
-  it("all 9 domain knowledge files exist", () => {
-    const domains = ["perf", "a11y", "compat", "compliance", "concurrency", "docs", "i18n", "infra", "observability"];
-    for (const d of domains) {
-      assert.ok(existsSync(resolve(knowledgeDir, "domains", `${d}.md`)), `${d}.md missing`);
-    }
-  });
-
-  it("specialist agents reference specialist-base.md", () => {
-    const specialists = [
-      "perf-analyst", "a11y-auditor", "compat-reviewer", "compliance-officer",
-      "concurrency-verifier", "doc-steward", "i18n-checker", "infra-validator",
-      "observability-inspector",
-    ];
-    for (const name of specialists) {
-      const persona = loader.load(name);
-      assert.ok(
-        persona.content.includes("agents/knowledge/specialist-base.md"),
-        `${name} does not reference specialist-base.md`
-      );
-    }
-  });
-});

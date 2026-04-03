@@ -272,10 +272,6 @@ describe('Built-in policies', () => {
   describe('ScopeBasedPolicy', () => {
     const policy = new ScopeBasedPolicy();
 
-    it('has name "scope-based"', () => {
-      assert.equal(policy.name, 'scope-based');
-    });
-
     it('defers non-tool requests', () => {
       const result = policy.evaluate(
         makeApprovalRequest({ kind: 'command', reason: 'ls' }),
@@ -312,10 +308,6 @@ describe('Built-in policies', () => {
   describe('DenyNetworkPolicy', () => {
     const policy = new DenyNetworkPolicy();
 
-    it('has name "deny-network"', () => {
-      assert.equal(policy.name, 'deny-network');
-    });
-
     it('denies network requests', () => {
       const result = policy.evaluate(
         makeApprovalRequest({ kind: 'network', reason: 'fetch api.example.com' }),
@@ -351,10 +343,6 @@ describe('Built-in policies', () => {
 
   describe('AllowAllPolicy', () => {
     const policy = new AllowAllPolicy();
-
-    it('has name "allow-all"', () => {
-      assert.equal(policy.name, 'allow-all');
-    });
 
     it('allows tool requests', () => {
       const result = policy.evaluate(

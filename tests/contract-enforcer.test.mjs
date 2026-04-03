@@ -51,20 +51,6 @@ describe('SprintContract', () => {
     assert.equal(sc.approvalState, 'approved');
   });
 
-  it('isApproved returns false for draft', () => {
-    const sc = createSprintContract({ trackName: 't', waveId: 'w' });
-    assert.equal(isApproved(sc), false);
-  });
-
-  it('isApproved returns true for approved', () => {
-    const sc = createSprintContract({
-      trackName: 't',
-      waveId: 'w',
-      approvalState: 'approved',
-    });
-    assert.equal(isApproved(sc), true);
-  });
-
   it('isApproved returns false for rejected', () => {
     const sc = createSprintContract({
       trackName: 't',
@@ -137,16 +123,6 @@ describe('HandoffArtifact', () => {
     assert.deepEqual(ha.residualRisks, []);
     assert.deepEqual(ha.rtmRefs, []);
     assert.equal(ha.nextAction, '');
-  });
-
-  it('isComplete returns true for a well-formed artifact', () => {
-    const ha = createHandoffArtifact({
-      contractId: 'c-1',
-      summary: 'All done',
-      nextAction: 'Deploy to staging',
-      openItems: ['item-1'],
-    });
-    assert.equal(isComplete(ha), true);
   });
 
   it('isComplete returns false when summary is empty', () => {

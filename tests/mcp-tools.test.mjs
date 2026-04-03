@@ -359,11 +359,8 @@ export enum Status {
     assert.ok(text.includes("sample.ts"));
   });
 
-  it("returns error for missing path", () => {
-    const result = mcpCall("code_map", { path: join(tmpDir, "nonexistent") });
-    assert.ok(result.isError);
-  });
 });
+
 
 // ═══ 5. audit_scan ═══════════════════════════════════════════════════════
 

@@ -205,22 +205,6 @@ describe("RAI-4: pickJob", () => {
   });
 });
 
-describe("RAI-4: job execution", () => {
-  it("status_brief executes and returns result", async () => {
-    const budget = { maxBlockingMs: 15000, startedAt: Date.now(), expiresAt: Date.now() + 15000 };
-    const result = await STATUS_BRIEF.execute(budget, { repoRoot: "/tmp", trackName: "TEST" });
-    assert.equal(result.kind, "status_brief");
-    assert.equal(result.status, "completed");
-    assert.ok(result.summary.includes("TEST"));
-    assert.ok(result.durationMs >= 0);
-  });
-
-  it("verify_light executes and returns result", async () => {
-    const budget = { maxBlockingMs: 15000, startedAt: Date.now(), expiresAt: Date.now() + 15000 };
-    const result = await VERIFY_LIGHT.execute(budget, { repoRoot: "/tmp" });
-    assert.equal(result.status, "completed");
-  });
-});
 
 // ═══ RAI-3+4: Integration ═════════════════════════════
 

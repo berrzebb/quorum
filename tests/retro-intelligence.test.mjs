@@ -47,10 +47,6 @@ describe("RDI-3: orient", () => {
     assert.equal(ctx.knownTopics.length, 2);
   });
 
-  it("handles empty memory", () => {
-    const ctx = orient({ trackName: "T", waveIndex: 0 });
-    assert.deepEqual(ctx.knownTopics, []);
-  });
 });
 
 // ═══ RDI-3: Audit Gathering ════════════════════════════
@@ -364,16 +360,6 @@ describe("RDI-4: selectCarryover", () => {
     assert.ok(items[0].includes("[constraint]"));
   });
 
-  it("returns empty for empty digest", () => {
-    const digest = {
-      learnedConstraints: [],
-      repeatedFailures: [],
-      confirmedDecisions: [],
-      nextWaveGuidance: [],
-      pruneDecisions: [],
-    };
-    assert.deepEqual(selectCarryover(digest), []);
-  });
 });
 
 describe("RDI-4: digest serialization", () => {

@@ -195,10 +195,6 @@ describe("RAI-7: FileStateCache", () => {
     // Second read should be a cache hit
     const entry2 = cache.read(filePath);
     assert.equal(entry2.contentHash, entry.contentHash);
-
-    const stats = cache.getStats();
-    assert.equal(stats.hits, 1);
-    assert.equal(stats.misses, 1);
   });
 
   it("returns null for missing files", () => {

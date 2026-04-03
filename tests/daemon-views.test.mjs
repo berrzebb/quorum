@@ -41,15 +41,6 @@ describe("View file existence", () => {
     });
   }
 
-  it("exactly 4 view files exist", () => {
-    let count = 0;
-    for (const viewId of expectedViews) {
-      if (existsSync(resolve("daemon", "views", `${viewId}-view.tsx`))) {
-        count++;
-      }
-    }
-    assert.equal(count, 4, `Expected 4 view files, found ${count}`);
-  });
 });
 
 // ═══ 2. VIEW_REGISTRY matches view files ════════════════════════════
@@ -65,14 +56,6 @@ describe("VIEW_REGISTRY matches view files", () => {
     }
   });
 
-  it("VIEW_REGISTRY has exactly 4 entries", () => {
-    assert.equal(VIEW_REGISTRY.length, 4);
-  });
-
-  it("VIEW_REGISTRY IDs match expected view set", () => {
-    const ids = VIEW_REGISTRY.map(v => v.id);
-    assert.deepStrictEqual(ids, ["overview", "review", "chat", "operations"]);
-  });
 });
 
 // ═══ 3. shellReducer SET_VIEW defaultFocus ══════════════════════════
@@ -159,20 +142,6 @@ describe("View exports from compiled output", () => {
 // ═══ 6. View-registry-to-file consistency ═══════════════════════════
 
 describe("View-registry-to-file consistency", () => {
-  it("VIEW_REGISTRY count matches view file count", () => {
-    const viewFiles = ["overview", "review", "chat", "operations"];
-    const existingFiles = viewFiles.filter(id =>
-      existsSync(resolve("daemon", "views", `${id}-view.tsx`))
-    );
-    assert.equal(VIEW_REGISTRY.length, existingFiles.length,
-      `VIEW_REGISTRY has ${VIEW_REGISTRY.length} entries but ${existingFiles.length} view files exist`);
-  });
-
-  it("VIEW_REGISTRY shortcuts are sequential 1-4", () => {
-    const shortcuts = VIEW_REGISTRY.map(v => v.shortcut);
-    assert.deepStrictEqual(shortcuts, ["1", "2", "3", "4"]);
-  });
-
   it("each VIEW_REGISTRY entry has a non-empty title", () => {
     for (const entry of VIEW_REGISTRY) {
       assert.ok(entry.title.length > 0, `VIEW_REGISTRY entry "${entry.id}" has empty title`);

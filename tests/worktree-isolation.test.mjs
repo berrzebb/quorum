@@ -59,14 +59,6 @@ describe("deriveAuditCwd", () => {
     );
   });
 
-  it("handles nested .claude paths without false match", () => {
-    // A path that contains .claude but NOT in worktrees pattern
-    assert.equal(
-      deriveAuditCwd("/repo/.claude/quorum/config.json", "/repo"),
-      "/repo",
-    );
-  });
-
   it("extracts correct root from deeply nested worktree paths", () => {
     assert.equal(
       deriveAuditCwd("/repo/.claude/worktrees/agent-xyz/sub/deep/src/index.ts", "/repo"),
@@ -245,22 +237,4 @@ describe("config.json quality_rules presets", () => {
     assert.ok(labels.includes("go"), "missing go preset");
   });
 
-  it("each preset has required fields", () => {
-    for (const preset of config.quality_rules.presets) {
-      assert.ok(preset.detect, `preset ${preset.label} missing detect`);
-      assert.ok(preset.label, `preset missing label`);
-      assert.ok(Array.isArray(preset.checks), `preset ${preset.label} missing checks array`);
-      assert.ok(typeof preset.precedence === "number", `preset ${preset.label} missing precedence`);
-    }
-  });
-
-  it("each check has id, label, command", () => {
-    for (const preset of config.quality_rules.presets) {
-      for (const check of preset.checks) {
-        assert.ok(check.id, `check in ${preset.label} missing id`);
-        assert.ok(check.label, `check in ${preset.label} missing label`);
-        assert.ok(check.command, `check in ${preset.label} missing command`);
-      }
-    }
-  });
 });

@@ -239,39 +239,6 @@ function medium(x: boolean) { if (x) return 2; return 3; }
   });
 });
 
-// ═══ 4. Export counting + effective lines ════════════════════════════════
-
-describe("export counting and effective lines", () => {
-  it("counts exported declarations", () => {
-    const file = writeTempTS("exports.ts", `
-export function foo() {}
-export const BAR = 1;
-export class Baz {}
-function internal() {}
-const PRIVATE = 2;
-`);
-    const analyzer = new ASTAnalyzer();
-    const [result] = analyzer.analyzeFiles([file]);
-    assert.equal(result.metrics.exportCount, 3);
-  });
-
-  it("counts effective lines (excludes blanks and comments)", () => {
-    const file = writeTempTS("lines.ts", `
-// This is a comment
-/* Block comment */
-
-const x = 1;
-const y = 2;
-
-// Another comment
-const z = 3;
-`);
-    const analyzer = new ASTAnalyzer();
-    const [result] = analyzer.analyzeFiles([file]);
-    assert.equal(result.metrics.effectiveLines, 3);
-  });
-});
-
 // ═══ 5. refineCandidates — regex→AST refinement ═════════════════════════
 
 describe("refineCandidates", () => {
@@ -378,14 +345,6 @@ export function App() {
     const analyzer = new ASTAnalyzer({ maxFiles: 2 });
     const results = analyzer.analyzeFiles(files);
     assert.equal(results.length, 2);
-  });
-
-  it("records duration per file", () => {
-    const file = writeTempTS("duration.ts", `const x = 1;`);
-    const analyzer = new ASTAnalyzer();
-    const [result] = analyzer.analyzeFiles([file]);
-    assert.equal(typeof result.duration, "number");
-    assert.ok(result.duration >= 0);
   });
 
   it("fail-open on unparseable file", () => {

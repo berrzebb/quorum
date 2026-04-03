@@ -547,10 +547,14 @@ export class EventStore {
     const now = Date.now();
 
     const tx = this.db.transaction(() => {
+      let prevHash = this.getLastHash();
       for (const event of events) {
         const id = randomUUID();
-        this.stmtAppend.run(...this._eventParams(id, event));
+        const payload = JSON.stringify(event.payload);
+        const hash = computeEventHash(prevHash, event.type, payload, event.timestamp);
+        this.stmtAppend.run(...this._eventParams(id, event), prevHash, hash);
         ids.push(id);
+        prevHash = hash;
       }
 
       for (const st of transitions) {

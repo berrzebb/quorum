@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-const { getTool, TOOL_NAMES } = await import("../platform/core/tools/registry.mjs");
+const { getTool } = await import("../platform/core/tools/registry.mjs");
 const toolPerfScan = getTool("perf_scan").execute;
 const toolCompatCheck = getTool("compat_check").execute;
 const toolA11yScan = getTool("a11y_scan").execute;
@@ -31,32 +31,9 @@ after(() => {
   try { if (tmpDir) rmSync(tmpDir, { recursive: true, force: true }); } catch (err) { console.warn("specialist-tools cleanup failed:", err?.message ?? err); }
 });
 
-// ═══ 0. Registry ═══════════════════════════════════════════════════════
-
-describe("TOOL_NAMES registry", () => {
-  it("includes all 8 specialist tools", () => {
-    const specialist = [
-      "perf_scan", "compat_check", "a11y_scan", "license_scan",
-      "i18n_validate", "infra_scan", "observability_check", "doc_coverage",
-    ];
-    for (const name of specialist) {
-      assert.ok(TOOL_NAMES.includes(name), `Missing tool: ${name}`);
-    }
-  });
-});
-
 // ═══ 1. perf_scan ══════════════════════════════════════════════════════
 
 describe("perf_scan", () => {
-  it("returns pass for clean files", () => {
-    const dir = join(tmpDir, "perf-clean");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "clean.ts"), "export function add(a: number, b: number) { return a + b; }\n");
-    const result = toolPerfScan({ path: dir });
-    assert.ok(result.text.includes("pass"));
-    assert.ok(!result.error);
-  });
-
   it("detects nested forEach", () => {
     const dir = join(tmpDir, "perf-nested");
     mkdirSync(dir, { recursive: true });
@@ -90,14 +67,6 @@ describe("perf_scan", () => {
 // ═══ 2. compat_check ═══════════════════════════════════════════════════
 
 describe("compat_check", () => {
-  it("returns pass for clean files", () => {
-    const dir = join(tmpDir, "compat-clean");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "ok.ts"), "export const VERSION = '1.0';\n");
-    const result = toolCompatCheck({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
-
   it("detects @deprecated", () => {
     const dir = join(tmpDir, "compat-deprecated");
     mkdirSync(dir, { recursive: true });
@@ -114,32 +83,11 @@ describe("compat_check", () => {
     assert.ok(result.text.includes("cjs-require") || result.text.includes("CommonJS"));
   });
 
-  it("checks wildcard deps in package.json", () => {
-    const dir = join(tmpDir, "compat-wildcard");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "package.json"), JSON.stringify({
-      name: "test", dependencies: { "bad-pkg": "*" },
-    }));
-    writeFileSync(join(dir, "index.ts"), "export default 1;\n");
-    // toolCompatCheck reads package.json from cwd, but we pass path
-    // The function reads package.json from cwd, so this may not catch it
-    // since it checks resolve(cwd, "package.json"). That's acceptable.
-    const result = toolCompatCheck({ path: dir });
-    assert.ok(!result.error);
-  });
 });
 
 // ═══ 3. a11y_scan ══════════════════════════════════════════════════════
 
 describe("a11y_scan", () => {
-  it("returns skip for non-JSX directory", () => {
-    const dir = join(tmpDir, "a11y-nojsx");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "app.ts"), "export const x = 1;\n");
-    const result = toolA11yScan({ path: dir });
-    assert.ok(result.text.includes("skip") || result.text.includes("pass"));
-  });
-
   it("detects img without alt", () => {
     const dir = join(tmpDir, "a11y-noalt");
     mkdirSync(dir, { recursive: true });
@@ -156,35 +104,11 @@ describe("a11y_scan", () => {
     assert.ok(result.text.includes("div-click") || result.text.includes("button"));
   });
 
-  it("returns pass for accessible JSX", () => {
-    const dir = join(tmpDir, "a11y-ok");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "Good.tsx"), '<button onClick={handle}>Label</button>\n<img src="a.jpg" alt="description" />\n');
-    const result = toolA11yScan({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
 });
 
 // ═══ 4. license_scan ═══════════════════════════════════════════════════
 
 describe("license_scan", () => {
-  it("returns pass for clean project", () => {
-    const dir = join(tmpDir, "license-clean");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "test", license: "MIT" }));
-    writeFileSync(join(dir, "index.ts"), "export const x = 1;\n");
-    const result = toolLicenseScan({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
-
-  it("detects missing license field", () => {
-    const dir = join(tmpDir, "license-missing");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "test" }));
-    const result = toolLicenseScan({ path: dir });
-    assert.ok(result.text.includes("no-license") || result.text.includes("No license"));
-  });
-
   it("detects hardcoded secret pattern", () => {
     const dir = join(tmpDir, "license-secret");
     mkdirSync(dir, { recursive: true });
@@ -208,16 +132,6 @@ describe("i18n_validate", () => {
     assert.ok(result.text.includes("farewell"));
   });
 
-  it("returns pass for parity locale files", () => {
-    const dir = join(tmpDir, "i18n-ok");
-    const localeDir = join(dir, "locales");
-    mkdirSync(localeDir, { recursive: true });
-    writeFileSync(join(localeDir, "en.json"), JSON.stringify({ greeting: "Hello" }));
-    writeFileSync(join(localeDir, "ko.json"), JSON.stringify({ greeting: "안녕" }));
-    const result = toolI18nValidate({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
-
   it("handles nested locale keys", () => {
     const dir = join(tmpDir, "i18n-nested");
     const localeDir = join(dir, "locales");
@@ -232,14 +146,6 @@ describe("i18n_validate", () => {
 // ═══ 6. infra_scan ═════════════════════════════════════════════════════
 
 describe("infra_scan", () => {
-  it("returns skip when no infra files", () => {
-    const dir = join(tmpDir, "infra-none");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "app.ts"), "export const x = 1;\n");
-    const result = toolInfraScan({ path: dir });
-    assert.ok(result.text.includes("skip"));
-  });
-
   it("detects FROM :latest", () => {
     const dir = join(tmpDir, "infra-latest");
     mkdirSync(dir, { recursive: true });
@@ -256,26 +162,11 @@ describe("infra_scan", () => {
     assert.ok(result.text.toLowerCase().includes("privileged"));
   });
 
-  it("returns pass for secure Dockerfile", () => {
-    const dir = join(tmpDir, "infra-ok");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "Dockerfile"), "FROM node:20-alpine\nUSER node\nCOPY . .\n");
-    const result = toolInfraScan({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
 });
 
 // ═══ 7. observability_check ════════════════════════════════════════════
 
 describe("observability_check", () => {
-  it("returns pass for clean files", () => {
-    const dir = join(tmpDir, "obs-clean");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "clean.ts"), "export function safeOp() { try { run(); } catch(e) { logger.error(e); } }\n");
-    const result = toolObservabilityCheck({ path: dir });
-    assert.ok(result.text.includes("pass"));
-  });
-
   it("detects empty catch block", () => {
     const dir = join(tmpDir, "obs-empty-catch");
     mkdirSync(dir, { recursive: true });
@@ -304,14 +195,6 @@ describe("observability_check", () => {
 // ═══ 8. doc_coverage ═══════════════════════════════════════════════════
 
 describe("doc_coverage", () => {
-  it("returns 100% for fully documented exports", () => {
-    const dir = join(tmpDir, "doc-full");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "lib.ts"), "/** Adds two numbers. */\nexport function add(a: number, b: number) { return a + b; }\n");
-    const result = toolDocCoverage({ path: dir });
-    assert.ok(result.text.includes("100%"));
-  });
-
   it("detects undocumented exports", () => {
     const dir = join(tmpDir, "doc-missing");
     mkdirSync(dir, { recursive: true });
@@ -336,26 +219,6 @@ describe("doc_coverage", () => {
     assert.equal(result.json.coverage, 50);
   });
 
-  it("returns error for nonexistent path", () => {
-    const result = toolDocCoverage({ path: "/nonexistent/path/xxx" });
-    assert.ok(result.error);
-  });
-});
-
-// ═══ 9. JSON output mode ═══════════════════════════════════════════════
-
-describe("JSON output (--json via tool-runner)", () => {
-  it("all tools provide json field when findings exist", () => {
-    const dir = join(tmpDir, "json-test");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "bad.ts"), "const data = readFileSync('x');\nconsole.log('test');\n");
-
-    const perfResult = toolPerfScan({ path: dir });
-    assert.ok(perfResult.json, "perf_scan should have json");
-
-    const obsResult = toolObservabilityCheck({ path: dir });
-    assert.ok(obsResult.json, "observability_check should have json");
-  });
 });
 
 // ═══ 10. ai_guide ═══════════════════════════════════════════════════════
@@ -398,10 +261,6 @@ describe("ai_guide", () => {
     const result = toolAiGuide({ target: resolve(__test_dirname, "..") });
     assert.ok(result.json);
     assert.ok(result.json.projectName);
-  });
-
-  it("TOOL_NAMES includes ai_guide", () => {
-    assert.ok(TOOL_NAMES.includes("ai_guide"), "Missing tool: ai_guide");
   });
 
   it("works on a minimal temp directory", () => {

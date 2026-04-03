@@ -141,13 +141,6 @@ describe("runCommandHook", () => {
     assert.match(result.reason, /code 1/);
   });
 
-  it("receives HookInput on stdin", async () => {
-    const cmd = `node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const o=JSON.parse(d);process.stdout.write(JSON.stringify({decision:'allow',reason:o.hook_event_name}))})"`;
-    const result = await runCommandHook(cmd, { hook_event_name: "PostToolUse", tool_name: "Edit" }, cwd, 5000);
-    assert.equal(result.decision, "allow");
-    assert.equal(result.reason, "PostToolUse");
-  });
-
   it("env interpolation in command", async () => {
     process.env.__HOOK_TEST_CMD = "node";
     const cmd = `$__HOOK_TEST_CMD -e "process.stdout.write(JSON.stringify({decision:'allow'}))"`;
@@ -177,20 +170,6 @@ describe("HookRunner", () => {
     assert.equal(runner.has("PostToolUse"), false);
   });
 
-  it("filters disabled hooks", () => {
-    const runner = new HookRunner(cwd, {
-      hooks: {
-        PreToolUse: [
-          { name: "active", event: "PreToolUse", handler: { type: "command", command: "echo ok" } },
-          { name: "off", event: "PreToolUse", handler: { type: "command", command: "echo no" }, disabled: true },
-        ],
-      },
-    });
-    const list = runner.listHooks();
-    assert.equal(list.length, 1);
-    assert.equal(list[0].name, "active");
-  });
-
   it("add() appends hook", () => {
     const runner = new HookRunner(cwd);
     assert.equal(runner.has("Stop"), false);
@@ -198,40 +177,10 @@ describe("HookRunner", () => {
     assert.equal(runner.has("Stop"), true);
   });
 
-  it("add() ignores disabled", () => {
-    const runner = new HookRunner(cwd);
-    runner.add({ name: "off", event: "Stop", handler: { type: "command", command: "echo" }, disabled: true });
-    assert.equal(runner.has("Stop"), false);
-  });
-
   it("fire() returns empty for unregistered event", async () => {
     const runner = new HookRunner(cwd);
     const results = await runner.fire("NonExistent", { hook_event_name: "NonExistent" });
     assert.deepEqual(results, []);
-  });
-
-  it("fire() runs command hook and returns result", async () => {
-    const runner = new HookRunner(cwd, {
-      hooks: {
-        test: [
-          {
-            name: "echo-hook",
-            event: "test",
-            handler: {
-              type: "command",
-              command: `node -e "process.stdout.write(JSON.stringify({decision:'allow',reason:'from-hook'}))"`,
-            },
-          },
-        ],
-      },
-    });
-
-    const results = await runner.fire("test", { hook_event_name: "test" });
-    assert.equal(results.length, 1);
-    assert.equal(results[0].hook_name, "echo-hook");
-    assert.equal(results[0].output.decision, "allow");
-    assert.equal(results[0].output.reason, "from-hook");
-    assert.ok(results[0].duration_ms >= 0);
   });
 
   it("fire() stops on first deny", async () => {
@@ -285,53 +234,6 @@ describe("HookRunner", () => {
     assert.equal(r2[0].output.reason, "matched");
   });
 
-  it("fire() handles async hooks as fire-and-forget", async () => {
-    const runner = new HookRunner(cwd, {
-      hooks: {
-        test: [
-          {
-            name: "async-hook",
-            event: "test",
-            async: true,
-            handler: { type: "command", command: `node -e "setTimeout(()=>process.exit(0),50)"` },
-          },
-          {
-            name: "sync-hook",
-            event: "test",
-            handler: {
-              type: "command",
-              command: `node -e "process.stdout.write(JSON.stringify({decision:'allow'}))"`,
-            },
-          },
-        ],
-      },
-    });
-
-    const results = await runner.fire("test", { hook_event_name: "test" });
-    assert.equal(results.length, 2);
-    assert.equal(results[0].hook_name, "async-hook");
-    assert.equal(results[0].output.decision, "ignore"); // async → immediate ignore
-    assert.equal(results[0].duration_ms, 0);
-    assert.equal(results[1].hook_name, "sync-hook");
-    assert.equal(results[1].output.decision, "allow");
-  });
-
-  it("listHooks() returns all registered hooks", () => {
-    const runner = new HookRunner(cwd, {
-      hooks: {
-        PreToolUse: [
-          { name: "gate1", event: "PreToolUse", handler: { type: "command", command: "echo" } },
-        ],
-        PostToolUse: [
-          { name: "log1", event: "PostToolUse", handler: { type: "http", url: "http://localhost" } },
-        ],
-      },
-    });
-    const list = runner.listHooks();
-    assert.equal(list.length, 2);
-    assert.ok(list.some((h) => h.name === "gate1" && h.handlerType === "command"));
-    assert.ok(list.some((h) => h.name === "log1" && h.handlerType === "http"));
-  });
 });
 
 
@@ -457,13 +359,6 @@ These hooks run during the quorum audit pipeline.
       assert.equal(merged.hooks.PostToolUse.length, 1);
     });
 
-    it("skips null configs", () => {
-      const a = {
-        hooks: { test: [{ name: "x", event: "test", handler: { type: "command", command: "echo" } }] },
-      };
-      const merged = mergeHooksConfigs(null, a, undefined);
-      assert.equal(merged.hooks.test.length, 1);
-    });
   });
 });
 

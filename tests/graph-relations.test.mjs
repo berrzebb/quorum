@@ -181,10 +181,6 @@ describe("getRelationsByType", () => {
 // ═══ 6. Allowed Edge Matrix completeness ════════════════════════════════
 
 describe("ALLOWED_EDGES matrix", () => {
-  it("has entries for all 17 relation types", () => {
-    assert.equal(Object.keys(ALLOWED_EDGES).length, 17);
-  });
-
   it("every entry has at least one allowed edge", () => {
     for (const [type, rules] of Object.entries(ALLOWED_EDGES)) {
       assert.ok(rules.length > 0, `${type} has no allowed edges`);

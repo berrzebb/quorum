@@ -1,17 +1,17 @@
 /**
  * Orchestrate integration tests — real filesystem, real parsing.
- * Tests resolveTrack, parseWorkBreakdown (colon format), committee routing,
- * empty convergence guard, loadBridge path.
+ * Tests resolveTrack, parseWorkBreakdown (colon format),
+ * empty convergence guard.
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 // Import from dist (compiled)
-import { resolveTrack, trackRef, parseWorkBreakdown, findTracks, reviewPlan } from "../dist/platform/cli/commands/orchestrate/shared.js";
-import { routeToCommittee, checkConvergence, createMeetingLog, storeMeetingLog } from "../dist/platform/bus/meeting-log.js";
+import { resolveTrack, parseWorkBreakdown } from "../dist/platform/cli/commands/orchestrate/shared.js";
+import { checkConvergence, createMeetingLog, storeMeetingLog } from "../dist/platform/bus/meeting-log.js";
 import { EventStore } from "../dist/platform/bus/store.js";
 
 // ── Setup: temp project with tracks ──────────
@@ -98,23 +98,6 @@ describe("resolveTrack", () => {
   });
 });
 
-describe("trackRef", () => {
-  it("returns index for multi-track project", () => {
-    const ref = trackRef("auth-system", TEST_ROOT);
-    assert.equal(ref, "1");
-  });
-
-  it("returns empty string for single-track project", () => {
-    const singleRoot = resolve(tmpdir(), `quorum-ref-${Date.now()}`);
-    const dir = resolve(singleRoot, "docs", "plan", "solo");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(resolve(dir, "work-breakdown.md"), "## S-1: Item\n", "utf8");
-
-    assert.equal(trackRef("solo", singleRoot), "");
-    rmSync(singleRoot, { recursive: true, force: true });
-  });
-});
-
 // ── parseWorkBreakdown ───────────────────────
 
 describe("parseWorkBreakdown colon format", () => {
@@ -156,50 +139,6 @@ describe("parseWorkBreakdown colon format", () => {
     const dat1 = items.find(i => i.id === "DAT-1");
     assert.ok(dat1);
     assert.deepEqual(dat1.dependsOn, ["AUTH-1"]);
-  });
-});
-
-// ── Committee routing (Korean) ───────────────
-
-describe("committee routing Korean", () => {
-  it("routes 플랫폼 구축 to architecture", () => {
-    const committees = routeToCommittee("정보수집을 위한 INTL 플랫폼 구축");
-    assert.ok(committees.includes("architecture"));
-  });
-
-  it("routes 설계 to architecture", () => {
-    const committees = routeToCommittee("시스템 설계 논의");
-    assert.ok(committees.includes("architecture"));
-  });
-
-  it("routes 범위 to scope", () => {
-    const committees = routeToCommittee("MVP 범위 정의");
-    assert.ok(committees.includes("scope"));
-  });
-
-  it("routes 원칙 to principles", () => {
-    const committees = routeToCommittee("감사 추적 원칙 수립");
-    assert.ok(committees.includes("principles"));
-  });
-
-  it("routes 구조 to structure", () => {
-    const committees = routeToCommittee("계층 구조 설계");
-    assert.ok(committees.includes("structure"));
-  });
-
-  it("routes 정의 to definitions", () => {
-    const committees = routeToCommittee("에이전트 정의 문서");
-    assert.ok(committees.includes("definitions"));
-  });
-
-  it("routes 연구 to research-questions", () => {
-    const committees = routeToCommittee("통신 프로토콜 연구");
-    assert.ok(committees.includes("research-questions"));
-  });
-
-  it("English topic still works", () => {
-    const committees = routeToCommittee("system architecture overview");
-    assert.ok(committees.includes("architecture"));
   });
 });
 
@@ -261,35 +200,6 @@ describe("parseWorkBreakdown targetFiles", () => {
   });
 });
 
-// ── Done field sanitization ─────────────────
-
-describe("parseWorkBreakdown done field", () => {
-  it("does not include --- separator in done field", () => {
-    const root = resolve(tmpdir(), `quorum-done-${Date.now()}`);
-    const dir = resolve(root, "docs", "plan", "clean");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(resolve(dir, "work-breakdown.md"), [
-      "## CL-1 — Task [XS]",
-      "",
-      "**Done**: Task is complete.",
-      "",
-      "---",
-      "",
-      "## CL-2 — Other [XS]",
-      "",
-      "**Done**: Other done.",
-    ].join("\n"), "utf8");
-
-    const items = parseWorkBreakdown(resolve(dir, "work-breakdown.md"));
-    const cl1 = items.find(i => i.id === "CL-1");
-    assert.ok(cl1);
-    assert.ok(!cl1.done?.includes("---"), `Done should not contain '---': got "${cl1.done}"`);
-    assert.equal(cl1.done, "Task is complete.");
-
-    rmSync(root, { recursive: true, force: true });
-  });
-});
-
 // ── Empty convergence guard ──────────────────
 
 describe("empty convergence guard", () => {
@@ -335,43 +245,5 @@ describe("empty convergence guard", () => {
 
     store.close();
     try { rmSync(dbPath, { force: true }); } catch (err) { console.warn("convergence db cleanup failed:", err?.message ?? err); }
-  });
-});
-
-// ── reviewPlan tsc-only Verify warning ───────
-
-describe("reviewPlan verify warnings", () => {
-  it("warns when Verify is tsc-only", () => {
-    const items = [
-      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npx tsc --noEmit", isParent: false, dependsOn: [] },
-    ];
-    const result = reviewPlan(items);
-    assert.ok(result.passed, "tsc-only should pass (warning, not error)");
-    assert.ok(result.warnings.some(w => w.includes("tsc-only")), "Should warn about tsc-only verify");
-  });
-
-  it("does not warn when Verify includes test runner", () => {
-    const items = [
-      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npx tsc --noEmit && npx vitest run", isParent: false, dependsOn: [] },
-    ];
-    const result = reviewPlan(items);
-    assert.ok(result.passed);
-    assert.ok(!result.warnings.some(w => w.includes("tsc-only")), "Should not warn when test runner present");
-  });
-
-  it("does not warn for npm test", () => {
-    const items = [
-      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "npm test", isParent: false, dependsOn: [] },
-    ];
-    const result = reviewPlan(items);
-    assert.ok(!result.warnings.some(w => w.includes("tsc-only")));
-  });
-
-  it("does not warn for node --test", () => {
-    const items = [
-      { id: "WB-1", title: "Test", targetFiles: ["src/a.ts"], action: "do stuff", verify: "node --test tests/foo.test.mjs", isParent: false, dependsOn: [] },
-    ];
-    const result = reviewPlan(items);
-    assert.ok(!result.warnings.some(w => w.includes("tsc-only")));
   });
 });

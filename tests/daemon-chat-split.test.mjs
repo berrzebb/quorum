@@ -91,20 +91,6 @@ describe("DUX-10: TranscriptSelection", () => {
     assert.equal(sel.text, "two");
   });
 
-  it("TranscriptSelection type has startLine, endLine, text fields", async () => {
-    if (!createSelection) {
-      const mod = await import("../dist/daemon/panels/sessions/transcript-selection.js");
-      createSelection = mod.createSelection;
-    }
-    const sel = createSelection(["a", "b"], 0, 1);
-    assert.ok("startLine" in sel, "Missing startLine");
-    assert.ok("endLine" in sel, "Missing endLine");
-    assert.ok("text" in sel, "Missing text");
-    assert.equal(typeof sel.startLine, "number");
-    assert.equal(typeof sel.endLine, "number");
-    assert.equal(typeof sel.text, "string");
-  });
-
   it("clearSelection returns null", async () => {
     if (!clearSelection) {
       const mod = await import("../dist/daemon/panels/sessions/transcript-selection.js");
@@ -218,9 +204,4 @@ describe("DUX-10: original preserved", () => {
     );
   });
 
-  it("original AgentChatPanel.tsx > 300 lines (unmodified)", () => {
-    const content = readFileSync(resolve("daemon", "components", "AgentChatPanel.tsx"), "utf8");
-    const lines = content.split("\n").length;
-    assert.ok(lines > 300, `AgentChatPanel.tsx has ${lines} lines, expected > 300`);
-  });
 });

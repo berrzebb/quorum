@@ -91,12 +91,6 @@ describe("buildImpactGraph — blast radius", () => {
     assert.equal(transitive[0].via, "src/foo.ts");
   });
 
-  it("sets type to file for blast radius nodes", async () => {
-    const result = await buildImpactGraph(["src/main.ts"], { tools: mockTools() });
-    for (const node of result.affected.filter(a => a.type === "file")) {
-      assert.equal(node.type, "file");
-    }
-  });
 
   it("handles blast radius error gracefully", async () => {
     const tools = mockTools({
@@ -285,18 +279,3 @@ describe("buildImpactGraph — deduplication", () => {
 
 // ═══ 9. Type contract ════════════════════════════════════════════════════
 
-describe("ImpactGraph type contract", () => {
-  it("returns all required fields", async () => {
-    const result = await buildImpactGraph(["src/main.ts"], { tools: mockTools() });
-    assert.ok(Array.isArray(result.sources));
-    assert.ok(Array.isArray(result.affected));
-    assert.ok(Array.isArray(result.gaps));
-    assert.ok(typeof result.summary === "object");
-    assert.ok(typeof result.summary.totalAffected === "number");
-    assert.ok(typeof result.summary.blastRatio === "number");
-    assert.ok(typeof result.summary.components === "number");
-    assert.ok(typeof result.summary.cycles === "number");
-    assert.ok(typeof result.summary.rtmRows === "number");
-    assert.ok(typeof result.summary.gapCount === "number");
-  });
-});

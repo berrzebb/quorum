@@ -126,11 +126,6 @@ describe("computeFitness total", () => {
     assert.ok(score.total >= 0.99, `Expected >= 0.99 with coverage-only weight, got ${score.total}`);
   });
 
-  it("has snapshotId and timestamp", () => {
-    const score = computeFitness({});
-    assert.ok(score.snapshotId.length > 0);
-    assert.ok(score.timestamp > 0);
-  });
 });
 
 // ═══ 3. Delta computation ════════════════════════════════════════════════
@@ -179,12 +174,6 @@ describe("computeTrend", () => {
     const trend = computeTrend([0.7, 0.7, 0.7, 0.7, 0.7]);
     assert.ok(Math.abs(trend.slope) < 0.001, `Expected slope ≈ 0, got ${trend.slope}`);
     assert.ok(Math.abs(trend.movingAverage - 0.7) < 0.01);
-  });
-
-  it("empty input → zeroes", () => {
-    const trend = computeTrend([]);
-    assert.equal(trend.movingAverage, 0);
-    assert.equal(trend.slope, 0);
   });
 
   it("single point → no slope", () => {

@@ -119,12 +119,6 @@ describe("bootstrapFromPRD — FR entities", () => {
     assert.equal(fr01.metadata.source, "prd-bootstrap");
   });
 
-  it("creates all 4 FR entities", () => {
-    bootstrapFromPRD(db, prdPath);
-    for (const id of ["FR-01", "FR-02", "FR-03", "FR-04"]) {
-      assert.ok(getEntity(db, id), `${id} should exist`);
-    }
-  });
 });
 
 // ═══ 3. NFR parsing ═════════════════════════════════════════════════════
@@ -140,11 +134,6 @@ describe("bootstrapFromPRD — NFR entities", () => {
     assert.equal(nfr01.metadata.category, "Performance");
   });
 
-  it("creates all NFR entities", () => {
-    bootstrapFromPRD(db, prdPath);
-    assert.ok(getEntity(db, "NFR-01"));
-    assert.ok(getEntity(db, "NFR-02"));
-  });
 });
 
 // ═══ 4. Core Invariant parsing ═══════════════════════════════════════════

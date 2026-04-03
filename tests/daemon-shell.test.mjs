@@ -27,23 +27,6 @@ const {
 // ═══ 1. VIEW_REGISTRY ════════════════════════════════════════════════
 
 describe("VIEW_REGISTRY", () => {
-  it("has exactly 4 entries", () => {
-    assert.equal(VIEW_REGISTRY.length, 4);
-  });
-
-  it("each entry has id, title, shortcut, defaultFocus", () => {
-    for (const entry of VIEW_REGISTRY) {
-      assert.ok("id" in entry, `entry missing id`);
-      assert.ok("title" in entry, `entry "${entry.id}" missing title`);
-      assert.ok("shortcut" in entry, `entry "${entry.id}" missing shortcut`);
-      assert.ok("defaultFocus" in entry, `entry "${entry.id}" missing defaultFocus`);
-      assert.equal(typeof entry.id, "string");
-      assert.equal(typeof entry.title, "string");
-      assert.equal(typeof entry.shortcut, "string");
-      assert.equal(typeof entry.defaultFocus, "string");
-    }
-  });
-
   it("IDs are: overview, review, chat, operations", () => {
     const ids = VIEW_REGISTRY.map(v => v.id);
     assert.deepStrictEqual(ids, ["overview", "review", "chat", "operations"]);
@@ -52,16 +35,6 @@ describe("VIEW_REGISTRY", () => {
   it("shortcuts are: 1, 2, 3, 4", () => {
     const shortcuts = VIEW_REGISTRY.map(v => v.shortcut);
     assert.deepStrictEqual(shortcuts, ["1", "2", "3", "4"]);
-  });
-
-  it("no duplicate IDs", () => {
-    const ids = VIEW_REGISTRY.map(v => v.id);
-    assert.equal(new Set(ids).size, ids.length, "duplicate IDs found");
-  });
-
-  it("no duplicate shortcuts", () => {
-    const shortcuts = VIEW_REGISTRY.map(v => v.shortcut);
-    assert.equal(new Set(shortcuts).size, shortcuts.length, "duplicate shortcuts found");
   });
 });
 

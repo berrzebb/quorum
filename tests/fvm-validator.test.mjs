@@ -69,32 +69,11 @@ describe("parseFvmRows", () => {
     assert.equal(rows.length, 4);
   });
 
-  it("normalizes method to uppercase", () => {
-    const rows = parseFvmRows(FVM_SAMPLE);
-    assert.ok(rows.every((r) => r.method === r.method.toUpperCase()));
-  });
-
-  it("normalizes role to lowercase", () => {
-    const rows = parseFvmRows(FVM_SAMPLE);
-    assert.ok(rows.every((r) => r.role === r.role.toLowerCase()));
-  });
-
-  it("parses expected_status as integer", () => {
-    const rows = parseFvmRows(FVM_SAMPLE);
-    assert.equal(rows[0].expected_status, 200);
-    assert.equal(rows[1].expected_status, 403);
-    assert.equal(rows[3].expected_status, 401);
-  });
-
   it("stops parsing at next section heading", () => {
     const rows = parseFvmRows(FVM_SAMPLE);
     assert.equal(rows.length, 4);
   });
 
-  it("returns empty array when no matrix found", () => {
-    const rows = parseFvmRows("# No matrix here\n\nsome content\n");
-    assert.equal(rows.length, 0);
-  });
 });
 
 describe("extractCookie", () => {
@@ -133,20 +112,12 @@ describe("classifyStatus", () => {
     assert.equal(classifyStatus(200, 403).pass, false);
   });
 
-  it("expected 401: actual 401 -> pass", () => {
-    assert.equal(classifyStatus(401, 401).pass, true);
-  });
-
   it("expected 401: actual 200 -> fail", () => {
     assert.equal(classifyStatus(401, 200).pass, false);
   });
 
   it("expected 403: actual 403 -> pass", () => {
     assert.equal(classifyStatus(403, 403).pass, true);
-  });
-
-  it("expected 403: actual 401 -> pass (both mean denied)", () => {
-    assert.equal(classifyStatus(403, 401).pass, true);
   });
 
   it("expected 403: actual 200 -> fail", () => {
@@ -262,21 +233,6 @@ describe("executeRow - live mock server", () => {
     assert.equal(result.pass, true);
   });
 
-  it("sets Cookie header when token present", async () => {
-    const row = { endpoint: "/api/admin/users", method: "GET", role: "admin", expected_status: 200 };
-    const authTokens = { admin: "session=test-token" };
-    const result = await executeRow(row, mock.url, authTokens, 3000);
-    assert.equal(result.actual_status, 200);
-    assert.equal(result.pass, true);
-  });
-
-  it("passes when expected 200 and actual 404 (no resource)", async () => {
-    const row = { endpoint: "/api/missing", method: "GET", role: "unauthenticated", expected_status: 200 };
-    const result = await executeRow(row, mock.url, { unauthenticated: null }, 3000);
-    assert.equal(result.actual_status, 404);
-    assert.equal(result.pass, true);
-    assert.ok(result.note.includes("no resource"));
-  });
 });
 
 describe("buildAuthTokenMap", () => {

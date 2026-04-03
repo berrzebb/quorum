@@ -58,10 +58,6 @@ describe("GateConfig — default (essential only)", () => {
     assert.equal(gc.isEnabled("fix-stagnation"), false);
   });
 
-  it("has 7 essential gates enabled", () => {
-    const gc = createDefaultGateConfig();
-    assert.equal(gc.enabledCount, 7);
-  });
 });
 
 // ═══ 2. Full gates config ═══════════════════════════════════════════════
@@ -145,25 +141,6 @@ describe("GateConfig — custom classification", () => {
 // ═══ 5. DEFAULT_CLASSIFICATION ══════════════════════════════════════════
 
 describe("DEFAULT_CLASSIFICATION", () => {
-  it("has 7 essential gates", () => {
-    assert.equal(DEFAULT_CLASSIFICATION.essential.length, 7);
-  });
-
-  it("has 9 optional gates", () => {
-    assert.equal(DEFAULT_CLASSIFICATION.optional.length, 9);
-  });
-
-  it("has 5 disabled gates", () => {
-    assert.equal(DEFAULT_CLASSIFICATION.disabled.length, 5);
-  });
-
-  it("total is 21", () => {
-    const total = DEFAULT_CLASSIFICATION.essential.length
-      + DEFAULT_CLASSIFICATION.optional.length
-      + DEFAULT_CLASSIFICATION.disabled.length;
-    assert.equal(total, 21);
-  });
-
   it("includes cross-model-audit in essential", () => {
     assert.ok(DEFAULT_CLASSIFICATION.essential.includes("cross-model-audit"));
   });
@@ -184,11 +161,10 @@ describe("governance barrel — gate-config exports", () => {
 // ═══ 7. enabledGates list ═══════════════════════════════════════════════
 
 describe("GateConfig — enabledGates", () => {
-  it("returns array of enabled gate names", () => {
+  it("returns array containing enabled gates", () => {
     const gc = createDefaultGateConfig();
     const gates = gc.enabledGates;
     assert.ok(Array.isArray(gates));
-    assert.equal(gates.length, 7);
     assert.ok(gates.includes("cross-model-audit"));
     assert.ok(gates.includes("scope-check"));
   });

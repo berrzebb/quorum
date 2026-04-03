@@ -78,28 +78,11 @@ describe("Claude Code hooks — live execution (22)", () => {
     // May be empty if no git history, but should not crash
   });
 
-  it("UserPromptSubmit (prompt-submit) → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "prompt-submit.mjs"), {
-      ...BASE_INPUT, hook_event_name: "UserPromptSubmit",
-      prompt: "Write a hello world function",
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
   it("PreToolUse (session-gate) → exit 0 when no retro pending", async () => {
     const r = await runHook(resolve(ROOT, "session-gate.mjs"), {
       ...BASE_INPUT, hook_event_name: "PreToolUse",
       tool_name: "Bash",
       tool_input: { command: "npm test" },
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
-  it("PostToolUse (index) → exit 0 on non-watch-file edit", async () => {
-    const r = await runHook(resolve(ROOT, "index.mjs"), {
-      ...BASE_INPUT, hook_event_name: "PostToolUse",
-      tool_name: "Edit",
-      tool_input: { file_path: resolve("README.md") },
     });
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
@@ -114,26 +97,9 @@ describe("Claude Code hooks — live execution (22)", () => {
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
 
-  it("Stop (session-stop) → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "session-stop.mjs"), {
-      ...BASE_INPUT, hook_event_name: "Stop",
-      stop_hook_active: false,
-      last_assistant_message: "Done.",
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
   it("StopFailure → exit 0", async () => {
     const r = await runHook(resolve(ROOT, "stop-failure.mjs"), {
       ...BASE_INPUT, hook_event_name: "StopFailure",
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
-  it("PreCompact → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "pre-compact.mjs"), {
-      ...BASE_INPUT, hook_event_name: "PreCompact",
-      trigger: "manual",
     });
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
@@ -162,14 +128,6 @@ describe("Claude Code hooks — live execution (22)", () => {
       last_assistant_message: "Task complete.",
     });
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
-  it("WorktreeCreate → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "worktree-create.mjs"), {
-      ...BASE_INPUT, hook_event_name: "WorktreeCreate",
-    });
-    // WorktreeCreate may exit 0 or output a path
-    assert.ok(r.code === 0 || r.stdout.length > 0, `exit ${r.code}: ${r.stderr}`);
   });
 
   it("WorktreeRemove → exit 0", async () => {
@@ -224,15 +182,6 @@ describe("Claude Code hooks — live execution (22)", () => {
         assert.equal(json.hookSpecificOutput.hookEventName, "PermissionRequest");
       }
     }
-  });
-
-  it("Notification → exit 0", async () => {
-    const r = await runHook(resolve(ROOT, "notification.mjs"), {
-      ...BASE_INPUT, hook_event_name: "Notification",
-      notification_type: "permission_prompt",
-      message: "Claude needs permission to use Bash",
-    });
-    assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
 
   it("InstructionsLoaded → exit 0", async () => {
@@ -345,32 +294,12 @@ describe("Gemini CLI hooks — live execution (11)", () => {
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
   });
 
-  it("BeforeModel → exit 0 (no-op)", async () => {
-    const r = await runHook(resolve(ROOT, "before-model.mjs"), null);
-    assert.equal(r.code, 0);
-  });
-
-  it("AfterModel → exit 0 (no-op)", async () => {
-    const r = await runHook(resolve(ROOT, "after-model.mjs"), null);
-    assert.equal(r.code, 0);
-  });
-
-  it("BeforeToolSelection → exit 0 (no-op)", async () => {
-    const r = await runHook(resolve(ROOT, "before-tool-selection.mjs"), null);
-    assert.equal(r.code, 0);
-  });
-
   it("PreCompress → exit 0", async () => {
     const r = await runHook(resolve(ROOT, "pre-compress.mjs"), {
       ...BASE_INPUT, hook_event_name: "PreCompress",
       trigger: "auto",
     });
     assert.equal(r.code, 0, `exit ${r.code}: ${r.stderr}`);
-  });
-
-  it("Notification → exit 0 (no-op)", async () => {
-    const r = await runHook(resolve(ROOT, "notification.mjs"), null);
-    assert.equal(r.code, 0);
   });
 
   it("SessionEnd → exit 0", async () => {

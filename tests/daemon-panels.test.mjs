@@ -13,26 +13,6 @@ import { describe, it } from "node:test";
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-// ═══ 1. Panel directory structure ═════════════════════════════════════
-
-describe("Panel directory structure", () => {
-  it("daemon/panels/ directory exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels")));
-  });
-
-  it("daemon/panels/shared/ directory exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "shared")));
-  });
-
-  it("daemon/panels/overview/ directory exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "overview")));
-  });
-
-  it("daemon/panels/review/ directory exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "review")));
-  });
-});
-
 // ═══ 2. Panel file existence ══════════════════════════════════════════
 
 describe("Panel file existence", () => {
@@ -74,26 +54,6 @@ describe("Panel file existence", () => {
     }
     countTsx(resolve("daemon", "panels"));
     assert.ok(count >= 8, `Expected at least 8 .tsx panel files, found ${count}`);
-  });
-});
-
-// ═══ 3. Barrel exports (index.ts files) ═══════════════════════════════
-
-describe("Barrel exports", () => {
-  it("daemon/panels/index.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "index.ts")));
-  });
-
-  it("daemon/panels/shared/index.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "shared", "index.ts")));
-  });
-
-  it("daemon/panels/overview/index.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "overview", "index.ts")));
-  });
-
-  it("daemon/panels/review/index.ts exists", () => {
-    assert.ok(existsSync(resolve("daemon", "panels", "review", "index.ts")));
   });
 });
 

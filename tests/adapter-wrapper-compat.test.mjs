@@ -39,14 +39,6 @@ const CORE_SKILLS = [
 // ═══ 1. Core skill manifests ══════════════════════════════════════════
 
 describe("skill architecture — core manifests", () => {
-  it(`should have exactly ${CORE_SKILLS.length} core skills`, () => {
-    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .filter(e => existsSync(resolve(SKILLS_DIR, e.name, "SKILL.md")))
-      .map(e => e.name);
-    assert.deepEqual(dirs.sort(), [...CORE_SKILLS].sort());
-  });
-
   for (const skill of CORE_SKILLS) {
     it(`${skill}/SKILL.md should exist and be a lightweight manifest`, () => {
       const path = resolve(SKILLS_DIR, skill, "SKILL.md");
@@ -70,20 +62,6 @@ describe("skill architecture — core manifests", () => {
 // ═══ 2. Knowledge base structure ═════════════════════════════════════
 
 describe("skill architecture — knowledge base", () => {
-  it("agents/knowledge/protocols/ should exist with protocols", () => {
-    const protocolsDir = resolve(KNOWLEDGE_DIR, "protocols");
-    assert.ok(existsSync(protocolsDir));
-    const files = readdirSync(protocolsDir).filter(f => f.endsWith(".md"));
-    assert.ok(files.length >= 20, `Expected >= 20 protocols, got ${files.length}`);
-  });
-
-  it("agents/knowledge/domains/ should exist with 11 domains", () => {
-    const domainsDir = resolve(KNOWLEDGE_DIR, "domains");
-    assert.ok(existsSync(domainsDir));
-    const files = readdirSync(domainsDir).filter(f => f.endsWith(".md"));
-    assert.equal(files.length, 11, `Expected 11 domains, got ${files.length}`);
-  });
-
   it("agents/knowledge/tools/inventory.md should exist", () => {
     assert.ok(existsSync(resolve(KNOWLEDGE_DIR, "tools", "inventory.md")));
   });

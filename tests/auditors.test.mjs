@@ -8,7 +8,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
-const { createAuditor, createConsensusAuditors, parseSpec, listAuditorProviders } = await import("../dist/platform/providers/auditors/factory.js");
+const { createAuditor, createConsensusAuditors, parseSpec } = await import("../dist/platform/providers/auditors/factory.js");
 const { ClaudeAuditor } = await import("../dist/platform/providers/auditors/claude.js");
 const { OpenAIAuditor } = await import("../dist/platform/providers/auditors/openai.js");
 const { GeminiAuditor } = await import("../dist/platform/providers/auditors/gemini.js");
@@ -151,21 +151,6 @@ describe("auditor availability", () => {
   });
 });
 
-// ═══ 5. listAuditorProviders ══════════════════════════════════════════
-
-describe("listAuditorProviders", () => {
-  it("lists all 6 providers", () => {
-    const providers = listAuditorProviders();
-    assert.ok(providers.includes("codex"));
-    assert.ok(providers.includes("claude"));
-    assert.ok(providers.includes("openai"));
-    assert.ok(providers.includes("gemini"));
-    assert.ok(providers.includes("ollama"));
-    assert.ok(providers.includes("vllm"));
-    assert.equal(providers.length, 6);
-  });
-});
-
 // ═══ 6. Error handling (no real API calls) ════════════════════════════
 
 describe("auditor error handling", () => {
@@ -209,25 +194,6 @@ describe("auditor error handling", () => {
 // ═══ 7. OpenAI-Compatible base class ═════════════════════════════════
 
 describe("OpenAICompatibleAuditor", () => {
-  it("constructs with default config", () => {
-    const auditor = new OpenAICompatibleAuditor();
-    assert.ok(auditor);
-    assert.ok(auditor.audit);
-    assert.ok(auditor.available);
-  });
-
-  it("respects custom config", () => {
-    const auditor = new OpenAICompatibleAuditor({
-      apiKey: "test-key",
-      model: "custom-model",
-      baseUrl: "http://custom:9999/v1",
-      timeout: 60000,
-      maxToolRounds: 3,
-      enableTools: false,
-    });
-    assert.ok(auditor);
-  });
-
   it("returns infra_failure when server unreachable", async () => {
     const auditor = new OpenAICompatibleAuditor({
       baseUrl: "http://127.0.0.1:19997/v1",

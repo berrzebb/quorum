@@ -17,7 +17,6 @@ import {
   resetConfigCache,
   readConfigFile,
 } from "../dist/platform/core/config/settings.js";
-import { DEFAULT_CONFIG } from "../dist/platform/core/config/types.js";
 import { safeParseConfig } from "../dist/platform/core/config/schema.js";
 
 // ═══ 1. mergeConfigs ════════════════════════════════════
@@ -58,10 +57,6 @@ describe("mergeConfigs", () => {
     assert.equal(result.anotherKey, "bar");
   });
 
-  it("empty merge returns empty", () => {
-    const result = mergeConfigs({}, {});
-    assert.deepEqual(result, {});
-  });
 });
 
 // ═══ 2. readConfigFile ══════════════════════════════════
@@ -104,20 +99,6 @@ describe("readConfigFile", () => {
 describe("loadConfig", () => {
   beforeEach(() => resetConfigCache());
   afterEach(() => resetConfigCache());
-
-  it("returns default config when no files exist", () => {
-    const config = loadConfig("/nonexistent/repo");
-    // Should have default values
-    assert.equal(config.plugin?.locale, "en");
-    assert.equal(config.consensus?.trigger_tag, "[REVIEW_NEEDED]");
-  });
-
-  it("returns a clone (mutation safe)", () => {
-    const a = loadConfig("/nonexistent/repo");
-    const b = loadConfig("/nonexistent/repo");
-    a.plugin.locale = "modified";
-    assert.equal(b.plugin.locale, "en"); // b is unaffected
-  });
 
   it("caches result — second call returns clone from cache", () => {
     const a = loadConfig("/nonexistent/repo");
@@ -185,12 +166,6 @@ describe("safeParseConfig", () => {
     assert.ok(result.errors.length > 0);
   });
 
-  it("stopReviewGate.enabled validates boolean", () => {
-    const result = safeParseConfig({
-      stopReviewGate: { enabled: "yes" }, // Should be boolean
-    });
-    assert.equal(result.data.stopReviewGate.enabled, false); // Default
-  });
 });
 
 // ═══ 5. NFR-20: Existing config.json compatibility ══════

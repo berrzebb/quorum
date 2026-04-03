@@ -17,27 +17,12 @@ const MOD_PATH = "../dist/daemon/panels/sessions/git-state.js";
 // ═══ 1. emptyGitSnapshot ════════════════════════════════════════════
 
 describe("DUX-12: emptyGitSnapshot", () => {
-  it("returns empty commits array", async () => {
+  it("returns empty arrays and zero offsets", async () => {
     const { emptyGitSnapshot } = await import(MOD_PATH);
     const snap = emptyGitSnapshot();
     assert.deepStrictEqual(snap.commits, []);
-  });
-
-  it("returns empty changedFiles array", async () => {
-    const { emptyGitSnapshot } = await import(MOD_PATH);
-    const snap = emptyGitSnapshot();
     assert.deepStrictEqual(snap.changedFiles, []);
-  });
-
-  it("commitScrollOffset is 0", async () => {
-    const { emptyGitSnapshot } = await import(MOD_PATH);
-    const snap = emptyGitSnapshot();
     assert.equal(snap.commitScrollOffset, 0);
-  });
-
-  it("filesScrollOffset is 0", async () => {
-    const { emptyGitSnapshot } = await import(MOD_PATH);
-    const snap = emptyGitSnapshot();
     assert.equal(snap.filesScrollOffset, 0);
   });
 });

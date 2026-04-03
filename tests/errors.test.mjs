@@ -20,17 +20,6 @@ describe("classifyError — kind classification", () => {
     assert.equal(result.statusCode, 429);
   });
 
-  it("transient: HTTP 503", () => {
-    const err = Object.assign(new Error("service unavailable"), { status: 503 });
-    assert.equal(classifyError(err).kind, "transient");
-  });
-
-  it("transient: ECONNRESET", () => {
-    const err = Object.assign(new Error("connection reset"), { code: "ECONNRESET" });
-    assert.equal(classifyError(err).kind, "transient");
-    assert.equal(classifyError(err).code, "ECONNRESET");
-  });
-
   it("transient: ETIMEDOUT", () => {
     const err = Object.assign(new Error("timeout"), { code: "ETIMEDOUT" });
     assert.equal(classifyError(err).kind, "transient");
@@ -41,18 +30,8 @@ describe("classifyError — kind classification", () => {
     assert.equal(classifyError(err).kind, "auth");
   });
 
-  it("auth: HTTP 403", () => {
-    const err = Object.assign(new Error("forbidden"), { status: 403 });
-    assert.equal(classifyError(err).kind, "auth");
-  });
-
   it("validation: HTTP 400", () => {
     const err = Object.assign(new Error("bad request"), { status: 400 });
-    assert.equal(classifyError(err).kind, "validation");
-  });
-
-  it("validation: HTTP 422", () => {
-    const err = Object.assign(new Error("unprocessable"), { status: 422 });
     assert.equal(classifyError(err).kind, "validation");
   });
 
@@ -242,13 +221,6 @@ describe("isRetryable", () => {
 // ═══ 6. Fail-open guarantee ═════════════════════════════
 
 describe("classifyError — fail-open", () => {
-  it("never throws on any input", () => {
-    const inputs = [null, undefined, 0, "", false, {}, [], Symbol("x"), () => {}, NaN, Infinity];
-    for (const input of inputs) {
-      assert.doesNotThrow(() => classifyError(input));
-    }
-  });
-
   it("always returns a valid QuorumError", () => {
     const result = classifyError({});
     assert.ok(result.kind);

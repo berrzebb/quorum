@@ -31,7 +31,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try { rmSync(testDir, { recursive: true, force: true }); } catch { /* ok */ }
+  try {
+    if (testDir) rmSync(testDir, { recursive: true, force: true });
+  } catch { /* ok */ }
 });
 
 // ═══ Lock Acquire ══════════════════════════════════════

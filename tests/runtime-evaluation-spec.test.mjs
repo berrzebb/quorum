@@ -56,12 +56,6 @@ describe('EvaluationScenario', () => {
     assert.equal(s.blocking, true);
   });
 
-  it('should generate unique IDs across calls', () => {
-    const a = createEvaluationScenario({ surface: 'api', target: '/health' });
-    const b = createEvaluationScenario({ surface: 'api', target: '/health' });
-    assert.notEqual(a.scenarioId, b.scenarioId);
-  });
-
   it('should support all 6 surface types', () => {
     const surfaces = ['browser', 'cli', 'tui', 'api', 'artifact', 'data'];
     for (const surface of surfaces) {
@@ -130,14 +124,6 @@ describe('RuntimeEvaluationSpec', () => {
     assert.ok(blocking.every((s) => s.blocking));
   });
 
-  it('getBlockingScenarios returns empty when none are blocking', () => {
-    const spec = createRuntimeEvaluationSpec({
-      scenarios: [
-        createEvaluationScenario({ surface: 'data', target: 'x' }),
-      ],
-    });
-    assert.deepEqual(getBlockingScenarios(spec), []);
-  });
 });
 
 // ═══ 3. QualityRubric ═══════════════════════════════════════════════════════

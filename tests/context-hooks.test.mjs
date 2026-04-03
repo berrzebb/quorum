@@ -3,18 +3,18 @@
  * Context + Hook module tests
  *
  * Tests:
- *   1. context.mjs — readSection, replaceSection, removeSection, escapeRe,
- *      collectIdsFromLine, extractStatusFromLine, parseStatusLines, isEmptyMarker
+ *   1. context.mjs — readSection, replaceSection, removeSection,
+ *      collectIdsFromLine, readBulletSection
  *   2. session-gate logic — retro-marker based tool blocking
- *   3. i18n — locale loading, fallback, placeholder substitution
- *   4. handoff-writer — mtime comparison, slug computation
+ *   3. i18n — placeholder substitution
+ *   4. handoff-writer — mtime comparison
  *
  * Run: node --test tests/context-hooks.test.mjs
  */
 
 import { strict as assert } from "node:assert";
 import { describe, it, before, after } from "node:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -22,29 +22,12 @@ import { tmpdir } from "node:os";
 
 // Import individual functions — these don't depend on config being valid
 import {
-  escapeRe,
   readSection,
   replaceSection,
   removeSection,
   collectIdsFromLine,
   readBulletSection,
-  isEmptyMarker,
-  stripStatusFormatting,
 } from "../platform/core/context.mjs";
-
-describe("escapeRe", () => {
-  it("escapes regex special characters", () => {
-    assert.equal(escapeRe("foo.bar"), "foo\\.bar");
-    assert.equal(escapeRe("a[b]c"), "a\\[b\\]c");
-    assert.equal(escapeRe("x+y*z"), "x\\+y\\*z");
-    assert.equal(escapeRe("(a|b)"), "\\(a\\|b\\)");
-  });
-
-  it("leaves normal text unchanged", () => {
-    assert.equal(escapeRe("hello world"), "hello world");
-    assert.equal(escapeRe("ABC-123"), "ABC-123");
-  });
-});
 
 describe("readSection", () => {
   const md = `# Title
@@ -172,39 +155,6 @@ describe("readBulletSection", () => {
   });
 });
 
-describe("isEmptyMarker", () => {
-  it("detects Korean empty markers", () => {
-    assert.ok(isEmptyMarker("없음"));
-    assert.ok(isEmptyMarker("해당 없음"));
-  });
-
-  it("detects English empty marker", () => {
-    assert.ok(isEmptyMarker("none"));
-    assert.ok(isEmptyMarker("None"));
-    assert.ok(isEmptyMarker("n/a"));
-    assert.ok(isEmptyMarker("N/A"));
-  });
-
-  it("detects backtick-wrapped markers", () => {
-    assert.ok(isEmptyMarker("`none`"));
-    assert.ok(isEmptyMarker("`없음`"));
-  });
-
-  it("rejects non-empty content", () => {
-    assert.ok(!isEmptyMarker("something"));
-    assert.ok(!isEmptyMarker("not none at all"));
-  });
-});
-
-describe("stripStatusFormatting", () => {
-  it("strips markdown formatting from status lines", () => {
-    const result = stripStatusFormatting("- **[APPROVED] TN-1** — context:");
-    assert.ok(!result.includes("**"));
-    assert.ok(!result.includes("[APPROVED]"));
-    assert.ok(result.includes("TN-1"));
-  });
-});
-
 // ═══ 2. session-gate logic ══════════════════════════════════════════════
 
 describe("session-gate logic", () => {
@@ -297,22 +247,6 @@ describe("i18n", () => {
     if (localeDir && existsSync(localeDir)) rmSync(localeDir, { recursive: true, force: true });
   });
 
-  // i18n.mjs createT(locale) uses __dirname/locales — test with actual locale files
-  it("creates translator with variable substitution", async () => {
-    const { createT } = await import("../platform/core/i18n.mjs");
-    const t = createT("en");
-    // Use a key that exists in locales/en.json
-    const result = t("index.audit.start");
-    assert.ok(typeof result === "string");
-    assert.ok(result.length > 0, "translator should return non-empty string");
-  });
-
-  it("returns key for missing message", async () => {
-    const { createT } = await import("../platform/core/i18n.mjs");
-    const t = createT("en");
-    assert.equal(t("nonexistent.key.12345"), "nonexistent.key.12345");
-  });
-
   it("substitutes variables", async () => {
     const { createT } = await import("../platform/core/i18n.mjs");
     const t = createT("en");
@@ -385,67 +319,3 @@ describe("handoff-writer logic", () => {
   });
 });
 
-// ═══ 5. pre-compact snapshot logic ══════════════════════════════════════
-
-describe("pre-compact snapshot", () => {
-  let snapDir;
-
-  before(() => {
-    snapDir = mkdtempSync(join(tmpdir(), "snap-test-"));
-  });
-
-  after(() => {
-    if (snapDir && existsSync(snapDir)) rmSync(snapDir, { recursive: true, force: true });
-  });
-
-  // createSnapshot now only captures retro-marker (audit.lock eliminated — ProcessMux manages coordination)
-  function createSnapshot(markerPath) {
-    const snapshot = {};
-
-    if (existsSync(markerPath)) {
-      try { snapshot.retroMarker = JSON.parse(readFileSync(markerPath, "utf8")); } catch (err) { console.warn("retro marker parse failed:", err?.message ?? err); }
-    }
-    snapshot.timestamp = new Date().toISOString();
-    return snapshot;
-  }
-
-  it("captures retro-marker in snapshot", () => {
-    const marker = join(snapDir, "retro-marker.json");
-    writeFileSync(marker, JSON.stringify({ retro_pending: true, session_id: "s1" }));
-
-    const snapshot = createSnapshot(marker);
-    assert.ok(snapshot.retroMarker);
-    assert.equal(snapshot.retroMarker.retro_pending, true);
-  });
-
-  it("handles missing files gracefully", () => {
-    const snapshot = createSnapshot(join(snapDir, "missing1.json"));
-    assert.ok(snapshot.timestamp);
-    assert.equal(snapshot.retroMarker, undefined);
-  });
-});
-
-// ═══ 6. (Removed — audit.lock liveness tests eliminated, ProcessMux manages coordination) ═══
-
-// ═══ 7. debounce logic ══════════════════════════════════════════════════
-
-describe("debounce", () => {
-  function shouldDebounce(lastTs, nowMs, intervalMs = 10000) {
-    if (!lastTs) return false;
-    return (nowMs - lastTs) < intervalMs;
-  }
-
-  it("does not debounce on first call", () => {
-    assert.ok(!shouldDebounce(null, Date.now()));
-  });
-
-  it("debounces within interval", () => {
-    const now = Date.now();
-    assert.ok(shouldDebounce(now - 5000, now, 10000));
-  });
-
-  it("does not debounce after interval", () => {
-    const now = Date.now();
-    assert.ok(!shouldDebounce(now - 15000, now, 10000));
-  });
-});

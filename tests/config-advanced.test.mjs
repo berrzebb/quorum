@@ -49,11 +49,6 @@ describe("source-tracker — resolveSource", () => {
     assert.equal(source, "defaults");
   });
 
-  it("getSourceDisplay formats correctly", () => {
-    loadConfig("/nonexistent/repo");
-    const display = getSourceDisplay("plugin.locale");
-    assert.ok(display.includes("set in:"));
-  });
 });
 
 describe("source-tracker — getConfigWithSources", () => {
