@@ -133,6 +133,11 @@ platform/bus/
   ├→ promotion-gate.ts  ← Status change gates (role promotion/demotion rules)
   ├→ contract-enforcer.ts ← Contract breach detection (harness ↔ bus integration)
   ├→ blueprint-parser.ts ← Blueprint naming convention extraction for lint
+  ├→ permission-rules.ts ← Rule parser + engine (deny/allow/ask, content patterns, glob matching)
+  ├→ permission-source.ts ← 5-tier rule source tracker (policy > project > user > session > cli)
+  ├→ permission-modes.ts ← 6 permission modes (default/plan/auto/bypass/dontAsk/acceptEdits)
+  ├→ denial-tracking.ts  ← Per-tool denial counter (3→fallback, 20→deactivate, SQLite KV)
+  ├→ safe-tools.ts       ← Safe tool allowlist (classifier skip, deny still applies)
   └→ mux.ts             ← ProcessMux (tmux/psmux/raw)
 
 platform/providers/
@@ -178,6 +183,19 @@ platform/core/
   │   ├→ mcp-server.mjs  ← MCP JSON-RPC transport (schema + dispatch from registry)
   │   ├→ {tool-name}/index.mjs ← 24 individual tool directories
   │   └→ ast-bridge.mjs  ← Fail-safe MJS↔AST bridge (hybrid scanning)
+  ├→ config/            ← 5-tier settings hierarchy (v0.6.2, 6 modules)
+  │   ├→ types.ts          ← ConfigTier, QuorumConfig, DEFAULT_CONFIG
+  │   ├→ settings.ts       ← loadConfig, mergeConfigs, 5-tier merge engine
+  │   ├→ schema.ts         ← safeParseConfig (native validation, no zod)
+  │   ├→ change-detector.ts ← fs.watch + 1000ms debounce + 1.7s deletion grace
+  │   ├→ source-tracker.ts ← resolveSource, getConfigWithSources (dot-notation)
+  │   ├→ managed-settings.ts ← Drop-in directory (/etc/quorum/managed-settings.d/)
+  │   └→ cache.ts          ← 3-layer cache (session + per-tier + file content)
+  ├→ errors.ts          ← 7-kind discriminated error union + classifyError + SSL hints
+  ├→ retry-engine.ts    ← RetryEngine (exponential backoff, jitter, retryAfter)
+  ├→ backpressure-queue.ts ← BackpressureQueue (blocking enqueue, serial drain)
+  ├→ session-recovery.ts ← Crash detection (interrupted_turn/prompt) + continuation builder
+  ├→ decision-reason.ts ← withReason wrapper + logDecision (audit trail)
   └→ harness/           ← Execution contracts (8 modules)
       ├→ contract-ledger.ts      ← Contract lifecycle tracking
       ├→ evaluation-contract.ts  ← Evaluation criteria contracts
@@ -312,6 +330,14 @@ platform/adapters/shared/
 - **Structured Verdict Schema**: `structured-schema.ts` defines JSON Schemas for advocate/devil opinions and judge verdicts. `parseOpinion()` and `parseJudgeVerdict()` use schema-first fast path (skip `extractJson` when structured output available), with existing fallback chain preserved.
 - **Hook Coexistence**: `mergeHookConfigs()` in hook-bridge.mjs ensures quorum hooks fire before plugin hooks. `hookRunnerToStopReviewGate()` bridges Stop hooks with fitness scoring.
 - **Background Jobs**: `background-job.ts` wraps codex-plugin-cc's detached job system. `submitBackgroundJob()` / `queryJobStatus()` / `getJobResult()` / `cancelJob()` for long-running audits.
+- **Permission System**: `platform/bus/permission-rules.ts` — deterministic rule engine with deny/allow/ask behaviors. Content pattern DSL (`prefix:X`, `contains:X`, `regex:X`, `path:X`). Simple glob for tool names (`mcp__quorum*`). 9-step short-circuit evaluation in `provider-approval-gate.ts`. Deny rules are bypass-immune (NFR-18) — no mode can override a deny.
+- **6 Permission Modes**: `permission-modes.ts` — default/plan/auto/bypass/dontAsk/acceptEdits. Module-scoped state (session lifetime). `evaluateMode()` called after deny/ask rules, before policy chain. bypass mode allows everything *except* deny rules.
+- **5-Tier Settings**: `platform/core/config/settings.ts` — defaults → user → project → local → policy. `mergeConfigs()` deep merge with array concat+dedup. `safeParseConfig()` native validation (no zod). clone-on-return via `structuredClone()`. Per-tier cache invalidation. `change-detector.ts` watches with 1000ms debounce + 1.7s deletion grace.
+- **Typed Error System**: `platform/core/errors.ts` — 7-kind discriminated union (transient/auth/validation/server/resource/sdk/unknown). `classifyError()` never throws (fail-open). Cause chain walking up to 5 levels. 29+ SSL/TLS error codes with user-friendly hints. `isRetryable()` per-kind.
+- **Retry Engine**: `platform/core/retry-engine.ts` — `RetryEngine.execute()` with exponential backoff (500ms base, 32s cap, ×2, ±25% jitter). `retryAfter` headers respected. validation/auth errors never retried. `onAttempt()` callbacks for telemetry.
+- **Backpressure Queue**: `platform/core/backpressure-queue.ts` — bounded async queue. `enqueue()` blocks when full (not drop). Serial drain (1 in-flight). Handler failure → front re-queue.
+- **Session Recovery**: `platform/core/session-recovery.ts` — `detectSessionCrash()` analyzes message history for interrupted_turn/interrupted_prompt. `buildContinuation()` creates synthetic resume message with wave state context.
+- **Decision Reason Tracking**: `platform/core/decision-reason.ts` — `withReason()` wrapper collects all decision audit trails. `logDecision()` persists to EventStore as `decision.reason` events. 7 types: error, retry, skip, fallback, timeout, permission, recovery.
 
 ## Testing
 
@@ -348,4 +374,17 @@ node --test tests/contract-negotiation.test.mjs   # Contract negotiation lifecyc
 node --test tests/handoff-gate.test.mjs           # Handoff artifact/evaluation gate
 node --test tests/runtime-evaluation-gate.test.mjs # Runtime evaluation criteria gate
 node --test tests/adaptive-gate-profile.test.mjs  # Per-track gate threshold tuning
+node --test tests/permission-rules.test.mjs        # Rule parser + engine (33 tests)
+node --test tests/permission-source.test.mjs       # Rule source tracker (20 tests)
+node --test tests/permission-modes.test.mjs        # 6 permission modes (25 tests)
+node --test tests/integrated-gate.test.mjs         # Integrated gate + NFR-18 bypass-immune (17 tests)
+node --test tests/denial-tracking.test.mjs         # Denial tracking (13 tests)
+node --test tests/safe-tools.test.mjs              # Safe tool allowlist (16 tests)
+node --test tests/errors.test.mjs                  # Typed error union (39 tests)
+node --test tests/retry-engine.test.mjs            # Retry engine (20 tests)
+node --test tests/backpressure-queue.test.mjs      # Backpressure queue (10 tests)
+node --test tests/session-recovery.test.mjs        # Session recovery (12 tests)
+node --test tests/settings.test.mjs                # 5-tier settings + schema (28 tests)
+node --test tests/config-advanced.test.mjs         # Change detector + source tracker + cache (24 tests)
+node --test tests/decision-reason.test.mjs         # Decision reason tracking (11 tests)
 ```
