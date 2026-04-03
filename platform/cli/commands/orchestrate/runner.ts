@@ -252,7 +252,9 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
       // Store phase-level sprint + evaluation contracts (keys must match canPromote lookup)
       // Only bind promotion gate when fitness data exists (avoids undefined < threshold → false)
       const phaseContractId = `${trackName}/${currentPhaseId}`;
-      const hasPromotionData = lastFitnessResult != null;
+      // Only activate contract promotion gate if fitness was actually computed (> 0).
+      // A fitness of 0 means no signals (new project, no tests) — gate would always block.
+      const hasPromotionData = lastFitnessResult != null && lastFitnessResult.score > 0;
       if (hasPromotionData) {
         // Sprint contract required by PromotionGate.canPromote()
         const phaseSprintContract = createSprintContract({
