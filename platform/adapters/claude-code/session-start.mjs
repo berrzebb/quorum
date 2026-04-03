@@ -133,7 +133,32 @@ if (existsSync(snapshotPath)) {
   } catch (err) { console.warn(`[session-start] snapshot parse error: ${err?.message}`); }
 }
 
-// ── 3f. Orchestrate track dashboard ──────────────────────────
+// ── 3f. Bridge: stagnation detection + learning load ──────────
+try {
+  const bridge = await import("../../core/bridge.mjs");
+  await bridge.init(REPO_ROOT);
+
+  // Stagnation detection — warn if patterns detected
+  const stagnation = bridge.gate.detectStagnation?.();
+  if (stagnation?.patterns?.length > 0) {
+    const patternNames = stagnation.patterns.map(p => p.type).join(", ");
+    resumeActions.push(`⚠ Stagnation detected: ${patternNames}. Consider decomposing the current task or switching approach.`);
+  }
+
+  // Load trigger weight adjustments from learning history
+  const learnings = bridge.execution.analyzeAuditLearnings?.();
+  if (learnings?.suggestions?.length > 0) {
+    context += `Auto-learn suggestions (from audit history):\n`;
+    for (const s of learnings.suggestions.slice(0, 3)) {
+      context += `  - ${s}\n`;
+    }
+    context += `\n`;
+  }
+
+  bridge.close();
+} catch (e) { /* bridge unavailable — fail-open */ }
+
+// ── 3g. Orchestrate track dashboard ──────────────────────────
 // Read wave-state files + track plans → show progress at session start.
 try {
   const quorumDir = resolve(REPO_ROOT, ".claude", "quorum");

@@ -20,6 +20,7 @@ import {
 } from "../../core/context.mjs";
 import { readAuditStatus, AUDIT_STATUS } from "../../adapters/shared/audit-state.mjs";
 import { runParliamentIfEnabled } from "../../adapters/shared/parliament-runner.mjs";
+import { evaluateAuditTrigger } from "../../adapters/shared/audit-trigger.mjs";
 import * as bridge from "../../core/bridge.mjs";
 
 const debugLog = resolve(HOOKS_DIR, plugin.debug_log ?? "debug.log");
@@ -179,11 +180,56 @@ async function main() {
     run_quality_checks(filePath);
   }
 
-  // (A) Evidence via audit_submit MCP tool — no hook-side detection.
-  // Evidence submission is now via `audit_submit` MCP tool (no file I/O).
-  // See: platform/core/tools/tool-core.mjs → toolAuditSubmit()
+  // (A) Automatic trigger evaluation on every Edit/Write
+  if (isHookEnabled("audit") && filePath) {
+    try {
+      const result = await evaluateAuditTrigger({
+        repoRoot: REPO_ROOT,
+        cfg,
+        content: `Changed file: ${filePath}\nTool: ${toolName}`,
+        source: "claude-code",
+        log,
+      });
+      if (result.triggerResult) {
+        const { mode, tier, score } = result.triggerResult;
+        if (mode === "skip") {
+          log(`TRIGGER_SKIP: score=${score.toFixed(2)} tier=${tier}`);
+        } else {
+          log(`TRIGGER_FIRE: mode=${mode} tier=${tier} score=${score.toFixed(2)}`);
 
-  // Other file edited → check for pending response
+          // T2/T3: run domain specialist tools + fitness check
+          try {
+            const br = await import("../../core/bridge.mjs");
+
+            // Domain specialist tools — enriched evidence for audit
+            const domainResult = await br.domain.detectDomains?.([filePath], `${toolName}: ${filePath}`).catch(() => null);
+            if (domainResult?.activeDomains?.length > 0) {
+              const tools = await br.domain.runSpecialistTools?.(domainResult.activeDomains, [filePath]).catch(() => null);
+              if (tools?.findings?.length > 0) {
+                const findingSummary = tools.findings.slice(0, 5).map(f => `  - [${f.severity}] ${f.message}`).join("\n");
+                log(`SPECIALIST: ${tools.findings.length} finding(s)`);
+                process.stdout.write(`\n[quorum] Specialist review (${domainResult.activeDomains.join(", ")}):\n${findingSummary}\n`);
+              }
+            }
+
+            // Fitness: log domain findings as quality signal for trigger learning
+            if (tools?.findings?.length > 0) {
+              br.event.emitEvent("fitness.check", "claude-code", {
+                score: 1.0 - (tools.findings.length * 0.1),  // rough signal: more findings = lower fitness
+                file: filePath, tier, findingCount: tools.findings.length,
+              });
+            }
+          } catch (err) { log(`ENRICH_ERR: ${err.message}`); }
+
+          process.stdout.write(`\n[quorum] Audit triggered (${mode}, T${tier}, score=${score.toFixed(2)}). Review in progress.\n`);
+        }
+      }
+    } catch (err) {
+      log(`TRIGGER_ERR: ${err.message}`);
+    }
+  }
+
+  // (B) Check for pending audit response
   check_pending_response();
 }
 

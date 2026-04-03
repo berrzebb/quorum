@@ -83,3 +83,43 @@ try {
     console.error(`[quorum] RTM auto-updated: ${total} row(s)`);
   }
 } catch (e) { console.error(`[quorum] RTM update warning: ${e.message}`); }
+
+// ── Bridge: emit session.stop + retro learning + fitness snapshot ──
+try {
+  const bridge = await import("../../core/bridge.mjs");
+  await bridge.init(REPO_ROOT);
+
+  // 1. Record session end event
+  bridge.event.emitEvent("session.stop", "claude-code", {
+    sessionId: process.env.RETRO_SESSION_ID ?? null,
+  });
+
+  // 2. Stagnation detection — feed into trigger learning
+  const stagnation = bridge.gate.detectStagnation?.();
+  if (stagnation?.patterns?.length > 0) {
+    bridge.event.emitEvent("stagnation.detected", "claude-code", {
+      patterns: stagnation.patterns.map(p => p.type),
+      count: stagnation.patterns.length,
+    });
+  }
+
+  // 3. Fitness: record last known score (actual computation is in orchestrate governance)
+  const lastFitness = bridge.event.queryEvents?.({ eventType: "fitness.check", limit: 1, descending: true })?.[0];
+  if (lastFitness?.payload?.score != null) {
+    bridge.event.emitEvent("fitness.snapshot", "claude-code", {
+      score: lastFitness.payload.score, phase: "session-end",
+    });
+  }
+
+  // 4. Auto-learn: analyze audit history → suggest rules
+  const learnings = bridge.execution.analyzeAuditLearnings?.();
+  if (learnings?.suggestions?.length > 0) {
+    bridge.event.emitEvent("learning.suggestions", "claude-code", {
+      count: learnings.suggestions.length,
+      suggestions: learnings.suggestions.slice(0, 5),
+    });
+    console.error(`[quorum] Auto-learn: ${learnings.suggestions.length} rule suggestion(s) from audit history`);
+  }
+
+  bridge.close();
+} catch (e) { console.error(`[quorum] Bridge session-stop warning: ${e.message}`); }
