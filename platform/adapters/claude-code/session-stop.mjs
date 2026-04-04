@@ -121,7 +121,31 @@ try {
     console.error(`[quorum] Auto-learn: ${learnings.suggestions.length} rule suggestion(s) from audit history`);
   }
 
-  // 5. [FACT WB-4] Extract facts from session events
+  // 5. [PROMOTE WB-4] Rule promotion check + Meta Loop
+  try {
+    const promotions = bridge.rules.checkPromotions();
+    for (const p of promotions) {
+      bridge.event.emitEvent("rule.promoted", "claude-code", {
+        ruleId: p.ruleId, pattern: p.pattern, from: p.from, to: p.to, violations: p.violations,
+      });
+      console.error(`[quorum] Rule promoted: "${p.pattern}" ${p.from} → ${p.to}`);
+    }
+
+    // Meta Loop: evaluate effectiveness of rules promoted 30+ days ago
+    const evals = bridge.rules.evaluateEffectiveness();
+    for (const ev of evals) {
+      if (ev.action === "archived") {
+        bridge.rules.promoteRule(ev.ruleId, "archived");
+        bridge.event.emitEvent("rule.archived", "claude-code", { ruleId: ev.ruleId, reason: ev.reason });
+        console.error(`[quorum] Rule archived: "${ev.pattern}" — ${ev.reason}`);
+      } else if (ev.action === "verified") {
+        bridge.rules.promoteRule(ev.ruleId, "verified");
+        console.error(`[quorum] Rule verified: "${ev.pattern}"`);
+      }
+    }
+  } catch (e) { console.error(`[quorum] Rule promotion warning: ${e?.message}`); }
+
+  // 6. [FACT WB-4] Extract facts from session events
   try {
     const { extractFacts } = await import("../../adapters/shared/fact-extractor.mjs");
     const sessionEvents = bridge.event.queryEvents({ limit: 100, descending: true });

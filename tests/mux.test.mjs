@@ -61,12 +61,15 @@ describe("ProcessMux raw backend", () => {
   });
 
   it("captures output from running process", async () => {
-    // Wait for some ticks
-    await new Promise((r) => setTimeout(r, 600));
-
-    const result = mux.capture(mux.list()[0].id);
+    // Poll until output appears (Windows process startup can be slow)
+    let result;
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 300));
+      result = mux.capture(mux.list()[0].id);
+      if (result?.output?.includes("tick")) break;
+    }
     assert.ok(result);
-    assert.ok(result.output.includes("tick"));
+    assert.ok(result.output.includes("tick"), `expected "tick" in output, got: ${result.output.slice(0, 100)}`);
     assert.ok(result.lines > 0);
   });
 

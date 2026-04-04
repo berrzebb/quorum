@@ -183,15 +183,32 @@ if (intent) {
   }
 }
 
-// ── [HIDE WB-3] Pipeline Detection ──────────────────────────
-// Detect large task intent → suggest auto-pipeline.
-// Only suggest when: (1) not a small edit, (2) pipeline.autoSuggest not disabled.
+// ── [HIDE WB-3] Pipeline Detection + Auto-Execution ─────────
+// Detect large task intent → output pipeline directive + write state.
+// PRD § 6.2: "사용자 명령 0개" — directive drives Claude's execution.
 if (prompt && cfg?.pipeline?.autoSuggest !== false) {
   const PIPELINE_PATTERNS = /구현해\s*줘|만들어\s*줘|추가해\s*줘|개발해\s*줘|build\s+(?:a|the|me)\s+\w+|implement|create\s+(?:a|the)\s+\w+|add\s+(?:a|the)\s+\w+.*system|set\s*up/i;
-  // Exclude small/trivial requests
   const SMALL_PATTERNS = /수정해|고쳐|fix|bug|typo|rename|변수|함수\s*하나|one\s+function|한\s*줄/i;
   if (PIPELINE_PATTERNS.test(prompt) && !SMALL_PATTERNS.test(prompt) && prompt.length > 5) {
-    signals.push("[quorum] 이 작업은 자동 파이프라인으로 실행할 수 있습니다. 진행하려면 알려주세요.");
+    try {
+      const { buildPipelineDirective } = await import("../../adapters/shared/pipeline-runner.mjs");
+      const directive = buildPipelineDirective(prompt, cfg);
+      signals.push(directive);
+
+      // Write pipeline state for tracking
+      const pipeDir = resolve(REPO_ROOT, ".claude", "quorum", "pipeline");
+      const { mkdirSync: mkd, writeFileSync: wfs } = await import("node:fs");
+      mkd(pipeDir, { recursive: true });
+      wfs(resolve(pipeDir, "state.json"), JSON.stringify({
+        status: "active",
+        agenda: prompt,
+        gateProfile: cfg?.gates?.gateProfile ?? "balanced",
+        startedAt: new Date().toISOString(),
+      }, null, 2), "utf8");
+    } catch (err) {
+      // Fallback: simple directive without pipeline-runner
+      signals.push(`[quorum auto-pipeline] "${prompt}" — 자동 개발 파이프라인으로 실행합니다. 설계 → 구현 → 검증 순으로 진행하세요.`);
+    }
   }
 }
 

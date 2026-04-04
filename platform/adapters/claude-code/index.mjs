@@ -229,6 +229,31 @@ async function main() {
     }
   }
 
+  // (D) [PROMOTE WB-2] Violation detection against registered rules
+  if (filePath) {
+    try {
+      const br = await import("../../core/bridge.mjs");
+      const allRules = br.rules.getRules({ level: "soft" }).concat(br.rules.getRules({ level: "hard" }));
+      if (allRules.length > 0) {
+        for (const rule of allRules) {
+          try {
+            if (new RegExp(rule.pattern, "i").test(filePath) || new RegExp(rule.pattern, "i").test(normalized)) {
+              br.rules.recordViolation(rule.id);
+              if (rule.level === "hard") {
+                log(`HARD_RULE_VIOLATION: ${rule.pattern} on ${filePath}`);
+                process.stdout.write(`\n[quorum] BLOCKED: "${rule.description}" (hard rule, exit 2)\n`);
+                process.exit(2);
+              } else {
+                log(`SOFT_RULE_VIOLATION: ${rule.pattern} on ${filePath}`);
+                process.stdout.write(`\n[quorum] WARNING: "${rule.description}" (soft rule, violation #${rule.violationCount + 1})\n`);
+              }
+            }
+          } catch { /* invalid regex — skip */ }
+        }
+      }
+    } catch (err) { log(`RULE_CHECK_ERR: ${err.message}`); }
+  }
+
   // (B) Check for pending audit response
   check_pending_response();
 }

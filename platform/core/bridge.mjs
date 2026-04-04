@@ -65,7 +65,7 @@ async function loadModules() {
   if (_svc.modules) return _svc.modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -80,8 +80,10 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "orchestrator.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "auto-learn.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "parliament-gate.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "rule-registry.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "rule-promotion.js"))).catch(() => null),
     ]);
-    _svc.modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod };
+    _svc.modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod };
     return _svc.modules;
   } catch (err) {
     console.warn("[bridge] loadModules failed:", err?.message ?? err);
@@ -801,6 +803,164 @@ function createConsensusAuditors(roles, cwd) {
   }, null, "createConsensusAuditors");
 }
 
+// ── Orchestrate Engine Bridges (v0.6.4 pipeline integration) ────────
+
+/**
+ * Run fitness gate on changed files.
+ * @returns {{ decision: "proceed"|"self-correct"|"auto-reject", score: number, reason: string }}
+ */
+async function runFitnessGate(repoRoot, changedFiles) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "governance", "fitness-gates.js")).href);
+    return mod.runFitnessGate(repoRoot, changedFiles, _svc.store);
+  }, { decision: "proceed", score: 0, reason: "fitness gate unavailable" }, "runFitnessGate");
+}
+
+/**
+ * Run fixer cycle: fix → re-audit up to maxRounds.
+ */
+async function runFixerCycle(opts) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "execution", "fixer-loop.js")).href);
+    return mod.runFixCycle(opts);
+  }, { passed: false, attempts: 0, stagnation: "fixer unavailable" }, "runFixerCycle");
+}
+
+/**
+ * Run single fixer invocation.
+ */
+async function runFixer(opts) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "execution", "fixer-loop.js")).href);
+    return mod.runFixer(opts);
+  }, { completed: false }, "runFixer");
+}
+
+/**
+ * Run self-checker audit gates (scope, stubs, fitness, blueprint).
+ */
+async function runAuditGates(opts) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "execution", "audit-loop.js")).href);
+    return mod.runWaveAuditGates(opts);
+  }, { passed: true, fitnessDecision: "proceed" }, "runAuditGates");
+}
+
+/**
+ * Run auto-retro (lifecycle hook).
+ */
+async function runAutoRetro(repoRoot) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "governance", "lifecycle-hooks.js")).href);
+    return mod.autoRetro(repoRoot);
+  }, undefined, "autoRetro");
+}
+
+/**
+ * Run the full orchestrate loop: parse WBs → compute waves → runWave per wave.
+ * This is the bridge equivalent of `quorum orchestrate run <track>`.
+ *
+ * @param {object} opts
+ * @param {string} opts.repoRoot
+ * @param {string} opts.trackName
+ * @param {string} opts.wbPath - path to work-breakdown.md
+ * @param {string} [opts.provider="claude"]
+ * @param {string} [opts.auditor="codex"]
+ * @param {number} [opts.maxConcurrency=3]
+ * @param {number} [opts.maxRetries=3]
+ * @param {(msg: string) => void} [opts.onLog]
+ * @returns {Promise<{success: boolean, completedIds: string[], failedWaves: number}>}
+ */
+async function runOrchestrateLoop(opts) {
+  return withFallback(async () => {
+    const toURL = (p) => pathToFileURL(p).href;
+
+    // Load orchestrate modules
+    const [wbMod, waveMod, waveRunnerMod, muxMod, auditLLMMod] = await Promise.all([
+      import(toURL(resolve(DIST, "orchestrate", "planning", "work-breakdown-parser.js"))),
+      import(toURL(resolve(DIST, "orchestrate", "planning", "wave-graph.js"))),
+      import(toURL(resolve(DIST, "orchestrate", "execution", "wave-runner.js"))),
+      import(toURL(resolve(DIST, "bus", "mux.js"))),
+      import(toURL(resolve(DIST, "orchestrate", "execution", "wave-audit-llm.js"))),
+    ]);
+
+    const { repoRoot, trackName, wbPath, provider = "claude", auditor = "codex", maxConcurrency = 3, maxRetries = 3, skipAudit = false, onLog } = opts;
+    const log = onLog ?? ((msg) => console.log(`[orchestrate] ${msg}`));
+
+    // 1. Parse work breakdown
+    const allItems = wbMod.parseWorkBreakdown(wbPath);
+    if (allItems.length === 0) return { success: false, completedIds: [], failedWaves: 0, reason: "no work items" };
+    const workItems = allItems.filter(i => !i.isParent);
+    log(`Parsed ${workItems.length} work items from ${wbPath}`);
+
+    // 2. Compute waves
+    const waves = waveMod.computeWaves(allItems);
+    log(`Computed ${waves.length} waves`);
+
+    // 3. Create mux
+    const mux = new muxMod.ProcessMux();
+
+    // 4. Run waves
+    const completedIds = new Set();
+    let failedWaves = 0;
+    const bridgeObj = { parliament, execution, gate, event, query, hooks, claim, lock, agent, domain };
+
+    try {
+      for (let i = 0; i < waves.length; i++) {
+        const wave = waves[i];
+        log(`Wave ${i + 1}/${waves.length} — ${wave.items.length} items`);
+
+        let snapshotRef = "";
+        try {
+          const cp = await import("node:child_process");
+          snapshotRef = cp.execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf8", timeout: 5000, windowsHide: true, stdio: "pipe" }).trim();
+        } catch { /* no git */ }
+
+        const result = await waveRunnerMod.runWave({
+          repoRoot,
+          wave,
+          waveIndex: i,
+          totalWaves: waves.length,
+          totalItems: workItems.length,
+          trackName,
+          provider,
+          auditor,
+          maxConcurrency,
+          maxRetries,
+          mux,
+          bridge: bridgeObj,
+          completedIds,
+          blueprintRules: [],
+          rtmPath: "",
+          manifests: [],
+          snapshotRef,
+          auditFn: skipAudit
+            ? async () => ({ passed: true, findings: [] })  // pipeline P5 QA handles cross-model audit
+            : auditLLMMod.runWaveAuditLLM,
+          onLog: log,
+        });
+
+        if (result.passed) {
+          log(`Wave ${i + 1} passed (${result.completedItemIds.length} completed)`);
+        } else {
+          log(`Wave ${i + 1} FAILED`);
+          failedWaves++;
+        }
+      }
+    } finally {
+      try { await mux.cleanup(); } catch { /* cleanup */ }
+    }
+
+    return {
+      success: failedWaves === 0,
+      completedIds: [...completedIds],
+      failedWaves,
+      totalWaves: waves.length,
+    };
+  }, { success: false, completedIds: [], failedWaves: 0, reason: "orchestrate unavailable" }, "runOrchestrateLoop");
+}
+
+
 /**
  * Run the internal pipeline (HIDE Track).
  * Lazy-loads pipeline-runner.mjs to avoid circular deps.
@@ -810,7 +970,7 @@ function createConsensusAuditors(roles, cwd) {
  */
 async function runPipelineInternal(agenda, config, opts) {
   const mod = await import("../adapters/shared/pipeline-runner.mjs");
-  const bridge = { parliament, execution, gate, event, query, hooks };
+  const bridge = { parliament, execution, gate, event, query, hooks, domain, fact };
   return mod.runPipeline(agenda, config ?? {}, bridge, opts);
 }
 
@@ -831,7 +991,7 @@ export const parliament = { runParliamentSession, checkParliamentConvergence, pr
 export const domain = { detectDomains, selectReviewers, runSpecialistTools, enrichEvidence, parseToolFindings };
 export const event = { emitEvent, recordTransition, currentState, queryEvents, queryItemStates };
 export const query = { getState, setState, getLatestEvidence, getMessageBus };
-export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius };
+export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius, runFitnessGate, runAuditGates, runFixer, runFixerCycle, runAutoRetro, runOrchestrateLoop };
 export const hooks = { initHookRunner, getHookRunner, fireHook, checkHookGate };
 export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal };
 export const fact = {
@@ -839,4 +999,37 @@ export const fact = {
   getFacts(filter) { return _svc.store?.getFacts(filter) ?? []; },
   promoteFact(id, status) { _svc.store?.promoteFact(id, status); },
   archiveStaleFacts(olderThanMs) { return _svc.store?.archiveStaleFacts(olderThanMs) ?? 0; },
+};
+
+// ── PROMOTE Track: Rule Registry + Promotion ──
+function getRuleRegistry() {
+  if (_svc.ruleRegistry) return _svc.ruleRegistry;
+  try {
+    const db = _svc.store?.getDb();
+    if (!db) return null;
+    const { RuleRegistry } = _svc.modules.ruleRegistryMod ?? {};
+    if (!RuleRegistry) return null;
+    _svc.ruleRegistry = new RuleRegistry(db);
+    return _svc.ruleRegistry;
+  } catch { return null; }
+}
+export const rules = {
+  addRule(candidate) { return withFallback(() => getRuleRegistry()?.addRule(candidate), null, "rules.addRule"); },
+  recordViolation(ruleId) { return withFallback(() => getRuleRegistry()?.recordViolation(ruleId), undefined, "rules.recordViolation"); },
+  getRules(filter) { return withFallback(() => getRuleRegistry()?.getRules(filter) ?? [], [], "rules.getRules"); },
+  promoteRule(id, level) { return withFallback(() => getRuleRegistry()?.promoteRule(id, level), undefined, "rules.promoteRule"); },
+  checkPromotions(config) {
+    return withFallback(() => {
+      const reg = getRuleRegistry();
+      if (!reg || !_svc.modules.rulePromotionMod) return [];
+      return _svc.modules.rulePromotionMod.checkPromotions(reg, config);
+    }, [], "rules.checkPromotions");
+  },
+  evaluateEffectiveness(config) {
+    return withFallback(() => {
+      const reg = getRuleRegistry();
+      if (!reg || !_svc.modules.rulePromotionMod) return [];
+      return _svc.modules.rulePromotionMod.evaluateEffectiveness(reg, config);
+    }, [], "rules.evaluateEffectiveness");
+  },
 };

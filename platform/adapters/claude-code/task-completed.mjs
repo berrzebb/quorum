@@ -109,10 +109,11 @@ try {
       } catch (err) { console.warn(`[task-completed] audit status parse error: ${err?.message}`); }
     }
 
-    // 2. No file fallback — evidence is in SQLite only
+    // 2. No audit-status.json = no audit triggered (score below threshold → skip).
+    //    Only block when file exists but has no valid verdict (audit started, not finished).
 
-    if (!hasEvidence) {
-      failures.push("[NO-ABANDON] No audit evidence found. Submit evidence and run audit before completing task.");
+    if (!hasEvidence && existsSync(auditStatusPath)) {
+      failures.push("[NO-ABANDON] Audit was triggered but no valid verdict found. Complete the audit before marking task done.");
     }
   }
 } catch (err) { console.warn(`[task-completed] no-abandon gate error: ${err?.message}`); }

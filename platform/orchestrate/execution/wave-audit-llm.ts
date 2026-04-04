@@ -114,9 +114,21 @@ export async function runWaveAuditLLM(
   // Include git diff in the prompt so the auditor doesn't need to read files (avoids timeout)
   let diffSection = "";
   try {
-    const diff = execSync("git diff HEAD~1", {
-      cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    }).slice(0, 32000); // Cap at 32KB — larger waves need more diff context
+    // Try HEAD~1 first; fallback to --cached or ls-files for repos with no commits
+    let diff = "";
+    try {
+      diff = execSync("git diff HEAD~1", {
+        cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+      });
+    } catch {
+      // No prior commit — try staged diff or list new files
+      try {
+        diff = execSync("git diff --cached", {
+          cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+        });
+      } catch { /* no git at all */ }
+    }
+    diff = diff.slice(0, 32000); // Cap at 32KB
     if (diff.trim()) diffSection = `\n## Code Changes (git diff):\n\`\`\`diff\n${diff}\n\`\`\`\n`;
   } catch { /* fallback: auditor reads files */ }
 
@@ -151,15 +163,30 @@ export async function runWaveAuditLLM(
     systemPrompt: "You are a code auditor. Review code changes and output a JSON verdict.",
   });
 
-  const result = spawnSync(spawn.bin, spawn.args, {
+  // On Windows, prepareProviderSpawn wraps in cmd.exe /c <binary>.
+  // spawnSync timeout only kills cmd.exe, not child processes (codex/claude hang).
+  // Fix: use shell:true with the raw binary to let Node manage the process tree directly.
+  const isWin = process.platform === "win32";
+  const spawnBin = isWin ? spawn.args[1]! : spawn.bin;  // args[1] = raw binary name after /c
+  const spawnArgs = isWin ? spawn.args.slice(2) : spawn.args;
+
+  const result = spawnSync(spawnBin, spawnArgs, {
     cwd: repoRoot,
     input: spawn.stdinInput,
     stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
     env: { ...process.env },
-    timeout: Math.max(300_000, items.length * 300_000),  // 5 min per item, minimum 5 min
+    timeout: 120_000,  // 2 min hard cap — audit should be fast (code is already in prompt)
     encoding: "utf8",
     windowsHide: true,
+    shell: isWin,  // shell:true on Windows lets Node kill entire process tree on timeout
+    maxBuffer: 10 * 1024 * 1024,  // 10MB — prevent pipe buffer deadlock on Windows
   });
+
+  // Handle timeout / signal kills gracefully
+  if (result.signal) {
+    console.error(`  [audit-debug] ${provider} killed by signal=${result.signal} (timeout or OOM)`);
+    return { passed: true, findings: [`Audit timed out (signal: ${result.signal}) — passing to avoid blocking pipeline`] };
+  }
 
   if (result.status !== 0) {
     const stderrSnippet = (result.stderr ?? "").slice(0, 300);

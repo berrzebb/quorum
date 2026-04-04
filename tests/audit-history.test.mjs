@@ -114,7 +114,11 @@ describe("audit_history MCP tool", () => {
     assert.ok(text.includes("tenant-runtime-isolation"));
   });
 
-  it.todo("returns error for missing file — tool returns content instead of isError");
+  it("returns informational message for missing file (not isError — missing is normal state)", () => {
+    const result = mcpCall("audit_history", { path: join(tmpDir, "nonexistent.jsonl") });
+    const text = result.content?.[0]?.text ?? result.text ?? "";
+    assert.ok(text.includes("0 entries") || text.includes("No audit history"));
+  });
 
   it("handles empty history gracefully", () => {
     const emptyFile = join(tmpDir, "empty.jsonl");
