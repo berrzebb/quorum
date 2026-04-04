@@ -16,7 +16,7 @@ export interface CodexAuditorConfig {
   bin?: string;
   /** Model to use (default: from CODEX_MODEL env or "codex"). */
   model?: string;
-  /** Timeout in ms (default: 120000). */
+  /** Timeout in ms (default: 300000 — Codex reads files + runs tools, needs time). */
   timeout?: number;
   /** Working directory for codex execution. */
   cwd?: string;
@@ -42,7 +42,7 @@ export class CodexAuditor implements Auditor {
     }
     this.bin = config.bin ?? process.env.CODEX_BIN ?? defaultBin;
     this.model = config.model ?? process.env.CODEX_MODEL ?? "codex";
-    this.timeout = config.timeout ?? 120_000;
+    this.timeout = config.timeout ?? 300_000;
     this.cwd = config.cwd ?? process.cwd();
     this.needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(this.bin);
   }
@@ -72,7 +72,18 @@ export class CodexAuditor implements Auditor {
       child.on("close", (code) => {
         clearTimeout(timer);
         const duration = Date.now() - start;
-        if (code !== 0) {
+
+        // code === null means killed by signal (timeout or manual).
+        // If we have stdout, try to parse it — Codex may have emitted a verdict before being killed.
+        if (code === null && stdout.length > 0) {
+          const parsed = parseAuditResponse(stdout, duration);
+          if (parsed.verdict !== "infra_failure") {
+            resolve(parsed);
+            return;
+          }
+        }
+
+        if (code !== 0 && code !== null) {
           resolve({
             verdict: "infra_failure",
             codes: ["auditor-error"],
