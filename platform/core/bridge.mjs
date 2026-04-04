@@ -199,10 +199,10 @@ function emitEvent(type, source, payload = {}, meta = {}) {
  * Returns { mode: "skip"|"simple"|"deliberative", tier, score, reasons }
  * Returns null if modules unavailable (legacy mode → always audit).
  */
-function evaluateTrigger(context) {
+function evaluateTrigger(context, learnedWeights, gateProfile) {
   if (!_svc.modules) return null;
   const { evaluateTrigger: evaluate } = _svc.modules.triggerMod;
-  return evaluate(context);
+  return evaluate(context, learnedWeights, gateProfile);
 }
 
 /**
@@ -801,6 +801,19 @@ function createConsensusAuditors(roles, cwd) {
   }, null, "createConsensusAuditors");
 }
 
+/**
+ * Run the internal pipeline (HIDE Track).
+ * Lazy-loads pipeline-runner.mjs to avoid circular deps.
+ * @param {string} agenda
+ * @param {object} [config]
+ * @param {object} [opts]
+ */
+async function runPipelineInternal(agenda, config, opts) {
+  const mod = await import("../adapters/shared/pipeline-runner.mjs");
+  const bridge = { parliament, execution, gate, event, query, hooks };
+  return mod.runPipeline(agenda, config ?? {}, bridge, opts);
+}
+
 export function close() {
   if (_svc.store) {
     withFallback(() => _svc.store.close(), undefined, "close");
@@ -820,4 +833,10 @@ export const event = { emitEvent, recordTransition, currentState, queryEvents, q
 export const query = { getState, setState, getLatestEvidence, getMessageBus };
 export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius };
 export const hooks = { initHookRunner, getHookRunner, fireHook, checkHookGate };
-export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork };
+export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal };
+export const fact = {
+  addFact(f) { return _svc.store?.addFact(f) ?? null; },
+  getFacts(filter) { return _svc.store?.getFacts(filter) ?? []; },
+  promoteFact(id, status) { _svc.store?.promoteFact(id, status); },
+  archiveStaleFacts(olderThanMs) { return _svc.store?.archiveStaleFacts(olderThanMs) ?? 0; },
+};

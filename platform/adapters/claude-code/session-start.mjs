@@ -13,6 +13,8 @@ import { readAuditStatus, readRetroMarker, AUDIT_STATUS } from "../../adapters/s
 import { resolveRepoRoot } from "../../adapters/shared/repo-resolver.mjs";
 import { firstRunSetup, buildFirstRunMessage } from "../../adapters/shared/first-run.mjs";
 import { createT } from "../../core/context.mjs";
+import { scanProject } from "../../adapters/shared/project-scanner.mjs";
+import { buildInterviewQuestions, getActiveQuestions } from "../../adapters/shared/setup-interview.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolveRepoRoot({ adapterDir: __dirname });
@@ -23,21 +25,86 @@ const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? __dirname;
 import { findConfigPath } from "../../adapters/shared/config-resolver.mjs";
 const configPath = findConfigPath({ repoRoot: REPO_ROOT, adapterDir: __dirname });
 
-// ── config.json not found → auto-copy to project dir + prompt to customize ──
+// ── config.json not found → auto-setup (PRD § 6.6) ─────────────────────
 if (!configPath) {
   const projectConfigDir = resolve(REPO_ROOT, ".claude", "quorum");
-  const result = firstRunSetup({ adapterRoot: pluginRoot, projectConfigDir });
-  const msg = buildFirstRunMessage(result, resolve(pluginRoot, "README.md"));
-  if (msg) {
-    process.stdout.write(`{"additionalContext": ${JSON.stringify(msg)}}`);
-    process.exit(0);
+  const setupStatePath = resolve(projectConfigDir, "setup-state.json");
+
+  // Check if interview is already pending (multi-turn)
+  let setupState = null;
+  if (existsSync(setupStatePath)) {
+    try { setupState = JSON.parse(readFileSync(setupStatePath, "utf8")); } catch { /* ignore */ }
   }
-  if (result.needsManualSetup) {
+
+  if (setupState?.status === "interview_pending") {
+    // Interview already shown — prompt-submit will handle answers
     process.stdout.write(`{"additionalContext": ${JSON.stringify(
-      `[SETUP REQUIRED — quorum]\n\nconfig.json not found and examples/ directory is missing.\nReinstall the plugin: claude plugin add berrzebb/quorum`
+      "[quorum setup] 아직 설정이 완료되지 않았습니다. 위 질문에 답변해주세요."
     )}}`);
     process.exit(0);
   }
+
+  // Step 1: Scan project
+  let profile;
+  try {
+    profile = scanProject(REPO_ROOT);
+  } catch (err) {
+    console.warn(`[session-start] project scan failed: ${err?.message}`);
+    // Fallback to legacy first-run
+    const result = firstRunSetup({ adapterRoot: pluginRoot, projectConfigDir });
+    const msg = buildFirstRunMessage(result, resolve(pluginRoot, "README.md"));
+    if (msg) process.stdout.write(`{"additionalContext": ${JSON.stringify(msg)}}`);
+    process.exit(0);
+  }
+
+  // Step 2: Generate interview questions
+  const questions = buildInterviewQuestions(profile);
+  const active = getActiveQuestions(questions);
+
+  // Step 3: Write setup state for prompt-submit to pick up
+  try {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    mkdirSync(projectConfigDir, { recursive: true });
+    writeFileSync(setupStatePath, JSON.stringify({
+      status: "interview_pending",
+      profile,
+      questions,
+      createdAt: new Date().toISOString(),
+    }, null, 2));
+  } catch (err) {
+    console.warn(`[session-start] setup state write failed: ${err?.message}`);
+  }
+
+  // Step 4: Output questions as additionalContext
+  const scanSummary = [
+    profile.languages.length > 0 ? `언어: ${profile.languages.join(", ")}` : null,
+    profile.packageManager ? `패키지 매니저: ${profile.packageManager}` : null,
+    profile.frameworks.length > 0 ? `프레임워크: ${profile.frameworks.join(", ")}` : null,
+    profile.ci ? `CI: ${profile.ci}` : null,
+    profile.testFramework ? `테스트: ${profile.testFramework}` : null,
+    profile.activeDomains.length > 0 ? `도메인: ${profile.activeDomains.join(", ")}` : null,
+  ].filter(Boolean).join(" | ");
+
+  const questionText = active.map((q, i) =>
+    q.type === "choice"
+      ? `${i + 1}. ${q.text}\n   선택지: ${q.choices.join(", ")}`
+      : `${i + 1}. ${q.text}`
+  ).join("\n");
+
+  const setupMsg = [
+    "[quorum auto-setup] 프로젝트를 스캔했습니다.",
+    "",
+    `📋 감지 결과: ${scanSummary}`,
+    "",
+    "다음 질문에 답해주세요 (한 번에 답변 가능):",
+    "",
+    questionText,
+    "",
+    "답변을 자유롭게 작성해주세요. 예: \"인증 시스템 구현, 보안 중요, 혼자 작업\"",
+  ].join("\n");
+
+  process.stdout.write(`{"additionalContext": ${JSON.stringify(setupMsg)}}`);
+  process.exit(0);
 }
 
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
@@ -154,6 +221,21 @@ try {
     }
     context += `\n`;
   }
+
+  // [FACT WB-6] Consolidate + inject established facts
+  try {
+    const { consolidateFacts } = await import("../../adapters/shared/fact-consolidator.mjs");
+    consolidateFacts(bridge.fact ? { ...bridge.fact, db: null } : bridge._svc?.store, null);
+
+    const established = bridge.fact?.getFacts?.({ status: "established", limit: 10 }) ?? [];
+    if (established.length > 0) {
+      context += `Established Facts:\n`;
+      for (const f of established) {
+        context += `  - [${f.category}] ${f.content}\n`;
+      }
+      context += `\n`;
+    }
+  } catch (e) { /* fact system unavailable — fail-open */ }
 
   bridge.close();
 } catch (e) { /* bridge unavailable — fail-open */ }

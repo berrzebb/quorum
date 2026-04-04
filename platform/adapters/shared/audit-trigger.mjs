@@ -62,7 +62,8 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
     content, changedFiles, changedFileCount, detectionResult, priorRejections, hasPlanDoc, blastRadius,
   });
 
-  const triggerResult = bridge.gate.evaluateTrigger(triggerCtx);
+  const gateProfile = cfg?.gates?.gateProfile ?? undefined;
+  const triggerResult = bridge.gate.evaluateTrigger(triggerCtx, undefined, gateProfile);
   if (triggerResult) {
     log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
     bridge.event.emitEvent("audit.submit", source, {

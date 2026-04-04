@@ -174,3 +174,17 @@ All verification roles resolve language-specific commands from `languages/{lang}
 - Do NOT retry same approach 3+ times — escalate to parliament
 - Do NOT skip retrospective
 - **Do NOT ask questions in headless mode** — route to parliament instead
+
+## Internal Pipeline API (v0.6.4)
+
+When operating within the quorum auto-pipeline (no CLI), use the bridge API directly:
+
+```javascript
+// Instead of: quorum parliament "topic" → quorum plan → quorum orchestrate run
+// Use:
+const result = await bridge.execution.runPipeline(agenda, config);
+```
+
+This runs the full 6-stage pipeline (Plan → Design → Implement → Verify → QA → Finalize) without CLI commands. The pipeline runner coordinates all stages and emits `pipeline.stage.*` events.
+
+**Prefer `bridge.execution.runPipeline()` over CLI commands** when operating as a subagent or in headless mode.

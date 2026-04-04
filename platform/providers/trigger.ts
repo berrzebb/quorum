@@ -7,6 +7,7 @@
  */
 
 import type { DetectedDomains } from "./domain-detect.js";
+import type { GateProfile } from "../core/config/types.js";
 
 export type ConsensusMode = "skip" | "simple" | "deliberative";
 
@@ -54,6 +55,42 @@ export interface TriggerResult {
 export type LearnedWeights = Record<string, number>;
 
 /**
+ * Profile config: single trigger threshold + fixed audit tier.
+ * PRD § 6.3 Gate Profile Matrix:
+ *   strict:    trigger 0.3, audit T3 (full deliberative)
+ *   balanced:  trigger 0.5, audit T2 (simple)
+ *   fast:      trigger 0.7, audit T1 (minimal)
+ *   prototype: trigger 0.9, audit skip
+ */
+interface ProfileSpec {
+  threshold: number;
+  auditTier: "T1" | "T2" | "T3";
+  auditMode: ConsensusMode;
+}
+
+const PROFILE_SPECS: Record<GateProfile, ProfileSpec> = {
+  strict:    { threshold: 0.3, auditTier: "T3", auditMode: "deliberative" },
+  balanced:  { threshold: 0.5, auditTier: "T2", auditMode: "simple" },
+  fast:      { threshold: 0.7, auditTier: "T1", auditMode: "skip" },
+  prototype: { threshold: 0.9, auditTier: "T1", auditMode: "skip" },
+};
+
+/**
+ * Get trigger threshold for a gate profile.
+ * Score below this → skip. Score at/above → profile's fixed audit tier.
+ */
+export function getThresholdForProfile(profile?: GateProfile): number {
+  return PROFILE_SPECS[profile ?? "balanced"].threshold;
+}
+
+/**
+ * Get the full profile spec (threshold + audit tier/mode).
+ */
+export function getProfileSpec(profile?: GateProfile): ProfileSpec {
+  return PROFILE_SPECS[profile ?? "balanced"];
+}
+
+/**
  * Determine consensus mode based on change context.
  *
  * Scoring:
@@ -61,7 +98,7 @@ export type LearnedWeights = Record<string, number>;
  *   0.3 - 0.7  → T2 simple (single auditor)
  *   0.7 - 1.0  → T3 deliberative (3-role protocol)
  */
-export function evaluateTrigger(ctx: TriggerContext, learnedWeights?: LearnedWeights): TriggerResult {
+export function evaluateTrigger(ctx: TriggerContext, learnedWeights?: LearnedWeights, gateProfile?: GateProfile): TriggerResult {
   const reasons: string[] = [];
   const factors: Record<string, number> = {};
   let score = 0;
@@ -225,19 +262,18 @@ export function evaluateTrigger(ctx: TriggerContext, learnedWeights?: LearnedWei
   // Clamp
   score = Math.min(1, Math.max(0, score));
 
-  // Tier mapping
+  // Tier mapping — profile-aware (PRD § 6.3)
+  // Below profile threshold → skip. At/above → profile's fixed audit tier.
+  const spec = getProfileSpec(gateProfile);
   let mode: ConsensusMode;
   let tier: "T1" | "T2" | "T3";
 
-  if (score < 0.3) {
+  if (score < spec.threshold) {
     mode = "skip";
     tier = "T1";
-  } else if (score < 0.7) {
-    mode = "simple";
-    tier = "T2";
   } else {
-    mode = "deliberative";
-    tier = "T3";
+    mode = spec.auditMode;
+    tier = spec.auditTier;
   }
 
   const requiresPlan = tier === "T3" && ctx.hasPlanDoc === false;

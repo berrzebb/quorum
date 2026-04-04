@@ -320,6 +320,25 @@ export class EventStore {
       );
       CREATE INDEX IF NOT EXISTS idx_fc_agent
         ON file_claims (agent_id);
+
+      -- Facts: cross-session learning store (v0.6.4 FACT track)
+      CREATE TABLE IF NOT EXISTS facts (
+        id          TEXT PRIMARY KEY,
+        scope       TEXT NOT NULL DEFAULT 'project',
+        category    TEXT NOT NULL,
+        content     TEXT NOT NULL,
+        frequency   INTEGER NOT NULL DEFAULT 1,
+        status      TEXT NOT NULL DEFAULT 'candidate',
+        project_id  TEXT,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_facts_status
+        ON facts (status);
+      CREATE INDEX IF NOT EXISTS idx_facts_scope
+        ON facts (scope);
+      CREATE INDEX IF NOT EXISTS idx_facts_project
+        ON facts (project_id);
     `);
 
     // Views — use separate exec() calls since CREATE VIEW IF NOT EXISTS
@@ -596,6 +615,73 @@ export class EventStore {
   /** Write a KV entry. */
   setKV(key: string, value: unknown): void {
     this.stmtSetKV.run(key, JSON.stringify(value), Date.now());
+  }
+
+  // ── Fact Store (v0.6.4 FACT track) ───────────
+
+  /** Add a fact candidate. Deduplicates by content similarity (exact match). */
+  addFact(fact: { scope?: string; category: string; content: string; projectId?: string }): string {
+    const now = Date.now();
+    // Check for exact duplicate
+    const existing = this.db.prepare(
+      "SELECT id, frequency FROM facts WHERE content = ? AND project_id IS ?",
+    ).get(fact.content, fact.projectId ?? null) as { id: string; frequency: number } | undefined;
+
+    if (existing) {
+      this.db.prepare(
+        "UPDATE facts SET frequency = frequency + 1, updated_at = ? WHERE id = ?",
+      ).run(now, existing.id);
+      return existing.id;
+    }
+
+    const id = randomUUID();
+    this.db.prepare(
+      "INSERT INTO facts (id, scope, category, content, frequency, status, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 'candidate', ?, ?, ?)",
+    ).run(id, fact.scope ?? "project", fact.category, fact.content, fact.projectId ?? null, now, now);
+    return id;
+  }
+
+  /** Query facts with filters. */
+  getFacts(filter: { scope?: string; status?: string; category?: string; projectId?: string; limit?: number } = {}): Array<{
+    id: string; scope: string; category: string; content: string;
+    frequency: number; status: string; projectId: string | null;
+    createdAt: number; updatedAt: number;
+  }> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (filter.scope) { conditions.push("scope = ?"); params.push(filter.scope); }
+    if (filter.status) { conditions.push("status = ?"); params.push(filter.status); }
+    if (filter.category) { conditions.push("category = ?"); params.push(filter.category); }
+    if (filter.projectId) { conditions.push("project_id = ?"); params.push(filter.projectId); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filter.limit ? `LIMIT ${Number(filter.limit)}` : "";
+    const sql = `SELECT * FROM facts ${where} ORDER BY frequency DESC, updated_at DESC ${limit}`;
+    const rows = this.db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+    return rows.map(r => ({
+      id: r.id as string,
+      scope: r.scope as string,
+      category: r.category as string,
+      content: r.content as string,
+      frequency: r.frequency as number,
+      status: r.status as string,
+      projectId: r.project_id as string | null,
+      createdAt: r.created_at as number,
+      updatedAt: r.updated_at as number,
+    }));
+  }
+
+  /** Promote a fact to a new status. */
+  promoteFact(id: string, newStatus: "candidate" | "established" | "archived"): void {
+    this.db.prepare("UPDATE facts SET status = ?, updated_at = ? WHERE id = ?").run(newStatus, Date.now(), id);
+  }
+
+  /** Archive stale candidate facts older than N ms. Returns count archived. */
+  archiveStaleFacts(olderThanMs: number): number {
+    const cutoff = Date.now() - olderThanMs;
+    const result = this.db.prepare(
+      "UPDATE facts SET status = 'archived', updated_at = ? WHERE status = 'candidate' AND updated_at < ?",
+    ).run(Date.now(), cutoff);
+    return (result as { changes: number }).changes ?? 0;
   }
 
   /** Close the database connection. */

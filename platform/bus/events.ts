@@ -96,6 +96,8 @@ export type EventType =
   | "parliament.session.digest"
   | "parliament.session.normalform"
   | "parliament.cps.generated"
+  // Steering
+  | "steering.switch"
   // Dream / Retro Intelligence
   | "dream.trigger.evaluate"
   | "dream.consolidation.start"

@@ -121,5 +121,18 @@ try {
     console.error(`[quorum] Auto-learn: ${learnings.suggestions.length} rule suggestion(s) from audit history`);
   }
 
+  // 5. [FACT WB-4] Extract facts from session events
+  try {
+    const { extractFacts } = await import("../../adapters/shared/fact-extractor.mjs");
+    const sessionEvents = bridge.event.queryEvents({ limit: 100, descending: true });
+    const factCandidates = extractFacts(sessionEvents);
+    for (const fc of factCandidates) {
+      bridge.fact.addFact(fc);
+    }
+    if (factCandidates.length > 0) {
+      console.error(`[quorum] Fact extraction: ${factCandidates.length} candidate(s) from session events`);
+    }
+  } catch (e) { console.error(`[quorum] Fact extraction warning: ${e?.message}`); }
+
   bridge.close();
 } catch (e) { console.error(`[quorum] Bridge session-stop warning: ${e.message}`); }

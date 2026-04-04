@@ -190,6 +190,9 @@ function showHelp(): void {
   console.log(`
 \x1b[36mquorum orchestrate\x1b[0m — session orchestration
 
+\x1b[33m💡 일반적으로 자동 실행됩니다.\x1b[0m 수동 실행이 필요한 경우에만 이 명령을 사용하세요.
+\x1b[2m   자동: setup 완료 시 파이프라인이 plan→orchestrate를 자동 호출합니다.\x1b[0m
+
 \x1b[1mSubcommands:\x1b[0m
   start [track]              Select and orchestrate a track
   plan <track> [--provider]  Interactive planner (Socratic + CPS)

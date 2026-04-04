@@ -7,8 +7,8 @@
  * @module core/config/schema
  */
 
-import type { QuorumConfig } from "./types.js";
-import { DEFAULT_CONFIG } from "./types.js";
+import type { QuorumConfig, GateProfile } from "./types.js";
+import { DEFAULT_CONFIG, GATE_PROFILES } from "./types.js";
 
 // ── Validation Result ───────────────────────────────
 
@@ -103,6 +103,16 @@ function validateConsensus(raw: unknown, errors: ValidationError[]): QuorumConfi
   };
 }
 
+function validateGateProfile(value: unknown, path: string, errors: ValidationError[]): GateProfile | undefined {
+  if (value === undefined || value === null) return undefined;
+  const s = validateString(value, path, errors);
+  if (s && !(GATE_PROFILES as readonly string[]).includes(s)) {
+    errors.push({ path, message: `Invalid gate profile "${s}". Valid: ${GATE_PROFILES.join(", ")}`, value });
+    return undefined;
+  }
+  return s as GateProfile | undefined;
+}
+
 function validateGates(raw: unknown, errors: ValidationError[]): QuorumConfig["gates"] {
   const obj = validateObject(raw, "gates", errors);
   if (!obj) return DEFAULT_CONFIG.gates;
@@ -112,6 +122,8 @@ function validateGates(raw: unknown, errors: ValidationError[]): QuorumConfig["g
     optional: validateArray(obj.optional, "gates.optional", errors) as string[] | undefined,
     disabled: validateArray(obj.disabled, "gates.disabled", errors) as string[] | undefined,
     profile: validateString(obj.profile, "gates.profile", errors),
+    gateProfile: validateGateProfile(obj.gateProfile, "gates.gateProfile", errors)
+      ?? DEFAULT_CONFIG.gates!.gateProfile,
   };
 }
 

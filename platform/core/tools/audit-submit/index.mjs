@@ -4,7 +4,7 @@
  * Submit evidence for audit — stores in SQLite and evaluates trigger.
  * Extracted from tool-core.mjs (SPLIT-4).
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -60,7 +60,16 @@ export async function toolAuditSubmit(params) {
     crossLayerChange: false,
     isRevert: false,
   };
-  const trigger = bridge.gate.evaluateTrigger(ctx);
+  // Read gateProfile from config (steering-controlled)
+  let gateProfile;
+  try {
+    const cfgPath = resolve(repoRoot, ".claude", "quorum", "config.json");
+    if (existsSync(cfgPath)) {
+      const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+      gateProfile = cfg?.gates?.gateProfile;
+    }
+  } catch { /* fail-open: use default balanced */ }
+  const trigger = bridge.gate.evaluateTrigger(ctx, undefined, gateProfile);
   if (!trigger) {
     return { text: "Evidence stored in SQLite. Trigger evaluation unavailable." };
   }

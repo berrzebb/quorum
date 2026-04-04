@@ -675,6 +675,9 @@ function showHelp(): void {
   console.log(`
 ${C.cyan}quorum parliament${C.reset} — run parliamentary deliberation on a topic
 
+${C.yellow}💡 일반적으로 자동 실행됩니다.${C.reset} 수동 실행이 필요한 경우에만 이 명령을 사용하세요.
+${C.dim}   자동: setup 완료 시 의제 기반으로 파이프라인이 parliament를 자동 호출합니다.${C.reset}
+
 ${C.bold}Usage:${C.reset}
   quorum parliament "<topic>"
   quorum parliament [options] "<topic>"

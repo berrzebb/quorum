@@ -43,12 +43,20 @@ export interface QualityRule {
   [key: string]: unknown;
 }
 
+/** Gate profile — controls trigger thresholds, audit depth, and verify scope. */
+export type GateProfile = "strict" | "balanced" | "fast" | "prototype";
+
+/** All valid gate profiles. */
+export const GATE_PROFILES: readonly GateProfile[] = ["strict", "balanced", "fast", "prototype"];
+
 /** Gate profile config. */
 export interface GatesConfig {
   essential?: string[];
   optional?: string[];
   disabled?: string[];
   profile?: string;
+  /** Active gate profile (steering-controlled). */
+  gateProfile?: GateProfile;
 }
 
 /** Parliament config. */
@@ -92,7 +100,7 @@ export const DEFAULT_CONFIG: QuorumConfig = {
     pending_tag: "[CHANGES_REQUESTED]",
   },
   quality_rules: [],
-  gates: { essential: [], optional: [], disabled: [] },
+  gates: { essential: [], optional: [], disabled: [], gateProfile: "balanced" },
   parliament: { convergenceThreshold: 0.7, maxRounds: 5, maxAutoAmendments: 3 },
   stopReviewGate: { enabled: false },
   permission: { safeTools: [], defaultMode: "default" },
