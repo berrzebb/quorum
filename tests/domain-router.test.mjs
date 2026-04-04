@@ -331,7 +331,8 @@ describe("evaluateTrigger with domains", () => {
     assert.ok(withDocs.activeDomains.includes("documentation"));
   });
 
-  it("multiple high-risk domains can escalate to T3", () => {
+  it("multiple high-risk domains can escalate to T3 (strict profile)", () => {
+    // PRD § 6.3: balanced → T2 max, strict → T3
     const result = evaluateTrigger({
       changedFiles: 5,
       securitySensitive: true,
@@ -344,7 +345,7 @@ describe("evaluateTrigger with domains", () => {
         compliance: true, observability: false, documentation: false,
         concurrency: true, i18n: false, infrastructure: false,
       },
-    });
+    }, undefined, "strict");
 
     assert.equal(result.tier, "T3");
     assert.equal(result.mode, "deliberative");
