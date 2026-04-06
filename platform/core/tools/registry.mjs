@@ -36,6 +36,10 @@ import { toolAgentComm } from "./agent-comm/index.mjs";
 import { toolAuditSubmit } from "./audit-submit/index.mjs";
 import { toolSkillSync } from "./skill-sync/index.mjs";
 import { toolTrackArchive } from "./track-archive/index.mjs";
+// v0.6.5 DCM — Dynamic Context Memory tools
+import { toolMemorySearch } from "./memory-search/index.mjs";
+import { toolMemoryWrite } from "./memory-write/index.mjs";
+import { toolMemoryRecall } from "./memory-recall/index.mjs";
 
 // ═══ Lazy-loaded heavy tools ════════════════════════════════════════════
 // Loaded on first execute() call to avoid upfront cost (~800 lines combined)
@@ -83,6 +87,8 @@ export const TOOL_NAMES = [
   "ai_guide",
   // Agent communication / lifecycle
   "agent_comm", "audit_submit", "skill_sync", "track_archive",
+  // v0.6.5 DCM — Dynamic Context Memory
+  "memory_search", "memory_write", "memory_recall",
 ];
 
 // ═══ Tool definitions ════════════════════════════════════════════════════
@@ -486,6 +492,74 @@ const TOOLS = [
     },
     execute: (args) => toolTrackArchive(args),
     category: "agent",
+  },
+
+  // ═══ v0.6.5 DCM — Dynamic Context Memory ════════════════════════════════
+
+  {
+    name: "memory_search",
+    description: "Search the knowledge graph. mode: keyword (FTS5), semantic (vector), graph (edge traversal). Returns matching nodes with type prefix and natural language description.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query or node ID (for graph mode)" },
+        mode: { type: "string", enum: ["keyword", "semantic", "graph"], description: "Search mode (default: keyword)" },
+        scope: { type: "string", enum: ["project", "global"], description: "Scope filter (default: project)" },
+        type: { type: "string", description: "Node type filter (Fact, Rule, Pattern, Decision, Trend, File, FR, WB, Test)" },
+        direction: { type: "string", enum: ["forward", "reverse", "rtm"], description: "Graph traversal direction (graph mode only)" },
+        limit: { type: "number", description: "Max results (default: 10)" },
+      },
+      required: ["query"],
+    },
+    execute: (args) => toolMemorySearch(args),
+    async: true,
+    category: "memory",
+  },
+  {
+    name: "memory_write",
+    description: "Write knowledge to the graph. Creates a node with optional edges and tags. All memory recording goes through this single entry point.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Content to record" },
+        type: { type: "string", enum: ["Fact", "Rule", "Decision", "Trend", "Pattern"], description: "Node type" },
+        title: { type: "string", description: "Short title (auto-generated from content if omitted)" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags for categorization" },
+        edges: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              target: { type: "string", description: "Target node ID" },
+              type: { type: "string", description: "Edge type (implements, caused, tested-by, imports, etc.)" },
+            },
+          },
+          description: "Edges to create from this node",
+        },
+        scope: { type: "string", enum: ["project", "global"], description: "Scope (default: project)" },
+      },
+      required: ["content", "type"],
+    },
+    execute: (args) => toolMemoryWrite(args),
+    async: true,
+    category: "memory",
+  },
+  {
+    name: "memory_recall",
+    description: "Auto-extract relevant past context for current work. Returns compact natural-language lines: patterns, facts, rules, trust scores. Optimized for prompt injection — minimal tokens, maximum signal.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        context: { type: "string", description: "Current work description or file paths" },
+        files: { type: "array", items: { type: "string" }, description: "Related file paths for pattern history lookup" },
+        agent_id: { type: "string", description: "Agent ID for trust score calculation" },
+        limit: { type: "number", description: "Max context lines (default: 5)" },
+      },
+      required: ["context"],
+    },
+    execute: (args) => toolMemoryRecall(args),
+    async: true,
+    category: "memory",
   },
 ];
 

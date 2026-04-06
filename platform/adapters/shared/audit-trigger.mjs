@@ -63,11 +63,39 @@ export async function evaluateAuditTrigger({ repoRoot, cfg, content, source, log
   });
 
   const gateProfile = cfg?.gates?.gateProfile ?? undefined;
-  const triggerResult = bridge.gate.evaluateTrigger(triggerCtx, undefined, gateProfile);
+
+  // [LEARN FR-12~14] Load learned weights from auto-learn stagnation analysis
+  let learnedWeights = undefined;
+  try {
+    const learnings = bridge.execution.analyzeAuditLearnings?.();
+    if (learnings?.stagnationLearnings?.length > 0) {
+      learnedWeights = {};
+      for (const sl of learnings.stagnationLearnings) {
+        if (sl.factor && sl.boost) learnedWeights[sl.factor] = sl.boost;
+      }
+    }
+  } catch { /* fail-open */ }
+
+  const triggerResult = bridge.gate.evaluateTrigger(triggerCtx, learnedWeights, gateProfile);
   if (triggerResult) {
     log(`TRIGGER: mode=${triggerResult.mode} tier=${triggerResult.tier} score=${triggerResult.score.toFixed(2)}`);
+
+    // [AUDIT FR-11] Pre-Audit Recall — inject past context from knowledge graph
+    let recallContext = "";
+    try {
+      const recallResult = bridge.graph.searchKeyword?.(changedFiles.slice(0, 3).join(" "), { type: "Pattern", limit: 3 });
+      const patterns = (recallResult ?? []).map(r => `Pattern: ${r.description || r.title}`);
+      // Agent trust (if source agent is known)
+      const trust = bridge.graph.queryAgentTrust?.(source);
+      if (trust?.total > 0 && trust.trustPct < 80) {
+        patterns.push(`Trust: ${source} 신뢰도 ${trust.trustPct}%, ${trust.trustPct < 50 ? "실행 검증 필수" : "완료 선언 검증 권장"}`);
+      }
+      if (patterns.length > 0) recallContext = patterns.join("\n");
+    } catch { /* fail-open: recall is best-effort */ }
+
     bridge.event.emitEvent("audit.submit", source, {
       tier: triggerResult.tier, mode: triggerResult.mode, score: triggerResult.score,
+      recallContext, // injected into audit prompt by downstream consumer
     });
 
     // Parliament session: T3 deliberative + parliament.enabled

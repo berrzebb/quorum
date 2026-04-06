@@ -65,7 +65,7 @@ async function loadModules() {
   if (_svc.modules) return _svc.modules;
   try {
     const toURL = (p) => pathToFileURL(p).href;
-    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod] = await Promise.all([
+    const [storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod, graphQueryMod, graphSearchMod] = await Promise.all([
       import(toURL(resolve(DIST, "bus", "store.js"))),
       import(toURL(resolve(DIST, "bus", "events.js"))),
       import(toURL(resolve(DIST, "providers", "trigger.js"))),
@@ -82,8 +82,10 @@ async function loadModules() {
       import(toURL(resolve(DIST, "bus", "parliament-gate.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "rule-registry.js"))).catch(() => null),
       import(toURL(resolve(DIST, "bus", "rule-promotion.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "graph-query.js"))).catch(() => null),
+      import(toURL(resolve(DIST, "bus", "graph-search.js"))).catch(() => null),
     ]);
-    _svc.modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod };
+    _svc.modules = { storeMod, eventsMod, triggerMod, routerMod, stagnationMod, lockMod, messageBusMod, fitnessMod, fitnessLoopMod, claimMod, parallelMod, orchestratorMod, autoLearnMod, parliamentGateMod, ruleRegistryMod, rulePromotionMod, graphQueryMod, graphSearchMod };
     return _svc.modules;
   } catch (err) {
     console.warn("[bridge] loadModules failed:", err?.message ?? err);
@@ -712,8 +714,16 @@ async function runParliamentSession(request, config) {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.parliamentSessionMod) return null;
+  // Default config when caller omits it (e.g. pipeline-runner)
+  const safeConfig = config ?? {
+    agendaId: request?.agenda?.[0] ?? "pipeline",
+    sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
+    consensus: {},
+    eligibleVoters: 3,
+    maxAutoAmendments: 5,
+  };
   return withAsyncFallback(
-    () => pMods.parliamentSessionMod.runParliamentSession(_svc.store, request, config),
+    () => pMods.parliamentSessionMod.runParliamentSession(_svc.store, request, safeConfig),
     null, "runParliamentSession"
   );
 }
@@ -822,6 +832,13 @@ async function runFitnessGate(repoRoot, changedFiles) {
 async function runFixerCycle(opts) {
   return withFallback(async () => {
     const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "execution", "fixer-loop.js")).href);
+    // Auto-inject stagnation detection if caller doesn't provide one
+    if (!opts.detectStagnation) {
+      try {
+        const scopeGates = await import(pathToFileURL(resolve(DIST, "orchestrate", "governance", "scope-gates.js")).href);
+        opts.detectStagnation = scopeGates.detectFixLoopStagnation;
+      } catch { /* proceed without — runFixCycle still works, just no early exit on stagnation */ }
+    }
     return mod.runFixCycle(opts);
   }, { passed: false, attempts: 0, stagnation: "fixer unavailable" }, "runFixerCycle");
 }
@@ -854,6 +871,17 @@ async function runAutoRetro(repoRoot) {
     const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "governance", "lifecycle-hooks.js")).href);
     return mod.autoRetro(repoRoot);
   }, undefined, "autoRetro");
+}
+
+/**
+ * Run planner session: CPS → mode selection → provider execution → WB+PRD+RTM.
+ * Bridge wrapper for orchestrate/planning/planner-session.ts.
+ */
+async function runPlannerSession(opts) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "planning", "planner-session.js")).href);
+    return mod.runPlannerSession(opts);
+  }, null, "runPlannerSession");
 }
 
 /**
@@ -951,8 +979,11 @@ async function runOrchestrateLoop(opts) {
       try { await mux.cleanup(); } catch { /* cleanup */ }
     }
 
+    // Success requires: no failed waves AND majority of items completed (>50%)
+    const completionRatio = workItems.length > 0 ? completedIds.size / workItems.length : 0;
+    const actualSuccess = failedWaves === 0 && completionRatio > 0.5;
     return {
-      success: failedWaves === 0,
+      success: actualSuccess,
       completedIds: [...completedIds],
       failedWaves,
       totalWaves: waves.length,
@@ -993,12 +1024,82 @@ export const event = { emitEvent, recordTransition, currentState, queryEvents, q
 export const query = { getState, setState, getLatestEvidence, getMessageBus };
 export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius, runFitnessGate, runAuditGates, runFixer, runFixerCycle, runAutoRetro, runOrchestrateLoop };
 export const hooks = { initHookRunner, getHookRunner, fireHook, checkHookGate };
-export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal };
+export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal, runPlannerSession };
 export const fact = {
   addFact(f) { return _svc.store?.addFact(f) ?? null; },
   getFacts(filter) { return _svc.store?.getFacts(filter) ?? []; },
   promoteFact(id, status) { _svc.store?.promoteFact(id, status); },
   archiveStaleFacts(olderThanMs) { return _svc.store?.archiveStaleFacts(olderThanMs) ?? 0; },
+};
+
+// ── v0.6.5 Knowledge Graph Namespace ──
+let _graphQuery = null;
+let _graphSearch = null;
+
+function loadGraphModules() {
+  if (_graphQuery) return { gq: _graphQuery, gs: _graphSearch };
+  try {
+    _graphQuery = _svc.modules?.graphQueryMod;
+    _graphSearch = _svc.modules?.graphSearchMod;
+  } catch { /* not loaded yet */ }
+  return { gq: _graphQuery, gs: _graphSearch };
+}
+
+export const graph = {
+  addNode(input) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.addNode(db, input) : null;
+    }, null, "graph.addNode");
+  },
+  updateNode(id, updates) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.updateNode(db, id, updates) : false;
+    }, false, "graph.updateNode");
+  },
+  queryNodes(filter) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.queryNodes(db, filter) : [];
+    }, [], "graph.queryNodes");
+  },
+  addEdge(input) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.addEdge(db, input) : null;
+    }, null, "graph.addEdge");
+  },
+  queryEdges(filter) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.queryEdges(db, filter) : [];
+    }, [], "graph.queryEdges");
+  },
+  searchKeyword(query, opts) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gs } = loadGraphModules();
+      return (db && gs) ? gs.searchKeyword(db, query, opts) : [];
+    }, [], "graph.searchKeyword");
+  },
+  queryForward(fromId, opts) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.queryForward(db, fromId, opts) : [];
+    }, [], "graph.queryForward");
+  },
+  queryReverse(toId, opts) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.queryReverse(db, toId, opts) : [];
+    }, [], "graph.queryReverse");
+  },
+  queryAgentTrust(agentId) {
+    return withFallback(() => {
+      const db = _svc.store?.getDb(); const { gq } = loadGraphModules();
+      return (db && gq) ? gq.queryAgentTrust(db, agentId) : { agentId, total: 0, correct: 0, incorrect: 0, trustPct: 100 };
+    }, { agentId, total: 0, correct: 0, incorrect: 0, trustPct: 100 }, "graph.queryAgentTrust");
+  },
 };
 
 // ── PROMOTE Track: Rule Registry + Promotion ──

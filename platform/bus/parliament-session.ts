@@ -106,13 +106,13 @@ export async function runParliamentSession(
 ): Promise<SessionResult> {
   const start = Date.now();
   const errors: SessionError[] = [];
-  const maxAutoAmendments = config.maxAutoAmendments ?? 5;
+  const maxAutoAmendments = config?.maxAutoAmendments ?? 5;
 
   // Emit session start event
   store.append(createEvent("parliament.session.start", "generic", {
-    agendaId: config.agendaId,
-    sessionType: config.sessionType,
-    eligibleVoters: config.eligibleVoters,
+    agendaId: config?.agendaId ?? "unknown",
+    sessionType: config?.sessionType ?? "morning",
+    eligibleVoters: config?.eligibleVoters ?? 3,
   }));
 
   // Phase 1: Deliberation (Diverge-Converge)

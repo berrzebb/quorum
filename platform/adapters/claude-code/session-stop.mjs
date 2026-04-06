@@ -158,5 +158,47 @@ try {
     }
   } catch (e) { console.error(`[quorum] Fact extraction warning: ${e?.message}`); }
 
+  // 7. [AUDIT FR-12] Post-Audit Write — record verdicts to knowledge graph
+  try {
+    const verdicts = bridge.event.queryEvents({ eventType: "audit.verdict", limit: 20, descending: true });
+    for (const v of verdicts) {
+      if (!v.payload?.verdict) continue;
+      const isReject = v.payload.verdict === "changes_requested";
+      const nodeType = isReject ? "Pattern" : "Decision";
+      const content = isReject
+        ? `Audit reject: ${v.payload.rejectionCodes?.map(c => c.code).join(", ") ?? "unknown"}`
+        : `Audit passed: ${v.payload.summary ?? "no details"}`;
+
+      bridge.graph.addNode?.({
+        type: nodeType,
+        title: content.slice(0, 80),
+        description: content,
+        status: "active",
+        metadata: { verdict: v.payload.verdict, session: v.sessionId },
+      });
+
+      // Record agent trust edge
+      if (v.agentId) {
+        const edgeType = isReject ? "completed-incorrectly" : "completed-correctly";
+        const agentId = v.agentId;
+        // Ensure agent node exists
+        const existing = bridge.graph.queryNodes?.({ type: "Agent", limit: 1 })?.find(n => n.id === agentId);
+        if (!existing) bridge.graph.addNode?.({ id: agentId, type: "Agent", title: agentId, status: "active" });
+        const sessionNode = `session-${v.sessionId || Date.now()}`;
+        bridge.graph.addNode?.({ id: sessionNode, type: "Session", title: sessionNode, status: "active" });
+        bridge.graph.addEdge?.({ fromId: agentId, toId: sessionNode, type: edgeType });
+      }
+    }
+  } catch (e) { console.error(`[quorum] Post-audit write warning: ${e?.message}`); }
+
+  // 8. [FACT FR-14] Cross-project global fact promotion
+  try {
+    const { promoteToGlobal } = await import("../../adapters/shared/fact-consolidator.mjs");
+    const promoted = promoteToGlobal(bridge.fact);
+    if (promoted > 0) {
+      console.error(`[quorum] Global fact promotion: ${promoted} fact(s) promoted to global scope`);
+    }
+  } catch (e) { console.error(`[quorum] Global fact promotion warning: ${e?.message}`); }
+
   bridge.close();
 } catch (e) { console.error(`[quorum] Bridge session-stop warning: ${e.message}`); }

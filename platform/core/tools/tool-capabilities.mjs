@@ -369,6 +369,48 @@ export const TOOL_CAPABILITIES = Object.freeze([
     maxResultSizeChars: 15_000,
     category: "pdca",
   },
+
+  // ── v0.6.5 DCM — Dynamic Context Memory ──
+
+  {
+    name: "memory_search",
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    isDestructive: false,
+    shouldDefer: true,
+    alwaysLoad: false,
+    searchHint: "memory search knowledge graph query recall find fact pattern rule",
+    domain: [],
+    allowedRoles: ALL_ROLES,
+    maxResultSizeChars: 10_000,
+    category: "memory",
+  },
+  {
+    name: "memory_write",
+    isConcurrencySafe: false,
+    isReadOnly: false,
+    isDestructive: false,
+    shouldDefer: true,
+    alwaysLoad: false,
+    searchHint: "memory write record save knowledge fact pattern rule decision",
+    domain: [],
+    allowedRoles: ALL_ROLES,
+    maxResultSizeChars: 5_000,
+    category: "memory",
+  },
+  {
+    name: "memory_recall",
+    isConcurrencySafe: true,
+    isReadOnly: true,
+    isDestructive: false,
+    shouldDefer: false,
+    alwaysLoad: true,
+    searchHint: "memory recall context past history pattern trust agent",
+    domain: [],
+    allowedRoles: ALL_ROLES,
+    maxResultSizeChars: 5_000,
+    category: "memory",
+  },
 ]);
 
 // ── Lookup helpers ──────────────────────────────────────

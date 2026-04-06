@@ -44,6 +44,7 @@ export function waveCommit(
 
   try {
     const existingFiles = files.filter(f => {
+      if (!f || !f.trim()) return false;  // Skip empty/whitespace strings
       try {
         const p = f.startsWith("/") || f.includes(":\\") ? f : resolve(repoRoot, f);
         return existsSync(p);
@@ -80,6 +81,7 @@ export function waveCommit(
  * Called after audit to squash RTM "implemented" → "passed"/"failed" into the same commit.
  */
 export function amendWaveCommit(repoRoot: string, rtmPath: string): void {
+  if (!rtmPath || !rtmPath.trim()) return;  // Nothing to amend
   try {
     execFileSync("git", ["add", "-f", rtmPath], { cwd: repoRoot, windowsHide: true, stdio: "pipe" });
     execFileSync("git", ["commit", "--amend", "--no-edit"], {

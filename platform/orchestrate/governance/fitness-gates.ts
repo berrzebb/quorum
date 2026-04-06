@@ -5,7 +5,7 @@
  * No execution logic, no agent spawning.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { computeFitness } from "../../bus/fitness.js";
@@ -36,6 +36,14 @@ const TSC_CACHE_TTL = 120_000; // 2 minutes — covers a full wave cycle
  */
 export function runTscCached(repoRoot: string): TscCacheEntry {
   if (_tscCache && Date.now() - _tscCache.ts < TSC_CACHE_TTL) return _tscCache;
+
+  // Skip tsc for non-TypeScript projects (no tsconfig.json)
+  const hasTsConfig = existsSync(resolve(repoRoot, "tsconfig.json"));
+  if (!hasTsConfig) {
+    _tscCache = { exitCode: 0, errorCount: 0, ts: Date.now() };
+    return _tscCache;
+  }
+
   let exitCode = 0;
   let errorCount = 0;
   try {

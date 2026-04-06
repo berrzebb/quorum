@@ -634,9 +634,9 @@ describe("Contract: Tool Bridge", () => {
     assert.ok(String(config.reason).length > 0);
   });
 
-  it("getAvailableTools() returns all 26 tools from canonical registry", () => {
+  it("getAvailableTools() returns all 29 tools from canonical registry", () => {
     const tools = ClaudeSdkToolBridge.getAvailableTools();
-    assert.equal(tools.length, 26);
+    assert.equal(tools.length, 29);
   });
 
 });

@@ -374,12 +374,18 @@ export function detectFixLoopStagnation(history: string[][]): string | null {
     }
   }
 
-  // 3. No progress: finding count not decreasing across 2+ attempts
+  // 3. No progress: count not decreasing AND findings substantially the same
   if (history.length >= 2) {
-    const counts = history.map(f => f.length);
-    const lastTwo = counts.slice(-2);
-    if (lastTwo[1]! >= lastTwo[0]! && lastTwo[0]! > 0) {
-      return `no progress — finding count not decreasing (${lastTwo[0]} → ${lastTwo[1]})`;
+    const prev = history[history.length - 2]!;
+    const curr = history[history.length - 1]!;
+    if (curr.length >= prev.length && prev.length > 0) {
+      // Check content overlap — if >50% of findings are the same, it's truly stuck
+      const prevSet = new Set(prev);
+      const overlap = curr.filter(f => prevSet.has(f)).length;
+      const overlapRatio = overlap / Math.max(prev.length, 1);
+      if (overlapRatio >= 0.5) {
+        return `no progress — finding count not decreasing (${prev.length} → ${curr.length}) with ${Math.round(overlapRatio * 100)}% overlap`;
+      }
     }
   }
 
@@ -444,6 +450,49 @@ export function runProjectTests(repoRoot: string): ProjectTestResult {
 
   // No test command detected
   return { ran: false, passed: true, summary: "no test command found" };
+}
+
+// ── Fix-First Severity Classification (v0.6.3 FR-8~10) ──
+
+export type FindingSeverity = "auto-fixable" | "review-required" | "blocking";
+
+/**
+ * Classify finding severity into 3 tiers:
+ *   auto-fixable: info/low — fixer agent handles without human review
+ *   review-required: medium — needs audit but doesn't block
+ *   blocking: high/critical — blocks wave progress
+ */
+export function classifyFindingSeverity(finding: string): FindingSeverity {
+  const lower = finding.toLowerCase();
+
+  // blocking: security, critical errors, regressions
+  if (/critical|security|vulnerability|injection|xss|regression|overwritten/i.test(lower)) return "blocking";
+  if (/high.*severity|high.*risk/i.test(lower)) return "blocking";
+
+  // review-required: medium complexity issues
+  if (/medium|complexity|refactor|architecture|design.*violation/i.test(lower)) return "review-required";
+  if (/type.*error|not.*assignable|missing.*return/i.test(lower)) return "review-required";
+
+  // auto-fixable: lint, style, stubs, TODO, naming, minor patterns
+  return "auto-fixable";
+}
+
+/**
+ * Partition findings by severity. Returns { autoFixable, reviewRequired, blocking }.
+ */
+export function partitionFindings(findings: string[]): {
+  autoFixable: string[];
+  reviewRequired: string[];
+  blocking: string[];
+} {
+  const result = { autoFixable: [] as string[], reviewRequired: [] as string[], blocking: [] as string[] };
+  for (const f of findings) {
+    const severity = classifyFindingSeverity(f);
+    if (severity === "auto-fixable") result.autoFixable.push(f);
+    else if (severity === "review-required") result.reviewRequired.push(f);
+    else result.blocking.push(f);
+  }
+  return result;
 }
 
 // ── Regression Detection ─────────────────────

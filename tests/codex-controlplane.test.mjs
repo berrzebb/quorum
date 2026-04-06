@@ -26,8 +26,8 @@ const {
 // ═══ Capability Registry Bridge ═══════════════════════════════════════
 
 describe("Capability Registry Bridge", () => {
-  it("re-exports TOOL_CAPABILITIES with 26 entries", () => {
-    assert.equal(TOOL_CAPABILITIES.length, 26);
+  it("re-exports TOOL_CAPABILITIES with 29 entries", () => {
+    assert.equal(TOOL_CAPABILITIES.length, 29);
   });
 
   it("getCapability returns metadata for known tool", () => {
@@ -52,9 +52,9 @@ describe("Capability Registry Bridge", () => {
     assert.equal(isReadOnly("dependency_graph"), true);
   });
 
-  it("allToolNames returns 26 names", () => {
+  it("allToolNames returns 29 names", () => {
     const names = allToolNames();
-    assert.equal(names.length, 26);
+    assert.equal(names.length, 29);
     assert.ok(names.includes("code_map"));
     assert.ok(names.includes("audit_submit"));
   });

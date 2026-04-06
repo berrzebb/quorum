@@ -181,6 +181,7 @@ export function composeHarness(intent, profile) {
     gates: {
       gateProfile: intent.gateProfile,
     },
+    pipeline: { agenda: intent.agenda },
     parliament: parliamentConfig[intent.teamSize] ?? parliamentConfig.solo,
     verify: { commands: verifyCommands },
     domains: { active: intent.activeDomains },

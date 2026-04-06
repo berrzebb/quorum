@@ -13,6 +13,7 @@ import type { FitnessGateResult } from "../governance/fitness-gates.js";
 import { invalidateTscCache } from "../governance/fitness-gates.js";
 import type { WorkItem } from "../planning/types.js";
 import { prepareProviderSpawn } from "../core/provider-binary.js";
+import { partitionFindings, type FindingSeverity } from "../governance/scope-gates.js";
 
 // ── Types ────────────────────────────────────
 
@@ -23,6 +24,8 @@ export interface FixerOptions {
   files: string[];
   provider: string;
   fitnessContext?: FitnessGateResult;
+  /** Findings from previous rounds — fixer must not regress these. */
+  previousFindings?: string[][];
 }
 
 /** Result of a single fixer invocation. */
@@ -73,7 +76,7 @@ export interface FixCycleResult {
  * Different from implementer: no fresh implementation, just bug fixing.
  */
 export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
-  const { repoRoot, findings, files, provider, fitnessContext } = opts;
+  const { repoRoot, findings, files, provider, fitnessContext, previousFindings } = opts;
 
   const fileList = [...new Set(files)].slice(0, 15).map(f => `- ${f}`).join("\n");
   const findingList = findings.map(f => `- ${f}`).join("\n");
@@ -91,6 +94,36 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     }
   }
 
+  // Convergence-loop step 4: ANALYZE — what changed since last iteration?
+  let contextSection = "";
+  if (previousFindings && previousFindings.length > 0) {
+    const currentSet = new Set(findings);
+    const prevRound = previousFindings[previousFindings.length - 1] ?? [];
+    const prevSet = new Set(prevRound);
+
+    const fixed = prevRound.filter(f => !currentSet.has(f));
+    const recurring = findings.filter(f => prevSet.has(f));
+    const newFindings = findings.filter(f => !prevSet.has(f));
+
+    const parts: string[] = ["", `## Context — Round ${previousFindings.length + 1} of fix cycle`];
+
+    if (fixed.length > 0) {
+      parts.push("", "### Successfully fixed last round (preserve these):");
+      parts.push(...fixed.slice(0, 15).map(f => `- ✅ ${f}`));
+    }
+    if (recurring.length > 0) {
+      parts.push("", "### Still failing (previous fix was insufficient or reverted):");
+      parts.push(...recurring.slice(0, 15).map(f => `- ⚠ ${f}`));
+    }
+    if (newFindings.length > 0) {
+      parts.push("", "### New findings this round:");
+      parts.push(...newFindings.slice(0, 15).map(f => `- 🆕 ${f}`));
+    }
+
+    parts.push("", "When fixing new/recurring issues, verify that previously fixed issues remain resolved.");
+    contextSection = parts.join("\n");
+  }
+
   const prompt = [
     "# Fixer — Address Audit Findings",
     "",
@@ -100,13 +133,14 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     "## Affected Files:",
     fileList,
     fitnessSection,
+    contextSection,
     "",
     "## Instructions:",
     "1. Read each affected file",
     "2. Fix the specific issues listed in the findings",
-    "3. Run compilation check (tsc --noEmit or equivalent)",
-    "4. Do NOT rewrite or restructure — only fix the identified issues",
-    "5. Run any available tests to verify your fixes",
+    "3. Do NOT rewrite or restructure — only fix the identified issues",
+    "4. Preserve fixes from previous rounds — do NOT regress",
+    "5. Run compilation/type checks and tests to verify",
   ].join("\n");
 
   const spawn = await prepareProviderSpawn(provider, prompt);
@@ -178,6 +212,15 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: true, attempts, findingsHistory };
     }
 
+    // [FIX FR-8~10] Fix-first: classify findings by severity
+    const { autoFixable, reviewRequired, blocking } = partitionFindings(inScope);
+
+    // Blocking findings (critical/high) → fail immediately, no auto-fix attempt
+    if (blocking.length > 0 && autoFixable.length === 0 && reviewRequired.length === 0) {
+      findingsHistory.push([...inScope]);
+      return { passed: false, attempts, stagnation: `${blocking.length} blocking finding(s)`, findingsHistory };
+    }
+
     // Only track in-scope findings for stagnation detection
     findingsHistory.push([...inScope]);
 
@@ -193,13 +236,16 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
       return { passed: false, attempts, stagnation, findingsHistory };
     }
 
-    // Only pass in-scope findings to fixer — don't waste time on out-of-scope
+    // Only pass fixable findings to fixer — blocking findings need human/audit review.
+    // Include previous findings so fixer knows what was already fixed and must be preserved.
+    const fixableFindings = [...autoFixable, ...reviewRequired];
     await runFixer({
       repoRoot,
-      findings: inScope,
+      findings: fixableFindings.length > 0 ? fixableFindings : inScope,
       files,
       provider: fixer,
       fitnessContext,
+      previousFindings: findingsHistory.slice(0, -1), // all except current round
     });
   }
 }

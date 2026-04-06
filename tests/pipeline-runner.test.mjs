@@ -22,7 +22,7 @@ afterEach(() => {
 /** Test config — uses fake provider to avoid spawning real claude. */
 const TEST_CONFIG = { pipeline: { provider: "__test__" } };
 
-/** Mock bridge. */
+/** Mock bridge — PRD §6.2 compliant: parliament + planner + orchestrate + self-checker. */
 function createMockBridge(overrides = {}) {
   const events = [];
   return {
@@ -33,14 +33,30 @@ function createMockBridge(overrides = {}) {
       }),
       ...overrides.parliament,
     },
-    execution: { ...overrides.execution },
+    execution: {
+      runPlannerSession: async ({ repoRoot, trackName }) => {
+        // Create mock WB file
+        const { mkdirSync, writeFileSync } = await import("node:fs");
+        const { resolve } = await import("node:path");
+        const slug = trackName || "pipeline";
+        const dir = resolve(repoRoot, "docs", slug);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(resolve(dir, "work-breakdown.md"), `### WB-1: Test\n- **Action**: test\n- **Target files**: src/test.ts\n- **Verify**: echo ok\n- **Done**: done\n`, "utf8");
+        return { autoMode: true, provider: "test", trackName, trackSlug: slug };
+      },
+      ...overrides.execution,
+    },
     gate: {
       computeFitness: () => ({ total: 0.85 }),
+      runOrchestrateLoop: async () => ({ success: true, completedIds: ["WB-1"], failedWaves: 0, totalWaves: 1 }),
+      runAuditGates: async () => ({ passed: true }),
+      runFitnessGate: async () => ({ score: 0.85, decision: "proceed" }),
       ...overrides.gate,
     },
     event: {
       emitEvent: (type, source, payload) => events.push({ type, source, payload }),
     },
+    domain: { detectDomains: () => [], ...overrides.domain },
     _events: events,
   };
 }
@@ -75,45 +91,65 @@ describe("runPipeline", () => {
     assert.equal(planOutput.converged, true);
   });
 
-  it("plan stage falls back to template when parliament fails", async () => {
+  it("plan stage proceeds with agenda-only when parliament fails", async () => {
     const bridge = createMockBridge({
       parliament: { runParliamentSession: async () => { throw new Error("no auditors"); } },
     });
-    const result = await runPipeline("인증", { ...TEST_CONFIG, gates: { gateProfile: "strict" } }, bridge, { repoRoot: tmpDir });
+    const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
     const planOutput = result.stages[0].output;
-    assert.equal(planOutput.source, "template");
-    assert.equal(planOutput.gateProfile, "strict");
+    assert.equal(planOutput.source, "agenda-only");
+    assert.equal(planOutput.cps, null);
+    assert.equal(planOutput.converged, false);
   });
 
-  it("plan stage falls back to template when parliament missing", async () => {
-    const bridge = { parliament: {}, event: { emitEvent: () => {} } };
+  it("plan stage proceeds with agenda-only when parliament missing", async () => {
+    const bridge = createMockBridge({ parliament: { runParliamentSession: undefined } });
     const result = await runPipeline("test", TEST_CONFIG, bridge, { repoRoot: tmpDir });
-    assert.equal(result.stages[0].output.source, "template");
+    const planOutput = result.stages[0].output;
+    assert.equal(planOutput.source, "agenda-only");
+    assert.equal(planOutput.cps, null);
   });
 
-  it("design stage generates work-breakdown or template", async () => {
+  it("plan stage carries verdict when parliament not converged", async () => {
+    const bridge = createMockBridge({
+      parliament: {
+        runParliamentSession: async () => ({
+          cps: null, converged: false,
+          verdict: { finalVerdict: "approved" },
+          convergence: { converged: false, stableRounds: 0 },
+        }),
+      },
+    });
+    const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
+    const planOutput = result.stages[0].output;
+    assert.equal(planOutput.source, "parliament");
+    assert.equal(planOutput.cps, null);
+    assert.equal(planOutput.converged, false);
+    assert.ok(planOutput.verdict);
+  });
+
+  it("design stage uses runPlannerSession to generate WBs", async () => {
     const bridge = createMockBridge();
     const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
     const designOutput = result.stages[1].output;
     assert.ok(designOutput.trackName);
-    // WB should be generated (provider fallback creates template)
-    assert.ok(designOutput.wbPath || designOutput.source === "failed");
+    assert.equal(designOutput.source, "planner-session");
+    assert.ok(designOutput.wbPath);
   });
 
-  it("implement stage spawns provider or falls back to brief", async () => {
+  it("implement stage uses runOrchestrateLoop", async () => {
     const bridge = createMockBridge();
-    // Use a non-existent provider to trigger fallback
-    const result = await runPipeline("인증", {
-      domains: { active: ["security"] },
-      pipeline: { provider: "nonexistent-provider-test" },
-    }, bridge, { repoRoot: tmpDir });
+    const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
     const implOutput = result.stages[2].output;
-    // Should fall back to brief when provider unavailable
-    assert.equal(implOutput.fallback, "brief");
-    const briefPath = resolve(tmpDir, ".claude", "quorum", "pipeline", "implement-brief.md");
-    assert.ok(existsSync(briefPath));
-    const content = readFileSync(briefPath, "utf8");
-    assert.ok(content.includes("security"));
+    assert.equal(implOutput.mode, "orchestrate");
+    assert.equal(implOutput.success, true);
+  });
+
+  it("implement stage fails when orchestrate unavailable", async () => {
+    const bridge = createMockBridge({ gate: { runOrchestrateLoop: undefined } });
+    const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
+    assert.equal(result.success, false);
+    assert.equal(result.failedAt, "implement");
   });
 
   it("verify stage runs commands and reports results", async () => {

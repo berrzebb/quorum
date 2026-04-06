@@ -127,6 +127,33 @@ if (is_subagent) {
 
 const tool_name = input.tool_name || "";
 
+// ── [PROMOTE FR-22] Push Gate — git commit/push pre-check ──
+if (tool_name === "Bash") {
+  const command = (input.tool_input?.command || "").trim();
+  if (/\bgit\s+(commit|push)\b/.test(command)) {
+    try {
+      const { checkPushGate } = await import("../../adapters/shared/push-gate.mjs");
+      const br = await getBridge();
+      const repoRoot = process.cwd();
+      let gateProfile = "balanced";
+      try {
+        const cfgP = resolve(repoRoot, ".claude", "quorum", "config.json");
+        if (existsSync(cfgP)) gateProfile = JSON.parse(readFileSync(cfgP, "utf8"))?.gates?.gateProfile ?? "balanced";
+      } catch { /* use balanced */ }
+      const lastFitness = br?.event?.queryEvents?.({ eventType: "fitness.check", limit: 1, descending: true })?.[0];
+      const fitnessScore = lastFitness?.payload?.score ?? 1.0;
+      const hardViolations = (br?.rules?.getRules?.({ level: "hard" }) ?? []).filter(r => r.violationCount > 0).length;
+      const result = checkPushGate({ gateProfile, fitnessScore, hardViolations });
+      if (!result.allowed) {
+        process.stdout.write(`\n${result.blockReason}\n`);
+        process.exit(2);
+      } else if (result.warnings.length > 0) {
+        process.stdout.write(`\n[quorum push-gate] WARNING: ${result.warnings.join("; ")}\n`);
+      }
+    } catch { /* fail-open */ }
+  }
+}
+
 // Completion command → release marker
 if (tool_name === "Bash") {
   const command = input.tool_input?.command || "";

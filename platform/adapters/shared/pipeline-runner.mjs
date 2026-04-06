@@ -8,10 +8,9 @@
  * @module adapters/shared/pipeline-runner
  */
 
-import { execSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, statSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { tmpdir } from "node:os";
 
 /**
  * @typedef {"plan"|"design"|"implement"|"verify"|"qa"|"finalize"} PipelineStage
@@ -49,10 +48,14 @@ const STAGES = ["plan", "design", "implement", "verify", "qa", "finalize"];
  * @returns {Promise<PipelineResult>}
  */
 export async function runPipeline(agenda, config, bridge, opts = {}) {
+  const effectiveAgenda = agenda
+    ?? config?.pipeline?.agenda
+    ?? config?._meta?.agenda
+    ?? "Build the project";
   const { maxQARounds = 3, onStageChange, repoRoot } = opts;
   const stages = [];
   const totalStart = Date.now();
-  const ctx = { agenda, config, bridge, repoRoot, plan: null, verifyResults: null };
+  const ctx = { agenda: effectiveAgenda, config, bridge, repoRoot, plan: null, verifyResults: null };
 
   for (const stage of STAGES) {
     onStageChange?.(stage, "running");
@@ -61,13 +64,20 @@ export async function runPipeline(agenda, config, bridge, opts = {}) {
     try {
       const handler = STAGE_HANDLERS[stage];
       const output = await handler(ctx, { maxQARounds });
-      const result = { stage, status: output?.skipped ? "skipped" : "success", output, duration: Date.now() - stageStart };
+      // QA stage: treat passed:false as a real failure (codex audit rejected after 3 rounds)
+      const qaFailed = stage === "qa" && output?.passed === false;
+      const result = { stage, status: output?.skipped ? "skipped" : (qaFailed ? "failed" : "success"), output, duration: Date.now() - stageStart };
       stages.push(result);
       onStageChange?.(stage, result.status);
 
       bridge.event?.emitEvent?.("pipeline.stage.complete", "claude-code", {
         stage, status: result.status, duration: result.duration,
       });
+
+      // QA failure: still run finalize (retro/cleanup), but mark pipeline as not fully passed
+      if (qaFailed) {
+        ctx._qaFailed = true;
+      }
     } catch (err) {
       const result = { stage, status: "failed", error: err?.message ?? String(err), duration: Date.now() - stageStart };
       stages.push(result);
@@ -81,47 +91,53 @@ export async function runPipeline(agenda, config, bridge, opts = {}) {
     }
   }
 
-  return { success: true, stages, totalDuration: Date.now() - totalStart };
+  return { success: !ctx._qaFailed, stages, totalDuration: Date.now() - totalStart };
 }
 
 // ── Stage Handlers ──────────────────────────────────────────
 
 const STAGE_HANDLERS = {
   /**
-   * P1. Plan — generate structured plan from agenda + config.
-   * Tries parliament first, falls back to template-based plan.
+   * P1. Plan — parliament session → CPS if converged, else verdict context for planner Phase 1.
+   *
+   * PRD: "If CPS exists → planner Phase 0. If not → planner Phase 1 (Capture Intent)."
+   * Parliament convergence requires multiple sessions — first session won't converge.
    */
   async plan(ctx) {
     const { agenda, config, bridge } = ctx;
 
-    // Try parliament CPS generation
+    // Attempt parliament session — CPS only produced on convergence
     if (bridge.parliament?.runParliamentSession) {
       try {
         const result = await bridge.parliament.runParliamentSession({
           agenda: [agenda],
           source: "pipeline",
         });
+
         if (result?.cps) {
-          ctx.plan = { source: "parliament", cps: result.cps, converged: result.converged ?? false };
+          // Converged → full CPS available for planner Phase 0
+          ctx.plan = { source: "parliament", cps: result.cps, converged: true };
           return ctx.plan;
         }
-      } catch { /* fall through to template */ }
+
+        // Not converged — carry verdict context forward for planner Phase 1
+        ctx.plan = {
+          source: "parliament",
+          cps: null,
+          converged: false,
+          verdict: result?.verdict ?? null,
+          convergence: result?.convergence ?? null,
+        };
+        return ctx.plan;
+      } catch (err) {
+        // Parliament failed — proceed without (planner Phase 1 will capture intent)
+        ctx.plan = { source: "agenda-only", cps: null, converged: false, error: err?.message };
+        return ctx.plan;
+      }
     }
 
-    // Template-based plan from agenda + config context
-    const domains = config?.domains?.active ?? [];
-    const gateProfile = config?.gates?.gateProfile ?? "balanced";
-    ctx.plan = {
-      source: "template",
-      agenda,
-      gateProfile,
-      domains,
-      phases: [
-        { name: "설계", description: "파일 구조 + 인터페이스 결정" },
-        { name: "구현", description: `${agenda} 핵심 로직 작성` },
-        { name: "검증", description: "테스트 + 타입 체크 실행" },
-      ],
-    };
+    // No parliament available — agenda-only plan for planner Phase 1
+    ctx.plan = { source: "agenda-only", cps: null, converged: false };
     return ctx.plan;
   },
 
@@ -130,67 +146,38 @@ const STAGE_HANDLERS = {
    * Calls planner to create work-breakdown.md from CPS/agenda.
    */
   async design(ctx) {
-    const { plan, config, repoRoot, agenda, bridge } = ctx;
-    if (!plan) return { skipped: true, reason: "no plan from plan stage" };
-    if (!repoRoot) return { skipped: true, reason: "no repoRoot" };
+    const { plan, config, repoRoot, bridge } = ctx;
+    if (!plan) throw new Error("no plan from P1 — cannot design");
+    if (!repoRoot) throw new Error("no repoRoot");
 
     const provider = config?.pipeline?.provider ?? "claude";
-    const domains = config?.domains?.active ?? [];
-    const verifyCommands = config?.verify?.commands ?? [];
     const trackName = config?._meta?.trackName ?? "pipeline";
 
-    // Create track directory for WBs
-    const trackDir = resolve(repoRoot, "docs", trackName);
-    mkdirSync(trackDir, { recursive: true });
-    const wbPath = resolve(trackDir, "work-breakdown.md");
+    // PRD §6.2 P2: planner.runSession(CPS) → PRD + WB + RTM
+    if (bridge.execution?.runPlannerSession) {
+      const result = await bridge.execution.runPlannerSession({
+        repoRoot,
+        trackName,
+        provider,
+        useMux: false,
+        useAuto: true,
+      });
 
-    // If WBs already exist, skip generation
-    if (existsSync(wbPath)) {
-      ctx.wbPath = wbPath;
-      ctx.trackName = trackName;
-      return { wbPath, trackName, source: "existing" };
+      if (result) {
+        const trackSlug = result.trackSlug ?? trackName;
+        // Planner writes to docs/plan/{trackSlug}/ — check multiple locations
+        const candidates = [
+          resolve(repoRoot, "docs", "plan", trackSlug, "work-breakdown.md"),
+          resolve(repoRoot, "docs", trackSlug, "work-breakdown.md"),
+          resolve(repoRoot, "plans", trackSlug, "work-breakdown.md"),
+        ];
+        ctx.wbPath = candidates.find(p => existsSync(p)) ?? null;
+        ctx.trackName = trackSlug;
+        return { wbPath: ctx.wbPath, trackName: trackSlug, source: "planner-session" };
+      }
     }
 
-    // Generate WBs: spawn provider with structured planning prompt
-    const planPrompt = [
-      `ROLE: You are a planner. Generate a work-breakdown.md file.`,
-      `Write the file to: ${wbPath}`,
-      ``,
-      `TASK: ${agenda}`,
-      domains.length > 0 ? `DOMAINS: ${domains.join(", ")}` : null,
-      ``,
-      `FORMAT: Each work item as a markdown heading with fields:`,
-      `### WB-N: <title>`,
-      `- **Action**: what to do`,
-      `- **Target files**: src/path/to/file.ts`,
-      `- **Verify**: how to verify (e.g., "npx tsc --noEmit && npm test")`,
-      `- **Done**: completion criteria`,
-      ``,
-      `Include 3-8 work items covering: schema/models, core logic, routes/API, middleware, tests.`,
-      verifyCommands.length > 0 ? `Verify commands available: ${verifyCommands.join(", ")}` : null,
-      ``,
-      `Write the work-breakdown.md file NOW. No explanations.`,
-    ].filter(Boolean).join("\n");
-
-    try {
-      spawnProvider(provider, planPrompt, repoRoot, {});
-    } catch (err) {
-      // Fallback: generate minimal WBs template
-      const template = [
-        `# Work Breakdown — ${agenda}`,
-        ``,
-        `### WB-1: Core implementation`,
-        `- **Action**: Implement ${agenda}`,
-        `- **Target files**: src/`,
-        `- **Verify**: ${verifyCommands[0] ?? "manual check"}`,
-        `- **Done**: All source files created and compilable`,
-      ].join("\n");
-      writeFileSync(wbPath, template, "utf8");
-    }
-
-    ctx.wbPath = existsSync(wbPath) ? wbPath : null;
-    ctx.trackName = trackName;
-    return { wbPath: ctx.wbPath, trackName, source: existsSync(wbPath) ? "provider" : "failed" };
+    throw new Error("runPlannerSession unavailable or failed — cannot generate design artifacts");
   },
 
   /**
@@ -200,22 +187,15 @@ const STAGE_HANDLERS = {
    *           (2) provider CLI spawn as fallback
    */
   async implement(ctx) {
-    const { plan, config, repoRoot, agenda, bridge } = ctx;
-    if (!plan) return { skipped: true, reason: "no plan" };
-    if (!repoRoot) return { skipped: true, reason: "no repoRoot" };
+    const { plan, config, repoRoot, bridge } = ctx;
+    if (!plan) throw new Error("no plan from P1");
+    if (!repoRoot) throw new Error("no repoRoot");
+    if (!ctx.wbPath || !existsSync(ctx.wbPath)) throw new Error("no work-breakdown from P2 design");
 
     const provider = config?.pipeline?.provider ?? "claude";
     const auditor = config?.consensus?.roles?.judge ?? "codex";
-    const domains = config?.domains?.active ?? [];
-    const verifyCommands = config?.verify?.commands ?? [];
     const planDir = resolve(repoRoot, ".claude", "quorum", "pipeline");
     mkdirSync(planDir, { recursive: true });
-
-    // Pre-implement: install dependencies
-    const pkgPath = resolve(repoRoot, "package.json");
-    if (existsSync(pkgPath) && !existsSync(resolve(repoRoot, "node_modules"))) {
-      try { execSync("npm install", { cwd: repoRoot, encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: "pipe" }); } catch { /* fail-open */ }
-    }
 
     // Pre-implement: ensure git has at least one commit (scope-gates + waveCommit need HEAD)
     try {
@@ -225,85 +205,27 @@ const STAGE_HANDLERS = {
         execSync("git add -A && git commit -m \"initial (pipeline pre-implement)\" --allow-empty", {
           cwd: repoRoot, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
         });
-      } catch { /* fail-open: no git or no files */ }
+      } catch { /* fail-open */ }
     }
 
-    // Path A: Use orchestrate engine if WBs exist (from P2 design stage)
-    if (ctx.wbPath && existsSync(ctx.wbPath) && bridge.gate?.runOrchestrateLoop) {
-      try {
-        const orchResult = await bridge.gate.runOrchestrateLoop({
-          repoRoot,
-          trackName: ctx.trackName ?? "pipeline",
-          wbPath: ctx.wbPath,
-          provider,
-          auditor,
-          maxConcurrency: 3,
-          maxRetries: 3,
-          // Skip orchestrate-internal LLM audit — pipeline P5 QA handles cross-model audit.
-          // This avoids spawnSync/Windows process tree timeout issues.
-          skipAudit: true,
-          onLog: (msg) => { try { writeFileSync(resolve(planDir, "implement-log.txt"), msg + "\n", { flag: "a" }); } catch { /* log dir may be gone */ } },
-        });
-
-        writeFileSync(resolve(planDir, "implement-log.txt"), [
-          `mode: orchestrate`,
-          `success: ${orchResult.success}`,
-          `completed: ${orchResult.completedIds?.length ?? 0}`,
-          `failedWaves: ${orchResult.failedWaves ?? 0}`,
-          `timestamp: ${new Date().toISOString()}`,
-        ].join("\n"), "utf8");
-
-        return { mode: "orchestrate", ...orchResult };
-      } catch (err) {
-        // Orchestrate failed — fall through to provider CLI
-        try {
-          mkdirSync(planDir, { recursive: true });
-          writeFileSync(resolve(planDir, "orchestrate-error.txt"), `${err?.message}\n${err?.stack ?? ""}`, "utf8");
-        } catch { /* can't even log — still fall through to Path B */ }
-      }
+    // PRD §6.2 P3: orchestrate.runWave(WB) — no fallback
+    if (!bridge.gate?.runOrchestrateLoop) {
+      throw new Error("gate.runOrchestrateLoop unavailable — cannot implement");
     }
 
-    // Path B: Provider CLI fallback (direct code generation)
-    const prompt = [
-      `ROLE: You are a code implementer. Your ONLY job is to write files. Do NOT explain, do NOT ask questions, do NOT provide insights.`,
-      ``,
-      `TASK: ${agenda}`,
-      ``,
-      `Write ALL of the following files now:`,
-      `- Source files in src/ directory (.ts)`,
-      `- Test file in tests/ directory (.test.mjs) with at least 10 test cases`,
-      `- Update package.json if new dependencies are needed`,
-      ``,
-      domains.length > 0 ? `DOMAINS TO CONSIDER: ${domains.join(", ")}` : null,
-      verifyCommands.length > 0 ? `MUST PASS: ${verifyCommands.join(" && ")}` : null,
-      ``,
-      `Write every file now. Start with the first file immediately.`,
-    ].filter(Boolean).join("\n");
+    const orchResult = await bridge.gate.runOrchestrateLoop({
+      repoRoot,
+      trackName: ctx.trackName ?? "pipeline",
+      wbPath: ctx.wbPath,
+      provider,
+      auditor,
+      maxConcurrency: 3,
+      maxRetries: 3,
+      skipAudit: true, // pipeline P5 QA handles cross-model audit
+      onLog: (msg) => { try { writeFileSync(resolve(planDir, "implement-log.txt"), msg + "\n", { flag: "a" }); } catch {} },
+    });
 
-    let result;
-    try {
-      result = spawnProvider(provider, prompt, repoRoot, {
-        timeout: config?.pipeline?.timeout || undefined,
-      });
-    } catch (err) {
-      writeFileSync(resolve(planDir, "implement-brief.md"), prompt, "utf8");
-      return { skipped: true, reason: `provider "${provider}" not available: ${err?.message}`, fallback: "brief" };
-    }
-
-    writeFileSync(resolve(planDir, "implement-log.txt"), [
-      `mode: provider-cli`,
-      `provider: ${provider}`,
-      `exitCode: ${result.exitCode}`,
-      `timestamp: ${new Date().toISOString()}`,
-      `---`,
-      result.stdout.slice(0, 2000),
-    ].join("\n"), "utf8");
-
-    if (result.exitCode !== 0 && result.exitCode !== null) {
-      throw new Error(`provider ${provider} exited with code ${result.exitCode}`);
-    }
-
-    return { mode: "provider-cli", provider, exitCode: result.exitCode, outputLength: result.stdout.length };
+    return { mode: "orchestrate", ...orchResult };
   },
 
   /**
@@ -311,14 +233,24 @@ const STAGE_HANDLERS = {
    */
   async verify(ctx) {
     const { config, repoRoot, bridge } = ctx;
-    const commands = config?.verify?.commands ?? [];
+    let commands = config?.verify?.commands ?? [];
     const cwd = repoRoot ?? process.cwd();
 
+    // Auto-detect verify commands if not configured (empty project → setup couldn't detect)
+    if (commands.length === 0) {
+      commands = detectVerifyCommands(cwd);
+    }
+
     // Pre-verify: install dependencies
-    const pkgPath = resolve(cwd, "package.json");
-    if (existsSync(pkgPath) && !existsSync(resolve(cwd, "node_modules"))) {
+    if (existsSync(resolve(cwd, "package.json")) && !existsSync(resolve(cwd, "node_modules"))) {
       try {
         execSync("npm install", { cwd, encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: "pipe" });
+      } catch { /* fail-open */ }
+    }
+    if (existsSync(resolve(cwd, "pyproject.toml")) || existsSync(resolve(cwd, "requirements.txt"))) {
+      try {
+        const pipCmd = existsSync(resolve(cwd, "pyproject.toml")) ? "pip install -e ." : "pip install -r requirements.txt";
+        execSync(pipCmd, { cwd, encoding: "utf8", timeout: 120_000, windowsHide: true, stdio: "pipe" });
       } catch { /* fail-open */ }
     }
 
@@ -343,7 +275,19 @@ const STAGE_HANDLERS = {
       } catch { /* fail-open */ }
     }
 
-    // C. Domain specialist tools
+    // C. Self-checker: audit gates (scope, stubs, blueprint — PRD §6.2 P4)
+    let selfCheckResult = null;
+    if (bridge.gate?.runAuditGates && changedFiles.length > 0) {
+      try {
+        selfCheckResult = await bridge.gate.runAuditGates({
+          repoRoot: cwd,
+          changedFiles,
+          fitnessResult,
+        });
+      } catch { /* fail-open */ }
+    }
+
+    // D. Domain specialist tools
     let domainFindings = [];
     if (bridge.domain?.detectDomains && changedFiles.length > 0) {
       try {
@@ -358,11 +302,13 @@ const STAGE_HANDLERS = {
       } catch { /* fail-open */ }
     }
 
-    const allPassed = mechanicalPassed && (fitnessResult?.decision !== "auto-reject");
+    const selfCheckPassed = selfCheckResult ? selfCheckResult.passed !== false : true;
+    const allPassed = mechanicalPassed && (fitnessResult?.decision !== "auto-reject") && selfCheckPassed;
     return {
       allPassed,
       results: ctx.verifyResults,
       fitness: fitnessResult ? { score: fitnessResult.score, decision: fitnessResult.decision } : null,
+      selfCheck: selfCheckResult,
       domainFindings: domainFindings.length > 0 ? domainFindings.slice(0, 10) : [],
       changedFiles: changedFiles.length,
     };
@@ -408,26 +354,15 @@ const STAGE_HANDLERS = {
           `Command: ${f.command}\nErrors:\n${(f.error ?? f.output ?? "").slice(0, 1000)}`
         ).join("\n\n");
 
-        // Try bridge fixer first
-        let fixerRan = false;
-        if (bridge.gate?.runFixer) {
-          try {
-            await bridge.gate.runFixer({
-              repoRoot: cwd,
-              findings: [errorSummary],
-              files: ctx.changedFiles ?? [],
-              provider: implProvider,
-            });
-            fixerRan = true;
-          } catch { /* fall through to provider */ }
-        }
-
-        // Fallback: spawn provider to fix
-        if (!fixerRan) {
-          try {
-            spawnProvider(implProvider, `Fix these build errors. Do not explain, just fix the code:\n\n${errorSummary}`, cwd, {});
-          } catch { /* can't fix */ }
-        }
+        // Use bridge fixer — no direct provider spawn fallback
+        if (!bridge.gate?.runFixer) break;
+        await bridge.gate.runFixer({
+          repoRoot: cwd,
+          findings: [errorSummary],
+          files: ctx.changedFiles ?? [],
+          provider: implProvider,
+          previousFindings: [],
+        });
 
         rounds.push({ round: rounds.length + 1, phase: "provider-fix", fixRound: fixRound + 1, errors: mechanicalFailures.length });
 
@@ -498,54 +433,40 @@ const STAGE_HANDLERS = {
             summary: auditResult.summary?.slice(0, 200),
           });
 
-          // Phase C: If rejected, run fixer → re-audit loop (up to maxRounds)
-          if (auditResult.verdict === "changes_requested") {
-            const findings = auditResult.codes ?? [];
+          // Phase C: If rejected, delegate to runFixerCycle (has findingsHistory + stagnation detection)
+          if (auditResult.verdict === "changes_requested" && bridge.gate?.runFixerCycle) {
             const changedFilesList = ctx.changedFiles ?? changedFiles;
             const implProvider = config?.pipeline?.provider ?? "claude";
 
-            for (let fixRound = 0; fixRound < maxRounds; fixRound++) {
-              // Try bridge fixer first (compiled orchestrate engine)
-              let fixerRan = false;
-              if (bridge.gate?.runFixer) {
-                try {
-                  await bridge.gate.runFixer({
-                    repoRoot: cwd,
-                    findings: [auditResult.summary ?? findings.join(", ")],
-                    files: changedFilesList,
-                    provider: implProvider,
-                  });
-                  fixerRan = true;
-                } catch { /* fall through to provider fixer */ }
-              }
+            const fixResult = await bridge.gate.runFixerCycle({
+              repoRoot: cwd,
+              files: changedFilesList,
+              provider: implProvider,
+              maxRounds: Infinity,  // stagnation detection handles convergence
+              auditFn: async (_repoRoot, _files, _items, _prov) => {
+                const result = await auditors.judge.audit(auditReq);
+                rounds.push({
+                  round: rounds.length + 1,
+                  phase: "fix-reaudit",
+                  verdict: result.verdict,
+                  summary: result.summary?.slice(0, 200),
+                });
+                bridge.event?.emitEvent?.("audit.verdict", "pipeline-reaudit", {
+                  verdict: result.verdict,
+                });
+                return {
+                  passed: result.verdict === "approved",
+                  findings: result.codes ?? [result.summary ?? "audit failed"],
+                };
+              },
+              completedItems: changedFilesList.map(f => ({ id: f, targetFiles: [f] })),
+              // detectStagnation auto-injected by bridge
+            });
 
-              // Fallback: spawn provider to fix
-              if (!fixerRan) {
-                try {
-                  const fixPrompt = `Fix these audit findings:\n${auditResult.summary ?? findings.join("\n")}\n\nAffected files: ${changedFilesList.join(", ")}\n\nApply fixes directly. Do not explain.`;
-                  spawnProvider(implProvider, fixPrompt, cwd, {});
-                } catch { /* can't fix */ }
-              }
-
-              // Re-audit
-              const reAudit = await auditors.judge.audit(auditReq);
-              rounds.push({
-                round: rounds.length + 1,
-                phase: "fix-reaudit",
-                fixRound: fixRound + 1,
-                verdict: reAudit.verdict,
-                summary: reAudit.summary?.slice(0, 200),
-              });
-
-              bridge.event?.emitEvent?.("audit.verdict", "pipeline-reaudit", {
-                verdict: reAudit.verdict, round: fixRound + 1,
-              });
-
-              if (reAudit.verdict === "approved" || reAudit.verdict === "infra_failure") {
-                auditResult = reAudit;
-                break;
-              }
-              auditResult = reAudit;
+            if (fixResult.passed) {
+              auditResult = { ...auditResult, verdict: "approved" };
+            } else if (fixResult.stagnation) {
+              console.log(`  \x1b[33m⚠ Fix cycle stagnation: ${fixResult.stagnation}\x1b[0m`);
             }
           }
         }
@@ -560,10 +481,9 @@ const STAGE_HANDLERS = {
       });
     }
 
-    // Fail-open: infra_failure or skipped means auditor had issues, not the code
-    const auditPassed = !auditResult
-      || auditResult.verdict === "approved"
-      || auditResult.verdict === "infra_failure";
+    // Only approved passes — incomplete audit (infra_failure) is not approval
+    // If no auditor available (auditResult null), pass (fail-open for missing infra, not for verdict)
+    const auditPassed = auditResult === null ? true : auditResult.verdict === "approved";
     return {
       passed: auditPassed,
       rounds,
@@ -628,81 +548,6 @@ const STAGE_HANDLERS = {
   },
 };
 
-/**
- * Spawn a provider CLI to execute a prompt.
- * Writes prompt to a temp file to avoid shell escaping issues.
- *
- * @param {string} provider - "claude" | "codex" | "gemini"
- * @param {string} prompt - The full prompt text
- * @param {string} cwd - Working directory
- * @param {object} [opts]
- * @param {number} [opts.timeout=300000]
- * @returns {{stdout: string, exitCode: number|null}}
- */
-function spawnProvider(provider, prompt, cwd, opts = {}) {
-  const timeout = opts.timeout || undefined;  // 0/null/undefined = no timeout
-
-  // Quick check: verify provider binary exists before spawning
-  try {
-    execSync(process.platform === "win32" ? `where ${provider}` : `which ${provider}`, {
-      encoding: "utf8", timeout: 5000, windowsHide: true, stdio: "pipe",
-    });
-  } catch {
-    throw new Error(`binary "${provider}" not found in PATH`);
-  }
-
-  // Write prompt to temp file (avoids shell arg length limits on Windows)
-  const promptFile = resolve(tmpdir(), `quorum-pipeline-${Date.now()}.txt`);
-  writeFileSync(promptFile, prompt, "utf8");
-
-  try {
-    if (provider === "claude") {
-      // Pass prompt via stdin to avoid shell arg length/escaping issues.
-      // claude -p - reads from stdin (pipe mode).
-      const isWin = process.platform === "win32";
-      const bin = isWin ? (process.env.ComSpec ?? "cmd.exe") : "claude";
-      const args = ["-p", "-", "--dangerously-skip-permissions"];
-      const spawnArgs = isWin ? ["/c", "claude", ...args] : args;
-
-      const result = spawnSync(bin, spawnArgs, {
-        cwd,
-        input: prompt,
-        encoding: "utf8",
-        timeout,
-        windowsHide: true,
-        stdio: ["pipe", "pipe", "pipe"],
-        maxBuffer: 10 * 1024 * 1024,
-      });
-
-      return {
-        stdout: result.stdout ?? "",
-        exitCode: result.status,
-      };
-    }
-
-    if (provider === "codex") {
-      const result = spawnSync("codex", ["exec", "--full-auto", "-"], {
-        cwd,
-        input: prompt,
-        encoding: "utf8",
-        timeout,
-        windowsHide: true,
-        stdio: ["pipe", "pipe", "pipe"],
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      return { stdout: result.stdout ?? "", exitCode: result.status };
-    }
-
-    // Fallback: try provider name as binary
-    const result = spawnSync(provider, ["-p", prompt], {
-      cwd, encoding: "utf8", timeout, windowsHide: true,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return { stdout: result.stdout ?? "", exitCode: result.status };
-  } finally {
-    try { unlinkSync(promptFile); } catch { /* cleanup */ }
-  }
-}
 
 /**
  * Run verify commands and collect results.
@@ -925,4 +770,29 @@ export function buildAgenda(intent, profile) {
  */
 export function getStages() {
   return STAGES;
+}
+
+/**
+ * Auto-detect verify commands from project files (post-implement).
+ * Called when config.verify.commands is empty (setup ran before code existed).
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function detectVerifyCommands(cwd) {
+  const commands = [];
+  if (existsSync(resolve(cwd, "tsconfig.json"))) commands.push("npx tsc --noEmit");
+  if (existsSync(resolve(cwd, "package.json"))) {
+    try {
+      const pkg = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
+      if (pkg.scripts?.test && pkg.scripts.test !== 'echo "Error: no test specified" && exit 1') {
+        commands.push("npm test");
+      }
+    } catch { /* skip */ }
+  }
+  if (existsSync(resolve(cwd, "pyproject.toml")) || existsSync(resolve(cwd, "setup.py"))) {
+    commands.push("pytest");
+  }
+  if (existsSync(resolve(cwd, "go.mod"))) commands.push("go test ./...");
+  if (existsSync(resolve(cwd, "Cargo.toml"))) commands.push("cargo test");
+  return commands;
 }

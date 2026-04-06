@@ -18,6 +18,7 @@ import { openDatabase, type SQLiteDatabase, type SQLiteStatement } from "./sqlit
 import { randomUUID, createHash } from "node:crypto";
 import { writeFileSync, renameSync, rmSync } from "node:fs";
 import type { QuorumEvent, EventType, ProviderKind } from "./events.js";
+import { runGraphMigration, type GraphMigrationReport } from "./graph-migrate.js";
 
 // ── Hash Chain (v0.6.3) ─────────────────────────────
 
@@ -108,6 +109,9 @@ export class EventStore {
   private queryCache = new Map<string, SQLiteStatement>();
   private countCache = new Map<string, SQLiteStatement>();
 
+  /** v0.6.5 graph migration report (available after construction). */
+  graphMigration?: GraphMigrationReport;
+
   constructor(opts: StoreOptions) {
     this.db = openDatabase(opts.dbPath);
 
@@ -119,6 +123,7 @@ export class EventStore {
 
     this.createSchema();
     this.migrateHashColumns();
+    this.migrateGraph();
     this.prepareStatements();
   }
 
@@ -173,6 +178,16 @@ export class EventStore {
         this.db.exec(`ALTER TABLE events ADD COLUMN hash TEXT DEFAULT NULL`);
       }
     } catch { /* migration is best-effort */ }
+  }
+
+  /**
+   * v0.6.5: Run graph migrations (entity columns, FTS5, facts migration).
+   * Safe to call on every startup — all migrations are idempotent.
+   */
+  private migrateGraph(): void {
+    try {
+      this.graphMigration = runGraphMigration(this.db);
+    } catch { /* graph migration is best-effort */ }
   }
 
   /** Expose the raw database handle (for LockService, StateReader). */

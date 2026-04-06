@@ -35,6 +35,7 @@ import {
   scanBlueprintViolations,
   detectFixLoopStagnation,
   runProjectTests,
+  partitionFindings,
 } from "../governance/scope-gates.js";
 import {
   runConfluenceCheck,
@@ -123,7 +124,7 @@ export interface WaveResult {
 // ── Constants ───────────────────────────────
 
 const POLL_INTERVAL = 5000;
-const TIMEOUT = 600_000;
+const TIMEOUT = 1_200_000;  // 20 min — items spawn sequentially (maxConcurrency), each needs ~5-10 min
 const MAX_OUTPUT_BYTES = 2_000_000;
 // STALL_THRESHOLD removed — agents legitimately pause output during tool calls.
 // Overall TIMEOUT is sufficient.
@@ -181,6 +182,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   const active: Array<{ item: WorkItem; sessionId: string; retries: number; outputFile?: string }> = [];
   const groupIds = new Set(wave.items.map(i => i.id));
   const spawned = new Set<string>();
+  const spawnFailures = new Map<string, number>();
   const localCompleted = new Set<string>();
   const timedOutIds: string[] = [];
 
@@ -210,7 +212,13 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       }
     } else {
       log(`    \x1b[31m!\x1b[0m ${item.id} spawn failed`);
-      spawned.add(item.id);
+      const prev = spawnFailures.get(item.id) ?? 0;
+      spawnFailures.set(item.id, prev + 1);
+      if (prev + 1 >= 3) {
+        spawned.add(item.id);  // Give up after 3 attempts
+        log(`    \x1b[31m!\x1b[0m ${item.id} abandoned after 3 spawn failures`);
+      }
+      // Otherwise: don't add to spawned — allow retry on next poll iteration
     }
   };
 
@@ -330,6 +338,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       files: auditGates.regressions.map(r => r.split(":")[0]!.trim()),
       provider,
       fitnessContext: auditGates.fitnessResult,
+      previousFindings: [],
     });
   }
 
@@ -337,7 +346,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     // Run fixer on detected stub/placeholder patterns
     if (auditGates.stubs.length > 0) {
       log(`\n  \x1b[31m◈ Stub/placeholder detected — fixing\x1b[0m`);
-      await runFixer({ repoRoot, findings: auditGates.stubs, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult });
+      await runFixer({ repoRoot, findings: auditGates.stubs, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult, previousFindings: [] });
       const remaining = scanLines(repoRoot, waveFiles, STUB_PATTERNS);
       if (remaining.length > 0) log(`  \x1b[33m⚠ ${remaining.length} stub(s) remain after fix\x1b[0m`);
     }
@@ -345,7 +354,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     // Blueprint fix
     if (auditGates.blueprintViolations.length > 0) {
       log(`\n  \x1b[31m◈ Blueprint naming violations — fixing\x1b[0m`);
-      await runFixer({ repoRoot, findings: auditGates.blueprintViolations, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult });
+      await runFixer({ repoRoot, findings: auditGates.blueprintViolations, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult, previousFindings: [] });
       const remaining = scanBlueprintViolations(repoRoot, waveFiles, blueprintRules);
       if (remaining.length > 0) {
         blueprintBlocked = true;
@@ -360,7 +369,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         `Fitness score ${fg.score.toFixed(2)} below threshold: ${fg.reason}`,
         ...(fg.components ?? []).filter((c) => c.score < 0.5).map((c) => `Component "${c.name}" = ${c.score.toFixed(2)} (below 0.5)`),
       ];
-      await runFixer({ repoRoot, findings: fitnessFindings, files: waveFiles, provider, fitnessContext: fg });
+      await runFixer({ repoRoot, findings: fitnessFindings, files: waveFiles, provider, fitnessContext: fg, previousFindings: [] });
     }
 
     // ── 5. RTM + WIP Commit ──────────────────
@@ -457,9 +466,10 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     };
   }
 
-  // No completed items
+  // No completed items — fail if there were timed-out or unspawned items
+  const hasIncomplete = timedOutIds.length > 0 || localCompleted.size < wave.items.length;
   return {
-    passed: true,
+    passed: !hasIncomplete,
     completedItemIds: [],
     timedOutIds,
     fitnessResult: auditGates.fitnessResult,

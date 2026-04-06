@@ -224,6 +224,26 @@ try {
         bridge.event.emitEvent("steering.switch", "claude-code", steeringEvent);
       }
 
+      // [FR-8] Skill auto-activation via skill-rules.json
+      try {
+        const { matchSkills, parseSkillRules } = await import("../../adapters/shared/skill-rules.mjs");
+        const rulesPath = resolve(REPO_ROOT, ".claude", "quorum", "skill-rules.json");
+        if (existsSync(rulesPath)) {
+          const rulesData = JSON.parse(readFileSync(rulesPath, "utf8"));
+          const rules = parseSkillRules(rulesData);
+          // Get last edited file from recent events
+          const lastEdit = bridge.event.queryEvents({ eventType: "tool.post", limit: 1, descending: true })?.[0];
+          const lastFile = lastEdit?.payload?.file ?? "";
+          const match = matchSkills(rules, lastFile, prompt);
+          if (match.skills.length > 0 || match.domains.length > 0) {
+            const parts = [];
+            if (match.skills.length > 0) parts.push(`skills: ${match.skills.join(", ")}`);
+            if (match.domains.length > 0) parts.push(`domains: ${match.domains.join(", ")}`);
+            signals.push(`[quorum auto-skill] ${parts.join(" | ")}`);
+          }
+        }
+      } catch { /* fail-open: skill-rules optional */ }
+
       // [WB-5] Error context auto-injection
       const recentErrors = bridge.event.queryEvents({
         eventType: "quality.fail",

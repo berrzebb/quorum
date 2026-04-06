@@ -237,6 +237,33 @@ try {
     }
   } catch (e) { /* fact system unavailable — fail-open */ }
 
+  // [VAULT FR-18] Reverse sync — import Obsidian edits into graph
+  try {
+    const { importVaultChanges } = await import("../../vault/importer.mjs");
+    const { getVaultPath } = await import("../../vault/exporter.mjs");
+    const vaultRoot = getVaultPath();
+    const lastSync = bridge.event?.getKV?.("vault.lastSync") ?? 0;
+    const importResult = importVaultChanges(bridge._svc?.store?.getDb(), vaultRoot, lastSync);
+    if (importResult.created > 0 || importResult.updated > 0) {
+      bridge.event?.setKV?.("vault.lastSync", Date.now());
+      console.error(`[quorum] Vault sync: ${importResult.created} created, ${importResult.updated} updated`);
+    }
+  } catch { /* vault not configured — skip */ }
+
+  // [DCM FR-10] Smart injection — replace static facts with dynamic recall
+  try {
+    const recentFiles = bridge.event?.queryEvents?.({ eventType: "tool.post", limit: 5, descending: true })
+      ?.map(e => e.payload?.file).filter(Boolean) ?? [];
+    const recallResults = bridge.graph?.searchKeyword?.(recentFiles.join(" "), { limit: 5 }) ?? [];
+    if (recallResults.length > 0) {
+      context += `\nKnowledge Graph Context:\n`;
+      for (const r of recallResults) {
+        context += `  ${r.type}: ${r.description || r.title}\n`;
+      }
+      context += `\n`;
+    }
+  } catch { /* graph not available — fail-open */ }
+
   bridge.close();
 } catch (e) { /* bridge unavailable — fail-open */ }
 

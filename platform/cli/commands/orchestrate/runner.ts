@@ -305,11 +305,13 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
 
           let fixAttempt = 0;
           let retryResult = phaseResult;
+          const fixHistory: string[][] = [];
           while (fixAttempt < DEFAULT_MAX_FIX_ROUNDS && !retryResult.passed) {
             fixAttempt++;
             console.log(`  \x1b[33m◈ Phase verify fix attempt ${fixAttempt}/${DEFAULT_MAX_FIX_ROUNDS}\x1b[0m`);
             const findings = retryResult.failures.filter(f => f.includes("verify failed:"));
-            await runFixer({ repoRoot, findings, files: failedFiles, provider, fitnessContext: lastFitnessResult ?? undefined });
+            await runFixer({ repoRoot, findings, files: failedFiles, provider, fitnessContext: lastFitnessResult ?? undefined, previousFindings: fixHistory });
+            fixHistory.push([...findings]);
             retryResult = _verifyPhaseCompletion(
               repoRoot, currentPhaseId, prevPhaseItems, completedIds, detectRegressions,
               hasPromotionData

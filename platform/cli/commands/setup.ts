@@ -66,7 +66,7 @@ const ALL_PRESETS: QualityPreset[] = [
 function detectPresets(repoRoot: string): QualityPreset[] {
   return ALL_PRESETS.filter(p => existsSync(resolve(repoRoot, p.detect)));
 }
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -188,6 +188,39 @@ export async function run(args: string[]): Promise<void> {
       console.log(`  📝 의제: ${(intent as Record<string, unknown>).agenda}`);
     } else {
       // Non-interactive or no profile: legacy defaults
+      // Detect agenda: --agenda flag > package.json description > directory name
+      const agendaIdx = args.indexOf("--agenda");
+      let detectedAgenda = agendaIdx >= 0 && args[agendaIdx + 1] ? args[agendaIdx + 1]! : "";
+      if (!detectedAgenda) {
+        try {
+          const pkgPath = resolve(repoRoot, "package.json");
+          if (existsSync(pkgPath)) {
+            const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+            if (pkg.description) detectedAgenda = pkg.description;
+          }
+        } catch { /* use directory name */ }
+      }
+      if (!detectedAgenda) detectedAgenda = basename(repoRoot);
+
+      // Detect verify commands from profile (languages + test framework)
+      const verifyCommands: string[] = [];
+      if (profile) {
+        const tf = profile.testFramework as string;
+        if (tf === "vitest") verifyCommands.push("npx vitest run");
+        else if (tf === "jest") verifyCommands.push("npx jest");
+        else if (tf === "node-test") verifyCommands.push("npm test");
+        else if (tf === "go-test") verifyCommands.push("go test ./...");
+        else if (tf === "cargo-test") verifyCommands.push("cargo test");
+        else if (tf === "pytest") verifyCommands.push("pytest");
+        else if (tf === "mocha") verifyCommands.push("npx mocha");
+
+        const langs = (profile.languages as string[]) ?? [];
+        if (langs.includes("typescript")) verifyCommands.push("npx tsc --noEmit");
+        if (langs.includes("python") && !verifyCommands.includes("pytest")) verifyCommands.push("pytest");
+        if (langs.includes("go") && !verifyCommands.includes("go test ./...")) verifyCommands.push("go test ./...");
+        if (langs.includes("rust") && !verifyCommands.includes("cargo test")) verifyCommands.push("cargo test");
+      }
+
       finalConfig = {
         plugin: { locale, hooks_enabled: { audit: true, session_gate: true, quality_rules: true } },
         consensus: {
@@ -196,6 +229,8 @@ export async function run(args: string[]): Promise<void> {
           pending_tag: "[CHANGES_REQUESTED]",
           roles: { advocate: "claude", devil: "claude", judge: "codex" },
         },
+        pipeline: { agenda: detectedAgenda },
+        verify: { commands: verifyCommands },
         gates: { gateProfile: "balanced" },
         parliament: { convergenceThreshold: 0.7, eligibleVoters: 3, maxRounds: 10, maxAutoAmendments: 5 },
         quality_rules: { presets: detectPresets(repoRoot), overrides: [] },
@@ -211,28 +246,37 @@ export async function run(args: string[]): Promise<void> {
   // 3. Evidence storage — SQLite EventStore (no feedback directory needed)
   steps.push({ label: "Evidence: SQLite EventStore (audit_submit tool)", ok: true });
 
-  // 4. MCP server registration
-  const mcpPath = resolve(repoRoot, ".mcp.json");
-  let mcpConfig: Record<string, unknown> = {};
-  if (existsSync(mcpPath)) {
-    try {
-      mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8"));
-    } catch (err) { console.warn(`[setup] .mcp.json parse failed: ${(err as Error).message}`); }
-  }
+  // 4. MCP server registration — all models (Claude, Codex, Gemini)
+  try {
+    const regPath = pathToFileURL(resolve(QUORUM_PKG_ROOT, "dist", "platform", "core", "mcp-registrar.js")).href;
+    const { registerAllMcp } = await import(regPath);
+    const results = registerAllMcp(repoRoot, QUORUM_PKG_ROOT) as Array<{ target: string; action: string; path: string; error?: string }>;
 
-  const mcpServers = (mcpConfig.mcpServers ?? {}) as Record<string, unknown>;
-  if (!mcpServers.quorum) {
-    const mcpServerPath = resolve(QUORUM_PKG_ROOT, "platform", "core", "tools", "mcp-server.mjs");
-    mcpServers.quorum = {
-      command: "node",
-      args: [mcpServerPath],
-      type: "stdio",
-    };
-    mcpConfig.mcpServers = mcpServers;
-    writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2) + "\n");
-    steps.push({ label: "Registered MCP server", ok: true });
-  } else {
-    steps.push({ label: "MCP server already registered", ok: true });
+    for (const r of results) {
+      if (r.action === "created" || r.action === "updated") {
+        steps.push({ label: `MCP registered: ${r.target}`, ok: true });
+      } else if (r.action === "exists") {
+        steps.push({ label: `MCP ${r.target}: already registered`, ok: true });
+      } else {
+        steps.push({ label: `MCP ${r.target}: ${r.error ?? "failed"}`, ok: false });
+      }
+    }
+  } catch (err) {
+    // Fallback: legacy single-target registration
+    const mcpPath = resolve(repoRoot, ".mcp.json");
+    let mcpConfig: Record<string, unknown> = {};
+    if (existsSync(mcpPath)) {
+      try { mcpConfig = JSON.parse(readFileSync(mcpPath, "utf8")); } catch { /* ignore */ }
+    }
+    const mcpServers = (mcpConfig.mcpServers ?? {}) as Record<string, unknown>;
+    if (!mcpServers.quorum) {
+      mcpServers.quorum = { command: "node", args: [resolve(QUORUM_PKG_ROOT, "platform", "core", "tools", "mcp-server.mjs")], type: "stdio" };
+      mcpConfig.mcpServers = mcpServers;
+      writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2) + "\n");
+      steps.push({ label: "MCP registered (claude-code only)", ok: true });
+    } else {
+      steps.push({ label: "MCP server already registered", ok: true });
+    }
   }
 
   // Summary
