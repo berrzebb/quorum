@@ -23,7 +23,7 @@ interface ReviewViewProps {
   height: number;
 }
 
-export function ReviewView({ state, events: _events, focusedRegion, width: _width, height: _height }: ReviewViewProps): React.ReactElement {
+export const ReviewView = React.memo(function ReviewView({ state, events: _events, focusedRegion, width: _width, height: _height }: ReviewViewProps): React.ReactElement {
   if (!state) {
     return <Box><Text dimColor>Loading review...</Text></Box>;
   }
@@ -58,4 +58,4 @@ export function ReviewView({ state, events: _events, focusedRegion, width: _widt
       )}
     </Box>
   );
-}
+});

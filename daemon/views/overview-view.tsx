@@ -25,7 +25,7 @@ interface OverviewViewProps {
   height: number;
 }
 
-export function OverviewView({ state, events, focusedRegion, width: _width, height: _height }: OverviewViewProps): React.ReactElement {
+export const OverviewView = React.memo(function OverviewView({ state, events, focusedRegion, width: _width, height: _height }: OverviewViewProps): React.ReactElement {
   if (!state) {
     return <Box><Text dimColor>Loading overview...</Text></Box>;
   }
@@ -52,4 +52,4 @@ export function OverviewView({ state, events, focusedRegion, width: _width, heig
       )}
     </Box>
   );
-}
+});

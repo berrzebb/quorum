@@ -24,7 +24,7 @@ interface OperationsViewProps {
   height: number;
 }
 
-export function OperationsView({ state, focusedRegion, width: _width, height: _height }: OperationsViewProps): React.ReactElement {
+export const OperationsView = React.memo(function OperationsView({ state, focusedRegion, width: _width, height: _height }: OperationsViewProps): React.ReactElement {
   if (!state) {
     return <Box><Text dimColor>Loading operations...</Text></Box>;
   }
@@ -54,4 +54,4 @@ export function OperationsView({ state, focusedRegion, width: _width, height: _h
       )}
     </Box>
   );
-}
+});

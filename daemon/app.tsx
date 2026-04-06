@@ -24,7 +24,7 @@ import { getFooterHints } from "./shell/shortcuts.js";
 /** Quick fingerprint to detect state changes without deep comparison. */
 function stateFingerprint(s: FullState): string {
   const lastEvent = s.recentEvents[s.recentEvents.length - 1]?.timestamp ?? 0;
-  return `${lastEvent}:${s.tracks.length}:${s.parliament.liveSessions.length}:${s.parliament.sessionCount}:${s.agentQueries.length}:${s.locks.length}:${s.findingStats.total}:${s.fitness.current ?? 0}`;
+  return `${s.recentEvents.length}:${lastEvent}:${s.agentEvents.length}:${s.tracks.length}:${s.parliament.liveSessions.length}:${s.parliament.sessionCount}:${s.agentQueries.length}:${s.locks.length}:${s.findingStats.total}:${s.fitness.current ?? 0}`;
 }
 
 interface AppProps {
