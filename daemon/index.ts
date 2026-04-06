@@ -63,7 +63,9 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
   const EXIT_ALT = "\x1b[?1049l";
   process.stdout.write(ENTER_ALT);
   // Ensure alt screen is exited on unexpected termination
-  process.on("exit", () => process.stdout.write(EXIT_ALT));
+  process.on("exit", () => {
+    try { process.stdout.write(EXIT_ALT + "\x1b[?25h"); } catch { /* ignore */ }
+  });
 
   const { waitUntilExit } = render(
     React.createElement(App, { bus, stateReader, mux: daemonMux }),
@@ -72,7 +74,13 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
 
   // ── 10. Graceful shutdown ──
   await waitUntilExit();
-  process.stdout.write(EXIT_ALT);
+  // Restore terminal: exit alt screen, show cursor, reset modes
+  process.stdout.write(EXIT_ALT + "\x1b[?25h");
+  // Ensure stdin raw mode is off (Ink may leave it on)
+  if (process.stdin.isTTY && process.stdin.isRaw) {
+    try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+  }
+  process.stdin.unref(); // Allow process to exit without waiting for stdin
   stopConfigRefresh();
   await providers.cleanup();
   store.close();
