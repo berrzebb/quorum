@@ -200,7 +200,7 @@ function MuxChatView({ mux, liveSessions, agentEvents = [], focusedRegion, width
       }
       else if (input === "i" || key.return) setInputMode(true);
     }
-  }, [inputMode, inputBuffer, selectedIdx, sessions.length, maxScroll]));
+  }, [inputMode, inputBuffer, selectedIdx, sessions.length, maxScroll, isGitFocused]));
 
   // Empty state — still show git explorer
   if (sessions.length === 0) {
