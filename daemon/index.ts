@@ -67,6 +67,7 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
 
   const { waitUntilExit } = render(
     React.createElement(App, { bus, stateReader, mux: daemonMux }),
+    { incrementalRendering: true },
   );
 
   // ── 10. Graceful shutdown ──
