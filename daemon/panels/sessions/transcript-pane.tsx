@@ -125,15 +125,21 @@ export function parseStreamJson(rawLines: string[]): string[] {
 
 // ── TranscriptPane Component ──────────────────────────────────────────
 
-export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessionId, role, backend, focused }: TranscriptPaneProps) {
-  const visibleLines = Math.max(height, 5);
-  const maxScroll = Math.max(0, lines.length - visibleLines);
-  const safeOffset = Math.min(scrollOffset, maxScroll);
-  const startIdx = Math.max(0, lines.length - visibleLines - safeOffset);
-  const displayLines = lines.slice(startIdx, startIdx + visibleLines);
+import { parseMessages, type ChatMessage } from "./message-parser.js";
+import { MessageList } from "./message-renderer.js";
 
-  const scrollPct = lines.length > visibleLines
-    ? Math.round(((lines.length - safeOffset - visibleLines) / (lines.length - visibleLines)) * 100)
+export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessionId, role, backend, focused }: TranscriptPaneProps) {
+  const visibleHeight = Math.max(height - 3, 5); // header(2) + scroll indicator(1)
+
+  // Parse raw lines into structured messages for rich rendering
+  const messages = React.useMemo(() => {
+    // Only parse if lines look like ndjson
+    const hasJson = lines.length > 0 && lines.some(l => l.trim().startsWith("{"));
+    return hasJson ? parseMessages(lines) : null;
+  }, [lines]);
+
+  const scrollPct = lines.length > visibleHeight
+    ? Math.round(((lines.length - scrollOffset - visibleHeight) / Math.max(1, lines.length - visibleHeight)) * 100)
     : 100;
 
   return (
@@ -144,30 +150,33 @@ export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessio
           {role ?? "agent"} <Text dimColor>{backend ?? ""}</Text>
         </Text>
         <Text dimColor>
-          {safeOffset > 0 ? `▲${safeOffset}` : ""} {lines.length}L {scrollPct}%
+          {scrollOffset > 0 ? `▲${scrollOffset}` : ""} {messages ? `${messages.length}msg` : `${lines.length}L`} {scrollPct}%
         </Text>
       </Box>
       <Text dimColor>{"─".repeat(40)}</Text>
 
-      {/* Scrollable output */}
-      <Box flexDirection="column" height={visibleLines}>
-        {displayLines.length === 0 ? (
+      {/* Rich message rendering or plain text fallback */}
+      <Box flexDirection="column" height={visibleHeight} overflowY="hidden">
+        {messages ? (
+          <MessageList
+            messages={messages}
+            visibleHeight={visibleHeight}
+            scrollOffset={scrollOffset}
+          />
+        ) : lines.length === 0 ? (
           <Text dimColor>waiting for output...</Text>
         ) : (
-          displayLines.map((line, i) => (
-            <Text key={startIdx + i} wrap="truncate-end">{line}</Text>
-          ))
+          // Plain text fallback (non-ndjson content like commit details)
+          (() => {
+            const maxScroll = Math.max(0, lines.length - visibleHeight);
+            const safeOffset = Math.min(scrollOffset, maxScroll);
+            const startIdx = Math.max(0, lines.length - visibleHeight - safeOffset);
+            return lines.slice(startIdx, startIdx + visibleHeight).map((line, i) => (
+              <Text key={startIdx + i} wrap="truncate-end">{line}</Text>
+            ));
+          })()
         )}
       </Box>
-
-      {/* Scroll indicator bar */}
-      {lines.length > visibleLines && (
-        <Text dimColor>
-          {safeOffset > 0 ? "▲ " : "  "}
-          {"─".repeat(20)}
-          {startIdx > 0 ? " ▼" : "  "}
-        </Text>
-      )}
     </Box>
   );
 }
