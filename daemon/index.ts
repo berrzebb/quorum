@@ -57,16 +57,7 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
   // ── 8. Init ProcessMux for agent sessions ──
   const daemonMux = await initializeMux();
 
-  // ── 9. Enter alternate screen + render TUI ──
-  // Alt screen prevents scroll jumping: fixed viewport, no scrollback interference
-  const ENTER_ALT = "\x1b[?1049h\x1b[2J\x1b[H";
-  const EXIT_ALT = "\x1b[?1049l";
-  process.stdout.write(ENTER_ALT);
-  // Ensure alt screen is exited on unexpected termination
-  process.on("exit", () => {
-    try { process.stdout.write(EXIT_ALT + "\x1b[?25h"); } catch { /* ignore */ }
-  });
-
+  // ── 9. Render TUI ──
   const { waitUntilExit } = render(
     React.createElement(App, { bus, stateReader, mux: daemonMux }),
     { incrementalRendering: true, concurrent: true },
@@ -74,21 +65,6 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
 
   // ── 10. Graceful shutdown ──
   await waitUntilExit();
-  // Restore terminal fully: exit alt screen, show cursor, reset SGR, reset DECSET modes
-  process.stdout.write(
-    EXIT_ALT +       // Exit alternate screen buffer
-    "\x1b[?25h" +    // Show cursor (DECTCEM)
-    "\x1b[0m" +      // Reset SGR (colors/bold)
-    "\x1b[?1000l" +  // Disable mouse tracking
-    "\x1b[?1006l" +  // Disable SGR mouse
-    "\x1b[?2004l"    // Disable bracketed paste
-  );
-  // Ensure stdin raw mode is off (Ink leaves it on)
-  if (process.stdin.isTTY) {
-    try { process.stdin.setRawMode(false); } catch { /* ignore */ }
-    try { process.stdin.resume(); process.stdin.pause(); } catch { /* reset stdin state */ }
-  }
-  process.stdin.unref();
   stopConfigRefresh();
   await providers.cleanup();
   store.close();
