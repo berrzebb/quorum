@@ -150,14 +150,19 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
     },
   ];
 
-  // Spawn all sub-agents in parallel (via mux if available)
+  // Spawn all sub-agents in parallel via mux (daemon-visible) or direct fallback
   let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux> | null = null;
+  let muxBackend = "raw";
   if (opts.useMux !== false) {
     try {
       const muxMod = await import("../../bus/mux.js");
       mux = new muxMod.ProcessMux();
-    } catch { /* mux unavailable — fall back to direct */ }
+      muxBackend = mux.getBackend();
+    } catch { /* mux unavailable */ }
   }
+
+  // Agent state persistence for daemon discovery
+  const { saveAgentState, removeAgentState } = await import("../execution/agent-session.js");
 
   const results = await Promise.allSettled(
     subAgents.map(async (agent) => {
@@ -165,20 +170,26 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
 
       const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
 
+      // Resolve provider binary for mux spawn
+      const { prepareProviderSpawn } = await import("../core/provider-binary.js");
+      const spawn = await prepareProviderSpawn(provider, agent.prompt);
+      const sessionName = `quorum-${agent.name}-${Date.now()}`;
+
       try {
-        if (mux && mux.getBackend() !== "raw") {
-          // Mux spawn: daemon can capture output
+        if (mux && muxBackend !== "raw") {
           const session = await mux.spawn({
-            command: args[0] === "/c" ? process.env.ComSpec ?? "cmd.exe" : provider,
-            args: args[0] === "/c" ? args : undefined,
+            command: spawn.bin,
+            args: spawn.args,
             cwd: repoRoot,
-            name: `quorum-${agent.name}-${Date.now()}`,
+            name: sessionName,
           });
           if (session) {
+            // Persist for daemon AgentPanel
+            saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
             await pollMuxCompletion(mux, session.id);
+            removeAgentState(repoRoot, session.id);
             await cleanupMuxSession(mux, session.id, "");
           } else {
-            // Mux spawn failed — fall back to direct
             await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
           }
         } else {
@@ -197,7 +208,6 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
     })
   );
 
-  // Cleanup mux
   if (mux) { try { await mux.cleanup(); } catch { /* ignore */ } }
 
   // Check results
