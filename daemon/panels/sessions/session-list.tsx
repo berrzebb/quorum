@@ -22,6 +22,7 @@ interface SessionListProps {
   selectedIdx: number;
   onSelect: (idx: number) => void;
   width?: number;
+  focused?: boolean;
 }
 
 /** Map role name to terminal color. */
@@ -41,9 +42,9 @@ function formatAge(startedAt: number): string {
   return age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`;
 }
 
-export function SessionList({ sessions, selectedIdx, onSelect: _onSelect, width = 22 }: SessionListProps) {
+export function SessionList({ sessions, selectedIdx, onSelect: _onSelect, width = 22, focused }: SessionListProps) {
   return (
-    <Box flexDirection="column" width={width} borderStyle="single" paddingX={1}>
+    <Box flexDirection="column" width={width} borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1}>
       <Text bold>Sessions</Text>
       <Text dimColor>{"─".repeat(Math.max(0, width - 4))}</Text>
       {sessions.map((s, i) => {

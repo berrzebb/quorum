@@ -1011,6 +1011,11 @@ async function runOrchestrateLoop(opts) {
  * @param {object} [opts]
  */
 async function runPipelineInternal(agenda, config, opts) {
+  // Ensure store is initialized so events (agent.spawn, track.progress) reach SQLite
+  if (opts?.repoRoot && !_svc.store) {
+    await loadModules();
+    getStore(opts.repoRoot);
+  }
   const mod = await import("../adapters/shared/pipeline-runner.mjs");
   const bridge = { parliament, execution, gate, event, query, hooks, domain, fact };
   return mod.runPipeline(agenda, config ?? {}, bridge, opts);

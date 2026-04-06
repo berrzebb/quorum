@@ -88,7 +88,9 @@ export class ProcessMux extends EventEmitter {
     const session = this.sessions.get(sessionId);
     if (!session || session.status !== "running") return null;
 
-    switch (this.backend) {
+    // Use session's own backend (for external sessions) or fall back to this instance's backend
+    const backend = session.backend ?? this.backend;
+    switch (backend) {
       case "tmux":
         return this.captureTmux(session, tailLines);
       case "psmux":

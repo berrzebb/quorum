@@ -206,8 +206,10 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       }
       if (bridge?.event?.emitEvent) {
         bridge.event.emitEvent("agent.spawn", "generic", {
-          agentId: `impl-${item.id}`, role: "implementer",
+          agentId: `impl-${item.id}`, name: handle.sessionName, role: "implementer",
           trackId: trackName, wbId: item.id, sessionId: handle.sessionId,
+          backend: mux.getBackend?.() ?? "unknown",
+          outputFile: handle.outputFile,
         });
       }
     } else {

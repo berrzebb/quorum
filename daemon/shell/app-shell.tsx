@@ -21,7 +21,7 @@ export type DaemonView = "overview" | "review" | "chat" | "operations";
  * View registry — single source of truth for available views.
  */
 export const VIEW_REGISTRY: ViewDescriptor[] = [
-  { id: "overview", title: "Overview", shortcut: "1", defaultFocus: "overview.summary" },
+  { id: "overview", title: "Overview", shortcut: "1", defaultFocus: "overview.gates" },
   { id: "review", title: "Review", shortcut: "2", defaultFocus: "review.findings" },
   { id: "chat", title: "Chat", shortcut: "3", defaultFocus: "chat.sessions" },
   { id: "operations", title: "Operations", shortcut: "4", defaultFocus: "operations.providers" },
@@ -43,7 +43,7 @@ export interface DaemonShellState {
 export function initialShellState(): DaemonShellState {
   return {
     activeView: "overview",
-    focusedRegion: "overview.summary",
+    focusedRegion: "overview.gates",
     overlay: "none",
     density: "comfortable",
   };

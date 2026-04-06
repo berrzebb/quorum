@@ -85,6 +85,7 @@ export function diffSnapshots(
     changedSections.add("tracks");
   }
   if (prev.recentEvents.length !== next.recentEvents.length) changedSections.add("events");
+  if (prev.agentEvents.length !== next.agentEvents.length) changedSections.add("agents");
   if (prev.parliament.sessionCount !== next.parliament.sessionCount) changedSections.add("parliament");
   if (prev.locks.length !== next.locks.length) changedSections.add("locks");
   if (prev.fitness.current !== next.fitness.current) changedSections.add("fitness");

@@ -92,6 +92,29 @@ export function App({ bus, stateReader, mux }: AppProps) {
     }
   }, [fullState?.parliament.liveSessions, mux]);
 
+  // Sync orchestrate agent sessions from agentEvents into daemon's mux
+  useEffect(() => {
+    if (!mux || !fullState?.agentEvents) return;
+    const completeIds = new Set(
+      fullState.agentEvents.filter(e => e.type === "agent.complete").map(e => (e.payload.sessionId as string) ?? ""),
+    );
+    for (const ev of fullState.agentEvents) {
+      if (ev.type !== "agent.spawn") continue;
+      const p = ev.payload;
+      const sessionId = p.sessionId as string | undefined;
+      const backend = p.backend as string | undefined;
+      if (!sessionId || !backend || backend === "unknown") continue;
+      if (completeIds.has(sessionId)) continue; // already done
+      mux.registerExternal({
+        id: sessionId,
+        name: (p.name as string) ?? `impl-${p.wbId ?? "agent"}`,
+        backend: backend as import("../platform/bus/mux.js").MuxBackend,
+        startedAt: ev.timestamp,
+        status: "running",
+      });
+    }
+  }, [fullState?.agentEvents?.length, mux]);
+
   // Input handling: view switching, focus cycling, help overlay, quit
   useInput((input, key) => {
     if (input === "q" || (key.ctrl && input === "c")) { exit(); return; }
@@ -116,7 +139,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
     }
 
     // Focus cycling via tab/shift+tab
-    if (key.tab) {
+    if (key.tab || input === "\t") {
       const next = key.shift
         ? prevFocusInCycle(shell.activeView, shell.focusedRegion)
         : nextFocusInCycle(shell.activeView, shell.focusedRegion);
@@ -142,6 +165,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
         <OverviewView
           state={fullState}
           events={events}
+          focusedRegion={shell.focusedRegion}
           width={process.stdout.columns || 120}
           height={process.stdout.rows || 24}
         />
@@ -151,6 +175,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
         <ReviewView
           state={fullState}
           events={events}
+          focusedRegion={shell.focusedRegion}
           width={process.stdout.columns || 120}
           height={process.stdout.rows || 24}
         />
@@ -161,6 +186,8 @@ export function App({ bus, stateReader, mux }: AppProps) {
           state={fullState}
           mux={mux ?? null}
           liveSessions={fullState?.parliament.liveSessions ?? []}
+          agentEvents={fullState?.agentEvents ?? []}
+          focusedRegion={shell.focusedRegion}
           width={process.stdout.columns || 120}
           height={process.stdout.rows || 24}
         />
@@ -169,6 +196,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
       {shell.activeView === "operations" && (
         <OperationsView
           state={fullState}
+          focusedRegion={shell.focusedRegion}
           width={process.stdout.columns || 120}
           height={process.stdout.rows || 24}
         />
@@ -176,7 +204,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
 
       <Box marginTop={1}>
         <Text dimColor>
-          {hintText}  [q] Quit
+          {hintText}  [q] Quit{shell.focusedRegion ? `  ▸ ${shell.focusedRegion}` : ""}
         </Text>
       </Box>
     </Box>

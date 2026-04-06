@@ -40,9 +40,9 @@ export const FOCUS_REGIONS: FocusRegion[] = [
  * Focus cycles per view.
  */
 export const FOCUS_CYCLES: Record<string, string[]> = {
-  overview: ["overview.summary", "overview.gates", "overview.tracks"],
+  overview: ["overview.gates", "overview.tracks"],
   review: ["review.findings", "review.thread"],
-  chat: ["chat.sessions", "chat.transcript", "chat.composer", "chat.git.commits", "chat.git.files"],
+  chat: ["chat.sessions", "chat.transcript", "chat.composer", "chat.git"],
   operations: ["operations.providers", "operations.worktrees"],
 };
 
@@ -83,7 +83,7 @@ export function regionsForView(view: string): FocusRegion[] {
 export function adjustedChatCycle(termWidth: number): string[] {
   const full = FOCUS_CYCLES.chat;
   if (termWidth < 100) {
-    return full.filter(r => !r.startsWith("chat.git."));
+    return full.filter(r => r !== "chat.git");
   }
   return [...full];
 }

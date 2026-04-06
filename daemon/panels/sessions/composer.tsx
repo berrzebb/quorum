@@ -18,11 +18,12 @@ interface ComposerProps {
   sessionId: string;
   /** Number of active sessions (shown in idle mode). */
   sessionCount?: number;
+  focused?: boolean;
 }
 
-export function Composer({ buffer, mode, onSubmit: _onSubmit, onBufferChange: _onBufferChange, sessionId: _sessionId, sessionCount }: ComposerProps) {
+export function Composer({ buffer, mode, onSubmit: _onSubmit, onBufferChange: _onBufferChange, sessionId: _sessionId, sessionCount, focused }: ComposerProps) {
   return (
-    <Box borderStyle="single" paddingX={1} height={3}>
+    <Box borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1} height={3}>
       {mode === "input" ? (
         <Box flexGrow={1}>
           <Text color="cyan" bold>{">"} </Text>

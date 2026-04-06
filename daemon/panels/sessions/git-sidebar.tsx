@@ -18,15 +18,16 @@ interface GitSidebarProps {
   filesScrollOffset: number;
   /** Changed files for the bottom section. */
   changedFiles?: ChangedFileInfo[];
+  focused?: boolean;
 }
 
-export function GitSidebar({ gitLog, width, commitScrollOffset, filesScrollOffset, changedFiles }: GitSidebarProps) {
+export function GitSidebar({ gitLog, width, commitScrollOffset, filesScrollOffset, changedFiles, focused }: GitSidebarProps) {
   // Split vertical space: commits get 70%, files get 30%
   // For now, if no changedFiles provided, commits take full height
   const hasFiles = changedFiles && changedFiles.length > 0;
 
   return (
-    <Box flexDirection="column" width={width} borderStyle="single" paddingX={1}>
+    <Box flexDirection="column" width={width} borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1}>
       <Text bold>Git Log</Text>
       <Text dimColor>{"─".repeat(Math.max(0, width - 4))}</Text>
 

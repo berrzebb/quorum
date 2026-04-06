@@ -17,6 +17,7 @@ interface TranscriptPaneProps {
   role?: string;
   /** Backend name for header display. */
   backend?: string;
+  focused?: boolean;
 }
 
 const MAX_BUFFER_LINES = 200;
@@ -124,7 +125,7 @@ export function parseStreamJson(rawLines: string[]): string[] {
 
 // ── TranscriptPane Component ──────────────────────────────────────────
 
-export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessionId, role, backend }: TranscriptPaneProps) {
+export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessionId, role, backend, focused }: TranscriptPaneProps) {
   const visibleLines = Math.max(height, 5);
   const maxScroll = Math.max(0, lines.length - visibleLines);
   const safeOffset = Math.min(scrollOffset, maxScroll);
@@ -136,7 +137,7 @@ export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessio
     : 100;
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle="single" paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1}>
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold color="cyan">

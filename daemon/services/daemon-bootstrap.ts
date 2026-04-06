@@ -11,7 +11,7 @@
  */
 
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -248,7 +248,7 @@ export async function startConfigRefresh(intervalMs = 10_000): Promise<() => voi
   try {
     // Resolve to source .mjs (not dist/) — tsc doesn't copy .mjs files
     const contextPath = resolve(__dirname, "..", "..", "..", "platform", "core", "context.mjs");
-    const mod = await import(contextPath);
+    const mod = await import(pathToFileURL(contextPath).href);
     _refreshConfig = mod.refreshConfigIfChanged;
   } catch (err) { console.warn(`[daemon-bootstrap] config refresh module load failed: ${(err as Error).message}`); }
 

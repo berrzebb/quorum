@@ -33,7 +33,7 @@ export async function run(args: string[]): Promise<void> {
   try {
     const status = JSON.parse(readFileSync(resolve(repoRoot, ".claude", "audit-status.json"), "utf8")) as { status?: string };
     auditGateLabel = GATE_LABELS[status.status ?? ""] ?? auditGateLabel;
-  } catch (err) { console.warn(`[status] audit-status.json read failed: ${(err as Error).message}`); }
+  } catch { /* no audit-status.json yet → OPEN (default) */ }
   console.log(`  Audit gate:  ${auditGateLabel}`);
 
   try {

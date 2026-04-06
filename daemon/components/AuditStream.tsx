@@ -96,8 +96,11 @@ function summarize(event: QuorumEvent): string {
   switch (event.type) {
     case "audit.verdict":
       return `${p.verdict} ${(p.codes as string[])?.join(",") ?? ""}`;
-    case "audit.submit":
-      return `evidence → ${(p.file as string)?.split("/").pop() ?? ""}`;
+    case "audit.submit": {
+      const files = p.changedFiles as string[] | undefined;
+      const fileHint = files?.length ? files.slice(0, 2).map(f => (f as string).split("/").pop()).join(", ") : "";
+      return `evidence → ${p.tier ?? ""}${p.mode ? ` (${p.mode})` : ""}${fileHint ? ` ${fileHint}` : ""}`;
+    }
     case "agent.spawn":
       return `${p.name ?? p.agentId ?? p.wbId ?? "agent"} (${p.role ?? "impl"})`;
     case "agent.complete":

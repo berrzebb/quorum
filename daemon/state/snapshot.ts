@@ -57,6 +57,7 @@ export interface FullState {
   reviewProgress: ReviewProgressInfo[];
   fileThreads: FileThread[];
   recentEvents: QuorumEvent[];
+  agentEvents: QuorumEvent[];
   fitness: FitnessInfo;
   parliament: ParliamentInfo;
   agentQueries: AgentQueryInfo[];
@@ -92,6 +93,9 @@ export class SnapshotAssembler {
       reviewProgress: queryReviewProgress(this.store),
       fileThreads: queryFindingThreads(this.store, this.messageBus, findingCache),
       recentEvents: this.store.recent(eventLimit),
+      agentEvents: this.store.query({ eventType: "agent.spawn", limit: 50, descending: true })
+        .concat(this.store.query({ eventType: "agent.complete", limit: 50, descending: true }))
+        .sort((a, b) => a.timestamp - b.timestamp),
       fitness: queryFitnessInfo(this.store),
       parliament: queryParliamentInfo(this.store, this._liveSessionsCache),
       agentQueries: queryAgentQueries(this.store),

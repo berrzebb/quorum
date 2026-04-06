@@ -218,6 +218,13 @@ const STAGE_HANDLERS = {
       } catch { /* fail-open */ }
     }
 
+    // Record pre-implement HEAD for WIP squash in finalize
+    try {
+      ctx._preImplementRef = execSync("git rev-parse HEAD", {
+        cwd: repoRoot, encoding: "utf8", timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch { /* fail-open: squash will be skipped */ }
+
     // PRD §6.2 P3: orchestrate.runWave(WB) — no fallback
     if (!bridge.gate?.runOrchestrateLoop) {
       throw new Error("gate.runOrchestrateLoop unavailable — cannot implement");
@@ -510,7 +517,28 @@ const STAGE_HANDLERS = {
     const { agenda, bridge, repoRoot, verifyResults } = ctx;
     const verifyPassed = verifyResults?.every(r => r.passed) ?? true;
 
-    // A. Emit pipeline.complete event
+    // A. Squash WIP commits into a single clean commit
+    let squashed = false;
+    if (repoRoot && ctx._preImplementRef) {
+      try {
+        const currentHead = execSync("git rev-parse HEAD", {
+          cwd: repoRoot, encoding: "utf8", timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+
+        // Only squash if new commits were created after pre-implement ref
+        if (currentHead !== ctx._preImplementRef) {
+          execSync(`git reset --soft ${ctx._preImplementRef}`, {
+            cwd: repoRoot, timeout: 10_000, windowsHide: true, stdio: "pipe",
+          });
+          execSync(`git commit -m "feat(pipeline): ${agenda}"`, {
+            cwd: repoRoot, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
+          });
+          squashed = true;
+        }
+      } catch { /* fail-open: WIP commits remain as-is */ }
+    }
+
+    // B. Emit pipeline.complete event
     bridge.event?.emitEvent?.("pipeline.complete", "claude-code", {
       agenda,
       success: verifyPassed,
@@ -541,7 +569,7 @@ const STAGE_HANDLERS = {
       } catch { /* fail-open: fact system optional */ }
     }
 
-    // D. Write completion state
+    // E. Write completion state
     const stateDir = repoRoot ? resolve(repoRoot, ".claude", "quorum", "pipeline") : null;
     if (stateDir && existsSync(stateDir)) {
       writeFileSync(resolve(stateDir, "state.json"), JSON.stringify({
@@ -551,10 +579,11 @@ const STAGE_HANDLERS = {
         verifyPassed,
         retroDone,
         factsExtracted,
+        squashed,
       }, null, 2), "utf8");
     }
 
-    return { finalized: true, retroDone, factsExtracted };
+    return { finalized: true, retroDone, factsExtracted, squashed };
   },
 };
 

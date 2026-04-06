@@ -17,16 +17,16 @@
  *   Bottom: Composer
  */
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import { existsSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
-import { execFile } from "node:child_process";
 import type { ProcessMux } from "../../platform/bus/mux.js";
 import type { FullState, ParliamentLiveSession, FileThread } from "../state-reader.js";
 import { SessionList } from "../panels/sessions/session-list.js";
 import type { SessionInfo } from "../panels/sessions/session-list.js";
 import { TranscriptPane, parseStreamJson } from "../panels/sessions/transcript-pane.js";
 import { Composer } from "../panels/sessions/composer.js";
+import { GitExplorer } from "../panels/sessions/git-explorer.js";
 import { GitSidebar } from "../panels/sessions/git-sidebar.js";
 import { severityColor } from "../lib/format.js";
 
@@ -34,6 +34,8 @@ interface ChatViewProps {
   state: FullState | null;
   mux: ProcessMux | null;
   liveSessions?: ParliamentLiveSession[];
+  agentEvents?: import("../../platform/bus/events.js").QuorumEvent[];
+  focusedRegion?: string | null;
   width: number;
   height: number;
 }
@@ -41,29 +43,34 @@ interface ChatViewProps {
 const MAX_BUFFER_LINES = 200;
 const SCROLL_STEP = 3;
 
-export function ChatView({ state, mux, liveSessions = [], width, height }: ChatViewProps): React.ReactElement {
+export function ChatView({ state, mux, liveSessions = [], agentEvents = [], focusedRegion, width, height }: ChatViewProps): React.ReactElement {
   // If no mux, show file-based review threads fallback
   if (!mux) {
     return <ChatFallback fileThreads={state?.fileThreads ?? []} />;
   }
 
-  return <MuxChatView mux={mux} liveSessions={liveSessions} width={width} height={height} />;
+  return <MuxChatView mux={mux} liveSessions={liveSessions} agentEvents={agentEvents} focusedRegion={focusedRegion} width={width} height={height} />;
 }
 
 // ── Mux Chat View (full interactive) ────────────────────────────────
 
-function MuxChatView({ mux, liveSessions, width, height }: {
+function MuxChatView({ mux, liveSessions, agentEvents = [], focusedRegion, width, height }: {
   mux: ProcessMux;
   liveSessions: ParliamentLiveSession[];
+  agentEvents?: import("../../platform/bus/events.js").QuorumEvent[];
+  focusedRegion?: string | null;
   width: number;
   height: number;
 }) {
+  const f = (region: string) => focusedRegion === region;
+  const isGitFocused = f("chat.git");
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [outputs, setOutputs] = useState<Map<string, string[]>>(new Map());
   const [inputBuffer, setInputBuffer] = useState("");
   const [inputMode, setInputMode] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [gitLog, setGitLog] = useState<string[]>([]);
+  const [gitSelectedIdx, setGitSelectedIdx] = useState(0);
+  const [commitDetail, setCommitDetail] = useState<string[]>([]);
   const [termSize, setTermSize] = useState({ rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 });
 
   // Track terminal resize
@@ -96,10 +103,15 @@ function MuxChatView({ mux, liveSessions, width, height }: {
 
   const sessions = mux.list().filter(s => s.status === "running");
 
-  // Output file map
+  // Output file map (parliament + orchestrate agents)
   const outputFileMap = new Map<string, string>();
   for (const ls of liveSessions) {
     if (ls.outputFile) outputFileMap.set(ls.id, ls.outputFile);
+  }
+  for (const ev of agentEvents) {
+    if (ev.type === "agent.spawn" && ev.payload.outputFile && ev.payload.sessionId) {
+      outputFileMap.set(ev.payload.sessionId as string, ev.payload.outputFile as string);
+    }
   }
 
   // Poll session outputs (2s interval)
@@ -139,24 +151,7 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     return () => clearInterval(timer);
   }, [sessions.length, sessions.map(s => s.id).join()]);
 
-  // Poll git log (5s interval) — async, skips re-render if unchanged
-  const lastGitRef = useRef("");
-  useEffect(() => {
-    const pollGit = () => {
-      execFile("git", ["log", "--oneline", "-30"], {
-        encoding: "utf8", timeout: 3000, windowsHide: true,
-      }, (err, stdout) => {
-        if (err) { setGitLog(["(no git repo)"]); return; }
-        const trimmed = stdout.trim();
-        if (trimmed === lastGitRef.current) return;
-        lastGitRef.current = trimmed;
-        setGitLog(trimmed ? trimmed.split("\n") : []);
-      });
-    };
-    pollGit();
-    const timer = setInterval(pollGit, 5000);
-    return () => clearInterval(timer);
-  }, []);
+  // Git polling handled by GitExplorer component
 
   // Current session + lines
   const safeIdx = Math.min(selectedIdx, Math.max(0, sessions.length - 1));
@@ -188,7 +183,12 @@ function MuxChatView({ mux, liveSessions, width, height }: {
       } else if (input && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow) {
         setInputBuffer(prev => prev + input);
       }
+    } else if (isGitFocused) {
+      // Git navigation: ↑↓ moves commit selection
+      if (key.upArrow) setGitSelectedIdx(prev => Math.max(0, prev - 1));
+      else if (key.downArrow) setGitSelectedIdx(prev => prev + 1);
     } else {
+      // Agent chat navigation
       if (key.upArrow) setScrollOffset(prev => Math.min(prev + SCROLL_STEP, maxScroll));
       else if (key.downArrow) setScrollOffset(prev => Math.max(0, prev - SCROLL_STEP));
       else if (key.leftArrow) {
@@ -202,20 +202,21 @@ function MuxChatView({ mux, liveSessions, width, height }: {
     }
   }, [inputMode, inputBuffer, selectedIdx, sessions.length, maxScroll]));
 
-  // Empty state — still show git log
+  // Empty state — still show git explorer
   if (sessions.length === 0) {
     return (
-      <Box flexDirection="row" padding={1}>
-        <Box flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column">
+        <Box flexDirection="column" borderStyle="single" paddingX={1} height={Math.floor(visibleLines * 0.4)}>
           <Text bold>Agent Chat</Text>
           <Text dimColor>No active mux sessions.</Text>
           <Text dimColor>quorum orchestrate run &lt;track&gt; or quorum agent spawn &lt;name&gt; claude</Text>
         </Box>
-        <GitSidebar
-          gitLog={gitLog}
-          width={Math.min(40, Math.floor(termSize.cols * 0.4))}
-          commitScrollOffset={0}
-          filesScrollOffset={0}
+        <GitExplorer
+          focused={isGitFocused}
+          height={Math.floor(visibleLines * 0.6)}
+          selectedIdx={gitSelectedIdx}
+          onSelectedIdxChange={setGitSelectedIdx}
+          onCommitSelect={setCommitDetail}
         />
       </Box>
     );
@@ -236,40 +237,47 @@ function MuxChatView({ mux, liveSessions, width, height }: {
   const live = liveSessions.find(ls => ls.id === selected?.id);
   const selectedRole = live?.role ?? selected?.name.split("-").slice(-2, -1)[0] ?? "agent";
 
+  // Split visible height: top 60%, bottom 40%
+  const topHeight = Math.max(Math.floor(visibleLines * 0.6), 5);
+  const bottomHeight = Math.max(visibleLines - topHeight, 5);
+
+  // When git is focused and commit is selected, show detail in transcript area
+  const displayLines = isGitFocused && commitDetail.length > 0 ? commitDetail : lines;
+  const displayRole = isGitFocused && commitDetail.length > 0 ? "commit" : selectedRole;
+  const displayBackend = isGitFocused && commitDetail.length > 0 ? "git" : selected?.backend;
+
   return (
     <Box flexDirection="column">
-      {/* Top: main panels */}
+      {/* Row 1: Sessions + Agent Chat / Commit Detail */}
       <Box flexDirection="row">
-        {/* Col 1: Session list */}
         {showSessionList && (
           <SessionList
             sessions={sessionInfos}
             selectedIdx={safeIdx}
             onSelect={setSelectedIdx}
             width={sessionListWidth}
+            focused={f("chat.sessions")}
           />
         )}
-
-        {/* Col 2: Transcript pane */}
         <TranscriptPane
-          lines={lines}
-          scrollOffset={scrollOffset}
-          height={visibleLines}
+          lines={displayLines}
+          scrollOffset={isGitFocused ? 0 : scrollOffset}
+          height={topHeight}
           sessionId={selected?.id ?? ""}
-          role={selectedRole}
-          backend={selected?.backend}
+          role={displayRole}
+          backend={displayBackend}
+          focused={f("chat.transcript")}
         />
-
-        {/* Col 3: Git sidebar */}
-        {showGitLog && (
-          <GitSidebar
-            gitLog={gitLog}
-            width={gitLogWidth}
-            commitScrollOffset={0}
-            filesScrollOffset={0}
-          />
-        )}
       </Box>
+
+      {/* Row 2: Git Explorer */}
+      <GitExplorer
+        focused={isGitFocused}
+        height={bottomHeight}
+        selectedIdx={gitSelectedIdx}
+        onSelectedIdxChange={setGitSelectedIdx}
+        onCommitSelect={setCommitDetail}
+      />
 
       {/* Bottom: composer */}
       <Composer
@@ -283,6 +291,7 @@ function MuxChatView({ mux, liveSessions, width, height }: {
         onBufferChange={setInputBuffer}
         sessionId={selected?.id ?? ""}
         sessionCount={sessions.length}
+        focused={f("chat.composer")}
       />
     </Box>
   );
