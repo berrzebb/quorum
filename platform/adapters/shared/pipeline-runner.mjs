@@ -166,7 +166,7 @@ const STAGE_HANDLERS = {
 
     const plannerOpts = bridge.execution?.runParallelPlannerSession
       ? { repoRoot, trackName, provider }
-      : { repoRoot, trackName, provider, useMux: false, useAuto: true };
+      : { repoRoot, trackName, provider, useMux: true, useAuto: true };
 
     const result = await runPlanner(plannerOpts);
 

@@ -101,6 +101,8 @@ export interface ParallelPlannerOptions {
   provider: string;
   /** Timeout per sub-agent in ms. Default: 10 minutes. */
   subAgentTimeout?: number;
+  /** Use mux for sub-agent spawn (enables daemon capture). Default: true in auto mode. */
+  useMux?: boolean;
 }
 
 /**
@@ -148,7 +150,15 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
     },
   ];
 
-  // Spawn all sub-agents in parallel
+  // Spawn all sub-agents in parallel (via mux if available)
+  let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux> | null = null;
+  if (opts.useMux !== false) {
+    try {
+      const muxMod = await import("../../bus/mux.js");
+      mux = new muxMod.ProcessMux();
+    } catch { /* mux unavailable — fall back to direct */ }
+  }
+
   const results = await Promise.allSettled(
     subAgents.map(async (agent) => {
       console.log(`  \x1b[36m▶\x1b[0m ${agent.name}: ${agent.description}`);
@@ -156,13 +166,24 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
       const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
 
       try {
-        await runProviderCLI({
-          provider,
-          args,
-          cwd: repoRoot,
-          stdio: "inherit",
-          timeout,
-        });
+        if (mux && mux.getBackend() !== "raw") {
+          // Mux spawn: daemon can capture output
+          const session = await mux.spawn({
+            command: args[0] === "/c" ? process.env.ComSpec ?? "cmd.exe" : provider,
+            args: args[0] === "/c" ? args : undefined,
+            cwd: repoRoot,
+            name: `quorum-${agent.name}-${Date.now()}`,
+          });
+          if (session) {
+            await pollMuxCompletion(mux, session.id);
+            await cleanupMuxSession(mux, session.id, "");
+          } else {
+            // Mux spawn failed — fall back to direct
+            await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
+          }
+        } else {
+          await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
+        }
         console.log(`  \x1b[32m✓\x1b[0m ${agent.name}: done`);
         return { name: agent.name, success: true };
       } catch (err) {
@@ -175,6 +196,9 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
       }
     })
   );
+
+  // Cleanup mux
+  if (mux) { try { await mux.cleanup(); } catch { /* ignore */ } }
 
   // Check results
   const failures = results.filter(r => r.status === "rejected" || (r.status === "fulfilled" && !r.value.success));
