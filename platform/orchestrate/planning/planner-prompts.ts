@@ -280,3 +280,77 @@ function extractBindingDecisions(cpsContent: string): string {
 export function derivePrefix(trackName: string): string {
   return trackName.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 3) || "TK";
 }
+
+// ── Phased Prompts (v0.6.5: split planner into sub-agents) ──
+
+export type PlannerPhase = "prd-design" | "wb-execution";
+
+/**
+ * Build a focused prompt for a specific planner phase.
+ * Phase 1 (prd-design): PRD + spec + blueprint + domain-model
+ * Phase 2 (wb-execution): work-breakdown + execution-order + test-strategy + work-catalog
+ */
+export function buildPhasedPrompt(phase: PlannerPhase, opts: AutoPromptOpts): string {
+  const { trackName, planDir, prefix, trackSlug, cpsContent } = opts;
+  const d = `${planDir}/${trackSlug}`;
+
+  if (phase === "prd-design") {
+    return `Plan track "${trackName}" — Phase 1: PRD + Design Documents.
+
+${cpsContent ? `## Parliament CPS\n${cpsContent}\n` : ""}
+Generate these 4 files. Each is a SEPARATE file with SINGLE responsibility:
+
+1. **PRD** → ${d}/PRD.md
+   WHAT and WHY. Problem statement, goals, non-goals, success criteria, risks.
+   NO technical details. NO schemas. NO file paths.
+
+2. **Spec** → ${d}/design/spec.md
+   HOW (interfaces). API endpoints, request/response schemas, DB DDL, env vars, error codes.
+   MUST include \`\`\`mermaid\\nsequenceDiagram\`\`\` for API call flow.
+
+3. **Blueprint** → ${d}/design/blueprint.md
+   HOW (structure). Directory tree, file naming conventions, module boundaries, import rules.
+   MUST include \`\`\`mermaid\\nflowchart\`\`\` or \`\`\`mermaid\\nclassDiagram\`\`\`.
+
+4. **Domain Model** → ${d}/design/domain-model.md
+   WHAT (entities). ER diagram, entity definitions, state machines, business rules.
+   MUST include \`\`\`mermaid\\nerDiagram\`\`\` AND \`\`\`mermaid\\nstateDiagram-v2\`\`\`.
+
+Generate ALL 4 files now without asking questions. Be concrete, not abstract.`;
+  }
+
+  // Phase 2: WB + execution
+  return `Plan track "${trackName}" — Phase 2: Work Breakdown + Execution.
+
+READ the existing design documents first:
+- ${d}/PRD.md
+- ${d}/design/spec.md
+- ${d}/design/blueprint.md
+- ${d}/design/domain-model.md
+
+Then generate these 4 files based on them:
+
+1. **Work Breakdown** → ${d}/work-breakdown.md
+   HOW TO BUILD. ${prefix}-1, ${prefix}-2, ... Each WB item has:
+   - First touch files (max 5 per WB)
+   - Prerequisite (${prefix}-X or none)
+   - Action (concrete steps for a sub-agent)
+   - Context budget (Read/Skip files)
+   - Verify (runnable command, MUST include test runner)
+   - Constraints (scope boundary)
+   - Done (machine-checkable)
+
+   HARD RULE: max 5 files per WB. If more, SPLIT.
+
+2. **Execution Order** → ${d}/execution-order.md
+   WHEN. Phase dependency graph (Phase 0→1→2), parallelizable groups,
+   critical path, milestone gates. References WB IDs.
+
+3. **Test Strategy** → ${d}/test-strategy.md
+   HOW TO VERIFY. Test types, fixture plan, coverage targets, CI pipeline.
+
+4. **Work Catalog** → ${d}/work-catalog.md
+   STATUS DASHBOARD. Table of all WBs: ID, title, size, phase, status, dependencies.
+
+Generate ALL 4 files now. Read the existing design docs before starting.`;
+}

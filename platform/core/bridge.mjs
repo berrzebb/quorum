@@ -885,6 +885,17 @@ async function runPlannerSession(opts) {
 }
 
 /**
+ * Run parallel planner: 4 sub-agents (PRD, design, test, WB) in parallel.
+ * v0.6.5: splits the single planner into focused sub-agents to avoid context overflow.
+ */
+async function runParallelPlannerSession(opts) {
+  return withFallback(async () => {
+    const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "planning", "planner-session.js")).href);
+    return mod.runParallelPlannerSession(opts);
+  }, null, "runParallelPlannerSession");
+}
+
+/**
  * Run the full orchestrate loop: parse WBs → compute waves → runWave per wave.
  * This is the bridge equivalent of `quorum orchestrate run <track>`.
  *
@@ -1024,7 +1035,7 @@ export const event = { emitEvent, recordTransition, currentState, queryEvents, q
 export const query = { getState, setState, getLatestEvidence, getMessageBus };
 export const gate = { evaluateTrigger, recordVerdict, currentTier, detectStagnation, computeFitness, getFitnessLoop, computeBlastRadius, runFitnessGate, runAuditGates, runFixer, runFixerCycle, runAutoRetro, runOrchestrateLoop };
 export const hooks = { initHookRunner, getHookRunner, fireHook, checkHookGate };
-export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal, runPlannerSession };
+export const execution = { planExecution, selectExecutionMode, validatePlanClaims, analyzeAuditLearnings, createUnitOfWork, runPipeline: runPipelineInternal, runPlannerSession, runParallelPlannerSession };
 export const fact = {
   addFact(f) { return _svc.store?.addFact(f) ?? null; },
   getFacts(filter) { return _svc.store?.getFacts(filter) ?? []; },

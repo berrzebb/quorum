@@ -142,8 +142,13 @@ const STAGE_HANDLERS = {
   },
 
   /**
-   * P2. Design — generate WBs via planner (or provider fallback).
-   * Calls planner to create work-breakdown.md from CPS/agenda.
+   * P2. Design — generate WBs via parallel planner sub-agents.
+   *
+   * v0.6.5: Split from single 8-file planner into focused sub-agents:
+   *   - planner-prd: PRD + spec + blueprint + domain-model
+   *   - planner-wb: work-breakdown + execution-order + test-strategy + catalog
+   *
+   * Falls back to single-session planner if parallel version unavailable.
    */
   async design(ctx) {
     const { plan, config, repoRoot, bridge } = ctx;
@@ -153,31 +158,36 @@ const STAGE_HANDLERS = {
     const provider = config?.pipeline?.provider ?? "claude";
     const trackName = config?._meta?.trackName ?? "pipeline";
 
-    // PRD §6.2 P2: planner.runSession(CPS) → PRD + WB + RTM
-    if (bridge.execution?.runPlannerSession) {
-      const result = await bridge.execution.runPlannerSession({
-        repoRoot,
-        trackName,
-        provider,
-        useMux: false,
-        useAuto: true,
-      });
+    // Try parallel planner first (v0.6.5)
+    const runPlanner = bridge.execution?.runParallelPlannerSession
+      ?? bridge.execution?.runPlannerSession;
 
-      if (result) {
-        const trackSlug = result.trackSlug ?? trackName;
-        // Planner writes to docs/plan/{trackSlug}/ — check multiple locations
-        const candidates = [
-          resolve(repoRoot, "docs", "plan", trackSlug, "work-breakdown.md"),
-          resolve(repoRoot, "docs", trackSlug, "work-breakdown.md"),
-          resolve(repoRoot, "plans", trackSlug, "work-breakdown.md"),
-        ];
-        ctx.wbPath = candidates.find(p => existsSync(p)) ?? null;
-        ctx.trackName = trackSlug;
-        return { wbPath: ctx.wbPath, trackName: trackSlug, source: "planner-session" };
+    if (!runPlanner) throw new Error("no planner available in bridge.execution");
+
+    const plannerOpts = bridge.execution?.runParallelPlannerSession
+      ? { repoRoot, trackName, provider }
+      : { repoRoot, trackName, provider, useMux: false, useAuto: true };
+
+    const result = await runPlanner(plannerOpts);
+
+    if (result) {
+      const trackSlug = result.trackSlug ?? trackName;
+      const candidates = [
+        resolve(repoRoot, "docs", "plan", trackSlug, "work-breakdown.md"),
+        resolve(repoRoot, "docs", trackSlug, "work-breakdown.md"),
+        resolve(repoRoot, "plans", trackSlug, "work-breakdown.md"),
+      ];
+      ctx.wbPath = candidates.find(p => existsSync(p)) ?? null;
+      ctx.trackName = trackSlug;
+
+      if (!ctx.wbPath) {
+        throw new Error(`design completed but work-breakdown.md not found. Searched: ${candidates.join(", ")}`);
       }
+
+      return { wbPath: ctx.wbPath, trackName: trackSlug, source: "parallel-planner" };
     }
 
-    throw new Error("runPlannerSession unavailable or failed — cannot generate design artifacts");
+    throw new Error("planner returned null — design failed");
   },
 
   /**

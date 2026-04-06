@@ -133,7 +133,7 @@ describe("runPipeline", () => {
     const result = await runPipeline("인증", TEST_CONFIG, bridge, { repoRoot: tmpDir });
     const designOutput = result.stages[1].output;
     assert.ok(designOutput.trackName);
-    assert.equal(designOutput.source, "planner-session");
+    assert.ok(["planner-session", "parallel-planner"].includes(designOutput.source));
     assert.ok(designOutput.wbPath);
   });
 

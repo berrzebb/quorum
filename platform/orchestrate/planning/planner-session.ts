@@ -7,8 +7,9 @@
 
 import { resolve } from "node:path";
 import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { loadCPS, loadPlannerProtocol } from "./cps-loader.js";
-import { buildPlannerSystemPrompt, buildSocraticPrompt, buildInlineAutoPrompt, derivePrefix } from "./planner-prompts.js";
+import { buildPlannerSystemPrompt, buildSocraticPrompt, buildInlineAutoPrompt, derivePrefix, buildPhasedPrompt, type PlannerPhase } from "./planner-prompts.js";
 import { determinePlannerMode } from "./planner-mode.js";
 import { runProviderCLI } from "../core/provider-cli.js";
 import { detectMuxBackend } from "../core/mux-backend.js";
@@ -89,6 +90,113 @@ export async function runPlannerSession(opts: PlannerSessionOptions): Promise<Pl
   }
 
   return { autoMode, provider, trackName, trackSlug };
+}
+
+// ── Parallel Planner (v0.6.5: split into 4 sub-agents) ──────
+
+/** Options for running a parallel planner session. */
+export interface ParallelPlannerOptions {
+  repoRoot: string;
+  trackName: string;
+  provider: string;
+  /** Timeout per sub-agent in ms. Default: 10 minutes. */
+  subAgentTimeout?: number;
+}
+
+/**
+ * Run planner as 4 parallel sub-agents:
+ *   1. PRD agent → PRD.md
+ *   2. Design agent → spec + blueprint + domain-model
+ *   3. Test agent → test-strategy
+ *   4. WB agent → work-breakdown + execution-order + work-catalog
+ *
+ * Agents 1-3 start immediately in parallel.
+ * Agent 4 starts in parallel but reads outputs from 1-3 as they appear.
+ * All agents share the same working directory — file system is the communication channel.
+ */
+export async function runParallelPlannerSession(opts: ParallelPlannerOptions): Promise<PlannerSessionResult> {
+  const { repoRoot, trackName, provider } = opts;
+  const timeout = opts.subAgentTimeout ?? 10 * 60_000;
+
+  const cps = loadCPS(repoRoot);
+  const cpsContent = cps?.raw ?? "";
+  const protocol = loadPlannerProtocol(repoRoot);
+
+  const planDir = resolve(repoRoot, "docs", "plan");
+  const trackSlug = slugify(trackName);
+  const prefix = derivePrefix(trackName);
+  const promptOpts = { trackName, cpsContent, protocol, planDir, prefix, trackSlug };
+  const systemPrompt = buildPlannerSystemPrompt(promptOpts);
+
+  console.log(`  Track: ${trackName}, Provider: ${provider}, Mode: parallel (4 sub-agents)\n`);
+
+  // Build focused prompts for each sub-agent
+  const prdDesignPrompt = buildPhasedPrompt("prd-design", promptOpts);
+  const wbPrompt = buildPhasedPrompt("wb-execution", promptOpts);
+
+  // Sub-agent definitions
+  const subAgents = [
+    {
+      name: "planner-prd",
+      prompt: prdDesignPrompt,
+      description: "PRD + design docs (spec, blueprint, domain-model)",
+    },
+    {
+      name: "planner-wb",
+      prompt: wbPrompt,
+      description: "Work breakdown + execution order + test strategy + catalog",
+    },
+  ];
+
+  // Spawn all sub-agents in parallel
+  const results = await Promise.allSettled(
+    subAgents.map(async (agent) => {
+      console.log(`  \x1b[36m▶\x1b[0m ${agent.name}: ${agent.description}`);
+
+      const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
+
+      try {
+        await runProviderCLI({
+          provider,
+          args,
+          cwd: repoRoot,
+          stdio: "inherit",
+          timeout,
+        });
+        console.log(`  \x1b[32m✓\x1b[0m ${agent.name}: done`);
+        return { name: agent.name, success: true };
+      } catch (err) {
+        console.log(`  \x1b[31m✗\x1b[0m ${agent.name}: ${(err as Error).message}`);
+        return { name: agent.name, success: false, error: (err as Error).message };
+      } finally {
+        for (const f of tempFiles) {
+          try { unlinkSync(f); } catch { /* ignore */ }
+        }
+      }
+    })
+  );
+
+  // Check results
+  const failures = results.filter(r => r.status === "rejected" || (r.status === "fulfilled" && !r.value.success));
+  if (failures.length > 0) {
+    console.log(`\n  \x1b[33m⚠\x1b[0m ${failures.length}/${subAgents.length} sub-agent(s) failed`);
+  }
+
+  // Verify WB file exists
+  const wbPath = resolve(planDir, trackSlug, "work-breakdown.md");
+  if (!existsSync(wbPath)) {
+    console.log(`  \x1b[31m✗\x1b[0m work-breakdown.md not found — retrying WB agent...`);
+    // Single retry for WB agent
+    const retryPrompt = `CRITICAL: Read ALL files in ${planDir}/${trackSlug}/ first, then create work-breakdown.md. This is the ONLY file you need to create. Follow the WB schema exactly.`;
+    const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, retryPrompt, true, repoRoot);
+    try {
+      await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
+    } finally {
+      for (const f of tempFiles) { try { unlinkSync(f); } catch { /* */ } }
+    }
+  }
+
+  return { autoMode: true, provider, trackName, trackSlug };
 }
 
 // ── Internal helpers ──────────────────────────
