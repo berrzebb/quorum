@@ -57,13 +57,21 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
   // ── 8. Init ProcessMux for agent sessions ──
   const daemonMux = await initializeMux();
 
-  // ── 9. Render TUI ──
+  // ── 9. Enter alternate screen + render TUI ──
+  // Alt screen prevents scroll jumping: fixed viewport, no scrollback interference
+  const ENTER_ALT = "\x1b[?1049h\x1b[2J\x1b[H";
+  const EXIT_ALT = "\x1b[?1049l";
+  process.stdout.write(ENTER_ALT);
+  // Ensure alt screen is exited on unexpected termination
+  process.on("exit", () => process.stdout.write(EXIT_ALT));
+
   const { waitUntilExit } = render(
     React.createElement(App, { bus, stateReader, mux: daemonMux }),
   );
 
   // ── 10. Graceful shutdown ──
   await waitUntilExit();
+  process.stdout.write(EXIT_ALT);
   stopConfigRefresh();
   await providers.cleanup();
   store.close();

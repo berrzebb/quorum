@@ -158,7 +158,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
   const hintText = hints.map(h => `[${h.key}] ${h.description}`).join("  ");
 
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column" padding={1} height={process.stdout.rows || 24}>
       <Header activeView={shell.activeView} providers={providers} />
 
       {shell.activeView === "overview" && (
