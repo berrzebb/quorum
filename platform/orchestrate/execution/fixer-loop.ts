@@ -141,6 +141,8 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     "3. Do NOT rewrite or restructure — only fix the identified issues",
     "4. Preserve fixes from previous rounds — do NOT regress",
     "5. Run compilation/type checks and tests to verify",
+    "6. Do NOT commit — only edit files. The caller handles git commits.",
+    "7. Do NOT ask questions or wait for confirmation — fix everything and exit.",
   ].join("\n");
 
   const spawn = await prepareProviderSpawn(provider, prompt);
