@@ -7,6 +7,8 @@
 
 import React, { useState, useEffect, useMemo, useReducer } from "react";
 import { Box, Text, useApp, useInput } from "ink";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import type { QuorumBus } from "../platform/bus/bus.js";
 import type { QuorumEvent } from "../platform/bus/events.js";
 import type { StateReader, FullState } from "./state-reader.js";
@@ -95,28 +97,57 @@ export function App({ bus, stateReader, mux }: AppProps) {
     }
   }, [fullState?.parliament.liveSessions, mux]);
 
-  // Sync orchestrate agent sessions from agentEvents into daemon's mux
+  // Sync agent sessions into daemon's mux from: (1) agentEvents, (2) .claude/agents/*.json
   useEffect(() => {
-    if (!mux || !fullState?.agentEvents) return;
-    const completeIds = new Set(
-      fullState.agentEvents.filter(e => e.type === "agent.complete").map(e => (e.payload.sessionId as string) ?? ""),
-    );
-    for (const ev of fullState.agentEvents) {
-      if (ev.type !== "agent.spawn") continue;
-      const p = ev.payload;
-      const sessionId = p.sessionId as string | undefined;
-      const backend = p.backend as string | undefined;
-      if (!sessionId || !backend || backend === "unknown") continue;
-      if (completeIds.has(sessionId)) continue; // already done
-      mux.registerExternal({
-        id: sessionId,
-        name: (p.name as string) ?? `impl-${p.wbId ?? "agent"}`,
-        backend: backend as import("../platform/bus/mux.js").MuxBackend,
-        startedAt: ev.timestamp,
-        status: "running",
-      });
+    if (!mux) return;
+
+    // Source 1: agent.spawn events
+    if (fullState?.agentEvents) {
+      const completeIds = new Set(
+        fullState.agentEvents.filter(e => e.type === "agent.complete").map(e => (e.payload.sessionId as string) ?? ""),
+      );
+      for (const ev of fullState.agentEvents) {
+        if (ev.type !== "agent.spawn") continue;
+        const p = ev.payload;
+        const sessionId = p.sessionId as string | undefined;
+        const backend = p.backend as string | undefined;
+        if (!sessionId || !backend || backend === "unknown") continue;
+        if (completeIds.has(sessionId)) continue;
+        mux.registerExternal({
+          id: sessionId,
+          name: (p.name as string) ?? `impl-${p.wbId ?? "agent"}`,
+          backend: backend as import("../platform/bus/mux.js").MuxBackend,
+          startedAt: ev.timestamp,
+          status: "running",
+        });
+      }
     }
-  }, [fullState?.agentEvents?.length, mux]);
+
+    // Source 2: .claude/agents/*.json files (planner sub-agents, orchestrate agents)
+    try {
+      const agentsDir = resolve(process.cwd(), ".claude", "agents");
+      if (existsSync(agentsDir)) {
+        const files = readdirSync(agentsDir).filter(f => f.endsWith(".json"));
+        for (const f of files) {
+          try {
+            const agent = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
+            const sessionId = agent.id ?? agent.name ?? f.replace(".json", "");
+            const backend = agent.backend ?? "psmux";
+            const name = agent.name ?? sessionId;
+            if (!mux.list().some(s => s.id === sessionId)) {
+              mux.registerExternal({
+                id: sessionId,
+                name,
+                backend: backend as import("../platform/bus/mux.js").MuxBackend,
+                startedAt: agent.startedAt ?? Date.now(),
+                status: "running",
+              });
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch { /* no agents dir */ }
+  }, [fullState?.agentEvents?.length, mux, fullState?.recentEvents?.length]);
 
   // Input handling: view switching, focus cycling, help overlay, quit
   useInput((input, key) => {
