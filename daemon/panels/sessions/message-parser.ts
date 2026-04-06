@@ -13,7 +13,7 @@
  *   - system: system messages (errors, etc.)
  */
 
-export type ChatMessageType = "user" | "assistant" | "thinking" | "tool_use" | "tool_result" | "system";
+export type ChatMessageType = "user" | "assistant" | "thinking" | "tool_use" | "tool_result" | "system" | "collapsed_group";
 
 export interface ChatMessage {
   type: ChatMessageType;
@@ -29,6 +29,10 @@ export interface ChatMessage {
   toolUseId?: string;
   /** Timestamp (ms). */
   timestamp?: number;
+  /** Grouped items (for collapsed_group). */
+  groupedItems?: Array<{ toolName: string; filePath?: string; toolUseId?: string }>;
+  /** Count of items in group. */
+  groupCount?: number;
 }
 
 /**
@@ -200,7 +204,58 @@ export function parseMessages(rawLines: string[]): ChatMessage[] {
   }
 
   flush();
-  return messages;
+  return collapseReadSearchGroups(messages);
+}
+
+/** Collapsible tool names — consecutive runs get merged. */
+const COLLAPSIBLE_TOOLS = new Set(["Read", "Grep", "Glob", "LS"]);
+
+/**
+ * Post-process: collapse consecutive Read/Grep/Glob tool_use + tool_result
+ * into a single collapsed_group message.
+ */
+function collapseReadSearchGroups(messages: ChatMessage[]): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  let groupBuffer: ChatMessage[] = [];
+
+  function flushGroup() {
+    if (groupBuffer.length === 0) return;
+    if (groupBuffer.length <= 2) {
+      // Too few to collapse — keep as-is
+      result.push(...groupBuffer);
+    } else {
+      // Collapse: extract tool_use items (skip tool_results)
+      const items = groupBuffer
+        .filter(m => m.type === "tool_use")
+        .map(m => ({ toolName: m.toolName ?? "tool", filePath: m.filePath, toolUseId: m.toolUseId }));
+      const toolCounts = new Map<string, number>();
+      for (const item of items) {
+        toolCounts.set(item.toolName, (toolCounts.get(item.toolName) ?? 0) + 1);
+      }
+      const summary = [...toolCounts.entries()].map(([name, count]) => `${name} ×${count}`).join(", ");
+      result.push({
+        type: "collapsed_group",
+        lines: [summary],
+        toolName: items[0]?.toolName,
+        groupedItems: items,
+        groupCount: items.length,
+      });
+    }
+    groupBuffer = [];
+  }
+
+  for (const msg of messages) {
+    if (msg.type === "tool_use" && COLLAPSIBLE_TOOLS.has(msg.toolName ?? "")) {
+      groupBuffer.push(msg);
+    } else if (msg.type === "tool_result" && groupBuffer.length > 0) {
+      groupBuffer.push(msg);
+    } else {
+      flushGroup();
+      result.push(msg);
+    }
+  }
+  flushGroup();
+  return result;
 }
 
 /** Extract file_path from tool input (Read, Edit, Write, Glob, Grep). */

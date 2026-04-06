@@ -69,6 +69,7 @@ function MuxChatView({ mux, liveSessions, agentEvents = [], focusedRegion, width
   const [inputBuffer, setInputBuffer] = useState("");
   const [inputMode, setInputMode] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [isSticky, setIsSticky] = useState(true); // stickyScroll: auto-follow bottom
   const [gitSelectedIdx, setGitSelectedIdx] = useState(0);
   const [commitDetail, setCommitDetail] = useState<string[]>([]);
   const [termSize, setTermSize] = useState({ rows: process.stdout.rows || 24, cols: process.stdout.columns || 80 });
@@ -144,12 +145,23 @@ function MuxChatView({ mux, liveSessions, agentEvents = [], focusedRegion, width
           next.set(s.id, hasJson ? parseStreamJson(rawLines) : rawLines.slice(-MAX_BUFFER_LINES));
         }
       }
-      setOutputs(next);
+      setOutputs(prev => {
+        // stickyScroll: reset offset to 0 if content grew and we're sticky
+        if (isSticky) {
+          const selectedId = sessions[Math.min(selectedIdx, sessions.length - 1)]?.id;
+          if (selectedId) {
+            const prevLen = prev.get(selectedId)?.length ?? 0;
+            const nextLen = next.get(selectedId)?.length ?? 0;
+            if (nextLen > prevLen) setScrollOffset(0);
+          }
+        }
+        return next;
+      });
     };
     poll();
     const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
-  }, [sessions.length, sessions.map(s => s.id).join()]);
+  }, [sessions.length, sessions.map(s => s.id).join(), isSticky]);
 
   // Git polling handled by GitExplorer component
 
@@ -189,8 +201,16 @@ function MuxChatView({ mux, liveSessions, agentEvents = [], focusedRegion, width
       else if (key.downArrow) setGitSelectedIdx(prev => prev + 1);
     } else {
       // Agent chat navigation
-      if (key.upArrow) setScrollOffset(prev => Math.min(prev + SCROLL_STEP, maxScroll));
-      else if (key.downArrow) setScrollOffset(prev => Math.max(0, prev - SCROLL_STEP));
+      if (key.upArrow) {
+        setScrollOffset(prev => Math.min(prev + SCROLL_STEP, maxScroll));
+        setIsSticky(false); // Break sticky on scroll up
+      } else if (key.downArrow) {
+        setScrollOffset(prev => {
+          const next = Math.max(0, prev - SCROLL_STEP);
+          if (next === 0) setIsSticky(true); // Re-engage sticky at bottom
+          return next;
+        });
+      }
       else if (key.leftArrow) {
         setSelectedIdx(prev => Math.max(0, prev - 1));
         setScrollOffset(0);
