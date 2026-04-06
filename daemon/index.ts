@@ -74,13 +74,21 @@ export default async function startDaemon(args: string[] = []): Promise<void> {
 
   // ── 10. Graceful shutdown ──
   await waitUntilExit();
-  // Restore terminal: exit alt screen, show cursor, reset modes
-  process.stdout.write(EXIT_ALT + "\x1b[?25h");
-  // Ensure stdin raw mode is off (Ink may leave it on)
-  if (process.stdin.isTTY && process.stdin.isRaw) {
+  // Restore terminal fully: exit alt screen, show cursor, reset SGR, reset DECSET modes
+  process.stdout.write(
+    EXIT_ALT +       // Exit alternate screen buffer
+    "\x1b[?25h" +    // Show cursor (DECTCEM)
+    "\x1b[0m" +      // Reset SGR (colors/bold)
+    "\x1b[?1000l" +  // Disable mouse tracking
+    "\x1b[?1006l" +  // Disable SGR mouse
+    "\x1b[?2004l"    // Disable bracketed paste
+  );
+  // Ensure stdin raw mode is off (Ink leaves it on)
+  if (process.stdin.isTTY) {
     try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+    try { process.stdin.resume(); process.stdin.pause(); } catch { /* reset stdin state */ }
   }
-  process.stdin.unref(); // Allow process to exit without waiting for stdin
+  process.stdin.unref();
   stopConfigRefresh();
   await providers.cleanup();
   store.close();
