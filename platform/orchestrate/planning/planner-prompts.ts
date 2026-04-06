@@ -316,7 +316,7 @@ Generate these 4 files. Each is a SEPARATE file with SINGLE responsibility:
    WHAT (entities). ER diagram, entity definitions, state machines, business rules.
    MUST include \`\`\`mermaid\\nerDiagram\`\`\` AND \`\`\`mermaid\\nstateDiagram-v2\`\`\`.
 
-Generate ALL 4 files now without asking questions. Be concrete, not abstract.`;
+CRITICAL: Generate ALL 4 files now. Do NOT ask questions. Do NOT wait for confirmation. Do NOT mention "next steps" or "Phase 2". Just create the files and exit.`;
   }
 
   // Phase 2: WB + execution
@@ -352,5 +352,5 @@ Then generate these 4 files based on them:
 4. **Work Catalog** → ${d}/work-catalog.md
    STATUS DASHBOARD. Table of all WBs: ID, title, size, phase, status, dependencies.
 
-Generate ALL 4 files now. Read the existing design docs before starting.`;
+CRITICAL: Generate ALL 4 files now. Do NOT ask questions. Do NOT wait for confirmation. Read the existing design docs, then create all files and exit.`;
 }
