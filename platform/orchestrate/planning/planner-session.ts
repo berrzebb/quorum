@@ -130,27 +130,36 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
   const promptOpts = { trackName, cpsContent, protocol, planDir, prefix, trackSlug };
   const systemPrompt = buildPlannerSystemPrompt(promptOpts);
 
-  console.log(`  Track: ${trackName}, Provider: ${provider}, Mode: parallel (4 sub-agents)\n`);
+  console.log(`  Track: ${trackName}, Provider: ${provider}, Mode: parallel (3 sub-agents)\n`);
 
   // Build focused prompts for each sub-agent
   const prdDesignPrompt = buildPhasedPrompt("prd-design", promptOpts);
-  const wbPrompt = buildPhasedPrompt("wb-execution", promptOpts);
+  const wbOnlyPrompt = buildPhasedPrompt("wb-only", promptOpts);
+  const supportDocsPrompt = buildPhasedPrompt("wb-execution", promptOpts);
 
-  // Sub-agent definitions
-  const subAgents = [
+  // Phase 1: PRD + design (runs first, WB depends on it)
+  // Phase 2: WB-only + support docs (run after Phase 1)
+  // WB-only is a dedicated agent — the most critical output
+  const phase1Agents = [
     {
       name: "planner-prd",
       prompt: prdDesignPrompt,
       description: "PRD + design docs (spec, blueprint, domain-model)",
     },
+  ];
+  const phase2Agents = [
     {
       name: "planner-wb",
-      prompt: wbPrompt,
-      description: "Work breakdown + execution order + test strategy + catalog",
+      prompt: wbOnlyPrompt,
+      description: "Work breakdown ONLY (dedicated agent)",
+    },
+    {
+      name: "planner-support",
+      prompt: supportDocsPrompt,
+      description: "Execution order + test strategy + work catalog",
     },
   ];
-
-  // Spawn all sub-agents in parallel via mux (daemon-visible) or direct fallback
+  // Mux + agent state setup
   let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux> | null = null;
   let muxBackend = "raw";
   if (opts.useMux !== false) {
@@ -160,60 +169,57 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
       muxBackend = mux.getBackend();
     } catch { /* mux unavailable */ }
   }
-
-  // Agent state persistence for daemon discovery
   const { saveAgentState, removeAgentState } = await import("../execution/agent-session.js");
+  const { prepareProviderSpawn } = await import("../core/provider-binary.js");
 
-  const results = await Promise.allSettled(
-    subAgents.map(async (agent) => {
-      console.log(`  \x1b[36m▶\x1b[0m ${agent.name}: ${agent.description}`);
+  // Shared spawn function
+  async function spawnAgent(agent: { name: string; prompt: string; description: string }) {
+    console.log(`  \x1b[36m▶\x1b[0m ${agent.name}: ${agent.description}`);
+    const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
+    const spawn = await prepareProviderSpawn(provider, agent.prompt);
+    const sessionName = `quorum-${agent.name}-${Date.now()}`;
 
-      const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
-
-      // Resolve provider binary for mux spawn
-      const { prepareProviderSpawn } = await import("../core/provider-binary.js");
-      const spawn = await prepareProviderSpawn(provider, agent.prompt);
-      const sessionName = `quorum-${agent.name}-${Date.now()}`;
-
-      try {
-        if (mux && muxBackend !== "raw") {
-          const session = await mux.spawn({
-            command: spawn.bin,
-            args: spawn.args,
-            cwd: repoRoot,
-            name: sessionName,
-          });
-          if (session) {
-            // Persist for daemon AgentPanel
-            saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
-            await pollMuxCompletion(mux, session.id);
-            removeAgentState(repoRoot, session.id);
-            await cleanupMuxSession(mux, session.id, "");
-          } else {
-            await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
-          }
+    try {
+      if (mux && muxBackend !== "raw") {
+        const session = await mux.spawn({
+          command: spawn.bin, args: spawn.args, cwd: repoRoot, name: sessionName,
+        });
+        if (session) {
+          saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
+          await pollMuxCompletion(mux, session.id);
+          removeAgentState(repoRoot, session.id);
+          await cleanupMuxSession(mux, session.id, "");
         } else {
           await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
         }
-        console.log(`  \x1b[32m✓\x1b[0m ${agent.name}: done`);
-        return { name: agent.name, success: true };
-      } catch (err) {
-        console.log(`  \x1b[31m✗\x1b[0m ${agent.name}: ${(err as Error).message}`);
-        return { name: agent.name, success: false, error: (err as Error).message };
-      } finally {
-        for (const f of tempFiles) {
-          try { unlinkSync(f); } catch { /* ignore */ }
-        }
+      } else {
+        await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
       }
-    })
-  );
+      console.log(`  \x1b[32m✓\x1b[0m ${agent.name}: done`);
+      return { name: agent.name, success: true };
+    } catch (err) {
+      console.log(`  \x1b[31m✗\x1b[0m ${agent.name}: ${(err as Error).message}`);
+      return { name: agent.name, success: false, error: (err as Error).message };
+    } finally {
+      for (const f of tempFiles) { try { unlinkSync(f); } catch { /* */ } }
+    }
+  }
 
+  // Phase 1: PRD + design docs (must complete before Phase 2)
+  console.log(`  \x1b[2mPhase 1: Design documents\x1b[0m`);
+  const phase1Results = await Promise.allSettled(phase1Agents.map(spawnAgent));
+
+  // Phase 2: WB (dedicated) + support docs (parallel, after design docs exist)
+  console.log(`  \x1b[2mPhase 2: Work breakdown + support\x1b[0m`);
+  const phase2Results = await Promise.allSettled(phase2Agents.map(spawnAgent));
+
+  const results = [...phase1Results, ...phase2Results];
   if (mux) { try { await mux.cleanup(); } catch { /* ignore */ } }
 
   // Check results
   const failures = results.filter(r => r.status === "rejected" || (r.status === "fulfilled" && !r.value.success));
   if (failures.length > 0) {
-    console.log(`\n  \x1b[33m⚠\x1b[0m ${failures.length}/${subAgents.length} sub-agent(s) failed`);
+    console.log(`\n  \x1b[33m⚠\x1b[0m ${failures.length}/${phase1Agents.length + phase2Agents.length} sub-agent(s) failed`);
   }
 
   // Verify WB file exists

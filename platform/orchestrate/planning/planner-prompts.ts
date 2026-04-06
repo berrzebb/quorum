@@ -283,7 +283,7 @@ export function derivePrefix(trackName: string): string {
 
 // ── Phased Prompts (v0.6.5: split planner into sub-agents) ──
 
-export type PlannerPhase = "prd-design" | "wb-execution";
+export type PlannerPhase = "prd-design" | "wb-only" | "wb-execution";
 
 /**
  * Build a focused prompt for a specific planner phase.
@@ -319,7 +319,33 @@ Generate these 4 files. Each is a SEPARATE file with SINGLE responsibility:
 CRITICAL: Generate ALL 4 files now. Do NOT ask questions. Do NOT wait for confirmation. Do NOT mention "next steps" or "Phase 2". Just create the files and exit.`;
   }
 
-  // Phase 2: WB + execution
+  // Phase WB-only: JUST work-breakdown.md — highest priority, dedicated agent
+  if (phase === "wb-only") {
+    return `You have ONE job: create ${d}/work-breakdown.md
+
+READ these existing design documents:
+- ${d}/PRD.md
+- ${d}/design/spec.md
+- ${d}/design/blueprint.md
+- ${d}/design/domain-model.md
+
+Then create EXACTLY ONE file: ${d}/work-breakdown.md
+
+Each WB item (${prefix}-1, ${prefix}-2, ...) MUST have:
+- **First touch files** (max 5 per WB)
+- **Prerequisite** (${prefix}-X or none)
+- **Action** (concrete steps)
+- **Context budget** (Read/Skip files)
+- **Verify** (runnable command with test runner)
+- **Constraints** (scope boundary)
+- **Done** (machine-checkable)
+
+HARD RULE: max 5 files per WB. If more, SPLIT.
+
+Do NOT create any other files. Do NOT ask questions. Create work-breakdown.md and exit.`;
+  }
+
+  // Phase 2: WB + execution (legacy — kept for fallback)
   return `Plan track "${trackName}" — Phase 2: Work Breakdown + Execution.
 
 READ the existing design documents first:
