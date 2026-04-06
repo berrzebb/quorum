@@ -288,8 +288,58 @@ export async function run(args: string[]): Promise<void> {
   closeRl();
 
   console.log(`\n\x1b[32mSetup complete.\x1b[0m`);
-  console.log(`\nNext steps:`);
-  console.log(`  quorum daemon     Start the TUI dashboard`);
-  console.log(`  quorum status     Check gate status`);
-  console.log(`  quorum help       See all commands\n`);
+
+  // ── Auto-Pipeline: --agenda 명시 시에만 6-stage 파이프라인 자동 실행 ──
+  const agendaFlagIdx = args.indexOf("--agenda");
+  const hasExplicitAgenda = agendaFlagIdx >= 0 && !!args[agendaFlagIdx + 1];
+  let pipelineAgenda: string | undefined;
+  if (hasExplicitAgenda) {
+    try {
+      const savedConfig = JSON.parse(readFileSync(configPath, "utf8"));
+      pipelineAgenda = savedConfig?.pipeline?.agenda;
+    } catch { /* no config */ }
+  }
+
+  if (pipelineAgenda) {
+    console.log(`\n\x1b[36m[pipeline]\x1b[0m agenda detected — starting auto-pipeline...\n`);
+    console.log(`  Agenda: ${pipelineAgenda}\n`);
+
+    try {
+      const bridgePath = pathToFileURL(resolve(QUORUM_PKG_ROOT, "platform", "core", "bridge.mjs")).href;
+      const bridge = await import(bridgePath);
+
+      const pipelineConfig = JSON.parse(readFileSync(configPath, "utf8"));
+      const startTime = Date.now();
+
+      const result = await bridge.execution.runPipeline(pipelineAgenda, pipelineConfig, {
+        repoRoot,
+        maxQARounds: 3,
+        onStageChange: (stage: string, status: string) => {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          const icon = status === "running" ? "\u25B6" : status === "success" ? "\u2713" : status === "failed" ? "\u2717" : "\u25CB";
+          console.log(`  [${elapsed}s] ${icon} ${stage.toUpperCase()} \u2014 ${status}`);
+        },
+      });
+
+      console.log(`\n${"─".repeat(60)}`);
+      console.log(`  Result: ${result.success ? "SUCCESS \u2713" : "FAILED \u2717"}`);
+      console.log(`  Duration: ${(result.totalDuration / 1000).toFixed(1)}s`);
+      if (result.failedAt) console.log(`  Failed at: ${result.failedAt}`);
+      for (const s of result.stages) {
+        console.log(`    ${s.stage}: ${s.status} (${(s.duration / 1000).toFixed(1)}s)`);
+        if (s.error) console.log(`      Error: ${s.error.slice(0, 200)}`);
+      }
+      console.log(`${"─".repeat(60)}\n`);
+
+      if (!result.success) process.exitCode = 1;
+    } catch (err) {
+      console.error(`\n\x1b[31m[pipeline] auto-pipeline failed:\x1b[0m ${(err as Error).message}`);
+      process.exitCode = 1;
+    }
+  } else {
+    console.log(`\nNext steps:`);
+    console.log(`  quorum daemon     Start the TUI dashboard`);
+    console.log(`  quorum status     Check gate status`);
+    console.log(`  quorum help       See all commands\n`);
+  }
 }
