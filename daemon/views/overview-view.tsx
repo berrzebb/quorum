@@ -43,13 +43,8 @@ export const OverviewView = React.memo(function OverviewView({ state, events, fo
         </FocusBox>
       </Box>
 
-      {state.parliament.sessionCount > 0 && (
-        <ParliamentPanel parliament={state.parliament} />
-      )}
-
-      {state.tracks.length > 0 && (
-        <TrackProgress tracks={state.tracks} />
-      )}
+      <ParliamentPanel parliament={state.parliament} />
+      <TrackProgress tracks={state.tracks} />
     </Box>
   );
 });

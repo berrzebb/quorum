@@ -63,7 +63,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
       } catch (err) { console.warn(`[app] state polling failed: ${(err as Error).message}`); }
     };
     update();
-    const poll = setInterval(update, 1000);
+    const poll = setInterval(update, 3000);
     return () => clearInterval(poll);
   }, [stateReader]);
 

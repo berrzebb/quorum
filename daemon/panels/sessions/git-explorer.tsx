@@ -72,24 +72,25 @@ export function GitExplorer({ focused, height, onCommitSelect, selectedIdx, onSe
     const commit = commits[safeIdx];
     if (!commit) return;
 
-    // Changed files for this commit
-    execFile("git", ["diff-tree", "--no-commit-id", "--name-status", "-r", commit.hash], {
-      encoding: "utf8", timeout: 3000, windowsHide: true,
+    // Single git call: changed files + commit message in one shot
+    // Format: name-status lines, then separator, then commit body
+    execFile("git", ["show", "--name-status", "--format=%B%n---SEPARATOR---", commit.hash], {
+      encoding: "utf8", timeout: 5000, windowsHide: true,
     }, (err, stdout) => {
       if (err) { setChangedFiles([]); return; }
-      const files = stdout.trim().split("\n").filter(Boolean).map(line => {
+      const sepIdx = stdout.indexOf("---SEPARATOR---");
+      const bodyPart = sepIdx >= 0 ? stdout.slice(0, sepIdx).trim() : "";
+      const filesPart = sepIdx >= 0 ? stdout.slice(sepIdx + "---SEPARATOR---".length).trim() : stdout.trim();
+
+      // Parse changed files
+      const files = filesPart.split("\n").filter(l => /^[AMDRC]\t/.test(l)).map(line => {
         const [status, ...rest] = line.split("\t");
         return { file: rest.join("\t"), status: status ?? "M" };
       });
       setChangedFiles(files);
-    });
 
-    // Commit detail (diff --stat + message)
-    execFile("git", ["show", "--stat", "--format=%B", commit.hash], {
-      encoding: "utf8", timeout: 5000, windowsHide: true,
-    }, (err, stdout) => {
-      if (err) return;
-      onCommitSelect?.(stdout.trim().split("\n"));
+      // Commit detail
+      if (bodyPart) onCommitSelect?.(bodyPart.split("\n"));
     });
   }, [selectedIdx, commits.length]);
 
