@@ -15,7 +15,7 @@ interface FocusBoxProps {
 export function FocusBox({ focused, children }: FocusBoxProps) {
   return (
     <Box>
-      {focused && <Text color="cyan">▐</Text>}
+      <Text color={focused ? "cyan" : undefined}>{focused ? "▐" : " "}</Text>
       {children}
     </Box>
   );

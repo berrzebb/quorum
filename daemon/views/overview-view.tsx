@@ -21,11 +21,12 @@ interface OverviewViewProps {
   state: FullState | null;
   events: QuorumEvent[];
   focusedRegion?: string | null;
+  eventScrollOffset?: number;
   width: number;
   height: number;
 }
 
-export const OverviewView = React.memo(function OverviewView({ state, events, focusedRegion, width: _width, height: _height }: OverviewViewProps): React.ReactElement {
+export const OverviewView = React.memo(function OverviewView({ state, events, focusedRegion, eventScrollOffset = 0, width: _width, height: _height }: OverviewViewProps): React.ReactElement {
   if (!state) {
     return <Box><Text dimColor>Loading overview...</Text></Box>;
   }
@@ -39,7 +40,7 @@ export const OverviewView = React.memo(function OverviewView({ state, events, fo
           <GateStatus events={events} />
         </FocusBox>
         <FocusBox focused={f("overview.tracks")}>
-          <AuditStream events={events} />
+          <AuditStream events={events} scrollOffset={eventScrollOffset} />
         </FocusBox>
       </Box>
 

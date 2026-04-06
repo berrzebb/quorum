@@ -714,7 +714,6 @@ async function runParliamentSession(request, config) {
   if (!_svc.store) return null;
   const pMods = await loadParliamentModules();
   if (!pMods?.parliamentSessionMod) return null;
-  // Default config when caller omits it (e.g. pipeline-runner)
   const safeConfig = config ?? {
     agendaId: request?.agenda?.[0] ?? "pipeline",
     sessionType: new Date().getHours() < 12 ? "morning" : "afternoon",
@@ -722,10 +721,13 @@ async function runParliamentSession(request, config) {
     eligibleVoters: 3,
     maxAutoAmendments: 5,
   };
-  return withAsyncFallback(
+  emitEvent("agent.spawn", "generic", { agentId: "parliament", name: "parliament", role: "deliberator" });
+  const result = await withAsyncFallback(
     () => pMods.parliamentSessionMod.runParliamentSession(_svc.store, request, safeConfig),
     null, "runParliamentSession"
   );
+  emitEvent("agent.complete", "generic", { agentId: "parliament", name: "parliament", role: "deliberator" });
+  return result;
 }
 
 /**
@@ -878,10 +880,13 @@ async function runAutoRetro(repoRoot) {
  * Bridge wrapper for orchestrate/planning/planner-session.ts.
  */
 async function runPlannerSession(opts) {
-  return withFallback(async () => {
+  emitEvent("agent.spawn", "generic", { agentId: "planner", name: "planner", role: "planner", trackId: opts?.trackName });
+  const result = await withFallback(async () => {
     const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "planning", "planner-session.js")).href);
     return mod.runPlannerSession(opts);
   }, null, "runPlannerSession");
+  emitEvent("agent.complete", "generic", { agentId: "planner", name: "planner", role: "planner" });
+  return result;
 }
 
 /**
@@ -889,10 +894,13 @@ async function runPlannerSession(opts) {
  * v0.6.5: splits the single planner into focused sub-agents to avoid context overflow.
  */
 async function runParallelPlannerSession(opts) {
-  return withFallback(async () => {
+  emitEvent("agent.spawn", "generic", { agentId: "parallel-planner", name: "parallel-planner", role: "planner", trackId: opts?.trackName });
+  const result = await withFallback(async () => {
     const mod = await import(pathToFileURL(resolve(DIST, "orchestrate", "planning", "planner-session.js")).href);
     return mod.runParallelPlannerSession(opts);
   }, null, "runParallelPlannerSession");
+  emitEvent("agent.complete", "generic", { agentId: "parallel-planner", name: "parallel-planner", role: "planner" });
+  return result;
 }
 
 /**

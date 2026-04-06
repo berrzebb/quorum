@@ -47,6 +47,9 @@ export function App({ bus, stateReader, mux }: AppProps) {
     return () => bus.off("*", handler);
   }, [bus]);
 
+  // Panel scroll states
+  const [eventScrollOffset, setEventScrollOffset] = useState(0);
+
   // SQLite state polling (1s interval, <1ms per read)
   // Only trigger re-render when data fingerprint changes to avoid TUI flicker
   const [fullState, setFullState] = useState<FullState | null>(null);
@@ -138,6 +141,20 @@ export function App({ bus, stateReader, mux }: AppProps) {
       return;
     }
 
+    // Arrow keys: scroll focused panel
+    if (key.upArrow) {
+      if (shell.focusedRegion === "overview.tracks") {
+        setEventScrollOffset(prev => prev + 3);
+      }
+      return;
+    }
+    if (key.downArrow) {
+      if (shell.focusedRegion === "overview.tracks") {
+        setEventScrollOffset(prev => Math.max(0, prev - 3));
+      }
+      return;
+    }
+
     // Focus cycling via tab/shift+tab
     if (key.tab || input === "\t") {
       const next = key.shift
@@ -166,6 +183,7 @@ export function App({ bus, stateReader, mux }: AppProps) {
           state={fullState}
           events={events}
           focusedRegion={shell.focusedRegion}
+          eventScrollOffset={eventScrollOffset}
           width={process.stdout.columns || 120}
           height={process.stdout.rows || 24}
         />

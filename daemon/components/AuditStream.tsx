@@ -12,14 +12,18 @@ import type { QuorumEvent, EventType } from "../../platform/bus/events.js";
 interface AuditStreamProps {
   events: QuorumEvent[];
   fullScreen?: boolean;
+  scrollOffset?: number;
 }
 
 const MAX_LINES = 15;
 const MAX_LINES_FULL = 40;
 
-export function AuditStream({ events, fullScreen }: AuditStreamProps) {
+export function AuditStream({ events, fullScreen, scrollOffset = 0 }: AuditStreamProps) {
   const limit = fullScreen ? MAX_LINES_FULL : MAX_LINES;
-  const visible = events.slice(-limit);
+  // Apply scroll: offset 0 = most recent, positive = scrolled up
+  const endIdx = events.length - scrollOffset;
+  const startIdx = Math.max(0, endIdx - limit);
+  const visible = events.slice(startIdx, Math.max(endIdx, 0));
 
   return (
     <Box
