@@ -72,8 +72,7 @@ export function GitExplorer({ focused, height, onCommitSelect, selectedIdx, onSe
     const commit = commits[safeIdx];
     if (!commit) return;
 
-    // Single git call: changed files + commit message in one shot
-    // Format: name-status lines, then separator, then commit body
+    // Single git call + single state update to minimize re-renders
     execFile("git", ["show", "--name-status", "--format=%B%n---SEPARATOR---", commit.hash], {
       encoding: "utf8", timeout: 5000, windowsHide: true,
     }, (err, stdout) => {
@@ -82,14 +81,14 @@ export function GitExplorer({ focused, height, onCommitSelect, selectedIdx, onSe
       const bodyPart = sepIdx >= 0 ? stdout.slice(0, sepIdx).trim() : "";
       const filesPart = sepIdx >= 0 ? stdout.slice(sepIdx + "---SEPARATOR---".length).trim() : stdout.trim();
 
-      // Parse changed files
       const files = filesPart.split("\n").filter(l => /^[AMDRC]\t/.test(l)).map(line => {
         const [status, ...rest] = line.split("\t");
         return { file: rest.join("\t"), status: status ?? "M" };
       });
-      setChangedFiles(files);
 
-      // Commit detail
+      // Batch: set local state + notify parent in one microtask
+      // React 18 auto-batches setState calls in the same callback
+      setChangedFiles(files);
       if (bodyPart) onCommitSelect?.(bodyPart.split("\n"));
     });
   }, [selectedIdx, commits.length]);
