@@ -143,7 +143,7 @@ export function TranscriptPane({ lines, scrollOffset, height, sessionId: _sessio
     : 100;
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1}>
+    <Box flexDirection="column" flexGrow={1} height={height} borderStyle={focused ? "bold" : "single"} borderColor={focused ? "cyan" : undefined} paddingX={1} overflowY="hidden">
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold color="cyan">

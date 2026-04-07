@@ -86,17 +86,19 @@ export async function spawnMuxSession(opts: MuxSpawnOptions): Promise<MuxSession
 export async function pollMuxCompletion(
   mux: InstanceType<any>,
   sessionId: string,
-  timeoutMs = 180_000,
+  _timeoutMs?: number,
   intervalMs = 5_000,
 ): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  // No timeout — agent runs until it emits a completion marker.
+  // Completion = end_turn / stop_sequence / result / turn.completed.
+  while (true) {
     await new Promise(r => setTimeout(r, intervalMs));
     const cap = mux.capture(sessionId, 200);
     if (!cap) continue;
     if (
       cap.output.includes('"type":"result"') ||
-      cap.output.includes('"stop_reason"') ||
+      cap.output.includes('"stop_reason":"end_turn"') ||
+      cap.output.includes('"stop_reason":"stop_sequence"') ||
       cap.output.includes('"type":"turn.completed"')
     ) break;
   }

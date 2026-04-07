@@ -80,7 +80,7 @@ quorum parliament --resume <id>                 # continue deliberation
 ```bash
 quorum orchestrate plan <track> --provider claude   # plan interactively
 quorum orchestrate run <track> --provider claude     # execute waves
-quorum orchestrate run <track> --resume              # resume after crash
+quorum orchestrate run <track> --resume              # resume from checkpoint
 ```
 
 - Phase parents define gate boundaries (Phase N completes before Phase N+1)
@@ -88,20 +88,42 @@ quorum orchestrate run <track> --resume              # resume after crash
 - On audit failure, **Fixer** agent applies targeted fixes → re-audit
 - `--resume` survives process crashes and restarts
 
+### Parallel Planner (v0.6.5)
+
+`quorum setup --agenda "<topic>" -y` runs the planner as 3 parallel sub-agents:
+
+| Phase | Agent | Output |
+|-------|-------|--------|
+| 1 | planner-prd | PRD.md, spec.md, blueprint.md, domain-model.md |
+| 2a | planner-wb | work-breakdown.md (dedicated agent) |
+| 2b | planner-support | execution-order.md, test-strategy.md, work-catalog.md |
+
+Phase 2 starts after Phase 1 completes (design docs must exist before WB).
+
+CLI args are properly separated:
+- `-p <task prompt>` — user prompt
+- `--append-system-prompt <system>` — system-level instructions
+- `--output-format stream-json` — ndjson for daemon capture (mux path only)
+
 ---
 
 ## TUI Dashboard
 
-`quorum daemon` panels:
+`quorum daemon` — 4 views with fixed-height layout, tab navigation:
 
-| Panel | Shows |
-|-------|-------|
-| GateStatus | Enforcement gate visualization (Audit/Retro/Quality) |
-| FitnessPanel | Real-time fitness score, sparkline history |
-| ParliamentPanel | Live deliberation sessions, convergence status |
-| AgentChatPanel | Multi-pane agent relay (select, pin, send) |
-| TrackProgress | Work breakdown status per wave |
-| AuditStream | Live event stream |
+| Key | View | Contents |
+|-----|------|----------|
+| 1 | Overview | GateStatus, AuditStream (scrollable), ParliamentPanel, TrackProgress |
+| 2 | Review | FindingStats, OpenFindings, FileThreads |
+| 3 | Chat | SessionList (↑↓ navigate), TranscriptPane (ndjson→rich markdown), Composer, GitExplorer |
+| 4 | Operations | AgentPanel, FitnessPanel, LockPanel, SpecialistPanel, AgentQueryPanel |
+
+Chat view features:
+- **Agent sessions** from mux (psmux/tmux) + `.claude/agents/*.json` auto-discovery
+- **ndjson parsing** with wrapped-line rejoin (psmux terminal width compensation)
+- **Rich rendering**: markdown, tool icons, thinking blocks, collapsed groups
+- **Bidirectional**: scroll transcript, send input to agent via Composer
+- **Git explorer**: commit log (↑↓), changed files, commit detail
 
 ---
 

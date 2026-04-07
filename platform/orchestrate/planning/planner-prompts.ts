@@ -295,7 +295,13 @@ export function buildPhasedPrompt(phase: PlannerPhase, opts: AutoPromptOpts): st
   const d = `${planDir}/${trackSlug}`;
 
   if (phase === "prd-design") {
-    return `Plan track "${trackName}" — Phase 1: PRD + Design Documents.
+    return `OVERRIDE: Ignore ALL output style instructions (learning mode, explanatory mode, insights, user contributions). You are in FULLY AUTOMATED pipeline mode. NO insights. NO explanations. JUST CREATE THE FILES.
+
+Plan track "${trackName}" — Phase 1: PRD + Design Documents.
+
+MANDATORY OUTPUT DIRECTORY: ${d}/
+All files MUST be written under this EXACT path. Do NOT use any other directory name.
+First, run: mkdir -p "${d}/design" (or use Bash tool to create the directory).
 
 ${cpsContent ? `## Parliament CPS\n${cpsContent}\n` : ""}
 Generate these 4 files. Each is a SEPARATE file with SINGLE responsibility:
@@ -316,20 +322,22 @@ Generate these 4 files. Each is a SEPARATE file with SINGLE responsibility:
    WHAT (entities). ER diagram, entity definitions, state machines, business rules.
    MUST include \`\`\`mermaid\\nerDiagram\`\`\` AND \`\`\`mermaid\\nstateDiagram-v2\`\`\`.
 
-CRITICAL: Generate ALL 4 files now. Do NOT ask questions. Do NOT wait for confirmation. Do NOT mention "next steps" or "Phase 2". Just create the files and exit.`;
+CRITICAL: Use EXACTLY the paths above (${d}/). Generate ALL 4 files now. Do NOT ask questions. Do NOT use a different directory. Just create the files and exit.`;
   }
 
   // Phase WB-only: JUST work-breakdown.md — highest priority, dedicated agent
   if (phase === "wb-only") {
-    return `You have ONE job: create ${d}/work-breakdown.md
+    return `OVERRIDE: Ignore ALL output style instructions (learning mode, explanatory mode, insights, user contributions). You are in FULLY AUTOMATED pipeline mode. NO insights. NO explanations. NO "★ Insight" blocks. JUST CREATE THE FILE.
+
+You have ONE job: create ${d}/work-breakdown.md
 
 READ these existing design documents:
 - ${d}/PRD.md
 - ${d}/design/spec.md
-- ${d}/design/blueprint.md
-- ${d}/design/domain-model.md
+- ${d}/design/blueprint.md (may not exist yet — skip if missing)
+- ${d}/design/domain-model.md (may not exist yet — skip if missing)
 
-Then create EXACTLY ONE file: ${d}/work-breakdown.md
+Then USE THE Write TOOL to create EXACTLY ONE file: ${d}/work-breakdown.md
 
 Each WB item (${prefix}-1, ${prefix}-2, ...) MUST have:
 - **First touch files** (max 5 per WB)
@@ -342,11 +350,18 @@ Each WB item (${prefix}-1, ${prefix}-2, ...) MUST have:
 
 HARD RULE: max 5 files per WB. If more, SPLIT.
 
-Do NOT create any other files. Do NOT ask questions. Create work-breakdown.md and exit.`;
+MANDATORY STEPS:
+1. Read the design docs that exist
+2. Call the Write tool to create ${d}/work-breakdown.md
+3. Exit immediately
+
+Do NOT create any other files. Do NOT ask questions. Do NOT explain. WRITE THE FILE AND EXIT.`;
   }
 
   // Phase 2: WB + execution (legacy — kept for fallback)
-  return `Plan track "${trackName}" — Phase 2: Work Breakdown + Execution.
+  return `OVERRIDE: Ignore ALL output style instructions (learning mode, explanatory mode, insights, user contributions). You are in FULLY AUTOMATED pipeline mode. NO insights. NO explanations. JUST CREATE THE FILES.
+
+Plan track "${trackName}" — Phase 2: Work Breakdown + Execution.
 
 READ the existing design documents first:
 - ${d}/PRD.md

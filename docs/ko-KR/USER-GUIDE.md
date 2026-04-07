@@ -88,20 +88,42 @@ quorum orchestrate run <track> --resume              # 장애 후 재개
 - 감사 실패 시 **Fixer** 에이전트가 수정 → 재감사
 - `--resume`는 프로세스 충돌/재시작에서도 복원
 
+### 병렬 플래너 (v0.6.5)
+
+`quorum setup --agenda "<주제>" -y` 실행 시 3개 병렬 서브 에이전트로 기획:
+
+| 단계 | 에이전트 | 출력 |
+|------|---------|------|
+| 1 | planner-prd | PRD.md, spec.md, blueprint.md, domain-model.md |
+| 2a | planner-wb | work-breakdown.md (전용 에이전트) |
+| 2b | planner-support | execution-order.md, test-strategy.md, work-catalog.md |
+
+Phase 2는 Phase 1 완료 후 시작 (설계 문서가 존재해야 WB 생성 가능).
+
+CLI 인자 분리:
+- `-p <작업 프롬프트>` — user prompt
+- `--append-system-prompt <시스템>` — system-level 지시
+- `--output-format stream-json` — 데몬 캡처용 ndjson (mux 경로만)
+
 ---
 
 ## TUI 대시보드
 
-`quorum daemon` 패널:
+`quorum daemon` — 4개 뷰, 고정 높이 레이아웃, Tab 네비게이션:
 
-| 패널 | 표시 내용 |
-|------|----------|
-| GateStatus | 실행 게이트 시각화 (Audit/Retro/Quality) |
-| FitnessPanel | 실시간 피트니스 점수, 스파크라인 이력 |
-| ParliamentPanel | 실시간 심의, 수렴 상태 |
-| AgentChatPanel | 멀티패인 에이전트 대화 |
-| TrackProgress | Wave별 작업 분해 상태 |
-| AuditStream | 실시간 이벤트 스트림 |
+| 키 | 뷰 | 내용 |
+|----|-----|------|
+| 1 | Overview | GateStatus, AuditStream (스크롤), ParliamentPanel, TrackProgress |
+| 2 | Review | FindingStats, OpenFindings, FileThreads |
+| 3 | Chat | SessionList (↑↓ 탐색), TranscriptPane (ndjson→마크다운), Composer, GitExplorer |
+| 4 | Operations | AgentPanel, FitnessPanel, LockPanel, SpecialistPanel, AgentQueryPanel |
+
+Chat 뷰 기능:
+- **에이전트 세션** — mux (psmux/tmux) + `.claude/agents/*.json` 자동 탐지
+- **ndjson 파싱** — 줄바꿈 병합 (psmux 터미널 폭 보정)
+- **리치 렌더링** — 마크다운, 도구 아이콘, thinking 블록, 접힌 그룹
+- **양방향** — 트랜스크립트 스크롤, Composer로 에이전트에 입력 전송
+- **Git 탐색** — 커밋 로그 (↑↓), 변경 파일, 커밋 상세
 
 ---
 

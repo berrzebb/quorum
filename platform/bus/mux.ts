@@ -321,6 +321,11 @@ export class ProcessMux extends EventEmitter {
         console.error(`[mux] psmux new failed (status ${result.status}): ${stderr || "(no stderr)"}`);
         console.error(`[mux] args: ${psmuxArgs.join(" ")}`);
       }
+    } else {
+      // Widen terminal to prevent ndjson line wrapping (stream-json lines can be very long)
+      spawnSync("psmux", ["resize-pane", "-t", session.name, "-x", "10000"], {
+        encoding: "utf8", windowsHide: true,
+      });
     }
   }
 
@@ -330,7 +335,10 @@ export class ProcessMux extends EventEmitter {
       "capture-pane", "-t", session.name, "-p", "-S", `-${tailLines}`,
     ], { encoding: "utf8", windowsHide: true });
 
-    const output = result.stdout ?? "";
+    const raw = result.stdout ?? "";
+    // Rejoin wrapped ndjson lines: psmux wraps long lines at terminal width.
+    // Each JSON object starts with '{' — join continuation lines back to their parent.
+    const output = rejoinWrappedJson(raw);
     return { output, lines: output.split("\n").length };
   }
 
@@ -384,6 +392,28 @@ export class ProcessMux extends EventEmitter {
     const output = proc._outputBuffer.join("\n");
     return { output, lines: proc._outputBuffer.length };
   }
+}
+
+// ── ndjson line rejoin ────────────────────────
+
+/**
+ * Rejoin ndjson lines that were wrapped by terminal width.
+ * Each JSON object starts with '{' — lines not starting with '{' are
+ * continuations of the previous line.
+ */
+function rejoinWrappedJson(raw: string): string {
+  const lines = raw.split("\n");
+  const joined: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("{") || joined.length === 0) {
+      joined.push(line);
+    } else {
+      // Continuation of previous line (wrapped by terminal)
+      joined[joined.length - 1] += line;
+    }
+  }
+  return joined.join("\n");
 }
 
 // ── Backend detection ─────────────────────────

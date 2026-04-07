@@ -154,20 +154,22 @@ Known unresolved items or "None".
 
 ## Planner Documents
 
-The planner generates 8 documents per track:
+The planner generates 8 documents per track across 3 parallel sub-agents (v0.6.5):
 
-| # | Document | Responsibility |
-|---|----------|---------------|
-| 1 | **PRD** | WHAT/WHY — problem, goals, non-goals, risks |
-| 2 | **Spec** | Interfaces — API endpoints, DDL, env vars, error codes |
-| 3 | **Blueprint** | Structure — directory tree, naming conventions (= law) |
-| 4 | **Domain Model** | Entities — ER diagram, state machines, invariants |
-| 5 | **Execution Order** | WHEN — phase dependency graph, critical path |
-| 6 | **Test Strategy** | HOW TO VERIFY — test types, fixtures, coverage targets |
-| 7 | **Work Breakdown** | HOW TO BUILD — per-task Action/Verify/Done |
-| 8 | **Work Catalog** | STATUS — summary table: ID, title, size, phase, status |
+| # | Document | Agent (Phase) | Responsibility |
+|---|----------|---------------|---------------|
+| 1 | **PRD** | planner-prd (1) | WHAT/WHY — problem, goals, non-goals, risks |
+| 2 | **Spec** | planner-prd (1) | Interfaces — API endpoints, DDL, env vars, error codes |
+| 3 | **Blueprint** | planner-prd (1) | Structure — directory tree, naming conventions (= law) |
+| 4 | **Domain Model** | planner-prd (1) | Entities — ER diagram, state machines, invariants |
+| 5 | **Work Breakdown** | planner-wb (2a) | HOW TO BUILD — per-task Action/Verify/Done |
+| 6 | **Execution Order** | planner-support (2b) | WHEN — phase dependency graph, critical path |
+| 7 | **Test Strategy** | planner-support (2b) | HOW TO VERIFY — test types, fixtures, coverage targets |
+| 8 | **Work Catalog** | planner-support (2b) | STATUS — summary table: ID, title, size, phase, status |
 
 **Separation principle**: each document has a single responsibility.
+
+**2-phase execution**: Phase 1 (design docs) must complete before Phase 2 (WB + support). WB gets a dedicated agent to prevent context overload.
 
 ## Session Gate
 

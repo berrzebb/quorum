@@ -34,7 +34,7 @@ export const OverviewView = React.memo(function OverviewView({ state, events, fo
   const f = (region: string) => focusedRegion === region;
 
   return (
-    <Box flexDirection="column" gap={1}>
+    <Box flexDirection="column" height={_height} overflowY="hidden">
       <Box gap={2}>
         <FocusBox focused={f("overview.gates")}>
           <GateStatus events={events} />

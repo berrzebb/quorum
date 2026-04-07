@@ -132,6 +132,10 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
 
   console.log(`  Track: ${trackName}, Provider: ${provider}, Mode: parallel (3 sub-agents)\n`);
 
+  // Pre-create target directory so agents use it (not stale dirs from previous runs)
+  const targetDir = resolve(planDir, trackSlug, "design");
+  mkdirSync(targetDir, { recursive: true });
+
   // Build focused prompts for each sub-agent
   const prdDesignPrompt = buildPhasedPrompt("prd-design", promptOpts);
   const wbOnlyPrompt = buildPhasedPrompt("wb-only", promptOpts);
@@ -159,7 +163,9 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
       description: "Execution order + test strategy + work catalog",
     },
   ];
-  // Mux + agent state setup
+  const { saveAgentState, removeAgentState } = await import("../execution/agent-session.js");
+
+  // Mux setup (optional — for daemon bidirectional communication)
   let mux: InstanceType<typeof import("../../bus/mux.js").ProcessMux> | null = null;
   let muxBackend = "raw";
   if (opts.useMux !== false) {
@@ -169,45 +175,71 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
       muxBackend = mux.getBackend();
     } catch { /* mux unavailable */ }
   }
-  const { saveAgentState, removeAgentState } = await import("../execution/agent-session.js");
-  const { prepareProviderSpawn } = await import("../core/provider-binary.js");
 
-  // Shared spawn function
+  /**
+   * Spawn a planner sub-agent.
+   * CLI args properly separated: -p (user) + --append-system-prompt (system) + --output-format stream-json
+   * Mux path: daemon bidirectional communication.
+   * Fallback: direct runProviderCLI.
+   */
   async function spawnAgent(agent: { name: string; prompt: string; description: string }) {
     console.log(`  \x1b[36m▶\x1b[0m ${agent.name}: ${agent.description}`);
-    const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, agent.prompt, true, repoRoot);
-    const spawn = await prepareProviderSpawn(provider, agent.prompt);
     const sessionName = `quorum-${agent.name}-${Date.now()}`;
 
     try {
       if (mux && muxBackend !== "raw") {
+        // mux path: stream-json for daemon ndjson capture
+        const muxArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot, true);
         const session = await mux.spawn({
-          command: spawn.bin, args: spawn.args, cwd: repoRoot, name: sessionName,
+          command: provider, args: muxArgs, cwd: repoRoot, name: sessionName,
         });
         if (session) {
           saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
-          await pollMuxCompletion(mux, session.id);
+          await pollMuxCompletion(mux, session.id, timeout);
           removeAgentState(repoRoot, session.id);
           await cleanupMuxSession(mux, session.id, "");
         } else {
-          await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
+          const fallbackArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot);
+          await runProviderCLI({ provider, args: fallbackArgs, cwd: repoRoot, stdio: "inherit", timeout });
         }
       } else {
-        await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
+        // No mux: normal output (no stream-json)
+        const directArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot);
+        await runProviderCLI({ provider, args: directArgs, cwd: repoRoot, stdio: "inherit", timeout });
       }
       console.log(`  \x1b[32m✓\x1b[0m ${agent.name}: done`);
       return { name: agent.name, success: true };
     } catch (err) {
       console.log(`  \x1b[31m✗\x1b[0m ${agent.name}: ${(err as Error).message}`);
       return { name: agent.name, success: false, error: (err as Error).message };
-    } finally {
-      for (const f of tempFiles) { try { unlinkSync(f); } catch { /* */ } }
     }
   }
 
   // Phase 1: PRD + design docs (must complete before Phase 2)
   console.log(`  \x1b[2mPhase 1: Design documents\x1b[0m`);
   const phase1Results = await Promise.allSettled(phase1Agents.map(spawnAgent));
+
+  // Detect actual plan directory created by Phase 1 (agent may use different slug)
+  let actualTrackSlug = trackSlug;
+  try {
+    const { readdirSync, statSync } = await import("node:fs");
+    const entries = readdirSync(planDir).filter(e => {
+      try { return statSync(resolve(planDir, e)).isDirectory(); } catch { return false; }
+    });
+    // Find the directory that has PRD.md (Phase 1 output)
+    const match = entries.find(e => existsSync(resolve(planDir, e, "PRD.md")));
+    if (match && match !== trackSlug) {
+      console.log(`  \x1b[33m⚠\x1b[0m Plan directory: ${match} (expected: ${trackSlug})`);
+      actualTrackSlug = match;
+    }
+  } catch { /* planDir may not exist yet */ }
+
+  // Rebuild Phase 2 prompts with actual directory path
+  const phase2PromptOpts = { ...promptOpts, trackSlug: actualTrackSlug };
+  const actualWbPrompt = buildPhasedPrompt("wb-only", phase2PromptOpts);
+  const actualSupportPrompt = buildPhasedPrompt("wb-execution", phase2PromptOpts);
+  phase2Agents[0].prompt = actualWbPrompt;
+  phase2Agents[1].prompt = actualSupportPrompt;
 
   // Phase 2: WB (dedicated) + support docs (parallel, after design docs exist)
   console.log(`  \x1b[2mPhase 2: Work breakdown + support\x1b[0m`);
@@ -222,21 +254,18 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
     console.log(`\n  \x1b[33m⚠\x1b[0m ${failures.length}/${phase1Agents.length + phase2Agents.length} sub-agent(s) failed`);
   }
 
-  // Verify WB file exists
-  const wbPath = resolve(planDir, trackSlug, "work-breakdown.md");
+  // Verify WB file exists (use actual directory, not expected slug)
+  const wbPath = resolve(planDir, actualTrackSlug, "work-breakdown.md");
   if (!existsSync(wbPath)) {
     console.log(`  \x1b[31m✗\x1b[0m work-breakdown.md not found — retrying WB agent...`);
-    // Single retry for WB agent
-    const retryPrompt = `CRITICAL: Read ALL files in ${planDir}/${trackSlug}/ first, then create work-breakdown.md. This is the ONLY file you need to create. Follow the WB schema exactly.`;
-    const { args, tempFiles } = buildCLIArgs(provider, systemPrompt, retryPrompt, true, repoRoot);
+    const retryPrompt = `CRITICAL: Read ALL files in ${planDir}/${trackSlug}/ first, then use the Write tool to create work-breakdown.md. This is the ONLY file you need to create. Follow the WB schema exactly. Do NOT explain. WRITE THE FILE AND EXIT.`;
+    const retryArgs = buildPlannerCLIArgs(provider, retryPrompt, systemPrompt, repoRoot);
     try {
-      await runProviderCLI({ provider, args, cwd: repoRoot, stdio: "inherit", timeout });
-    } finally {
-      for (const f of tempFiles) { try { unlinkSync(f); } catch { /* */ } }
-    }
+      await runProviderCLI({ provider, args: retryArgs, cwd: repoRoot, stdio: "inherit", timeout });
+    } catch { /* retry best-effort */ }
   }
 
-  return { autoMode: true, provider, trackName, trackSlug };
+  return { autoMode: true, provider, trackName, trackSlug: actualTrackSlug };
 }
 
 // ── Internal helpers ──────────────────────────
@@ -295,6 +324,36 @@ function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: str
     args.push("--system-prompt", systemArg);
   }
   return { args, tempFiles };
+}
+
+/**
+ * Build CLI args for planner sub-agents.
+ * Properly separates: -p (user prompt) + --append-system-prompt (system prompt).
+ *
+ * @param streamJson — true for mux path (daemon needs ndjson), false for inherit path (user sees normal output)
+ */
+function buildPlannerCLIArgs(provider: string, userPrompt: string, sysPrompt: string, repoRoot: string, streamJson = false): string[] {
+  if (provider === "claude") {
+    let systemArg = sysPrompt;
+    if (sysPrompt.length > 16_000) {
+      const tmpDir = resolve(repoRoot, ".claude", "tmp");
+      mkdirSync(tmpDir, { recursive: true });
+      const tmpPath = resolve(tmpDir, `planner-system-${Date.now()}.md`);
+      writeFileSync(tmpPath, sysPrompt, "utf8");
+      systemArg = `See system prompt in file: ${tmpPath}`;
+    }
+    const args = [
+      "-p", userPrompt,
+      "--append-system-prompt", systemArg,
+      "--dangerously-skip-permissions",
+    ];
+    if (streamJson) args.push("--output-format", "stream-json");
+    return args;
+  }
+  if (provider === "codex") {
+    return ["exec", "--full-auto", "--instructions", sysPrompt, "-"];
+  }
+  return ["--system-prompt", sysPrompt, userPrompt];
 }
 
 async function executeMux(repoRoot: string, provider: string, cliArgs: string[], trackName: string, autoMode: boolean, timeout?: number): Promise<void> {

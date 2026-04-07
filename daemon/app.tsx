@@ -97,57 +97,82 @@ export function App({ bus, stateReader, mux }: AppProps) {
     }
   }, [fullState?.parliament.liveSessions, mux]);
 
-  // Sync agent sessions into daemon's mux from: (1) agentEvents, (2) .claude/agents/*.json
+  // Sync agent sessions into daemon's mux — independent polling (3s)
+  // Separate from fullState to detect .claude/agents/*.json changes (planner agents don't emit SQLite events)
+  const [muxSessionCount, setMuxSessionCount] = useState(0);
   useEffect(() => {
     if (!mux) return;
 
-    // Source 1: agent.spawn events
-    if (fullState?.agentEvents) {
-      const completeIds = new Set(
-        fullState.agentEvents.filter(e => e.type === "agent.complete").map(e => (e.payload.sessionId as string) ?? ""),
-      );
-      for (const ev of fullState.agentEvents) {
-        if (ev.type !== "agent.spawn") continue;
-        const p = ev.payload;
-        const sessionId = p.sessionId as string | undefined;
-        const backend = p.backend as string | undefined;
-        if (!sessionId || !backend || backend === "unknown") continue;
-        if (completeIds.has(sessionId)) continue;
-        mux.registerExternal({
-          id: sessionId,
-          name: (p.name as string) ?? `impl-${p.wbId ?? "agent"}`,
-          backend: backend as import("../platform/bus/mux.js").MuxBackend,
-          startedAt: ev.timestamp,
-          status: "running",
-        });
-      }
-    }
+    const syncAgents = () => {
+      let changed = false;
 
-    // Source 2: .claude/agents/*.json files (planner sub-agents, orchestrate agents)
-    try {
-      const agentsDir = resolve(process.cwd(), ".claude", "agents");
-      if (existsSync(agentsDir)) {
-        const files = readdirSync(agentsDir).filter(f => f.endsWith(".json"));
-        for (const f of files) {
-          try {
-            const agent = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
-            const sessionId = agent.id ?? agent.name ?? f.replace(".json", "");
-            const backend = agent.backend ?? "psmux";
-            const name = agent.name ?? sessionId;
-            if (!mux.list().some(s => s.id === sessionId)) {
-              mux.registerExternal({
-                id: sessionId,
-                name,
-                backend: backend as import("../platform/bus/mux.js").MuxBackend,
-                startedAt: agent.startedAt ?? Date.now(),
-                status: "running",
-              });
-            }
-          } catch { /* skip malformed */ }
+      // Source 1: agent.spawn events from SQLite
+      if (fullState?.agentEvents) {
+        const completeIds = new Set(
+          fullState.agentEvents.filter(e => e.type === "agent.complete").map(e => (e.payload.sessionId as string) ?? ""),
+        );
+        for (const ev of fullState.agentEvents) {
+          if (ev.type !== "agent.spawn") continue;
+          const p = ev.payload;
+          const sessionId = p.sessionId as string | undefined;
+          const backend = p.backend as string | undefined;
+          if (!sessionId || !backend || backend === "unknown") continue;
+          if (completeIds.has(sessionId)) continue;
+          if (!mux.list().some(s => s.id === sessionId)) {
+            mux.registerExternal({
+              id: sessionId,
+              name: (p.name as string) ?? `impl-${p.wbId ?? "agent"}`,
+              backend: backend as import("../platform/bus/mux.js").MuxBackend,
+              startedAt: ev.timestamp,
+              status: "running",
+            });
+            changed = true;
+          }
         }
       }
-    } catch { /* no agents dir */ }
-  }, [fullState?.agentEvents?.length, mux, fullState?.recentEvents?.length]);
+
+      // Source 2: .claude/agents/*.json files (planner sub-agents, orchestrate agents)
+      const agentFileIds = new Set<string>();
+      try {
+        const agentsDir = resolve(process.cwd(), ".claude", "agents");
+        if (existsSync(agentsDir)) {
+          for (const f of readdirSync(agentsDir).filter(fn => fn.endsWith(".json"))) {
+            try {
+              const agent = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
+              const sessionId = agent.id ?? agent.name ?? f.replace(".json", "");
+              agentFileIds.add(sessionId);
+              if (!mux.list().some(s => s.id === sessionId)) {
+                mux.registerExternal({
+                  id: sessionId,
+                  name: agent.name ?? sessionId,
+                  backend: (agent.backend ?? "psmux") as import("../platform/bus/mux.js").MuxBackend,
+                  startedAt: agent.startedAt ?? Date.now(),
+                  status: "running",
+                });
+                changed = true;
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      } catch { /* no agents dir */ }
+
+      // Unregister file-based sessions whose JSON was removed (agent completed)
+      for (const s of mux.list()) {
+        if (s.name.startsWith("quorum-") && !agentFileIds.has(s.id)) {
+          mux.unregister(s.id);
+          changed = true;
+        }
+      }
+
+      // Only trigger re-render if session count actually changed
+      const count = mux.list().filter(s => s.status === "running").length;
+      setMuxSessionCount(prev => prev === count ? prev : count);
+    };
+
+    syncAgents();
+    const timer = setInterval(syncAgents, 3000);
+    return () => clearInterval(timer);
+  }, [mux, fullState?.agentEvents?.length]);
 
   // Input handling: view switching, focus cycling, help overlay, quit
   useInput((input, key) => {
@@ -205,53 +230,60 @@ export function App({ bus, stateReader, mux }: AppProps) {
   const hints = getFooterHints(shell.activeView, shell.focusedRegion, shell.overlay);
   const hintText = hints.map(h => `[${h.key}] ${h.description}`).join("  ");
 
+  // Fixed layout: Header(3) + padding(2) + footer(1) = 6 lines overhead
+  const termRows = process.stdout.rows || 24;
+  const termCols = process.stdout.columns || 120;
+  const viewHeight = Math.max(termRows - 6, 10);
+
   return (
-    <Box flexDirection="column" padding={1}>
+    <Box flexDirection="column" padding={1} height={termRows}>
       <Header activeView={shell.activeView} providers={providers} />
 
-      {shell.activeView === "overview" && (
-        <OverviewView
-          state={fullState}
-          events={events}
-          focusedRegion={shell.focusedRegion}
-          eventScrollOffset={eventScrollOffset}
-          width={process.stdout.columns || 120}
-          height={process.stdout.rows || 24}
-        />
-      )}
+      <Box height={viewHeight} overflowY="hidden">
+        {shell.activeView === "overview" && (
+          <OverviewView
+            state={fullState}
+            events={events}
+            focusedRegion={shell.focusedRegion}
+            eventScrollOffset={eventScrollOffset}
+            width={termCols}
+            height={viewHeight}
+          />
+        )}
 
-      {shell.activeView === "review" && (
-        <ReviewView
-          state={fullState}
-          events={events}
-          focusedRegion={shell.focusedRegion}
-          width={process.stdout.columns || 120}
-          height={process.stdout.rows || 24}
-        />
-      )}
+        {shell.activeView === "review" && (
+          <ReviewView
+            state={fullState}
+            events={events}
+            focusedRegion={shell.focusedRegion}
+            width={termCols}
+            height={viewHeight}
+          />
+        )}
 
-      {shell.activeView === "chat" && (
-        <ChatView
-          state={fullState}
-          mux={mux ?? null}
-          liveSessions={fullState?.parliament.liveSessions ?? []}
-          agentEvents={fullState?.agentEvents ?? []}
-          focusedRegion={shell.focusedRegion}
-          width={process.stdout.columns || 120}
-          height={process.stdout.rows || 24}
-        />
-      )}
+        {shell.activeView === "chat" && (
+          <ChatView
+            state={fullState}
+            mux={mux ?? null}
+            liveSessions={fullState?.parliament.liveSessions ?? []}
+            agentEvents={fullState?.agentEvents ?? []}
+            focusedRegion={shell.focusedRegion}
+            width={termCols}
+            height={viewHeight}
+          />
+        )}
 
-      {shell.activeView === "operations" && (
-        <OperationsView
-          state={fullState}
-          focusedRegion={shell.focusedRegion}
-          width={process.stdout.columns || 120}
-          height={process.stdout.rows || 24}
-        />
-      )}
+        {shell.activeView === "operations" && (
+          <OperationsView
+            state={fullState}
+            focusedRegion={shell.focusedRegion}
+            width={termCols}
+            height={viewHeight}
+          />
+        )}
+      </Box>
 
-      <Box marginTop={1}>
+      <Box height={1}>
         <Text dimColor>
           {hintText}  [q] Quit{shell.focusedRegion ? `  ▸ ${shell.focusedRegion}` : ""}
         </Text>
