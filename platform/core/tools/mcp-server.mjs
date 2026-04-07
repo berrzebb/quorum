@@ -25,7 +25,7 @@ import {
 
 // ═══ MCP Protocol ═══════════════════════════════════════════════════════
 
-const SERVER_INFO = { name: "quorum", version: "0.5.0" };
+const SERVER_INFO = { name: "quorum", version: "0.6.5" };
 
 // ═══ Request handler ════════════════════════════════════════════════════
 
