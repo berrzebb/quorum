@@ -278,12 +278,34 @@ const STAGE_HANDLERS = {
     // B. Fitness gate (7-component quality score)
     let fitnessResult = null;
     let changedFiles = [];
-    try {
-      const diff = execSync("git diff --name-only HEAD 2>/dev/null || git ls-files --others --exclude-standard", {
-        cwd, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
-      }).trim();
-      changedFiles = diff.split("\n").filter(f => f.length > 0);
-    } catch { /* no git */ }
+    // Prefer EventStore (no subprocess, no ENOBUFS risk)
+    const GIT_MAX_BUFFER = 10 * 1024 * 1024;
+    const EXCL_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/"];
+    let fromStore = false;
+    if (bridge.event?.queryEvents) {
+      try {
+        const waveEvents = bridge.event.queryEvents({ eventType: "wave.files", descending: true, limit: 10 });
+        if (waveEvents?.length > 0) {
+          const allFiles = new Set();
+          for (const ev of waveEvents) {
+            const files = ev.payload?.files;
+            if (Array.isArray(files)) for (const f of files) allFiles.add(f);
+          }
+          changedFiles = [...allFiles].filter(f => !EXCL_PREFIXES.some(p => f.startsWith(p)));
+          fromStore = true;
+        }
+      } catch { /* fall through to git */ }
+    }
+    if (!fromStore) {
+      try {
+        const diff = execSync("git diff --name-only HEAD 2>/dev/null || git ls-files --others --exclude-standard", {
+          cwd, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
+          maxBuffer: GIT_MAX_BUFFER,
+        }).trim();
+        changedFiles = diff.split("\n").filter(f => f.length > 0);
+        changedFiles = changedFiles.filter(f => !EXCL_PREFIXES.some(p => f.startsWith(p)));
+      } catch { /* no git */ }
+    }
     ctx.changedFiles = changedFiles;
 
     if (bridge.gate?.runFitnessGate && changedFiles.length > 0) {
@@ -411,13 +433,17 @@ const STAGE_HANDLERS = {
         const auditors = await bridge.parliament.createConsensusAuditors(roles, cwd);
         if (auditors?.judge) {
           // Collect changed files
-          let changedFiles = [];
-          try {
-            const gitDiff = execSync("git diff --name-only HEAD 2>/dev/null || git ls-files --others --exclude-standard", {
-              cwd, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
-            }).trim();
-            changedFiles = gitDiff.split("\n").filter(f => f.length > 0);
-          } catch { /* no git or no changes */ }
+          let changedFiles = ctx.changedFiles ?? [];
+          if (changedFiles.length === 0) {
+            try {
+              const gitDiff = execSync("git diff --name-only HEAD 2>/dev/null || git ls-files --others --exclude-standard", {
+                cwd, encoding: "utf8", timeout: 10_000, windowsHide: true, stdio: "pipe",
+                maxBuffer: GIT_MAX_BUFFER,
+              }).trim();
+              changedFiles = gitDiff.split("\n").filter(f => f.length > 0);
+              changedFiles = changedFiles.filter(f => !EXCL_PREFIXES.some(p => f.startsWith(p)));
+            } catch { /* no git or no changes */ }
+          }
 
           // Build evidence for audit
           const evidence = [

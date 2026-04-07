@@ -27,10 +27,14 @@ interface Gate {
 
 export function GateStatus({ events }: GateStatusProps) {
   const gates = deriveGates(events);
+  const profile = deriveProfile(events);
 
   return (
     <Box flexDirection="column" borderStyle="single" paddingX={1} width={30}>
-      <Text bold>Enforcement Gates</Text>
+      <Box gap={1}>
+        <Text bold>Enforcement Gates</Text>
+        <Text dimColor>[{profile}]</Text>
+      </Box>
       <Text dimColor>{"─".repeat(26)}</Text>
 
       {gates.map((gate) => (
@@ -50,6 +54,7 @@ export function GateStatus({ events }: GateStatusProps) {
         <Text>Flow:</Text>
         {flowArrow(gates)}
       </Box>
+      <Text dimColor>s: steer</Text>
     </Box>
   );
 }
@@ -121,6 +126,12 @@ function flowArrow(gates: Gate[]): React.ReactNode {
       })}
     </Text>
   );
+}
+
+function deriveProfile(events: QuorumEvent[]): string {
+  const lastSteer = findLast(events, "steering.switch");
+  if (lastSteer) return (lastSteer.payload.to as string) ?? "balanced";
+  return "balanced";
 }
 
 function findLast(events: QuorumEvent[], type: string): QuorumEvent | undefined {

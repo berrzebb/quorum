@@ -115,8 +115,10 @@ export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
   const waveFiles = [...new Set(completedItems.flatMap(i => i.targetFiles))];
 
   // 1. Changed files + dependency audit (essential: changed-files)
+  // Prefer EventStore (no subprocess) → git fallback
+  const store = bridge?.store ?? null;
   const changedFiles = gc.isEnabled('changed-files')
-    ? getChangedFiles(repoRoot, snapshotRef)
+    ? getChangedFiles(repoRoot, snapshotRef, store as any)
     : [];
   const dependencyIssues = gc.isEnabled('changed-files') && waveFiles.length > 0
     ? auditNewDependencies(repoRoot, snapshotRef)
@@ -174,7 +176,6 @@ export function runWaveAuditGates(opts: WaveAuditOptions): WaveAuditResult {
     : [];
 
   // 7. Fitness gate (optional: fitness)
-  const store = bridge?.store ?? null;
   const fg = gc.isEnabled('fitness')
     ? runFitnessGate(repoRoot, waveFiles, store, { stubCount: stubs.length })
     : { decision: "proceed" as const, score: 0, reason: "gate disabled" };

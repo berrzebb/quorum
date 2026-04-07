@@ -41,7 +41,8 @@ export function recordWaveManifest(
 
   try {
     const stat = execFileSync("git", ["diff", "--name-only", snapshotRef], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true, maxBuffer: 10 * 1024 * 1024,
     }).trim();
     const changedFiles = stat ? stat.split("\n").filter(Boolean) : [];
 

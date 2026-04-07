@@ -118,13 +118,15 @@ export async function runWaveAuditLLM(
     let diff = "";
     try {
       diff = execSync("git diff HEAD~1", {
-        cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+        cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true, maxBuffer: 10 * 1024 * 1024,
       });
     } catch {
       // No prior commit — try staged diff or list new files
       try {
         diff = execSync("git diff --cached", {
-          cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+          cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true, maxBuffer: 10 * 1024 * 1024,
         });
       } catch { /* no git at all */ }
     }

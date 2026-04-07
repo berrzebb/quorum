@@ -104,7 +104,9 @@ export type EventType =
   | "dream.consolidation.complete"
   | "dream.consolidation.failed"
   | "dream.digest.generated"
-  | "dream.prune.applied";
+  | "dream.prune.applied"
+  // Wave file tracking (replaces git-based changedFiles)
+  | "wave.files";
 
 // ── Typed payloads ────────────────────────────────
 
@@ -148,6 +150,15 @@ export interface TrackProgressPayload {
   completed: number;
   pending: number;
   blocked: number;
+}
+
+export interface WaveFilesPayload {
+  waveIndex: number;
+  trackName: string;
+  /** Files changed during wave execution (relative paths). */
+  files: string[];
+  /** Git snapshot ref at wave start. */
+  snapshotRef?: string;
 }
 
 export interface QualityCheckPayload {

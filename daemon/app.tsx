@@ -7,10 +7,10 @@
 
 import React, { useState, useEffect, useMemo, useReducer } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { QuorumBus } from "../platform/bus/bus.js";
-import type { QuorumEvent } from "../platform/bus/events.js";
+import { createEvent, type QuorumEvent } from "../platform/bus/events.js";
 import type { StateReader, FullState } from "./state-reader.js";
 import { listProviders } from "../platform/providers/provider.js";
 import { Header } from "./components/Header.js";
@@ -208,6 +208,25 @@ export function App({ bus, stateReader, mux }: AppProps) {
       if (shell.focusedRegion === "overview.tracks") {
         setEventScrollOffset(prev => Math.max(0, prev - 3));
       }
+      return;
+    }
+
+    // Steering: cycle gate profile on 's' key (overview only)
+    if (input === "s" && shell.activeView === "overview") {
+      const PROFILES = ["strict", "balanced", "fast", "prototype"] as const;
+      const configPath = resolve(process.cwd(), ".claude", "quorum", "config.json");
+      try {
+        const cfg = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : {};
+        const current = cfg?.gates?.gateProfile ?? "balanced";
+        const idx = PROFILES.indexOf(current as typeof PROFILES[number]);
+        const next = PROFILES[(idx + 1) % PROFILES.length]!;
+        if (!cfg.gates) cfg.gates = {};
+        cfg.gates.gateProfile = next;
+        writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\n");
+        bus.emit(createEvent("steering.switch", "generic", {
+          from: current, to: next, trigger: "daemon:shortcut",
+        }));
+      } catch { /* fail-open */ }
       return;
     }
 

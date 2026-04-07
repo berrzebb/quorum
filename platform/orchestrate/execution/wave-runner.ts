@@ -304,7 +304,7 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   const allowedFiles = new Set(wave.items.flatMap(i => i.targetFiles));
   if (allowedFiles.size > 0) {
     try {
-      const diffRaw = execSync("git diff --name-only HEAD", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+      const diffRaw = execSync("git diff --name-only HEAD", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true, maxBuffer: 10 * 1024 * 1024 }).trim();
       const trackedChanged = diffRaw ? diffRaw.split("\n").filter(Boolean) : [];
       const SCOPE_EXCLUDE_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/", ".claude/", "docs/plan/"];
       const outOfScope = trackedChanged.filter(f =>
@@ -319,6 +319,38 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         for (const f of outOfScope) log(`    \x1b[2m• ${f}\x1b[0m`);
       }
     } catch (err) { log(`  \x1b[33m⚠ scope enforcement failed: ${(err as Error).message}\x1b[0m`); }
+  }
+
+  // ── 2.6. Record changed files to EventStore (replaces git-based tracking) ──
+  if (bridge?.event?.emitEvent) {
+    try {
+      const GIT_MAX_BUF = 10 * 1024 * 1024;
+      let waveChangedFiles: string[] = [];
+      try {
+        const raw = execSync("git diff --name-only HEAD", {
+          cwd: repoRoot, encoding: "utf8", timeout: 15_000,
+          stdio: ["ignore", "pipe", "ignore"], windowsHide: true, maxBuffer: GIT_MAX_BUF,
+        }).trim();
+        waveChangedFiles = raw ? raw.split("\n").filter(Boolean) : [];
+      } catch {
+        // Fresh repo or no HEAD — list untracked files
+        try {
+          const raw = execSync("git ls-files --others --exclude-standard", {
+            cwd: repoRoot, encoding: "utf8", timeout: 15_000,
+            stdio: ["ignore", "pipe", "ignore"], windowsHide: true, maxBuffer: GIT_MAX_BUF,
+          }).trim();
+          waveChangedFiles = raw ? raw.split("\n").filter(Boolean) : [];
+        } catch { /* no git */ }
+      }
+      const EXCL = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/"];
+      waveChangedFiles = waveChangedFiles.filter(f => !EXCL.some(p => f.startsWith(p)));
+      bridge.event.emitEvent("wave", "files", {
+        waveIndex: wave.index,
+        trackName,
+        files: waveChangedFiles,
+        snapshotRef,
+      });
+    } catch (err) { log(`  \x1b[33m⚠ wave.files event failed: ${(err as Error).message}\x1b[0m`); }
   }
 
   // ── 3. Run audit gates ──────────────────────

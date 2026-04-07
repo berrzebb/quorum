@@ -106,18 +106,55 @@ export function scanForPerfAntiPatterns(repoRoot: string, targetFiles: string[])
  * Get list of changed files between current state and snapshot ref.
  * Single git process — result shared across scope/test/constraint gates.
  */
-export function getChangedFiles(repoRoot: string, snapshotRef = "HEAD"): string[] {
+const GIT_MAX_BUFFER = 10 * 1024 * 1024; // 10MB — prevents ENOBUFS in repos with many untracked files
+const EXCLUDE_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/"];
+
+/**
+ * Query EventStore for changed files recorded by wave-runner.
+ * Returns null if no events found (caller should fall back to git).
+ */
+export function getChangedFilesFromStore(
+  store: { query: (filter: Record<string, unknown>) => Array<{ payload: Record<string, unknown> }> } | null,
+  snapshotRef?: string,
+): string[] | null {
+  if (!store) return null;
+  try {
+    const events = store.query({ eventType: "wave.files", descending: true, limit: 10 });
+    if (events.length === 0) return null;
+    const allFiles = new Set<string>();
+    for (const ev of events) {
+      const files = (ev.payload as { files?: string[] }).files;
+      if (files) for (const f of files) allFiles.add(f);
+    }
+    return [...allFiles].filter(f => !EXCLUDE_PREFIXES.some(p => f.startsWith(p)));
+  } catch { return null; }
+}
+
+/**
+ * Get list of changed files between current state and snapshot ref.
+ * Prefers EventStore when available; falls back to git.
+ */
+export function getChangedFiles(
+  repoRoot: string,
+  snapshotRef = "HEAD",
+  store?: { query: (filter: Record<string, unknown>) => Array<{ payload: Record<string, unknown> }> } | null,
+): string[] {
+  // Try EventStore first (no subprocess, no ENOBUFS risk)
+  const fromStore = getChangedFilesFromStore(store ?? null, snapshotRef);
+  if (fromStore !== null) return fromStore;
+
+  // Fallback: git
   try {
     const diff = execFileSync("git", ["diff", "--name-only", snapshotRef], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true, maxBuffer: GIT_MAX_BUFFER,
     }).trim();
     const tracked = diff ? diff.split("\n").filter(Boolean) : [];
     const untracked = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], {
-      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+      cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true, maxBuffer: GIT_MAX_BUFFER,
     }).trim();
     const newFiles = untracked ? untracked.split("\n").filter(Boolean) : [];
-    // Filter out dirs that should never appear in changed-file analysis (even without .gitignore)
-    const EXCLUDE_PREFIXES = ["node_modules/", "dist/", ".git/", ".next/", "__pycache__/", "target/", "build/"];
     const all = [...new Set([...tracked, ...newFiles])];
     return all.filter(f => !EXCLUDE_PREFIXES.some(p => f.startsWith(p)));
   } catch (err) {
@@ -248,7 +285,8 @@ export function auditNewDependencies(repoRoot: string, snapshotRef = "HEAD"): st
     let prevDeps: Record<string, string> = {};
     try {
       const prevContent = execFileSync("git", ["show", `${snapshotRef}:package.json`], {
-        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+        cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true, maxBuffer: GIT_MAX_BUFFER,
       });
       const prevPkg = JSON.parse(prevContent);
       prevDeps = { ...prevPkg.dependencies, ...prevPkg.devDependencies };
@@ -514,7 +552,7 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
   try {
     numstatOutput = execFileSync("git", ["diff", "--numstat", snapshotRef, "--", ...uniqueFiles], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-      windowsHide: true,
+      windowsHide: true, maxBuffer: GIT_MAX_BUFFER,
     }).trim();
   } catch (err) { console.error(`[scope-gates] git diff --numstat failed: ${(err as Error).message}`); return []; }
 
@@ -525,7 +563,7 @@ export function detectRegressions(repoRoot: string, targetFiles: string[], snaps
   try {
     trackedOutput = execFileSync("git", ["ls-files", "--", ...uniqueFiles], {
       cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
-      windowsHide: true,
+      windowsHide: true, maxBuffer: GIT_MAX_BUFFER,
     }).trim();
   } catch (err) { console.error(`[scope-gates] git ls-files failed: ${(err as Error).message}`); return []; }
 

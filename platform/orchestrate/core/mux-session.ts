@@ -89,12 +89,18 @@ export async function pollMuxCompletion(
   _timeoutMs?: number,
   intervalMs = 5_000,
 ): Promise<void> {
-  // No timeout — agent runs until it emits a completion marker.
-  // Completion = end_turn / stop_sequence / result / turn.completed.
+  // No artificial timeout — agent runs until completion marker or session death.
+  let nullCount = 0;
   while (true) {
     await new Promise(r => setTimeout(r, intervalMs));
     const cap = mux.capture(sessionId, 200);
-    if (!cap) continue;
+    if (!cap || !cap.output) {
+      // Session may have exited — allow a few retries then break
+      nullCount++;
+      if (nullCount >= 3) break; // 3 consecutive nulls = session gone
+      continue;
+    }
+    nullCount = 0;
     if (
       cap.output.includes('"type":"result"') ||
       cap.output.includes('"stop_reason":"end_turn"') ||
