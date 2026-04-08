@@ -33,11 +33,14 @@ export async function run(args: string[]): Promise<void> {
     await runIngest(args.slice(1));
   } else if (sub === "search") {
     await runSearch(args.slice(1));
+  } else if (sub === "graph") {
+    await runGraph();
   } else {
     console.log(`\n\x1b[36mquorum vault\x1b[0m — vault management\n`);
     console.log(`  quorum vault status            Show vault stats`);
     console.log(`  quorum vault ingest [--auto]   Ingest sessions`);
-    console.log(`  quorum vault search <query>    Search turns (FTS)\n`);
+    console.log(`  quorum vault search <query>    Search turns (FTS)`);
+    console.log(`  quorum vault graph             Generate graph report\n`);
   }
 }
 
@@ -153,5 +156,44 @@ async function runSearch(args: string[]): Promise<void> {
     console.log();
   } finally {
     store.close();
+  }
+}
+
+async function runGraph(): Promise<void> {
+  const vaultRoot = resolveVaultRoot();
+
+  const eventsDbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
+  if (!existsSync(eventsDbPath)) {
+    console.log(`No EventStore found. Run \`quorum setup\` first.`);
+    return;
+  }
+
+  const { openDatabase } = await import("../../bus/sqlite-adapter.js");
+  const db = openDatabase(eventsDbPath);
+
+  try {
+    const { analyzeGraph, generateGraphReport } = await import("../../vault/graph-analysis.js");
+
+    console.log(`\n\x1b[36m[vault]\x1b[0m Analyzing knowledge graph...\n`);
+
+    const report = analyzeGraph(db);
+    console.log(`  Nodes:       ${report.nodeCount}`);
+    console.log(`  Edges:       ${report.edgeCount}`);
+    console.log(`  Communities: ${report.communities.length}`);
+    console.log(`  Hub nodes:   ${report.godNodes.length}`);
+    console.log(`  Bridges:     ${report.bridges.length}`);
+    console.log(`  Orphans:     ${report.orphans.length}`);
+
+    if (report.godNodes.length > 0) {
+      console.log(`\n  Top hub nodes:`);
+      for (const n of report.godNodes.slice(0, 5)) {
+        console.log(`    \x1b[1m${n.title}\x1b[0m (${n.type}) — ${n.degree} edges`);
+      }
+    }
+
+    const reportPath = generateGraphReport(db, vaultRoot);
+    console.log(`\n  Report: ${reportPath}\n`);
+  } finally {
+    db.close();
   }
 }
