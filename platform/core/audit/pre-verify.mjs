@@ -3,6 +3,12 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+
+/** DEP0190-safe shell spawn: single command string + shell option. */
+function shellSpawn(cmd, opts = {}) {
+  const shell = process.platform === "win32" ? (process.env.COMSPEC || "cmd.exe") : true;
+  return spawnSync(cmd, { ...opts, shell, windowsHide: true });
+}
 import { REPO_ROOT } from "../context.mjs";
 import { extractChangedFilesFromEvidence, extractTestCommands } from "./scope.mjs";
 
@@ -56,8 +62,8 @@ export function runTscLocally(root) {
   const results = ["### CQ-2: TypeScript Check (pre-verified locally)"];
   if (!existsSync(resolve(root, "tsconfig.json"))) return results.join("\n");
 
-  const rootTsc = spawnSync("npx", ["tsc", "--noEmit"], {
-    cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+  const rootTsc = shellSpawn("npx tsc --noEmit", {
+    cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000,
   });
   results.push(`**Root \`npx tsc --noEmit\`**: ${rootTsc.status === 0 ? "\u2705 0 errors" : "\u274C FAILED"}`);
   if (rootTsc.status !== 0) {
@@ -67,8 +73,8 @@ export function runTscLocally(root) {
 
   const webTsconfig = resolve(root, "web", "tsconfig.json");
   if (existsSync(webTsconfig)) {
-    const webTsc = spawnSync("npx", ["tsc", "--noEmit", "-p", "web/tsconfig.json"], {
-      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    const webTsc = shellSpawn("npx tsc --noEmit -p web/tsconfig.json", {
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 60000,
     });
     results.push(`**Web \`npx tsc --noEmit -p web/tsconfig.json\`**: ${webTsc.status === 0 ? "\u2705 0 errors" : "\u274C FAILED"}`);
     if (webTsc.status !== 0) {
@@ -94,8 +100,8 @@ export function runEslintLocally(files, root) {
     const fullPath = resolve(root, file);
     if (!existsSync(fullPath)) continue;
 
-    const lint = spawnSync("npx", ["eslint", file, "--no-warn-ignored"], {
-      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    const lint = shellSpawn(`npx eslint ${file} --no-warn-ignored`, {
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 30000,
     });
     if (lint.status !== 0) {
       allPassed = false;
@@ -122,10 +128,8 @@ export function runTestsLocally(cmds, root) {
   for (const cmd of cmds) {
     if (cmd.includes("eslint") || cmd.includes("tsc")) continue;
 
-    const parts = cmd.split(/\s+/);
-    const child = spawnSync(parts[0], parts.slice(1), {
-      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120000, shell: process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : true, windowsHide: true,
+    const child = shellSpawn(cmd, {
+      cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: 120000,
     });
 
     const passed = child.status === 0;

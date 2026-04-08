@@ -289,7 +289,7 @@ export async function run(args: string[]): Promise<void> {
 
   console.log(`\n\x1b[32mSetup complete.\x1b[0m`);
 
-  // ── Auto-Pipeline: --agenda 명시 시에만 6-stage 파이프라인 자동 실행 ──
+  // ── Auto-Pipeline: --agenda → parliament → plan → run (same engine) ──
   const agendaFlagIdx = args.indexOf("--agenda");
   const hasExplicitAgenda = agendaFlagIdx >= 0 && !!args[agendaFlagIdx + 1];
   let pipelineAgenda: string | undefined;
@@ -301,39 +301,40 @@ export async function run(args: string[]): Promise<void> {
   }
 
   if (pipelineAgenda) {
-    console.log(`\n\x1b[36m[pipeline]\x1b[0m agenda detected — starting auto-pipeline...\n`);
-    console.log(`  Agenda: ${pipelineAgenda}\n`);
+    console.log(`\n\x1b[36m[pipeline]\x1b[0m agenda: "${pipelineAgenda}"\n`);
+    const startTime = Date.now();
+    const elapsed = () => `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
 
     try {
-      const bridgePath = pathToFileURL(resolve(QUORUM_PKG_ROOT, "platform", "core", "bridge.mjs")).href;
-      const bridge = await import(bridgePath);
+      const savedConfig = JSON.parse(readFileSync(configPath, "utf8"));
+      const provider = savedConfig?.pipeline?.provider ?? "claude";
 
-      const pipelineConfig = JSON.parse(readFileSync(configPath, "utf8"));
-      const startTime = Date.now();
+      // Derive track name from agenda
+      const trackName = pipelineAgenda
+        .toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 40);
 
-      const result = await bridge.execution.runPipeline(pipelineAgenda, pipelineConfig, {
-        repoRoot,
-        maxQARounds: 3,
-        onStageChange: (stage: string, status: string) => {
-          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          const icon = status === "running" ? "\u25B6" : status === "success" ? "\u2713" : status === "failed" ? "\u2717" : "\u25CB";
-          console.log(`  [${elapsed}s] ${icon} ${stage.toUpperCase()} \u2014 ${status}`);
-        },
-      });
+      // P1. Parliament — deliberate on agenda → CPS (--mux for daemon visibility)
+      console.log(`  [${elapsed()}] \u25B6 PARLIAMENT`);
+      const parliament = await import("./parliament.js");
+      await parliament.run(["--mux", pipelineAgenda]);
+      console.log(`  [${elapsed()}] \u2713 PARLIAMENT — done\n`);
 
-      console.log(`\n${"─".repeat(60)}`);
-      console.log(`  Result: ${result.success ? "SUCCESS \u2713" : "FAILED \u2717"}`);
-      console.log(`  Duration: ${(result.totalDuration / 1000).toFixed(1)}s`);
-      if (result.failedAt) console.log(`  Failed at: ${result.failedAt}`);
-      for (const s of result.stages) {
-        console.log(`    ${s.stage}: ${s.status} (${(s.duration / 1000).toFixed(1)}s)`);
-        if (s.error) console.log(`      Error: ${s.error.slice(0, 200)}`);
-      }
+      // P2. Plan — design WBs via orchestrate plan
+      console.log(`  [${elapsed()}] \u25B6 DESIGN (orchestrate plan ${trackName})`);
+      const orchestrate = await import("./orchestrate.js");
+      await orchestrate.run(["plan", trackName, "--provider", provider]);
+      console.log(`  [${elapsed()}] \u2713 DESIGN — done\n`);
+
+      // P3. Run — wave execution + audit (same engine as 'orchestrate run')
+      console.log(`  [${elapsed()}] \u25B6 IMPLEMENT (orchestrate run ${trackName})`);
+      await orchestrate.run(["run", trackName, "--provider", provider]);
+      console.log(`  [${elapsed()}] \u2713 IMPLEMENT — done\n`);
+
+      console.log(`${"─".repeat(60)}`);
+      console.log(`  Pipeline complete (${elapsed()})`);
       console.log(`${"─".repeat(60)}\n`);
-
-      if (!result.success) process.exitCode = 1;
     } catch (err) {
-      console.error(`\n\x1b[31m[pipeline] auto-pipeline failed:\x1b[0m ${(err as Error).message}`);
+      console.error(`\n\x1b[31m[pipeline] failed at ${elapsed()}:\x1b[0m ${(err as Error).message}`);
       process.exitCode = 1;
     }
   } else {

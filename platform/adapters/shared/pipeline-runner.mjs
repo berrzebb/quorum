@@ -165,8 +165,8 @@ const STAGE_HANDLERS = {
     if (!runPlanner) throw new Error("no planner available in bridge.execution");
 
     const plannerOpts = bridge.execution?.runParallelPlannerSession
-      ? { repoRoot, trackName, provider }
-      : { repoRoot, trackName, provider, useMux: true, useAuto: true };
+      ? { repoRoot, trackName, provider, agenda: ctx.agenda, cps: plan.cps, verdict: plan.verdict }
+      : { repoRoot, trackName, provider, useMux: true, useAuto: true, agenda: ctx.agenda };
 
     const result = await runPlanner(plannerOpts);
 
@@ -238,7 +238,7 @@ const STAGE_HANDLERS = {
       auditor,
       maxConcurrency: 3,
       maxRetries: 3,
-      skipAudit: true, // pipeline P5 QA handles cross-model audit
+      skipAudit: false, // wave-level audit — each wave gets audited before next
       onLog: (msg) => { try { writeFileSync(resolve(planDir, "implement-log.txt"), msg + "\n", { flag: "a" }); } catch {} },
     });
 

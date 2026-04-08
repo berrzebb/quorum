@@ -109,14 +109,17 @@ export async function run(args: string[]): Promise<void> {
   for (const check of filtered) {
     process.stdout.write(`  ${check.label.padEnd(6)} ${check.name.padEnd(20)} `);
 
-    const result = spawnSync(check.bin, check.args, {
-      cwd: repoRoot,
-      encoding: "utf8",
-      timeout: 60000,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
-      windowsHide: true,
-    });
+    // DEP0190: shell + args array is deprecated. Use single command string on Windows.
+    const isWin = process.platform === "win32";
+    const result = isWin
+      ? spawnSync([check.bin, ...check.args].join(" "), {
+          cwd: repoRoot, encoding: "utf8", timeout: 60000,
+          stdio: ["ignore", "pipe", "pipe"], shell: true, windowsHide: true,
+        })
+      : spawnSync(check.bin, check.args, {
+          cwd: repoRoot, encoding: "utf8", timeout: 60000,
+          stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+        });
 
     if (result.status === 0) {
       console.log("\x1b[32mPASS\x1b[0m");

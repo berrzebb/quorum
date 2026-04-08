@@ -290,7 +290,7 @@ export function auditNewDependencies(repoRoot: string, snapshotRef = "HEAD"): st
       });
       const prevPkg = JSON.parse(prevContent);
       prevDeps = { ...prevPkg.dependencies, ...prevPkg.devDependencies };
-    } catch (err) { console.warn(`[scope-gates] could not read previous package.json from git: ${(err as Error).message}`); }
+    } catch { /* expected in fresh repos with no prior commits */ }
 
     // Get current dependencies
     const curContent = readFileSync(pkgPath, "utf8");

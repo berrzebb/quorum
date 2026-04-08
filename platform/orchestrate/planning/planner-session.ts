@@ -99,6 +99,12 @@ export interface ParallelPlannerOptions {
   repoRoot: string;
   trackName: string;
   provider: string;
+  /** Pipeline agenda (e.g. "Build Task API"). Injected into planner system prompt. */
+  agenda?: string;
+  /** CPS from parliament convergence. */
+  cps?: string | null;
+  /** Parliament verdict (when not fully converged). */
+  verdict?: string | null;
   /** Timeout per sub-agent in ms. Default: 10 minutes. */
   subAgentTimeout?: number;
   /** Use mux for sub-agent spawn (enables daemon capture). Default: true in auto mode. */
@@ -120,14 +126,18 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
   const { repoRoot, trackName, provider } = opts;
   const timeout = opts.subAgentTimeout ?? 10 * 60_000;
 
-  const cps = loadCPS(repoRoot);
-  const cpsContent = cps?.raw ?? "";
+  // CPS priority: opts.cps (from parliament) > file on disk > empty
+  const fileCps = loadCPS(repoRoot);
+  const cpsContent = opts.cps ?? fileCps?.raw ?? "";
+  const agendaContext = opts.agenda ? `\n\n## Agenda\n\n${opts.agenda}` : "";
+  const verdictContext = opts.verdict ? `\n\n## Parliament Verdict\n\n${opts.verdict}` : "";
   const protocol = loadPlannerProtocol(repoRoot);
 
   const planDir = resolve(repoRoot, "docs", "plan");
   const trackSlug = slugify(trackName);
   const prefix = derivePrefix(trackName);
-  const promptOpts = { trackName, cpsContent, protocol, planDir, prefix, trackSlug };
+  const fullCpsContent = [cpsContent, agendaContext, verdictContext].filter(Boolean).join("");
+  const promptOpts = { trackName, cpsContent: fullCpsContent, protocol, planDir, prefix, trackSlug };
   const systemPrompt = buildPlannerSystemPrompt(promptOpts);
 
   console.log(`  Track: ${trackName}, Provider: ${provider}, Mode: parallel (3 sub-agents)\n`);

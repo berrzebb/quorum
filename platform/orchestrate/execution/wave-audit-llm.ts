@@ -167,22 +167,38 @@ export async function runWaveAuditLLM(
 
   // On Windows, prepareProviderSpawn wraps in cmd.exe /c <binary>.
   // spawnSync timeout only kills cmd.exe, not child processes (codex/claude hang).
-  // Fix: use shell:true with the raw binary to let Node manage the process tree directly.
+  // Fix: shell:true with single command string (DEP0190: shell+args array is deprecated).
   const isWin = process.platform === "win32";
-  const spawnBin = isWin ? spawn.args[1]! : spawn.bin;  // args[1] = raw binary name after /c
-  const spawnArgs = isWin ? spawn.args.slice(2) : spawn.args;
 
-  const result = spawnSync(spawnBin, spawnArgs, {
-    cwd: repoRoot,
-    input: spawn.stdinInput,
-    stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
-    env: { ...process.env },
-    timeout: 120_000,  // 2 min hard cap — audit should be fast (code is already in prompt)
-    encoding: "utf8",
-    windowsHide: true,
-    shell: isWin,  // shell:true on Windows lets Node kill entire process tree on timeout
-    maxBuffer: 10 * 1024 * 1024,  // 10MB — prevent pipe buffer deadlock on Windows
-  });
+  let result;
+  if (isWin) {
+    // Combine binary + args into a single shell command string
+    const rawBin = spawn.args[1]!;  // args[1] = raw binary name after /c
+    const rawArgs = spawn.args.slice(2);
+    const cmd = [rawBin, ...rawArgs].join(" ");
+    result = spawnSync(cmd, {
+      cwd: repoRoot,
+      input: spawn.stdinInput,
+      stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
+      env: { ...process.env },
+      timeout: 300_000,  // 5 min — Codex cold start + model inference can exceed 2 min
+      encoding: "utf8",
+      windowsHide: true,
+      shell: true,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } else {
+    result = spawnSync(spawn.bin, spawn.args, {
+      cwd: repoRoot,
+      input: spawn.stdinInput,
+      stdio: [spawn.stdinInput ? "pipe" : "ignore", "pipe", "pipe"],
+      env: { ...process.env },
+      timeout: 300_000,
+      encoding: "utf8",
+      windowsHide: true,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  }
 
   // Handle timeout / signal kills gracefully
   if (result.signal) {

@@ -424,6 +424,14 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       amendWaveCommit(repoRoot, rtmPath);
     } else if (completedItems.length > 0 && fitnessDecision !== "auto-reject") {
       log(`  \x1b[36m◈ LLM audit\x1b[0m (auditor: ${auditor}, max retries: ${maxRetries})`);
+
+      // Emit audit.submit so daemon gates update
+      if (bridge?.event?.emitEvent) {
+        bridge.event.emitEvent("audit.submit", "orchestrate", {
+          wave: wave.index, items: completedItems.map(i => i.id), files: waveFiles,
+        });
+      }
+
       const auditStart = Date.now();
       const fixResult = await runFixCycle({
         repoRoot,
@@ -439,6 +447,17 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       const auditSec = Math.round((Date.now() - auditStart) / 1000);
 
       wavePassed = fixResult.passed;
+
+      // Emit audit.verdict so daemon gates update
+      if (bridge?.event?.emitEvent) {
+        bridge.event.emitEvent("audit.verdict", "orchestrate", {
+          verdict: fixResult.passed ? "approved" : "changes_requested",
+          wave: wave.index,
+          attempts: fixResult.attempts,
+          duration: auditSec,
+          findings: fixResult.findingsHistory?.flat()?.slice(0, 10),
+        });
+      }
 
       if (fixResult.passed) {
         log(`  \x1b[32m✓ LLM audit passed\x1b[0m (${fixResult.attempts} round(s), ${auditSec}s)`);

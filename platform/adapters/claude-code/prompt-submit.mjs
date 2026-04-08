@@ -84,17 +84,19 @@ if (existsSync(setupStatePath)) {
         completedAt: new Date().toISOString(),
       }, null, 2));
 
-      // Output confirmation
+      // Output confirmation — do NOT exit; let normal prompt-submit logic continue
+      // so the user's actual work request proceeds after setup.
       const msg = [
         `[quorum setup complete] config.json 생성 완료!`,
         `  프로필: ${intent.gateProfile}`,
         `  의제: ${intent.agenda}`,
         `  팀: ${intent.teamSize}`,
         intent.activeDomains.length > 0 ? `  도메인: ${intent.activeDomains.join(", ")}` : null,
+        "",
+        "설정이 완료되었습니다. 작업을 계속 진행합니다.",
       ].filter(Boolean).join("\n");
 
       process.stdout.write(`{"additionalContext": ${JSON.stringify(msg)}}`);
-      process.exit(0);
     }
   } catch (err) {
     console.warn(`[prompt-submit] interview processing failed: ${err?.message}`);

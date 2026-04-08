@@ -101,7 +101,7 @@ const COMMITTEE_PATTERNS: Record<StandingCommittee, RegExp> = {
   "principles": /\b(boundar|mental.model|hallucin|human.in.the.loop|hitl|audit.trail|principle|i\/o)\b|원칙|경계|감사.?추적/i,
   "definitions": /\b(agent.example|agent.call|sub.?agent|context.defin|definition|terminolog)\b|정의|용어|에이전트.?정의/i,
   "structure": /\b(hierarch|relation|parent.child|composition|inheritance|tree.struct)\b|구조|계층|관계/i,
-  "architecture": /\b(overview|dataflow|data.flow|api.design|protocol|system.diagram|architect)\b|아키텍처|설계|구축|플랫폼|시스템|데이터.?흐름/i,
+  "architecture": /\b(overview|dataflow|data.flow|api|protocol|system.diagram|architect|build|implement)\b|아키텍처|설계|구축|플랫폼|시스템|데이터.?흐름/i,
   "scope": /\b(in.scope|out.scope|exclude|scope.bound|mvp|defer|phase.out)\b|범위|스코프|MVP|제외|포함/i,
   "research-questions": /\b(research|communicat|intent.classif|agent.cooperat|state.manage|workflow.visual|open.question)\b|연구|조사|수집|통신|프로토콜/i,
 };
