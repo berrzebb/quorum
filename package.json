@@ -75,8 +75,10 @@
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.8.0",
+    "hnswlib-node": "^3.0.0",
     "onnxruntime-node": "^1.24.3",
-    "usearch": "^2.21.4"
+    "usearch": "^2.21.4",
+    "vectra": "^0.14.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

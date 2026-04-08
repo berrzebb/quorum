@@ -37,44 +37,24 @@ interface HNSWIndex {
   load(path: string): void;
 }
 
-let _hnswIndex: HNSWIndex | null = null;
-let _turnIdMap: Map<bigint, string> = new Map();
-let _reverseMap: Map<string, bigint> = new Map();
+// ── In-Memory Vector Index ──────────────────────
+// Brute-force cosine similarity — fast enough for <100k vectors.
+// Upgrade to HNSW (usearch/hnswlib-node) when needed.
+
+let _vecIndex: Array<{ turnId: string; vector: Float32Array }> | null = null;
 
 /**
- * Build or rebuild HNSW index from vault store embeddings.
+ * Build in-memory vector index from vault store embeddings.
  */
-export async function buildHNSWIndex(store: VaultStore, dimensions: number): Promise<HNSWIndex | null> {
-  let usearch: any;
-  try {
-    // @ts-ignore — optional dependency
-    usearch = await import(/* webpackIgnore: true */ "usearch");
-  } catch {
-    console.warn("[search] usearch not available — vector search disabled");
-    return null;
-  }
+export function buildVectorIndex(store: VaultStore): number {
+  _vecIndex = store.getAllEmbeddings();
+  return _vecIndex.length;
+}
 
-  const embeddings = store.getAllEmbeddings();
-  if (embeddings.length === 0) return null;
-
-  const index = new usearch.Index({
-    metric: "cos",
-    connectivity: 16,
-    dimensions,
-  });
-
-  _turnIdMap = new Map();
-  _reverseMap = new Map();
-
-  for (let i = 0; i < embeddings.length; i++) {
-    const key = BigInt(i);
-    _turnIdMap.set(key, embeddings[i]!.turnId);
-    _reverseMap.set(embeddings[i]!.turnId, key);
-    index.add(key, embeddings[i]!.vector);
-  }
-
-  _hnswIndex = index;
-  return index;
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i]! * b[i]!;
+  return dot; // vectors are L2-normalized, so dot = cosine
 }
 
 // ── Search Functions ────────────────────────────
@@ -87,7 +67,7 @@ export function searchKeyword(store: VaultStore, query: string, limit = 20): Sea
 }
 
 /**
- * Vector semantic search via HNSW.
+ * Vector semantic search via brute-force cosine similarity.
  */
 export async function searchSemantic(
   store: VaultStore,
@@ -95,28 +75,29 @@ export async function searchSemantic(
   embedder: Embedder | null,
   limit = 20,
 ): Promise<SearchResult[]> {
-  if (!embedder || !_hnswIndex || _hnswIndex.size() === 0) return [];
+  if (!embedder || !_vecIndex || _vecIndex.length === 0) return [];
 
   const queryVec = await embedder.embed(query);
-  const { keys, distances } = _hnswIndex.search(queryVec, limit);
+
+  // Brute-force top-k by cosine similarity
+  const scored = _vecIndex.map(e => ({
+    turnId: e.turnId,
+    score: cosineSimilarity(queryVec, e.vector),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  const topK = scored.slice(0, limit);
+
+  const stmtTurn = store.db.prepare(`
+    SELECT t.id as turnId, t.session_id as sessionId, s.provider,
+           t.role, t.content, t.timestamp
+    FROM turns t JOIN sessions s ON t.session_id = s.id
+    WHERE t.id = ?
+  `);
 
   const results: SearchResult[] = [];
-  for (let i = 0; i < keys.length; i++) {
-    const turnId = _turnIdMap.get(keys[i]!);
-    if (!turnId) continue;
-
-    const turns = store.getTurns("", 1); // placeholder — need turn lookup
-    // Direct turn lookup
-    const row = store.db.prepare(`
-      SELECT t.id as turnId, t.session_id as sessionId, s.provider,
-             t.role, t.content, t.timestamp
-      FROM turns t JOIN sessions s ON t.session_id = s.id
-      WHERE t.id = ?
-    `).get(turnId) as SearchResult | undefined;
-
-    if (row) {
-      results.push({ ...row, score: 1 - (distances[i] ?? 0) }); // cosine similarity
-    }
+  for (const { turnId, score } of topK) {
+    const row = stmtTurn.get(turnId) as SearchResult | undefined;
+    if (row) results.push({ ...row, score });
   }
 
   return results;
