@@ -10,8 +10,8 @@
  *   status         Show current audit gate status
  *   audit          Trigger manual audit
  *   plan           Work breakdown planning
- *   ask <provider> Query a provider directly
  *   tool <name>    Run MCP analysis tool
+ *   vault          Knowledge vault management
  *   help           Show this help message
  */
 
@@ -73,16 +73,6 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "Run parliamentary deliberation on a topic",
     handler: () => import("./commands/parliament.js").then((m) => m.run(args)),
   },
-  ask: {
-    description: "→ deprecated (use provider CLI directly, or orchestrate plan)",
-    handler: () => {
-      console.log("\x1b[33mDeprecated:\x1b[0m 'ask' adds no quorum context.\n");
-      console.log("  Direct query:      claude -p \"prompt\"");
-      console.log("  Interactive plan:  quorum orchestrate plan <track>");
-      console.log("  Agent relay:       quorum agent attach <session-id>\n");
-      return Promise.resolve();
-    },
-  },
   tool: {
     description: "Run MCP analysis tool",
     handler: () => import("./commands/tool.js").then((m) => m.run(args)),
@@ -137,8 +127,9 @@ function showHelp(): void {
   quorum status               Check audit gate status
   quorum audit                Trigger manual audit
   quorum parliament "topic"    Run parliamentary deliberation
-  quorum ask codex "review"   Ask Codex to review
   quorum tool code_map        Run code_map analysis
+  quorum vault status         Show vault stats
+  quorum vault search "query" Search past sessions
 
 \x1b[2mv${getVersion()}\x1b[0m
 `);

@@ -49,7 +49,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-22개 라이프사이클 훅, 26개 MCP 도구, 29개 스킬, 13개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
+22개 라이프사이클 훅, 30개 MCP 도구, 29개 스킬, 13개 전문 에이전트가 자동 등록됩니다. CLI는 플러그인과 함께 동작합니다.
 
 ### Gemini CLI 확장
 
@@ -61,7 +61,7 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 gemini extensions link adapters/gemini
 ```
 
-11개 훅, 33개 스킬, 4개 명령어, 26개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
+11개 훅, 33개 스킬, 4개 명령어, 30개 MCP 도구가 등록됩니다. Claude Code와 동일한 감사 엔진.
 
 ### Codex CLI 훅
 
@@ -96,6 +96,8 @@ quorum <command>
   audit          수동 감사 트리거
   plan           작업 분해 + RTM 진행률
   orchestrate    트랙 선택, 에이전트 분배
+  vault          지식 볼트 관리 (wiki/검색/그래프)              # v0.7.0
+  steer          게이트 프로파일 전환                           # v0.6.5
   agent          에이전트 프로세스 관리 (spawn/list/capture/kill)
   ask <provider> 프로바이더 직접 쿼리
   tool <name>    MCP 분석 도구 실행
@@ -293,7 +295,7 @@ Business Logic (platform/adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, ...
       ↓ bridge.init() + checkHookGate()
 Core (platform/core/)
-  audit, tools (26 MCP), EventStore, bus
+  audit, tools (28 MCP), EventStore, bus, vault
 ```
 
 새 어댑터 추가: ~280줄 (Codex 어댑터 기준).

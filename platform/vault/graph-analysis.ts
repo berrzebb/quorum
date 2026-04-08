@@ -13,6 +13,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { slug } from "./exporter.js";
 
 type DB = import("../bus/sqlite-adapter.js").SQLiteDatabase;
 
@@ -368,6 +369,11 @@ export function analyzeGraph(db: DB): GraphReport {
 
 // ── Report Generation ───────────────────────────
 
+/** Obsidian wikilink: [[slug|display title]] */
+function wikilink(title: string): string {
+  return `[[${slug(title)}|${title}]]`;
+}
+
 /**
  * Generate GRAPH_REPORT.md in wiki/ directory.
  */
@@ -390,7 +396,7 @@ export function generateGraphReport(db: DB, vaultRoot: string): string {
     lines.push("## Hub Nodes (Highest Connectivity)");
     lines.push("");
     for (const n of report.godNodes) {
-      lines.push(`- **[[${n.title}]]** (${n.type}) — ${n.degree} connections (in: ${n.inDegree}, out: ${n.outDegree})`);
+      lines.push(`- **${wikilink(n.title)}** (${n.type}) — ${n.degree} connections (in: ${n.inDegree}, out: ${n.outDegree})`);
     }
     lines.push("");
   }
@@ -400,7 +406,7 @@ export function generateGraphReport(db: DB, vaultRoot: string): string {
     lines.push("## Bridge Nodes (Cross-Community Connectors)");
     lines.push("");
     for (const n of report.bridges) {
-      lines.push(`- **[[${n.title}]]** (${n.type}) — centrality: ${n.centrality.toFixed(4)}, community ${n.community}`);
+      lines.push(`- **${wikilink(n.title)}** (${n.type}) — centrality: ${n.centrality.toFixed(4)}, community ${n.community}`);
     }
     lines.push("");
   }
@@ -413,7 +419,7 @@ export function generateGraphReport(db: DB, vaultRoot: string): string {
       const topNodes = c.nodes.sort((a, b) => b.degree - a.degree).slice(0, 5);
       lines.push(`### Community ${c.id}: ${c.label} (${c.size} nodes)`);
       for (const n of topNodes) {
-        lines.push(`- [[${n.title}]] (${n.type}, ${n.degree} edges)`);
+        lines.push(`- ${wikilink(n.title)} (${n.type}, ${n.degree} edges)`);
       }
       lines.push("");
     }
@@ -426,7 +432,7 @@ export function generateGraphReport(db: DB, vaultRoot: string): string {
     for (const e of report.surprisingEdges.slice(0, 10)) {
       const from = db.prepare("SELECT title FROM entities WHERE id = ?").get(e.fromId) as { title: string } | undefined;
       const to = db.prepare("SELECT title FROM entities WHERE id = ?").get(e.toId) as { title: string } | undefined;
-      lines.push(`- [[${from?.title ?? e.fromId}]] → [[${to?.title ?? e.toId}]] (${e.type}, ${e.confidence})`);
+      lines.push(`- ${wikilink(from?.title ?? e.fromId)} → ${wikilink(to?.title ?? e.toId)} (${e.type}, ${e.confidence})`);
     }
     lines.push("");
   }
@@ -437,7 +443,7 @@ export function generateGraphReport(db: DB, vaultRoot: string): string {
     lines.push("");
     lines.push(`${report.orphans.length} nodes with zero edges:`);
     for (const n of report.orphans.slice(0, 20)) {
-      lines.push(`- [[${n.title}]] (${n.type})`);
+      lines.push(`- ${wikilink(n.title)} (${n.type})`);
     }
     if (report.orphans.length > 20) lines.push(`- ... and ${report.orphans.length - 20} more`);
     lines.push("");

@@ -10,7 +10,7 @@ import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
 
-export function toolDashboard(params) {
+export async function toolDashboard(params) {
   const { path: outPath, format = "html" } = params;
 
   // 1. Load EventStore

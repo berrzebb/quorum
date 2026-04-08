@@ -124,7 +124,7 @@ Auditor receives facts, not raw code
 ```
 quorum/
 ├── platform/core/tools/
-│   ├── mcp-server.mjs           ← MCP server registration (all 22 tools)
+│   ├── mcp-server.mjs           ← MCP server registration (all 28 tools)
 │   ├── code-map.mjs             ← code_map
 │   ├── dependency-graph.mjs     ← dependency_graph
 │   ├── blast-radius.mjs         ← blast_radius

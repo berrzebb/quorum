@@ -355,3 +355,44 @@ quorum verify DEP          # dependency vulnerabilities
 ## scan-ignore
 
 Add `// scan-ignore` to any source line to suppress pattern scan findings on that line.
+
+---
+
+## Knowledge Management (Vault)
+
+MCP tools for the knowledge vault (session search + wiki/entity search).
+
+### recall
+
+Hybrid search across past AI agent sessions stored in vault.db.
+
+```bash
+# Via MCP tool (in agent context)
+recall({ query: "ENOBUFS buffer overflow", mode: "hybrid", limit: 5 })
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `query` | Search query (required) |
+| `mode` | `keyword` (FTS5), `semantic` (BGE-M3 vector), `hybrid` (RRF fusion, default) |
+| `provider` | Filter by provider: `claude-code`, `codex`, `gemini` |
+| `limit` | Max results (default: 10) |
+
+### search
+
+Wiki and entity search via knowledge graph.
+
+```bash
+# Via MCP tool (in agent context)
+search({ query: "stub pattern", type: "Pattern", limit: 5 })
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `query` | Search query (required) |
+| `type` | Entity type filter: `Fact`, `Pattern`, `Decision`, `Rule`, `Trend`, `Agent` |
+| `limit` | Max results (default: 10) |
+
+### memory_write (deprecated)
+
+Creates an entity node in the knowledge graph and exports to Obsidian wiki page. Use `recall`/`search` for retrieval instead of `memory_recall`/`memory_search`.

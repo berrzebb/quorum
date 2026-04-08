@@ -100,7 +100,43 @@ quorum tool <name> --help                # Tool-specific help
 quorum tool <name> [path] --json         # Raw JSON output
 ```
 
-See [Tool Reference](TOOLS.md) for all 22 tools.
+See [Tool Reference](TOOLS.md) for all 30 tools.
+
+---
+
+## Vault Management
+
+Knowledge vault with Obsidian integration, session search, and graph analysis.
+
+```bash
+quorum vault status                          # DB stats (sessions, turns, embeddings)
+quorum vault ingest --auto                   # Auto-ingest Claude/Codex/Gemini sessions
+quorum vault ingest <path>                   # Ingest single file or directory
+quorum vault search <query>                  # FTS5 keyword search
+quorum vault embed                           # Generate BGE-M3 embeddings for unembedded turns
+quorum vault graph                           # Graph analysis → GRAPH_REPORT.md
+quorum vault schema                          # Build schema/AGENTS.md + wiki meta-files
+```
+
+| Flag | Description |
+|------|-------------|
+| `--auto` | (ingest) Scan default session locations |
+
+Environment: `QUORUM_VAULT_PATH` overrides default vault location (`~/.quorum/vault`).
+
+---
+
+## Steering
+
+Switch gate enforcement profile.
+
+```bash
+quorum steer                                 # Show current profile
+quorum steer strict                          # Switch to strict mode
+quorum steer balanced                        # Switch to balanced (default)
+quorum steer fast                            # Switch to fast mode
+quorum steer prototype                       # Switch to prototype mode
+```
 
 ---
 

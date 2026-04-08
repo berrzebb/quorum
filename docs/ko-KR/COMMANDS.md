@@ -100,7 +100,7 @@ quorum tool <이름> --help                 # 도구별 도움말
 quorum tool <이름> [경로] --json          # JSON 출력
 ```
 
-22개 도구 상세는 [도구 레퍼런스](TOOLS.md) 참조.
+30개 도구 상세는 [도구 레퍼런스](TOOLS.md) 참조.
 
 ---
 

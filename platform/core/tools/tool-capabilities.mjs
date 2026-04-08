@@ -370,21 +370,8 @@ export const TOOL_CAPABILITIES = Object.freeze([
     category: "pdca",
   },
 
-  // ── v0.6.5 DCM — Dynamic Context Memory ──
+  // ── Knowledge Management ──
 
-  {
-    name: "memory_search",
-    isConcurrencySafe: true,
-    isReadOnly: true,
-    isDestructive: false,
-    shouldDefer: true,
-    alwaysLoad: false,
-    searchHint: "memory search knowledge graph query recall find fact pattern rule",
-    domain: [],
-    allowedRoles: ALL_ROLES,
-    maxResultSizeChars: 10_000,
-    category: "memory",
-  },
   {
     name: "memory_write",
     isConcurrencySafe: false,
@@ -396,20 +383,23 @@ export const TOOL_CAPABILITIES = Object.freeze([
     domain: [],
     allowedRoles: ALL_ROLES,
     maxResultSizeChars: 5_000,
-    category: "memory",
+    category: "knowledge",
   },
+
+  // ── Reporting ──
+
   {
-    name: "memory_recall",
+    name: "dashboard",
     isConcurrencySafe: true,
     isReadOnly: true,
     isDestructive: false,
-    shouldDefer: false,
-    alwaysLoad: true,
-    searchHint: "memory recall context past history pattern trust agent",
+    shouldDefer: true,
+    alwaysLoad: false,
+    searchHint: "dashboard report html audit verdict fitness trigger stagnation",
     domain: [],
     allowedRoles: ALL_ROLES,
-    maxResultSizeChars: 5_000,
-    category: "memory",
+    maxResultSizeChars: 50_000,
+    category: "reporting",
   },
 ]);
 

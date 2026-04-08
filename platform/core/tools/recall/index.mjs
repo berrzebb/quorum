@@ -21,7 +21,7 @@ export async function toolRecall(args) {
   const vaultRoot = resolveVaultRoot();
 
   // Dynamic imports (compiled TS → dist/)
-  let openVaultStore, openDatabase, searchHybrid;
+  let openVaultStore, openDatabase, searchHybrid, buildVectorIndex, createEmbedder;
   try {
     const storeMod = await import("../../../../dist/platform/vault/store.js");
     openVaultStore = storeMod.openVaultStore;
@@ -29,6 +29,9 @@ export async function toolRecall(args) {
     openDatabase = sqliteMod.openDatabase;
     const searchMod = await import("../../../../dist/platform/vault/search.js");
     searchHybrid = searchMod.searchHybrid;
+    buildVectorIndex = searchMod.buildVectorIndex;
+    const embedMod = await import("../../../../dist/platform/vault/embedder.js");
+    createEmbedder = embedMod.createEmbedder;
   } catch (err) {
     return { text: `Error: vault modules not available — run \`npm run build\`. ${err.message}`, isError: true };
   }
@@ -45,10 +48,20 @@ export async function toolRecall(args) {
     return { text: `Error opening vault: ${err.message}`, isError: true };
   }
 
+  let embedder = null;
   try {
-    // For now, keyword search always works. Semantic/hybrid requires embeddings.
-    const results = await searchHybrid(store, query, null /* embedder */, {
-      mode: mode === "hybrid" && !hasEmbeddings(store) ? "keyword" : mode,
+    // Load embedder + vector index if embeddings exist and mode needs it
+    const wantsVector = mode === "hybrid" || mode === "semantic";
+    if (wantsVector && hasEmbeddings(store)) {
+      try {
+        embedder = await createEmbedder(vaultRoot);
+        if (embedder) buildVectorIndex(store);
+      } catch { /* fail-open: keyword fallback */ }
+    }
+
+    const effectiveMode = wantsVector && !embedder ? "keyword" : mode;
+    const results = await searchHybrid(store, query, embedder, {
+      mode: effectiveMode,
       provider,
       limit,
     });
@@ -68,6 +81,7 @@ export async function toolRecall(args) {
       json: { count: results.length, results: results.map(r => ({ turnId: r.turnId, sessionId: r.sessionId, provider: r.provider, role: r.role, content: r.content.slice(0, 500), score: r.rrfScore ?? r.score, timestamp: r.timestamp })) },
     };
   } finally {
+    if (embedder) try { embedder.dispose(); } catch {}
     store.close();
   }
 }

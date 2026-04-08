@@ -1,7 +1,7 @@
 /**
  * Vault Embedder — BGE-M3 ONNX embedding generation.
  *
- * Generates 384-dimensional vectors from text using BGE-M3 model via ONNX Runtime.
+ * Generates 1024-dimensional vectors from text using BGE-M3 model via ONNX Runtime.
  * Fail-open: if model not available, returns null (FTS-only search).
  *
  * Model download: `quorum vault model` CLI command downloads ONNX model.

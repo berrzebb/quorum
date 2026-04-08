@@ -3,7 +3,7 @@
 > Cross-model audit gate with structural enforcement. v0.5.0
 >
 > **v0.3.0**: Parliament protocol, 3-role deliberative consensus
-> **v0.4.0**: SQLite unified state, fitness score engine, 26 MCP tools
+> **v0.4.0**: SQLite unified state, fitness score engine, 30 MCP tools
 > **v0.4.2**: Confluence verification, amendment protocol, Normal Form convergence
 > **v0.4.5**: Wave execution, Fixer role, 4-adapter parity, 2401 tests
 > **v0.4.6**: Quality gate chain (21-gate), fitness integration, cross-model audit
@@ -64,7 +64,7 @@ The system makes mistakes **structurally hard** — not through better prompts, 
 
 1. **No single model can both write and approve code** — structural separation of writer and auditor
 2. **Measurable things are never asked to the LLM** — fitness score gates before audit
-3. **Deterministic tools establish facts first** — 26 MCP tools run before LLM reasoning
+3. **Deterministic tools establish facts first** — 30 MCP tools run before LLM reasoning
 4. **Structure → Consensus → Convergence** — Normal Form is the destination
 
 → See [philosophy/](philosophy/) for detailed design rationale.

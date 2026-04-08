@@ -153,188 +153,20 @@ function searchLikeFallback(
 
 // ── sqlite-vec Semantic Search ──────────────────
 
-/** Whether sqlite-vec extension is loaded. */
-let _vecAvailable: boolean | null = null;
-
-/**
- * Attempt to load sqlite-vec extension. Call once at startup.
- * Fail-open: returns false if extension not available.
- */
-export function loadSqliteVec(db: SQLiteDatabase): boolean {
-  if (_vecAvailable !== null) return _vecAvailable;
-
-  try {
-    // sqlite-vec provides vec0 virtual table module
-    // Try loading the extension — path varies by platform
-    const paths = [
-      "vec0",                    // In system path
-      "./vec0",                  // Current directory
-      "../lib/vec0",             // Bundled
-    ];
-
-    for (const p of paths) {
-      try {
-        db.exec(`SELECT load_extension('${p}')`);
-        _vecAvailable = true;
-        break;
-      } catch {
-        continue;
-      }
-    }
-
-    if (!_vecAvailable) {
-      // Try if vec0 is already compiled in (some builds include it)
-      try {
-        db.exec("SELECT vec_version()");
-        _vecAvailable = true;
-      } catch {
-        _vecAvailable = false;
-      }
-    }
-
-    if (_vecAvailable) {
-      // Create vector index table if it doesn't exist
-      const existing = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='entities_vec'"
-      ).get();
-
-      if (!existing) {
-        db.exec(`
-          CREATE VIRTUAL TABLE entities_vec USING vec0(
-            entity_id TEXT PRIMARY KEY,
-            embedding float[384]
-          );
-        `);
-      }
-    }
-
-    return _vecAvailable;
-  } catch {
-    _vecAvailable = false;
-    return false;
-  }
-}
-
-/**
- * Check if sqlite-vec is available without attempting to load.
- */
-export function isVecAvailable(): boolean {
-  return _vecAvailable === true;
-}
-
-/**
- * Search entities by semantic similarity using sqlite-vec.
- * Requires embeddings to be stored in entities_vec table.
- *
- * @param db - SQLite database handle
- * @param embedding - Query embedding (384-dim float32 array)
- * @param opts - Optional filters
- */
-export function searchSemantic(
-  db: SQLiteDatabase,
-  embedding: Float32Array,
-  opts: SearchOptions = {},
-): EntityRow[] {
-  if (!_vecAvailable) return [];
-
-  const limit = opts.limit ?? 10;
-
-  try {
-    // sqlite-vec uses MATCH with a blob for KNN search
-    const embeddingBlob = Buffer.from(embedding.buffer);
-
-    let sql = `
-      SELECT e.*, v.distance
-      FROM entities_vec v
-      JOIN entities e ON e.id = v.entity_id
-      WHERE v.embedding MATCH ?
-    `;
-    const params: unknown[] = [embeddingBlob];
-
-    if (opts.type) {
-      sql += " AND e.type = ?";
-      params.push(opts.type);
-    }
-    if (opts.projectId) {
-      sql += " AND e.project_id = ?";
-      params.push(opts.projectId);
-    }
-
-    sql += " ORDER BY v.distance LIMIT ?";
-    params.push(limit);
-
-    return db.prepare(sql).all(...params) as EntityRow[];
-  } catch (err) {
-    console.warn(`[graph-search] Semantic search failed: ${(err as Error).message}`);
-    return [];
-  }
-}
-
-/**
- * Store an embedding for an entity in the vector index.
- *
- * @param db - SQLite database handle
- * @param entityId - Entity ID to associate
- * @param embedding - 384-dim float32 embedding
- */
-export function storeEmbedding(
-  db: SQLiteDatabase,
-  entityId: string,
-  embedding: Float32Array,
-): boolean {
-  if (!_vecAvailable) return false;
-
-  try {
-    const blob = Buffer.from(embedding.buffer);
-    db.prepare(
-      "INSERT OR REPLACE INTO entities_vec (entity_id, embedding) VALUES (?, ?)"
-    ).run(entityId, blob);
-    return true;
-  } catch (err) {
-    console.warn(`[graph-search] Store embedding failed: ${(err as Error).message}`);
-    return false;
-  }
-}
-
 // ── Hybrid Search ───────────────────────────────
+// NOTE: Semantic vector search moved to vault/search.ts (BGE-M3 1024-dim + RRF).
+// This file retains keyword-only search for legacy memory_* MCP tools.
 
 /**
- * Combined search: keyword + semantic, deduplicated and ranked.
- * Semantic results are included only if sqlite-vec is available.
+ * Combined search: keyword results deduplicated and ranked.
  */
 export function searchHybrid(
   db: SQLiteDatabase,
   query: string,
-  embedding: Float32Array | null,
+  _embedding: Float32Array | null,
   opts: SearchOptions = {},
 ): EntityRow[] {
-  const limit = opts.limit ?? 10;
-
-  // Keyword results
-  const kwResults = searchKeyword(db, query, { ...opts, limit });
-
-  // Semantic results (if available)
-  let vecResults: EntityRow[] = [];
-  if (embedding && _vecAvailable) {
-    vecResults = searchSemantic(db, embedding, { ...opts, limit });
-  }
-
-  // Merge and deduplicate (keyword results first, then semantic)
-  const seen = new Set<string>();
-  const merged: EntityRow[] = [];
-
-  for (const r of kwResults) {
-    if (!seen.has(r.id)) {
-      seen.add(r.id);
-      merged.push(r);
-    }
-  }
-  for (const r of vecResults) {
-    if (!seen.has(r.id)) {
-      seen.add(r.id);
-      merged.push(r);
-    }
-  }
-
-  return merged.slice(0, limit);
+  // Semantic search removed — use vault/search.ts for vector+RRF search.
+  // This function now delegates to keyword-only search.
+  return searchKeyword(db, query, opts);
 }

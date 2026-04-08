@@ -51,7 +51,7 @@ claude plugin marketplace add berrzebb/quorum
 claude plugin install quorum@berrzebb-plugins
 ```
 
-This registers 22 lifecycle hooks, 26 MCP tools, 29 skills, and 13 specialist agents automatically. The CLI still works alongside the plugin.
+This registers 22 lifecycle hooks, 30 MCP tools, 29 skills, and 13 specialist agents automatically. The CLI still works alongside the plugin.
 
 ### As a Gemini CLI extension
 
@@ -63,7 +63,7 @@ gemini extensions install https://github.com/berrzebb/quorum.git
 gemini extensions link adapters/gemini
 ```
 
-This registers 11 hooks, 33 skills, 4 commands, and 26 MCP tools. Same audit engine as Claude Code.
+This registers 11 hooks, 33 skills, 4 commands, and 30 MCP tools. Same audit engine as Claude Code.
 
 ### As a Codex CLI hook
 
@@ -98,6 +98,8 @@ quorum <command>
   audit          Trigger manual audit
   plan           Work breakdown planning
   orchestrate    Track orchestration (parallel execution)   # v0.4.0
+  vault          Knowledge vault management (wiki/search)   # v0.7.0
+  steer          Gate profile switching                     # v0.6.5
   ask <provider> Query a provider directly
   tool <name>    Run MCP analysis tool
   migrate        Import consensus-loop data into quorum
@@ -164,7 +166,8 @@ quorum/
 │   ├── orchestrate/      ← 5-layer orchestration (planning/execution/governance/state/core)
 │   ├── bus/              ← EventStore (SQLite) + pub/sub + stagnation + LockService + Fitness + Claims + Parliament
 │   ├── providers/        ← consensus protocol + trigger (13-factor) + router + evaluators + AST analyzer
-│   ├── core/             ← audit protocol (7 modules), templates, 26 MCP tools, harness contracts
+│   ├── vault/            ← knowledge vault (3-layer wiki, FTS5+BGE-M3 hybrid search, graph analysis)
+│   ├── core/             ← audit protocol (7 modules), templates, 30 MCP tools, harness contracts
 │   ├── skills/           ← 36 canonical skill definitions (protocol-neutral)
 │   └── adapters/
 │       ├── shared/       ← adapter-agnostic business logic (20 modules, incl. HookRunner, NDJSON, MuxAdapter)
@@ -318,7 +321,7 @@ Business Logic (platform/adapters/shared/ — 17 modules)
   cli-adapter, mux-adapter, jsonrpc-client, sdk-tool-bridge, ...
       ↓ bridge.init() + bridge.checkHookGate()
 Core (platform/core/)
-  audit, tools (26 MCP), EventStore, bus, providers
+  audit, tools (30 MCP), EventStore, bus, vault, providers
 ```
 
 Adding a new adapter requires ~280 lines (proven by the Codex adapter).

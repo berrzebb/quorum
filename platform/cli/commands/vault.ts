@@ -35,12 +35,18 @@ export async function run(args: string[]): Promise<void> {
     await runSearch(args.slice(1));
   } else if (sub === "graph") {
     await runGraph();
+  } else if (sub === "schema") {
+    await runSchema();
+  } else if (sub === "embed") {
+    await runEmbed();
   } else {
     console.log(`\n\x1b[36mquorum vault\x1b[0m — vault management\n`);
     console.log(`  quorum vault status            Show vault stats`);
     console.log(`  quorum vault ingest [--auto]   Ingest sessions`);
     console.log(`  quorum vault search <query>    Search turns (FTS)`);
-    console.log(`  quorum vault graph             Generate graph report\n`);
+    console.log(`  quorum vault embed             Generate embeddings for unembedded turns`);
+    console.log(`  quorum vault graph             Generate graph report`);
+    console.log(`  quorum vault schema            Build schema/AGENTS.md\n`);
   }
 }
 
@@ -193,6 +199,87 @@ async function runGraph(): Promise<void> {
 
     const reportPath = generateGraphReport(db, vaultRoot);
     console.log(`\n  Report: ${reportPath}\n`);
+  } finally {
+    db.close();
+  }
+}
+
+async function runEmbed(): Promise<void> {
+  const vaultRoot = resolveVaultRoot();
+  const dbPath = resolve(vaultRoot, ".store", "vault.db");
+
+  if (!existsSync(dbPath)) {
+    console.log(`No vault database. Run \`quorum vault ingest --auto\` first.`);
+    return;
+  }
+
+  const { openDatabase } = await import("../../bus/sqlite-adapter.js");
+  const { openVaultStore } = await import("../../vault/store.js");
+  const { createEmbedder } = await import("../../vault/embedder.js");
+
+  const store = openVaultStore(vaultRoot, openDatabase);
+  const embedder = await createEmbedder(vaultRoot);
+
+  if (!embedder) {
+    console.log(`[vault] Embedder not available. Run \`quorum vault model\` to download BGE-M3.`);
+    store.close();
+    return;
+  }
+
+  try {
+    const unembedded = store.getUnembeddedTurnIds(5000);
+    if (unembedded.length === 0) {
+      console.log(`\n\x1b[36m[vault]\x1b[0m All turns already have embeddings.\n`);
+      return;
+    }
+
+    console.log(`\n\x1b[36m[vault]\x1b[0m Embedding ${unembedded.length} turns...\n`);
+
+    const start = Date.now();
+    let done = 0;
+
+    for (const turnId of unembedded) {
+      const turn = store.db.prepare("SELECT content FROM turns WHERE id = ?").get(turnId) as { content: string } | undefined;
+      if (!turn?.content) continue;
+
+      const vector = await embedder.embed(turn.content);
+      store.setEmbedding(turnId, vector);
+      done++;
+
+      if (done % 200 === 0) {
+        const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+        const rate = (done / ((Date.now() - start) / 1000)).toFixed(1);
+        console.log(`  ${done}/${unembedded.length} (${elapsed}s, ${rate}/s)`);
+      }
+    }
+
+    const elapsed = ((Date.now() - start) / 1000).toFixed(0);
+    const rate = (done / ((Date.now() - start) / 1000)).toFixed(1);
+    console.log(`  Done: ${done} turns in ${elapsed}s (${rate}/s)\n`);
+  } finally {
+    embedder.dispose();
+    store.close();
+  }
+}
+
+async function runSchema(): Promise<void> {
+  const vaultRoot = resolveVaultRoot();
+
+  const eventsDbPath = resolve(process.cwd(), ".claude", "quorum-events.db");
+  if (!existsSync(eventsDbPath)) {
+    console.log(`No EventStore found. Run \`quorum setup\` first.`);
+    return;
+  }
+
+  const { openDatabase } = await import("../../bus/sqlite-adapter.js");
+  const db = openDatabase(eventsDbPath);
+
+  try {
+    const { buildSchema } = await import("../../vault/exporter.js");
+
+    console.log(`\n\x1b[36m[vault]\x1b[0m Building schema/AGENTS.md...\n`);
+    const agentsPath = buildSchema(db, vaultRoot);
+    console.log(`  Generated: ${agentsPath}\n`);
   } finally {
     db.close();
   }

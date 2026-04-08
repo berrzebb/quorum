@@ -126,7 +126,7 @@ describe("vault exporter", () => {
 describe("vault importer", () => {
   it("detects new .md file and creates entity", () => {
     const d = freshDb();
-    const importDir = join(VAULT_DIR, "_import_test");
+    const importDir = join(VAULT_DIR, "wiki", "_import_test");
     mkdirSync(importDir, { recursive: true });
 
     // Write a .md file directly (simulating Obsidian edit)
@@ -157,7 +157,7 @@ describe("vault importer", () => {
     const d = freshDb();
     const id = addNode(d, { type: "Fact", title: "updatable", description: "original" });
 
-    const importDir = join(VAULT_DIR, "_update_test");
+    const importDir = join(VAULT_DIR, "wiki", "_update_test");
     mkdirSync(importDir, { recursive: true });
 
     writeFileSync(join(importDir, "updatable.md"), [

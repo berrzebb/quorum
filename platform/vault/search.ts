@@ -27,19 +27,8 @@ export interface HybridResult extends SearchResult {
   rrfScore: number;
 }
 
-// ── HNSW Index (usearch) ────────────────────────
-
-interface HNSWIndex {
-  add(key: bigint, vector: Float32Array): void;
-  search(query: Float32Array, k: number): { keys: BigInt64Array; distances: Float32Array };
-  size(): number;
-  save(path: string): void;
-  load(path: string): void;
-}
-
 // ── In-Memory Vector Index ──────────────────────
-// Brute-force cosine similarity — fast enough for <100k vectors.
-// Upgrade to HNSW (usearch/hnswlib-node) when needed.
+// Brute-force cosine similarity — fast enough for <100k vectors at <1ms.
 
 let _vecIndex: Array<{ turnId: string; vector: Float32Array }> | null = null;
 
