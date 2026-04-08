@@ -99,6 +99,10 @@ const COMMANDS: Record<string, { description: string; handler: () => Promise<voi
     description: "Squash-merge worktree branch",
     handler: () => import("./commands/merge.js").then((m) => m.run(args)),
   },
+  vault: {
+    description: "Vault management (ingest/search/status)",
+    handler: () => import("./commands/vault.js").then((m) => m.run(args)),
+  },
   steer: {
     description: "Switch gate profile (strict/balanced/fast/prototype)",
     handler: () => import("./commands/steer.js").then((m) => m.run(args)),

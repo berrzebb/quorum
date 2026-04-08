@@ -74,7 +74,9 @@
     "web-tree-sitter": "0.24.7"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^12.8.0"
+    "better-sqlite3": "^12.8.0",
+    "onnxruntime-node": "^1.24.3",
+    "usearch": "^2.21.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

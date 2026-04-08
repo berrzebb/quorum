@@ -4,10 +4,13 @@
  * memory_write → node INSERT → this exporter → .md with frontmatter + wikilinks.
  * Obsidian graph view renders wikilinks as edges automatically.
  *
- * Vault structure:
- *   vault/{project}/facts/   vault/{project}/patterns/
- *   vault/global/            vault/rules/{soft,hard,verified}/
- *   vault/trends/
+ * Vault structure (LLM Wiki 3-layer):
+ *   vault/raw/                  — immutable source documents (human-curated)
+ *   vault/wiki/                 — LLM-maintained pages (entities, summaries, cross-refs)
+ *     wiki/{project}/facts/     wiki/{project}/patterns/
+ *     wiki/global/              wiki/rules/{soft,hard,verified}/
+ *     wiki/trends/              wiki/index.md  wiki/log.md
+ *   vault/schema/               — agent entry points (CLAUDE.md, AGENTS.md links)
  */
 
 import { mkdirSync, writeFileSync, existsSync, readdirSync, statSync, readFileSync } from "node:fs";
@@ -72,27 +75,28 @@ function slug(title: string): string {
 
 // ── Path Resolution ─────────────────────────────
 
-/** Determine the vault file path for an entity. */
+/** Determine the vault file path for an entity (under wiki/ layer). */
 function vaultPath(vaultRoot: string, entity: EntityRow): string {
+  const wiki = join(vaultRoot, "wiki");
   const s = slug(entity.title);
   const typeDir = entity.type.toLowerCase() + "s"; // Fact→facts, Pattern→patterns
 
   if (entity.type === "Rule") {
     const level = entity.status || "soft";
-    return join(vaultRoot, "rules", level, `${s}.md`);
+    return join(wiki, "rules", level, `${s}.md`);
   }
 
   if (entity.type === "Trend") {
-    return join(vaultRoot, "trends", `${s}.md`);
+    return join(wiki, "trends", `${s}.md`);
   }
 
   if (entity.type === "Tag" || entity.type === "Category") {
-    return join(vaultRoot, "tags", `${s}.md`);
+    return join(wiki, "tags", `${s}.md`);
   }
 
   // Project-scoped vs global
   const scope = entity.project_id || "global";
-  return join(vaultRoot, scope, typeDir, `${s}.md`);
+  return join(wiki, scope, typeDir, `${s}.md`);
 }
 
 // ── Markdown Generation ─────────────────────────
@@ -170,7 +174,7 @@ export function exportNode(db: SQLiteDatabase, entityId: string): ExportResult |
   const entity = db.prepare("SELECT * FROM entities WHERE id = ?").get(entityId) as EntityRow | undefined;
   if (!entity) return null;
 
-  const vaultRoot = getVaultRoot();
+  const vaultRoot = ensureVaultStructure();
   const filePath = vaultPath(vaultRoot, entity);
 
   // Build markdown content
@@ -184,7 +188,68 @@ export function exportNode(db: SQLiteDatabase, entityId: string): ExportResult |
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, content, "utf8");
 
+  // Log
+  appendLog(vaultRoot, "export-node", entity.title);
+
   return { path: filePath, created: true };
+}
+
+/**
+ * Ensure the 3-layer vault structure exists (raw/wiki/schema).
+ */
+export function ensureVaultStructure(vaultRoot?: string): string {
+  const root = vaultRoot ?? getVaultRoot();
+  for (const dir of ["raw", "wiki", "schema"]) {
+    mkdirSync(join(root, dir), { recursive: true });
+  }
+  return root;
+}
+
+/**
+ * Generate wiki/index.md — catalog of all wiki pages.
+ */
+function generateIndex(db: SQLiteDatabase, vaultRoot: string): void {
+  const entities = db.prepare(
+    "SELECT id, type, title, status, project_id, updated_at FROM entities WHERE type != 'Reference' ORDER BY type, title"
+  ).all() as EntityRow[];
+
+  const lines: string[] = [
+    "---", "generated: true", `updated: ${new Date().toISOString()}`, "---",
+    "", "# Wiki Index", "",
+  ];
+
+  let currentType = "";
+  for (const e of entities) {
+    if (e.type !== currentType) {
+      currentType = e.type;
+      lines.push(`## ${currentType}s`, "");
+    }
+    const s = slug(e.title);
+    const scope = e.project_id || "global";
+    const status = e.status !== "active" ? ` (${e.status})` : "";
+    lines.push(`- [[${s}]] — ${e.title}${status}`);
+  }
+
+  lines.push("", `*${entities.length} pages*`, "");
+  writeFileSync(join(vaultRoot, "wiki", "index.md"), lines.join("\n"), "utf8");
+}
+
+/**
+ * Append to wiki/log.md — chronological record.
+ */
+function appendLog(vaultRoot: string, action: string, detail: string): void {
+  const logPath = join(vaultRoot, "wiki", "log.md");
+  const date = new Date().toISOString().slice(0, 10);
+  const entry = `## [${date}] ${action} | ${detail}\n`;
+
+  let existing = "";
+  try { existing = readFileSync(logPath, "utf8"); } catch { /* new file */ }
+
+  if (!existing) {
+    existing = "# Wiki Log\n\nChronological record of wiki operations.\n\n";
+  }
+
+  writeFileSync(logPath, existing + entry, "utf8");
 }
 
 /**
@@ -193,6 +258,8 @@ export function exportNode(db: SQLiteDatabase, entityId: string): ExportResult |
 export function exportAll(db: SQLiteDatabase): { exported: number; errors: number } {
   let exported = 0;
   let errors = 0;
+
+  const vaultRoot = ensureVaultStructure();
 
   const entities = db.prepare("SELECT id FROM entities WHERE type != 'Reference' ORDER BY updated_at DESC LIMIT 500").all() as Array<{ id: string }>;
 
@@ -204,6 +271,10 @@ export function exportAll(db: SQLiteDatabase): { exported: number; errors: numbe
       errors++;
     }
   }
+
+  // Generate index + log
+  generateIndex(db, vaultRoot);
+  appendLog(vaultRoot, "export", `${exported} pages exported (${errors} errors)`);
 
   return { exported, errors };
 }

@@ -87,8 +87,10 @@ export const TOOL_NAMES = [
   "ai_guide",
   // Agent communication / lifecycle
   "agent_comm", "audit_submit", "skill_sync", "track_archive",
-  // v0.6.5 DCM — Dynamic Context Memory
+  // v0.6.5 DCM — Dynamic Context Memory (deprecated → vault recall/search)
   "memory_search", "memory_write", "memory_recall",
+  // v0.7 Vault — session search + wiki search
+  "recall", "search",
 ];
 
 // ═══ Tool definitions ════════════════════════════════════════════════════
@@ -560,6 +562,49 @@ const TOOLS = [
     execute: (args) => toolMemoryRecall(args),
     async: true,
     category: "memory",
+  },
+
+  // ═══ v0.7 Vault — Session Search + Wiki Search ══════════════════════════
+
+  {
+    name: "recall",
+    description: "Search past AI agent sessions (Claude Code, Codex, Gemini). Hybrid BM25 + vector search with RRF fusion. Use to find past conversations, tool usage, decisions, and solutions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query (natural language)" },
+        mode: { type: "string", enum: ["keyword", "semantic", "hybrid"], description: "Search mode (default: hybrid)" },
+        provider: { type: "string", enum: ["claude-code", "codex", "gemini"], description: "Filter by provider" },
+        limit: { type: "number", description: "Max results (default: 10)" },
+      },
+      required: ["query"],
+    },
+    execute: async (args) => {
+      const { toolRecall } = await import("./recall/index.mjs");
+      return toolRecall(args);
+    },
+    async: true,
+    category: "vault",
+  },
+  {
+    name: "search",
+    description: "Search the vault wiki pages (entities, concepts, summaries, cross-references). Returns structured knowledge from the LLM-maintained wiki.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+        scope: { type: "string", enum: ["project", "global"], description: "Scope filter" },
+        type: { type: "string", description: "Entity type filter (Fact, Rule, Pattern, Decision, Trend)" },
+        limit: { type: "number", description: "Max results (default: 10)" },
+      },
+      required: ["query"],
+    },
+    execute: async (args) => {
+      const { toolSearch } = await import("./search/index.mjs");
+      return toolSearch(args);
+    },
+    async: true,
+    category: "vault",
   },
 ];
 

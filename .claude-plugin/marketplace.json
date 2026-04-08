@@ -19,8 +19,7 @@
       "repository": "https://github.com/berrzebb/quorum",
       "source": {
         "source": "url",
-        "url": "https://github.com/berrzebb/quorum.git",
-        "sha": "e3d18b578cd75e152123be36315f4a37c3274f63"
+        "url": "https://github.com/berrzebb/quorum.git"
       },
       "category": "development",
       "keywords": ["code-review", "audit", "consensus", "mcp", "ai-agents", "parliament", "cross-model", "orchestrator"]

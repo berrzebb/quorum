@@ -115,7 +115,10 @@ export function importVaultChanges(
 
   if (!existsSync(vaultRoot)) return result;
 
-  const changes = scanVault(vaultRoot, lastSyncTimestamp);
+  // Scan wiki/ subdirectory (LLM-maintained layer), not raw/ or schema/
+  const wikiRoot = join(vaultRoot, "wiki");
+  const scanRoot = existsSync(wikiRoot) ? wikiRoot : vaultRoot;
+  const changes = scanVault(scanRoot, lastSyncTimestamp);
   if (changes.length === 0) return result;
 
   const now = Date.now();
