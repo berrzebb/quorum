@@ -38,7 +38,7 @@ interface OrtModule {
 
 // ── Constants ───────────────────────────────────
 
-const DIMENSIONS = 384;
+const DIMENSIONS = 1024; // BGE-M3 dense embedding dimension
 const MAX_TOKENS = 512;
 
 // ── Simple Tokenizer (word-piece approximation) ─
