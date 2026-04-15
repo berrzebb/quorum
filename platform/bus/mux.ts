@@ -8,7 +8,9 @@
  */
 
 import { spawn, spawnSync, execSync, type ChildProcess } from "node:child_process";
-import { platform } from "node:os";
+import { platform, tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { EventEmitter } from "node:events";
 
@@ -71,7 +73,7 @@ export class ProcessMux extends EventEmitter {
         this.spawnTmux(session, opts);
         break;
       case "psmux":
-        this.spawnPsmux(session, opts);
+        await this.spawnPsmux(session, opts);
         break;
       case "raw":
         this.spawnRaw(session, opts);
@@ -261,8 +263,9 @@ export class ProcessMux extends EventEmitter {
     return count;
   }
 
-  /** Clean up all sessions. */
+  /** Clean up all sessions — both tracked and stale server-side ones. */
   async cleanup(): Promise<void> {
+    // Kill tracked sessions
     for (const session of this.sessions.values()) {
       if (session.status === "running") {
         await this.kill(session.id);
@@ -270,6 +273,31 @@ export class ProcessMux extends EventEmitter {
     }
     this.sessions.clear();
     this.processes.clear();
+
+    // Kill stale server-side sessions (from previous ProcessMux instances)
+    if (this.backend === "psmux") {
+      try {
+        const result = spawnSync("psmux", ["list-sessions", "-F", "#{session_name}"], { encoding: "utf8", windowsHide: true });
+        if (result.status === 0 && result.stdout) {
+          for (const name of result.stdout.trim().split("\n").filter(Boolean)) {
+            if (name.startsWith("quorum-")) {
+              spawnSync("psmux", ["kill-session", "-t", name], { windowsHide: true });
+            }
+          }
+        }
+      } catch { /* psmux may not support list-sessions */ }
+    } else if (this.backend === "tmux") {
+      try {
+        const result = spawnSync("tmux", ["list-sessions", "-F", "#{session_name}"], { encoding: "utf8", windowsHide: true });
+        if (result.status === 0 && result.stdout) {
+          for (const name of result.stdout.trim().split("\n").filter(Boolean)) {
+            if (name.startsWith("quorum-")) {
+              spawnSync("tmux", ["kill-session", "-t", name], { windowsHide: true });
+            }
+          }
+        }
+      } catch { /* tmux may not be running */ }
+    }
   }
 
   // ── tmux backend ──────────────────────────────
@@ -301,12 +329,13 @@ export class ProcessMux extends EventEmitter {
 
   // ── psmux backend (Windows) ───────────────────
 
-  private spawnPsmux(session: MuxSession, opts: SpawnOptions): void {
-    // psmux uses tmux-compatible CLI: new -s <name> -d [-- <cmd> [args]]
+  private async spawnPsmux(session: MuxSession, opts: SpawnOptions): Promise<void> {
+    // Always spawn a bare shell first, then send the command via send-keys.
+    // Passing command+args via `psmux new ... -- cmd args` hits Windows
+    // CreateProcess command line length limit (~32K) with long prompts.
     const psmuxArgs = ["new", "-s", session.name, "-d"];
     if (opts.cwd) psmuxArgs.push("-c", opts.cwd);
-    // Empty command = use default shell (pwsh on Windows)
-    if (opts.command) psmuxArgs.push("--", opts.command, ...(opts.args ?? []));
+    // No "--" command — always start a bare shell
 
     const result = spawnSync("psmux", psmuxArgs, {
       env: { ...process.env, ...opts.env },
@@ -314,16 +343,31 @@ export class ProcessMux extends EventEmitter {
       windowsHide: true,
     });
 
-    if (result.status !== 0) {
+    const stderr = (result.stderr ?? "").trim();
+    if (result.status !== 0 || (stderr && /error|핸들|invalid|failed|잘못/i.test(stderr))) {
       session.status = "error";
-      if (process.env.QUORUM_DEBUG) {
-        const stderr = (result.stderr ?? "").trim();
-        console.error(`[mux] psmux new failed (status ${result.status}): ${stderr || "(no stderr)"}`);
-        console.error(`[mux] args: ${psmuxArgs.join(" ")}`);
+      return;
+    }
+
+    // If caller provided a command, write it to a temp script and invoke via send-keys.
+    // Wait for shell to initialize first (PowerShell on Windows takes ~2-3s to become ready).
+    if (opts.command) {
+      await new Promise(r => setTimeout(r, 3000));
+      const isWin = platform() === "win32";
+      const args = (opts.args ?? []).map(a => {
+        // Shell-escape: wrap in quotes, escape internal quotes
+        if (isWin) return a.includes(" ") || a.includes('"') ? `"${a.replace(/"/g, '""')}"` : a;
+        return a.includes(" ") || a.includes("'") || a.includes('"') ? `'${a.replace(/'/g, "'\\''")}'` : a;
+      });
+      const cmdLine = `${opts.command} ${args.join(" ")}`;
+      const scriptPath = join(tmpdir(), `quorum-cmd-${session.name}${isWin ? ".cmd" : ".sh"}`);
+      if (isWin) {
+        writeFileSync(scriptPath, `@${cmdLine}\r\n`, "utf8");
+      } else {
+        writeFileSync(scriptPath, `#!/bin/sh\n${cmdLine}\n`, { mode: 0o755 });
       }
-    } else {
-      // Widen terminal to prevent ndjson line wrapping (stream-json lines can be very long)
-      spawnSync("psmux", ["resize-pane", "-t", session.name, "-x", "10000"], {
+      const invoke = isWin ? `& "${scriptPath.replace(/\//g, "\\")}"` : `"${scriptPath}"`;
+      spawnSync("psmux", ["send-keys", "-t", session.name, invoke, "Enter"], {
         encoding: "utf8", windowsHide: true,
       });
     }

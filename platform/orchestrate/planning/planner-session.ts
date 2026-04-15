@@ -77,7 +77,18 @@ export async function runPlannerSession(opts: PlannerSessionOptions): Promise<Pl
 
   try {
     if (useMux) {
-      if (provider === "claude") cliArgs.push("--dangerously-skip-permissions");
+      if (provider === "claude") {
+        cliArgs.push("--dangerously-skip-permissions", "--output-format", "stream-json");
+        // Mux path needs -p (non-interactive) for pollMuxCompletion to detect completion.
+        // buildCLIArgs in non-auto mode uses positional arg — convert to -p.
+        if (!autoMode && !cliArgs.includes("-p")) {
+          const positionalIdx = cliArgs.findIndex((a, i) => !a.startsWith("-") && (i === 0 || !cliArgs[i - 1]!.startsWith("--")));
+          if (positionalIdx >= 0) {
+            const prompt = cliArgs.splice(positionalIdx, 1)[0]!;
+            cliArgs.unshift("-p", prompt);
+          }
+        }
+      }
       await executeMux(repoRoot, provider, cliArgs, trackName, autoMode, plannerTimeout);
     } else {
       await runProviderCLI({ provider, args: cliArgs, cwd: repoRoot, stdio: "inherit", timeout: plannerTimeout });
@@ -181,8 +192,22 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
   if (opts.useMux !== false) {
     try {
       const muxMod = await import("../../bus/mux.js");
-      mux = new muxMod.ProcessMux();
-      muxBackend = mux.getBackend();
+      const candidate = new muxMod.ProcessMux();
+      const backend = candidate.getBackend();
+      if (backend !== "raw") {
+        try { await candidate.cleanup(); } catch { /* stale session cleanup best-effort */ }
+        // Verify psmux is healthy by listing sessions
+        try {
+          candidate.list();
+          mux = candidate;
+          muxBackend = backend;
+        } catch {
+          console.log("  \x1b[33m⚠\x1b[0m psmux unhealthy, using direct mode");
+        }
+      } else {
+        mux = candidate;
+        muxBackend = backend;
+      }
     } catch { /* mux unavailable */ }
   }
 
@@ -197,23 +222,27 @@ export async function runParallelPlannerSession(opts: ParallelPlannerOptions): P
     const sessionName = `quorum-${agent.name}-${Date.now()}`;
 
     try {
+      let usedMux = false;
       if (mux && muxBackend !== "raw") {
-        // mux path: stream-json for daemon ndjson capture
-        const muxArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot, true);
-        const session = await mux.spawn({
-          command: provider, args: muxArgs, cwd: repoRoot, name: sessionName,
-        });
-        if (session) {
-          saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
-          await pollMuxCompletion(mux, session.id, timeout);
-          removeAgentState(repoRoot, session.id);
-          await cleanupMuxSession(mux, session.id, "");
-        } else {
-          const fallbackArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot);
-          await runProviderCLI({ provider, args: fallbackArgs, cwd: repoRoot, stdio: "inherit", timeout });
+        try {
+          const muxArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot, true);
+          const session = await mux.spawn({
+            command: provider, args: muxArgs, cwd: repoRoot, name: sessionName,
+          });
+          if (session && session.status === "running") {
+            saveAgentState(repoRoot, session.id, sessionName, muxBackend, agent.name, trackName);
+            await pollMuxCompletion(mux, session.id, timeout);
+            removeAgentState(repoRoot, session.id);
+            await cleanupMuxSession(mux, session.id, "");
+            usedMux = true;
+          } else {
+            console.log(`  \x1b[33m⚠\x1b[0m mux session failed to start, falling back to direct mode`);
+          }
+        } catch (muxErr) {
+          console.log(`  \x1b[33m⚠\x1b[0m mux error (${(muxErr as Error).message}), falling back to direct mode`);
         }
-      } else {
-        // No mux: normal output (no stream-json)
+      }
+      if (!usedMux) {
         const directArgs = buildPlannerCLIArgs(provider, agent.prompt, systemPrompt, repoRoot);
         await runProviderCLI({ provider, args: directArgs, cwd: repoRoot, stdio: "inherit", timeout });
       }
@@ -305,33 +334,27 @@ function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: str
   const args: string[] = [];
   const tempFiles: string[] = [];
 
-  // Write large system prompts to file to avoid CLI arg length limits
-  let systemArg = systemPrompt;
-  if (systemPrompt.length > 16_000) {
-    const tmpDir = resolve(repoRoot, ".claude", "tmp");
-    mkdirSync(tmpDir, { recursive: true });
-    const tmpPath = resolve(tmpDir, `planner-system-${Date.now()}.md`);
-    writeFileSync(tmpPath, systemPrompt, "utf8");
-    tempFiles.push(tmpPath);
-    systemArg = `See system prompt in file: ${tmpPath}`;
-  }
+  // Always write prompts to files — avoids cmd.exe 8191-char limit in psmux .cmd scripts
+  const tmpDir = resolve(repoRoot, ".claude", "tmp");
+  mkdirSync(tmpDir, { recursive: true });
+  const ts = Date.now();
+  const sysPath = resolve(tmpDir, `planner-system-${ts}.md`);
+  const promptPath = resolve(tmpDir, `planner-prompt-${ts}.md`);
+  writeFileSync(sysPath, systemPrompt, "utf8");
+  writeFileSync(promptPath, initialPrompt, "utf8");
+  tempFiles.push(sysPath, promptPath);
 
   if (provider === "claude") {
     if (autoMode) {
-      // For large prompts, combine into -p so Claude reads both
-      if (tempFiles.length > 0) {
-        args.push("-p", `Read the system instructions from ${tempFiles[0]} first, then:\n\n${initialPrompt}`, "--dangerously-skip-permissions");
-      } else {
-        args.push("-p", initialPrompt, "--append-system-prompt", systemArg, "--dangerously-skip-permissions");
-      }
+      args.push("-p", `Read and follow the instructions in: ${promptPath}\nAlso read system instructions in: ${sysPath}`, "--dangerously-skip-permissions");
     } else {
-      args.push("--append-system-prompt", systemArg, initialPrompt);
+      args.push("--append-system-prompt", `Read and follow the system instructions in: ${sysPath}`, `Read and follow the instructions in: ${promptPath}`);
     }
   } else if (provider === "codex") {
-    args.push("--instructions", systemArg);
+    args.push("--instructions", `Read instructions from: ${sysPath}`);
     if (autoMode) args.push("--full-auto");
   } else {
-    args.push("--system-prompt", systemArg);
+    args.push("--system-prompt", `Read instructions from: ${sysPath}`);
   }
   return { args, tempFiles };
 }
@@ -344,17 +367,16 @@ function buildCLIArgs(provider: string, systemPrompt: string, initialPrompt: str
  */
 function buildPlannerCLIArgs(provider: string, userPrompt: string, sysPrompt: string, repoRoot: string, streamJson = false): string[] {
   if (provider === "claude") {
-    let systemArg = sysPrompt;
-    if (sysPrompt.length > 16_000) {
-      const tmpDir = resolve(repoRoot, ".claude", "tmp");
-      mkdirSync(tmpDir, { recursive: true });
-      const tmpPath = resolve(tmpDir, `planner-system-${Date.now()}.md`);
-      writeFileSync(tmpPath, sysPrompt, "utf8");
-      systemArg = `See system prompt in file: ${tmpPath}`;
-    }
+    const tmpDir = resolve(repoRoot, ".claude", "tmp");
+    mkdirSync(tmpDir, { recursive: true });
+    const ts = Date.now();
+    const sysPath = resolve(tmpDir, `planner-system-${ts}.md`);
+    const promptPath = resolve(tmpDir, `planner-prompt-${ts}.md`);
+    writeFileSync(sysPath, sysPrompt, "utf8");
+    writeFileSync(promptPath, userPrompt, "utf8");
     const args = [
-      "-p", userPrompt,
-      "--append-system-prompt", systemArg,
+      "-p", `Read and follow the instructions in: ${promptPath}`,
+      "--append-system-prompt", `Read and follow the system instructions in: ${sysPath}`,
       "--dangerously-skip-permissions",
     ];
     if (streamJson) args.push("--output-format", "stream-json");
@@ -396,7 +418,9 @@ async function executeMux(repoRoot: string, provider: string, cliArgs: string[],
 
   const { session, stateFile } = handle;
 
-  if (autoMode) {
+  if (autoMode || !process.stdin.isTTY) {
+    // Auto mode or non-interactive (piped) — poll for completion.
+    // attach requires an interactive terminal.
     await pollMuxCompletion(mux, session.id);
   } else {
     mux.attach(session.id);

@@ -5,7 +5,7 @@
  * No mechanical gates, no fixer logic — pure LLM review.
  */
 
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 import { prepareProviderSpawn } from "../core/provider-binary.js";
 
@@ -44,7 +44,8 @@ function parseAuditVerdict(output: string): { passed: boolean; findings: string[
     // Check if it's a wrapper: {type: "message", content: "...{passed...}"}
     try {
       const obj = JSON.parse(trimmed);
-      const text = obj.content ?? obj.text ?? obj.result ?? obj.message;
+      const text = obj.content ?? obj.text ?? obj.result ?? obj.message
+        ?? (obj.item as Record<string, unknown>)?.text;
       if (typeof text === "string") {
         const inner = parseAuditVerdict(text);
         if (inner) return inner;
@@ -111,59 +112,43 @@ export async function runWaveAuditLLM(
     return parts.join("\n");
   }).join("\n");
 
-  // Include git diff in the prompt so the auditor doesn't need to read files (avoids timeout)
-  let diffSection = "";
-  try {
-    // Try HEAD~1 first; fallback to --cached or ls-files for repos with no commits
-    let diff = "";
-    try {
-      diff = execSync("git diff HEAD~1", {
-        cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"],
-        windowsHide: true, maxBuffer: 10 * 1024 * 1024,
-      });
-    } catch {
-      // No prior commit — try staged diff or list new files
-      try {
-        diff = execSync("git diff --cached", {
-          cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"],
-          windowsHide: true, maxBuffer: 10 * 1024 * 1024,
-        });
-      } catch { /* no git at all */ }
-    }
-    diff = diff.slice(0, 32000); // Cap at 32KB
-    if (diff.trim()) diffSection = `\n## Code Changes (git diff):\n\`\`\`diff\n${diff}\n\`\`\`\n`;
-  } catch { /* fallback: auditor reads files */ }
-
   const prompt = [
     "# Wave Audit — Review Implementation Changes",
     "",
     `## Items completed in this wave (with scope and done criteria):`,
     itemList,
     "",
-    `## Files changed:`,
+    `## Scoped files to review:`,
     fileList,
-    diffSection,
+    "",
     "## Instructions:",
-    "Review the code changes shown above. Do NOT read files or run commands — all information is provided.",
-    "Build verification is already handled by the orchestrator. Your role is code quality review.",
+    "1. Read each scoped file listed above.",
+    "2. Check: types correct? Obvious bugs or logic errors?",
+    "3. Check: error handling appropriate? Edge cases considered?",
+    "4. Substantiveness check — NO stubs (TODO, FIXME, placeholder, empty functions, mock data)",
     "",
-    "IMPORTANT: Only judge each item against ITS OWN done criteria and scope.",
-    "Do NOT fail an item for work that belongs to a DIFFERENT work-breakdown item.",
+    "Only judge each item against ITS OWN done criteria and scope.",
+    "Build verification (tsc, vitest) is already handled — focus on code quality.",
     "",
-    "1. Check: are types correct? Are there obvious bugs or logic errors?",
-    "2. Check: is error handling appropriate? Are edge cases considered?",
-    "3. **Substantiveness check** — verify NO stubs (TODO, FIXME, placeholder, empty functions, mock data)",
-    "4. Output a JSON verdict at the END of your response:",
-    '```json',
-    '{"passed": true|false, "findings": ["issue 1", "issue 2"]}',
-    '```',
+    "5. Submit verdict via `audit_submit` tool:",
+    '   - passed: `audit_submit({ verdict: "approved", findings: [] })`',
+    '   - failed: `audit_submit({ verdict: "changes_requested", findings: ["issue 1", "issue 2"] })`',
     "",
     "FAIL if: type errors, obvious bugs, regressions, OR stub/placeholder code.",
   ].join("\n");
 
   const spawn = await prepareProviderSpawn(provider, prompt, {
-    systemPrompt: "You are a code auditor. Review code changes and output a JSON verdict.",
+    systemPrompt: "You are a code auditor. Review files, then submit verdict via audit_submit tool. Do NOT ask for confirmation.",
   });
+
+  // Clear previous verdict KV before spawning auditor
+  try {
+    const { EventStore } = await import("../../bus/store.js");
+    const { resolve: r } = await import("node:path");
+    const store = new EventStore({ dbPath: r(repoRoot, ".claude", "quorum-events.db") });
+    store.setKV("audit.verdict:latest", null);
+    store.close();
+  } catch { /* best-effort */ }
 
   // On Windows, prepareProviderSpawn wraps in cmd.exe /c <binary>.
   // spawnSync timeout only kills cmd.exe, not child processes (codex/claude hang).
@@ -211,6 +196,23 @@ export async function runWaveAuditLLM(
     console.error(`  [audit-debug] ${provider} exit=${result.status} signal=${result.signal} stderr=${stderrSnippet}`);
   }
 
+  // Primary: read verdict from EventStore (auditor submitted via audit_submit MCP tool)
+  try {
+    const { resolve: r } = await import("node:path");
+    const { pathToFileURL } = await import("node:url");
+    const bridgePath = r(repoRoot, ".claude", "quorum", "..", "..", "..", "platform", "core", "bridge.mjs");
+    // Use EventStore directly — bridge init may clash with running process
+    const { EventStore } = await import("../../bus/store.js");
+    const dbPath = r(repoRoot, ".claude", "quorum-events.db");
+    const store = new EventStore({ dbPath });
+    const verdictKV = store.getKV("audit.verdict:latest") as { passed: boolean; findings: string[] } | null;
+    store.close();
+    if (verdictKV && typeof verdictKV.passed === "boolean") {
+      return { passed: verdictKV.passed, findings: verdictKV.findings ?? [] };
+    }
+  } catch { /* EventStore unavailable — fall back to stdout parsing */ }
+
+  // Fallback: parse verdict from stdout (backward compat)
   const output = (result.stdout ?? "") as string;
 
   const parsed = parseAuditVerdict(output);
@@ -225,7 +227,6 @@ export async function runWaveAuditLLM(
 
   if (hasPassSignal && !hasFailSignal) return { passed: true, findings: [] };
   if (hasFailSignal) {
-    // Try to extract bullet points as findings
     const bullets = output.match(/^[-*]\s+.+$/gm) ?? [];
     return { passed: false, findings: bullets.length > 0 ? bullets.map(b => b.replace(/^[-*]\s+/, "")) : ["Audit returned 'passed: false' but findings could not be extracted"] };
   }

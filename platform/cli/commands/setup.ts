@@ -313,21 +313,43 @@ export async function run(args: string[]): Promise<void> {
       const trackName = pipelineAgenda
         .toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 40);
 
-      // P1. Parliament — deliberate on agenda → CPS (--mux for daemon visibility)
-      console.log(`  [${elapsed()}] \u25B6 PARLIAMENT`);
-      const parliament = await import("./parliament.js");
-      await parliament.run(["--mux", pipelineAgenda]);
-      console.log(`  [${elapsed()}] \u2713 PARLIAMENT — done\n`);
+      // P1. Parliament — skip if CPS already exists (converged previously)
+      const { EventStore: SetupEventStore } = await import("../../bus/store.js");
+      const setupStore = new SetupEventStore({ dbPath: resolve(repoRoot, ".claude", "quorum-events.db") });
+      const existingCps = setupStore.getKV("parliament.cps.latest") as Record<string, unknown> | null;
+      setupStore.close();
 
-      // P2. Plan — design WBs via orchestrate plan
-      console.log(`  [${elapsed()}] \u25B6 DESIGN (orchestrate plan ${trackName})`);
+      if (existingCps) {
+        console.log(`  [${elapsed()}] \u2713 PARLIAMENT — CPS exists (skipped)\n`);
+      } else {
+        console.log(`  [${elapsed()}] \u25B6 PARLIAMENT`);
+        const parliament = await import("./parliament.js");
+        await parliament.run(["--mux", "--no-plan", pipelineAgenda]);
+        console.log(`  [${elapsed()}] \u2713 PARLIAMENT — done\n`);
+      }
+
+      // P2. Plan — skip if WBs already exist for this track
       const orchestrate = await import("./orchestrate.js");
-      await orchestrate.run(["plan", trackName, "--provider", provider]);
-      console.log(`  [${elapsed()}] \u2713 DESIGN — done\n`);
+      const wbPath = resolve(repoRoot, "docs", "plan", trackName, "work-breakdown.md");
+      if (existsSync(wbPath)) {
+        console.log(`  [${elapsed()}] \u2713 DESIGN — WBs exist (skipped)\n`);
+      } else {
+        console.log(`  [${elapsed()}] \u25B6 DESIGN (orchestrate plan ${trackName})`);
+        await orchestrate.run(["plan", trackName, "--provider", provider, "--mux"]);
+        console.log(`  [${elapsed()}] \u2713 DESIGN — done\n`);
+      }
 
-      // P3. Run — wave execution + audit (same engine as 'orchestrate run')
+      // Mark design cycle boundary — stale verdicts from before this point are irrelevant
+      {
+        const { EventStore: CycleStore } = await import("../../bus/store.js");
+        const cs = new CycleStore({ dbPath: resolve(repoRoot, ".claude", "quorum-events.db") });
+        cs.setKV("pipeline.design.completedAt", Date.now());
+        cs.close();
+      }
+
+      // P3. Run — wave execution + audit (--mux for daemon visibility)
       console.log(`  [${elapsed()}] \u25B6 IMPLEMENT (orchestrate run ${trackName})`);
-      await orchestrate.run(["run", trackName, "--provider", provider]);
+      await orchestrate.run(["run", trackName, "--provider", provider, "--mux"]);
       console.log(`  [${elapsed()}] \u2713 IMPLEMENT — done\n`);
 
       console.log(`${"─".repeat(60)}`);

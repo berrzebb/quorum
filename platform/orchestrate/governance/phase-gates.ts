@@ -5,10 +5,31 @@
  * No execution logic, no agent spawning.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { WorkItem } from "../planning/types.js";
 import type { PromotionGate, PromotionGateResult } from "../../bus/promotion-gate.js";
 import { isAllowedVerifier, getChangedFiles } from "./scope-gates.js";
+
+/** Load .env from project root, merging with process.env (existing vars take precedence). */
+function loadProjectEnv(repoRoot: string): NodeJS.ProcessEnv {
+  const envFile = resolve(repoRoot, ".env");
+  if (!existsSync(envFile)) return { ...process.env };
+  const env: Record<string, string | undefined> = { ...process.env };
+  try {
+    for (const line of readFileSync(envFile, "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const eq = t.indexOf("=");
+      if (eq < 0) continue;
+      const key = t.slice(0, eq).trim();
+      const val = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      if (!(key in env) || env[key] === undefined) env[key] = val;
+    }
+  } catch { /* best-effort */ }
+  return env;
+}
 
 /** Get files changed since the phase started (all WIP commits in this phase). */
 function getChangedFilesSincePhaseStart(repoRoot: string): string[] {
@@ -53,6 +74,7 @@ export function verifyPhaseCompletion(
   }
 
   // 2. Re-run verify commands (shared security filter from scope-gates)
+  const verifyEnv = loadProjectEnv(repoRoot);
   for (const item of phaseItems) {
     if (!item.verify || !completedIds.has(item.id)) continue;
     const trimmed = item.verify.trim();
@@ -60,11 +82,10 @@ export function verifyPhaseCompletion(
       failures.push(`${item.id} verify blocked (not in allowlist): ${item.verify}`);
       continue;
     }
-    const parts = trimmed.split(/\s+/);
     try {
-      execFileSync(parts[0], parts.slice(1), {
+      execSync(trimmed, {
         cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true,
-        shell: process.platform === "win32",
+        env: verifyEnv,
       });
     } catch (err) {
       const stderr = (err as { stderr?: Buffer | string })?.stderr;

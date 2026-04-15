@@ -3,7 +3,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { findTracks, trackRef } from "./shared.js";
-import { runPlannerSession, slugify } from "../../../orchestrate/planning/planner-session.js";
+import { runPlannerSession, runParallelPlannerSession, slugify } from "../../../orchestrate/planning/planner-session.js";
 
 // ── Re-exports from orchestrate/planning/ ────
 export { autoGenerateWBs, autoFixDesignDiagrams } from "../../../orchestrate/planning/auto-planner.js";
@@ -35,7 +35,11 @@ export async function interactivePlanner(repoRoot: string, args: string[]): Prom
 
   console.log(`\n\x1b[36mquorum orchestrate plan\x1b[0m\n`);
 
-  const result = await runPlannerSession({ repoRoot, trackName, provider, useMux, useAuto });
+  // Pipeline (mux) mode → parallel planner (3 sub-agents: prd, wb, support)
+  // Interactive mode → single planner session
+  const result = useMux
+    ? await runParallelPlannerSession({ repoRoot, trackName, provider, useMux: true })
+    : await runPlannerSession({ repoRoot, trackName, provider, useMux, useAuto });
 
   const planDir = resolve(repoRoot, "docs", "plan");
   const slug = result.trackSlug;

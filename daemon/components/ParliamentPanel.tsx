@@ -40,11 +40,17 @@ export function ParliamentPanel({ parliament }: ParliamentPanelProps) {
               {liveSessions.map((s) => {
                 const age = ageSeconds(s.startedAt);
                 const roleColor = s.role === "advocate" ? "green" : s.role === "devil" ? "red" : "blue";
+                const sizeKB = s.outputSize ? `${(s.outputSize / 1024).toFixed(1)}KB` : "";
                 return (
-                  <Text key={s.id}>
-                    <Text color={roleColor}>{padRight(s.role, 10)}</Text>
-                    <Text dimColor>{s.backend} {age}s</Text>
-                  </Text>
+                  <Box key={s.id} flexDirection="column">
+                    <Text>
+                      <Text color={roleColor}>{padRight(s.role, 10)}</Text>
+                      <Text dimColor>{age}s {sizeKB}</Text>
+                    </Text>
+                    {s.outputPreview && (
+                      <Text dimColor wrap="truncate">  {s.outputPreview}</Text>
+                    )}
+                  </Box>
                 );
               })}
             </Box>

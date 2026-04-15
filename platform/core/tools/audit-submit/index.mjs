@@ -11,10 +11,37 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // ═══ Tool: audit_submit ═══════════════════════════════════════════════
 
 /**
- * Submit evidence for audit — stores in SQLite EventStore, evaluates trigger, runs audit if needed.
+ * Submit evidence or audit verdict to SQLite EventStore.
+ *
+ * Two modes:
+ * 1. Evidence mode (default): stores evidence, evaluates trigger, runs audit if needed.
+ *    Required: evidence (string)
+ * 2. Verdict mode: stores audit verdict for wave runner to consume.
+ *    Required: verdict ("approved" | "changes_requested"), findings (string[])
  */
 export async function toolAuditSubmit(params) {
-  const { evidence, changed_files, source = "claude-code" } = params;
+  const { evidence, changed_files, source = "claude-code", verdict, findings } = params;
+
+  // Verdict mode — auditor submits review result
+  if (verdict) {
+    const repoRoot = process.cwd();
+    const bridgePath = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "bridge.mjs");
+    let bridge;
+    try {
+      bridge = await import(pathToFileURL(bridgePath).href);
+      await bridge.init(repoRoot);
+    } catch (err) {
+      return { error: `Bridge init failed: ${err.message}` };
+    }
+    const passed = verdict === "approved";
+    const findingsList = Array.isArray(findings) ? findings : [];
+    bridge.event.emitEvent("audit.verdict", source, { verdict, findings: findingsList });
+    bridge.query.setState("audit.verdict:latest", { passed, verdict, findings: findingsList, timestamp: Date.now() });
+    try { bridge.close(); } catch { /* ignore */ }
+    return { text: `Verdict stored: ${verdict} (${findingsList.length} finding(s))` };
+  }
+
+  // Evidence mode (original)
   if (!evidence) return { error: "evidence is required (markdown text with ### Claim, ### Changed Files, etc.)" };
 
   const repoRoot = process.cwd();

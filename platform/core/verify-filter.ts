@@ -54,6 +54,7 @@ export const ALLOWED_VERIFY_PREFIXES = [
   "npm ", "npx ", "node ", "tsc ", "eslint ", "vitest ",
   "go ", "cargo ", "python ", "pytest ", "pip ",
   "java ", "javac ", "mvn ", "gradle ",
+  "docker ", "docker-compose ",
   "cat ", "ls ", "test ",
 ];
 

@@ -442,15 +442,16 @@ const TOOLS = [
   },
   {
     name: "audit_submit",
-    description: "Submit evidence for audit review. Stores evidence in SQLite, evaluates trigger, and runs audit if threshold is met.",
+    description: "Submit evidence or audit verdict. Evidence mode: stores evidence, evaluates trigger. Verdict mode: stores audit result (passed/failed + findings) for the pipeline to consume.",
     inputSchema: {
       type: "object",
       properties: {
-        evidence: { type: "string", description: "Full evidence text (markdown with ### Claim, ### Changed Files, ### Test Command, ### Test Result sections)" },
+        evidence: { type: "string", description: "Evidence text (markdown). Required for evidence mode." },
         changed_files: { type: "array", items: { type: "string" }, description: "List of changed file paths" },
         source: { type: "string", description: "Provider name (default: claude-code)" },
+        verdict: { type: "string", enum: ["approved", "changes_requested"], description: "Audit verdict. When provided, switches to verdict mode." },
+        findings: { type: "array", items: { type: "string" }, description: "List of findings (verdict mode)." },
       },
-      required: ["evidence"],
     },
     execute: (args) => toolAuditSubmit(args),
     async: true,

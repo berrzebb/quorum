@@ -1,6 +1,6 @@
 /** @module Compatibility shell — real implementation in orchestrate/execution/ and orchestrate/governance/ */
 
-import { existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execSync } from "node:child_process";
@@ -201,13 +201,12 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   console.log(`  Waves: ${waves.length} (Phase gates → topological depth)\n`);
   const checkpointDir = resolve(repoRoot, ".claude", "quorum");
   const checkpointStore = new FilesystemCheckpointStore(checkpointDir);
-  const resumeState = resumeMode ? checkpointStore.load(trackName) : null;
+  // Always load checkpoint — completed work should never be redone
+  const resumeState = checkpointStore.load(trackName);
   const skipUntilWave = resumeState?.lastCompletedWave ?? -1;
-  if (resumeMode) {
-    if (resumeState) {
-      console.log(`  \x1b[33m↻ Resuming from Wave ${skipUntilWave + 2}\x1b[0m (${resumeState.completedIds.length} completed, ${resumeState.failedIds.length} failed)`);
-      if (resumeState.failedIds.length > 0) console.log(`    Failed items to retry: ${resumeState.failedIds.join(", ")}`);
-    } else console.log("  \x1b[33mNo saved state — starting from Wave 1\x1b[0m");
+  if (resumeState && resumeState.completedIds.length > 0) {
+    console.log(`  \x1b[33m↻ Resuming from Wave ${skipUntilWave + 2}\x1b[0m (${resumeState.completedIds.length} completed, ${resumeState.failedIds.length} failed)`);
+    if (resumeState.failedIds.length > 0) console.log(`    Failed items to retry: ${resumeState.failedIds.join(", ")}`);
     console.log();
   }
   const toURL = (p: string) => pathToFileURL(p).href;
@@ -231,26 +230,39 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   const parentChildStatus = new Map<string, { total: number; completed: Set<string> }>();
   if (hasHierarchy) for (const p of parentItems) parentChildStatus.set(p.id, { total: workItems.filter(c => c.parentId === p.id).length, completed: new Set() });
   let currentPhaseId: string | undefined;
+  const skippedWaves = new Set<number>();
+
+  // Ensure clean working tree before starting — previous run may have crashed without cleanup
+  cleanWorkingTree(repoRoot);
+
+  // Standard project setup: create .env from .env.example if missing
+  const envPath = resolve(repoRoot, ".env");
+  const envExamplePath = resolve(repoRoot, ".env.example");
+  if (!existsSync(envPath) && existsSync(envExamplePath)) {
+    copyFileSync(envExamplePath, envPath);
+    console.log("  \x1b[33m⚠ Created .env from .env.example\x1b[0m\n");
+  }
+
   for (let gi = 0; gi < waves.length; gi++) {
     const wave = waves[gi]!;
-    if (resumeMode && gi <= skipUntilWave) {
-      const allDone = wave.items.every(i => completedIds.has(i.id));
-      if (allDone) {
-        console.log(`  \x1b[2mWave ${wave.index + 1}/${waves.length} — skipped (completed)\x1b[0m`);
-        for (const item of wave.items) {
-          if (hasHierarchy && item.parentId) {
-            const ps = parentChildStatus.get(item.parentId);
-            if (ps) ps.completed.add(item.id);
-          }
+    // Skip completed items — checkpoint always loaded, no --resume needed
+    const allDone = wave.items.every(i => completedIds.has(i.id));
+    if (allDone) {
+      console.log(`  \x1b[2mWave ${wave.index + 1}/${waves.length} — skipped (completed)\x1b[0m`);
+      for (const item of wave.items) {
+        if (hasHierarchy && item.parentId) {
+          const ps = parentChildStatus.get(item.parentId);
+          if (ps) ps.completed.add(item.id);
         }
-        currentPhaseId = wave.phaseId ?? currentPhaseId;
-        continue;
       }
-      const failedInWave = wave.items.filter(i => !completedIds.has(i.id));
-      if (failedInWave.length < wave.items.length) {
-        console.log(`  \x1b[33mWave ${wave.index + 1}/${waves.length} — partial retry (${failedInWave.length} failed)\x1b[0m`);
-        wave.items = failedInWave;
-      }
+      currentPhaseId = wave.phaseId ?? currentPhaseId;
+      skippedWaves.add(gi);
+      continue;
+    }
+    const pendingInWave = wave.items.filter(i => !completedIds.has(i.id));
+    if (pendingInWave.length < wave.items.length) {
+      console.log(`  \x1b[33mWave ${wave.index + 1}/${waves.length} — partial (${pendingInWave.length} pending, ${wave.items.length - pendingInWave.length} already done)\x1b[0m`);
+      wave.items = pendingInWave;
     }
     if (wave.phaseId && currentPhaseId && wave.phaseId !== currentPhaseId) {
       const prevPhaseItems = waves
@@ -298,10 +310,9 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
         const otherFailures = phaseResult.failures.filter(f => !f.includes("verify failed:"));
 
         if (verifyFailures.length > 0 && otherFailures.length === 0) {
-          // All failures are verify-related — try fixer before giving up
-          const failedFiles = prevPhaseItems
-            .filter(i => verifyFailures.some(f => f.startsWith(i.id)))
-            .flatMap(i => i.targetFiles);
+          // All failures are verify-related — don't constrain files so fixer diagnoses root cause
+          // (verify failures may need env config, new files, or changes outside targetFiles)
+          const failedFiles: string[] = [];
 
           let fixAttempt = 0;
           let retryResult = phaseResult;
@@ -328,6 +339,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
             console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
             checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
             await mux.cleanup();
+            cleanWorkingTree(repoRoot);
             if (bridge?.close) bridge.close();
             return;
           }
@@ -338,6 +350,7 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
           console.log(`\n  Cannot proceed to ${wave.phaseId}. Fix issues and --resume.\n`);
           checkpointStore.save({ trackName, completedIds: [...completedIds], failedIds: [], lastCompletedWave: gi - 1, updatedAt: "", totalItems: totalWBs, lastFitness: lastFitnessResult?.score, totalWaves: waves.length });
           await mux.cleanup();
+          cleanWorkingTree(repoRoot);
           if (bridge?.close) bridge.close();
           return;
         }
@@ -347,8 +360,8 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
     currentPhaseId = wave.phaseId ?? currentPhaseId;
 
     // ── Handoff gate: block if previous wave's handoff is incomplete (A-3) ──
-    // Skip for resumed waves (ledger is in-memory, no state from prior runs)
-    const prevWaveWasInThisRun = gi > 0 && !(resumeMode && gi - 1 <= skipUntilWave);
+    // Skip for skipped waves (ledger is in-memory, no state from prior runs)
+    const prevWaveWasInThisRun = gi > 0 && !skippedWaves.has(gi - 1);
     if (prevWaveWasInThisRun) {
       const prevContractId = `${trackName}/wave-${gi - 1}`;
       const handoffCheck = handoffGate.canResume(prevContractId);
@@ -526,10 +539,21 @@ export async function runImplementationLoop(repoRoot: string, args: string[]): P
   }
 
   await mux.cleanup();
+  cleanWorkingTree(repoRoot);
   if (bridge?.close) bridge.close();
 }
 
 // ── Helpers (presentation + contract protection) ──
+
+/** Discard uncommitted changes left by agents/fixer so next run starts clean. */
+function cleanWorkingTree(repoRoot: string): void {
+  try {
+    const status = execSync("git status --porcelain", { cwd: repoRoot, timeout: 10_000, encoding: "utf8", stdio: "pipe", windowsHide: true }).trim();
+    if (!status) return;
+    execSync("git checkout -- .", { cwd: repoRoot, timeout: 15_000, stdio: "pipe", windowsHide: true });
+    execSync("git clean -fd", { cwd: repoRoot, timeout: 15_000, stdio: "pipe", windowsHide: true });
+  } catch { /* best-effort cleanup */ }
+}
 
 function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
   if (!bridge?.claim?.claimFiles) return;
@@ -561,10 +585,10 @@ function claimContractFiles(repoRoot: string, bridge: Bridge | null): void {
 
 /** Pick a default auditor that differs from the provider for cross-model review. */
 function _defaultAuditor(provider: string): string {
-  // Prefer gemini (fast, stable parsing) → codex → claude.
+  // Prefer codex (reliable NDJSON wire format) → gemini → claude.
   // Same-provider audit is blocked — cross-model review is mandatory.
   // Only CLI-spawnable providers (ollama is HTTP-only, would fail in runWaveAuditLLM).
-  const candidates = ["gemini", "codex", "claude"];
+  const candidates = ["codex", "gemini", "claude"];
   for (const c of candidates) {
     if (c !== provider) return c;
   }

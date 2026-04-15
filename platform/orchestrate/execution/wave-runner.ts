@@ -141,10 +141,11 @@ const MAX_OUTPUT_BYTES = 2_000_000;
  */
 export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
   const {
-    repoRoot, wave, trackName, provider, auditor, maxConcurrency, maxRetries,
+    repoRoot, wave, trackName, provider, auditor, maxRetries,
     mux, bridge, completedIds, blueprintRules, rtmPath, manifests, snapshotRef,
     auditFn, onLog, onProgress,
   } = opts;
+  let maxConcurrency = opts.maxConcurrency;
 
   const log = onLog ?? (() => {});
 
@@ -162,6 +163,20 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
         blueprintBlocked: false,
       };
     }
+  }
+
+  // ── 0b. Detect shared files → serialize to prevent overwrites ──
+  const allTargets = wave.items.flatMap(i => i.targetFiles);
+  const waveTargetSet = new Set(allTargets);
+  const seen = new Set<string>();
+  let hasOverlap = false;
+  for (const f of allTargets) {
+    if (seen.has(f)) { hasOverlap = true; break; }
+    seen.add(f);
+  }
+  if (hasOverlap && maxConcurrency > 1) {
+    log(`  \x1b[33m⚠ Shared target files detected — serializing wave (concurrency 1)\x1b[0m`);
+    maxConcurrency = 1;
   }
 
   // ── 1. Build roster ─────────────────────────
@@ -255,12 +270,48 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
       if (!isAgentComplete(pollOutput)) continue;
 
-      log(`    \x1b[32m✓\x1b[0m ${s.item.id} done`);
-      completedIds.add(s.item.id);
-      localCompleted.add(s.item.id);
       active.splice(si, 1);
       removeAgentState(repoRoot, s.sessionId);
       try { await mux.kill(s.sessionId); } catch (err) { console.warn(`[wave-runner] mux.kill ${s.sessionId}: ${(err as Error).message}`); }
+
+      // Scope enforcement: revert/remove files outside wave's targetFiles
+      // Checks both modified tracked files AND newly created untracked files
+      if (waveTargetSet.size > 0) {
+        try {
+          const SCOPE_OK = new Set(["package.json", "package-lock.json", "tsconfig.json"]);
+          const isAllowed = (f: string) =>
+            waveTargetSet.has(f) || SCOPE_OK.has(f) ||
+            f.endsWith(".lock") || f.startsWith("docs/plan/") || f.startsWith(".claude/");
+
+          // 1. Revert out-of-scope modifications to tracked files
+          const diffRaw = execSync("git diff --name-only", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+          if (diffRaw) {
+            const outOfScope = diffRaw.split("\n").filter(f => f && !isAllowed(f));
+            if (outOfScope.length > 0) {
+              execSync(`git checkout -- ${outOfScope.map(f => `"${f}"`).join(" ")}`, {
+                cwd: repoRoot, timeout: 15_000, stdio: "pipe", windowsHide: true,
+              });
+              log(`    \x1b[33m⚠\x1b[0m ${s.item.id}: reverted ${outOfScope.length} out-of-scope modified file(s)`);
+            }
+          }
+
+          // 2. Remove out-of-scope new (untracked) files
+          const untrackedRaw = execSync("git ls-files --others --exclude-standard", { cwd: repoRoot, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).trim();
+          if (untrackedRaw) {
+            const newOutOfScope = untrackedRaw.split("\n").filter(f => f && !isAllowed(f));
+            if (newOutOfScope.length > 0) {
+              for (const f of newOutOfScope) {
+                try { execSync(`git clean -f -- "${f}"`, { cwd: repoRoot, timeout: 10_000, stdio: "pipe", windowsHide: true }); } catch { /* best-effort */ }
+              }
+              log(`    \x1b[33m⚠\x1b[0m ${s.item.id}: removed ${newOutOfScope.length} out-of-scope new file(s)`);
+            }
+          }
+        } catch (err) { log(`    \x1b[33m⚠\x1b[0m scope enforcement failed: ${(err as Error).message}`); }
+      }
+
+      log(`    \x1b[32m✓\x1b[0m ${s.item.id} done`);
+      completedIds.add(s.item.id);
+      localCompleted.add(s.item.id);
 
       if (bridge?.event?.emitEvent) {
         bridge.event.emitEvent("agent.complete", "generic", {
@@ -406,6 +457,23 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       await runFixer({ repoRoot, findings: fitnessFindings, files: waveFiles, provider, fitnessContext: fg, previousFindings: [] });
     }
 
+    // ── 4b. Lock file sync — if package.json was modified (in scope or by implementer), sync lock
+    {
+      let pkgChanged = waveFiles.some(f => f.endsWith("package.json"));
+      if (!pkgChanged) {
+        try {
+          const diff = execSync("git diff --name-only HEAD", { cwd: repoRoot, timeout: 10_000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+          pkgChanged = diff.split("\n").some(f => f.trim() === "package.json");
+        } catch { /* ignore */ }
+      }
+      if (pkgChanged) {
+        try {
+          execSync("npm install --package-lock-only", { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
+          log(`  \x1b[36m◈ package-lock.json synced\x1b[0m`);
+        } catch (err) { log(`  \x1b[33m⚠ lock sync failed: ${(err as Error).message}\x1b[0m`); }
+      }
+    }
+
     // ── 5. RTM + WIP Commit ──────────────────
     updateRTM(rtmPath, completedItems, "implemented");
     const committed = waveCommit(repoRoot, [...waveFiles, rtmPath], wave.index + 1, trackName);
@@ -461,8 +529,20 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
 
       if (fixResult.passed) {
         log(`  \x1b[32m✓ LLM audit passed\x1b[0m (${fixResult.attempts} round(s), ${auditSec}s)`);
-        // Confluence verification
+
+        // Run tests — if they fail, give fixer a chance to fix the regression
         testResult = runProjectTests(repoRoot);
+        if (testResult.ran && !testResult.passed) {
+          log(`  \x1b[33m⚠ Tests failed after audit\x1b[0m — running fixer`);
+          const testFindings = [`Test failure: ${testResult.summary}`];
+          await runFixer({ repoRoot, findings: testFindings, files: waveFiles, provider, fitnessContext: auditGates.fitnessResult, previousFindings: [] });
+          testResult = runProjectTests(repoRoot);
+          if (testResult.ran && !testResult.passed) {
+            log(`  \x1b[31m✗ Tests still failing after fix\x1b[0m`);
+          }
+        }
+
+        // Confluence verification
         const confluenceResult = runConfluenceCheck(true, testResult);
         if (!confluenceResult.passed && bridge?.store) {
           proposeConfluenceAmendments(bridge.store, confluenceResult.suggestedAmendments);
@@ -505,8 +585,21 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
       wavePassed = false;
     }
 
-    // ── 7. Project test gate (skip if already run in audit-pass branch)
+    // ── 7. Project test gate — test failure blocks wave
     testResult ??= runProjectTests(repoRoot);
+    if (testResult.ran && !testResult.passed) {
+      wavePassed = false;
+    }
+
+    // ── 8. Runtime smoke test — catch CJS/ESM, missing module, and startup errors
+    if (wavePassed) {
+      const smokeResult = runRuntimeSmokeTest(repoRoot);
+      if (smokeResult.failed) {
+        log(`\n  \x1b[31m✗ Runtime smoke test failed\x1b[0m`);
+        log(`    ${smokeResult.error}`);
+        wavePassed = false;
+      }
+    }
 
     return {
       passed: wavePassed,
@@ -529,6 +622,71 @@ export async function runWave(opts: WaveRunnerOptions): Promise<WaveResult> {
     auditGates,
     blueprintBlocked: false,
   };
+}
+
+// ── Runtime smoke test ─────────────────────
+
+/**
+ * Try to import the project's entry point to catch runtime errors
+ * (CJS/ESM interop, missing modules, syntax errors) that tests miss.
+ */
+function runRuntimeSmokeTest(repoRoot: string): { failed: boolean; error?: string } {
+  try {
+    const pkgPath = resolve(repoRoot, "package.json");
+    if (!existsSync(pkgPath)) return { failed: false };
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+
+    // Find entry point: main > exports["."] > src/index.ts > src/app.ts
+    let entry = pkg.main;
+    if (!entry && pkg.exports) {
+      const root = pkg.exports["."];
+      entry = typeof root === "string" ? root : root?.import ?? root?.default;
+    }
+    if (!entry) {
+      for (const candidate of ["src/index.ts", "src/app.ts", "src/main.ts"]) {
+        if (existsSync(resolve(repoRoot, candidate))) { entry = candidate; break; }
+      }
+    }
+    if (!entry) return { failed: false }; // No entry point found — skip
+
+    // Load .env for smoke test
+    const env: Record<string, string | undefined> = { ...process.env, SMOKE_TEST: "1" };
+    const dotenvPath = resolve(repoRoot, ".env");
+    if (existsSync(dotenvPath)) {
+      for (const line of readFileSync(dotenvPath, "utf8").split("\n")) {
+        const t = line.trim();
+        if (!t || t.startsWith("#")) continue;
+        const eq = t.indexOf("=");
+        if (eq < 0) continue;
+        const key = t.slice(0, eq).trim();
+        const val = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+        if (!(key in env) || env[key] === undefined) env[key] = val;
+      }
+    }
+
+    // Use tsx for .ts files, node for .js
+    const isTsEntry = entry.endsWith(".ts") || entry.endsWith(".tsx");
+    const cmd = isTsEntry
+      ? `npx tsx -e "await import('./${entry}')"`
+      : `node --input-type=module -e "await import('./${entry}')"`;
+
+    execSync(cmd, {
+      cwd: repoRoot,
+      timeout: 15_000,
+      stdio: "pipe",
+      windowsHide: true,
+      env,
+    });
+    return { failed: false };
+  } catch (err) {
+    const stderr = (err as { stderr?: Buffer })?.stderr?.toString() ?? "";
+    const stdout = (err as { stdout?: Buffer })?.stdout?.toString() ?? "";
+    const output = (stderr || stdout || (err as Error).message).slice(0, 500);
+    // Ignore infrastructure/runtime errors — only catch code-level import failures
+    const infraErrors = ["EADDRINUSE", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "listen", "SIGTERM", "timed out"];
+    if (infraErrors.some(e => output.includes(e))) return { failed: false };
+    return { failed: true, error: output };
+  }
 }
 
 // ── Helpers ─────────────────────────────────

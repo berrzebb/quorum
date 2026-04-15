@@ -15,9 +15,9 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EventStore } from "./store.js";
-import { AUDIT_VERDICT } from "./events.js";
+import { AUDIT_VERDICT, type ProviderKind } from "./events.js";
 import { getPendingAmendmentCount } from "./amendment.js";
-import { STAGE_ORDER, type ConformanceStage, generateConvergenceReport } from "./normal-form.js";
+import { STAGE_ORDER, type ConformanceStage, generateConvergenceReport, trackProviderConvergenceFromEvents } from "./normal-form.js";
 
 // ── Gate result ─────────────────────────────
 
@@ -55,6 +55,10 @@ export function checkAmendmentGate(store: EventStore): GateResult {
 
 /**
  * Block merge/commit when latest audit verdict is not "approved".
+ *
+ * Scoped to current design cycle: only verdicts AFTER the latest CPS generation
+ * are considered. A new CPS marks a new cycle — stale verdicts from previous
+ * pipeline runs are irrelevant.
  */
 export function checkVerdictGate(store: EventStore): GateResult {
   try {
@@ -63,7 +67,19 @@ export function checkVerdictGate(store: EventStore): GateResult {
     const verdicts = allVerdicts.filter(e => e.payload.mode !== "parliament");
     if (verdicts.length === 0) return { allowed: true }; // No audits yet
 
-    const latest = verdicts[0]!;
+    // Cycle boundary = latest of (CPS generation, design completion)
+    // Design completion is set by setup pipeline after WBs are generated —
+    // ensures stale verdicts from previous pipeline runs don't block new runs.
+    const cpsEvents = store.query({ eventType: "parliament.cps.generated", limit: 1, descending: true });
+    const cpsTs = cpsEvents.length > 0 ? cpsEvents[0]!.timestamp : 0;
+    const designTs = (store.getKV("pipeline.design.completedAt") as number) ?? 0;
+    const cycleStart = Math.max(cpsTs, designTs);
+
+    // Only consider verdicts from current cycle
+    const cycleVerdicts = verdicts.filter(e => e.timestamp > cycleStart);
+    if (cycleVerdicts.length === 0) return { allowed: true }; // No verdicts in current cycle
+
+    const latest = cycleVerdicts[0]!;
     const verdict = latest.payload.verdict as string;
 
     if (verdict !== AUDIT_VERDICT.APPROVED) {
@@ -195,15 +211,33 @@ export function checkAllGates(
   }
 
   // 5. Normal Form regression gate — block if any provider moved backward
+  // Scoped to current design cycle (same boundary as verdict gate)
   try {
-    const report = generateConvergenceReport(store);
-    for (const p of report.providers) {
-      if (p.regressed) {
-        return {
-          allowed: false,
-          reason: `Normal Form regression: provider "${p.provider}" regressed from ${p.regressionFrom ?? "?"} to ${p.currentStage}.`,
-          details: { provider: p.provider, from: p.regressionFrom, to: p.currentStage },
-        };
+    const cpsEvts = store.query({ eventType: "parliament.cps.generated", limit: 1, descending: true });
+    const cpsTs = cpsEvts.length > 0 ? cpsEvts[0]!.timestamp : 0;
+    const designTs = (store.getKV("pipeline.design.completedAt") as number) ?? 0;
+    const regressionCycleStart = Math.max(cpsTs, designTs);
+
+    const allVerdictEvents = store.query({ eventType: "audit.verdict" });
+    const cycleEvents = allVerdictEvents.filter(e => e.timestamp > regressionCycleStart);
+
+    // Only check regression within current cycle — stale data from previous runs is irrelevant
+    if (cycleEvents.length > 0) {
+      const byProvider = new Map<ProviderKind, typeof cycleEvents>();
+      for (const e of cycleEvents) {
+        const arr = byProvider.get(e.source) ?? [];
+        arr.push(e);
+        byProvider.set(e.source, arr);
+      }
+      for (const [prov, events] of byProvider) {
+        const conv = trackProviderConvergenceFromEvents(prov as ProviderKind, events);
+        if (conv.regressed) {
+          return {
+            allowed: false,
+            reason: `Normal Form regression: provider "${prov}" regressed from ${conv.regressionFrom ?? "?"} to ${conv.currentStage}.`,
+            details: { provider: prov, from: conv.regressionFrom, to: conv.currentStage },
+          };
+        }
       }
     }
   } catch (err) { console.warn(`[parliament-gate] convergence data unavailable: ${(err as Error).message}`); }

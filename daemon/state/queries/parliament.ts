@@ -2,7 +2,8 @@
  * Parliament queries — committee convergence, verdict, amendments, conformance, live sessions.
  */
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { openSync, readSync, closeSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EventStore } from "../../../platform/bus/store.js";
 import type { EventType } from "../../../platform/bus/events.js";
@@ -29,6 +30,10 @@ export interface ParliamentLiveSession {
   backend: string;
   startedAt: number;
   outputFile?: string;
+  /** Output file size in bytes (real-time progress indicator). */
+  outputSize?: number;
+  /** Last snippet of assistant text from the output (truncated). */
+  outputPreview?: string;
 }
 
 export interface ParliamentInfo {
@@ -144,14 +149,25 @@ export function readLiveParliamentSessions(cache: { ts: number; data: Parliament
       try {
         const data = JSON.parse(readFileSync(resolve(agentsDir, f), "utf8"));
         if ((data.type === "parliament" || data.type === "planner" || data.type === "orchestrate") && data.status === "running") {
-          sessions.push({
+          const session: ParliamentLiveSession = {
             id: data.id,
             name: data.name ?? data.id,
             role: data.role ?? "unknown",
             backend: data.backend ?? "raw",
             startedAt: data.startedAt ?? 0,
             ...(data.outputFile ? { outputFile: data.outputFile } : {}),
-          });
+          };
+
+          // Read output file for live progress
+          if (data.outputFile && existsSync(data.outputFile)) {
+            try {
+              const st = statSync(data.outputFile);
+              session.outputSize = st.size;
+              session.outputPreview = extractOutputPreview(data.outputFile, st.size);
+            } catch { /* file may be locked */ }
+          }
+
+          sessions.push(session);
         }
       } catch (err) { console.warn(`[parliament] corrupt agent file ${f}: ${(err as Error).message}`); }
     }
@@ -165,4 +181,44 @@ export function readLiveParliamentSessions(cache: { ts: number; data: Parliament
     cache.data = [];
     return [];
   }
+}
+
+/**
+ * Extract a short text preview from an NDJSON output file.
+ * Reads the last 4KB to find the most recent assistant text.
+ *
+ * Wire formats:
+ *   Claude: "text":"..." in content_block_delta events
+ *   Codex:  "text":"..." in item.completed agent_message events
+ */
+function extractOutputPreview(filePath: string, fileSize: number): string | undefined {
+  if (fileSize === 0) return undefined;
+
+  // Read last 4KB (enough for recent events, avoids reading entire file)
+  const chunkSize = Math.min(4096, fileSize);
+  const buf = Buffer.alloc(chunkSize);
+  let fd: number;
+  try {
+    fd = openSync(filePath, "r");
+    readSync(fd, buf, 0, chunkSize, Math.max(0, fileSize - chunkSize));
+    closeSync(fd);
+  } catch { return undefined; }
+
+  const tail = buf.toString("utf8");
+
+  // Find all "text":"..." values — last one is most recent
+  const textMatches = tail.match(/"text"\s*:\s*"([^"]{1,500})"/g);
+  if (!textMatches || textMatches.length === 0) return undefined;
+
+  // Extract the value from the last match
+  const last = textMatches[textMatches.length - 1]!;
+  const valMatch = last.match(/"text"\s*:\s*"(.+)"/);
+  if (!valMatch) return undefined;
+
+  // Unescape JSON string escapes and truncate
+  let text = valMatch[1]!;
+  try { text = JSON.parse(`"${text}"`); } catch { /* use raw */ }
+
+  // Trim to ~60 chars for panel display
+  return text.length > 60 ? text.slice(0, 57) + "..." : text;
 }

@@ -45,6 +45,8 @@ export interface MuxAuditorConfig {
   timeoutMs?: number;
   /** Keep mux session alive after audit (for debugging). */
   keepSession?: boolean;
+  /** Called with new text chunks during deliberation (for live streaming). */
+  onProgress?: (chunk: string) => void;
 }
 
 // ── Agent state persistence ─────────────────
@@ -192,6 +194,8 @@ export class MuxAuditor implements Auditor {
     let raw = "";
     let completed = false;
     const debug = !!process.env.QUORUM_DEBUG;
+    const { onProgress } = this.config;
+    let lastStreamedLen = 0;
 
     if (debug) console.error(`[mux-audit] ${role}: session ${session.name}, backend ${backend}, polling...`);
 
@@ -204,10 +208,18 @@ export class MuxAuditor implements Auditor {
         if (!capture) continue;
         pollOutput = capture.output;
       } else if (outputFile && existsSync(outputFile)) {
-        // Read output file (reliable, no terminal padding/truncation)
-        try { pollOutput = readFileSync(outputFile, "utf8"); } catch (err) { console.warn(`[mux-auditor] output file read failed: ${(err as Error).message}`); continue; }
+        try { pollOutput = readFileSync(outputFile, "utf8"); } catch (err) { continue; }
       } else {
         continue;
+      }
+
+      // Stream new text to caller for live visibility
+      if (onProgress && pollOutput.length > lastStreamedLen) {
+        const currentText = extractAssistantText(pollOutput) ?? "";
+        if (currentText.length > lastStreamedLen) {
+          onProgress(currentText.slice(lastStreamedLen));
+          lastStreamedLen = currentText.length;
+        }
       }
 
       if (debug) {
@@ -232,7 +244,7 @@ export class MuxAuditor implements Auditor {
       cleanupPromptFile(promptFile.replace(/\.txt$/, ".out"));
     }
     if (!keepSession) {
-      try { await mux.kill(session.id); } catch (err) { console.warn(`[mux-auditor] session kill failed: ${(err as Error).message}`); }
+      try { await mux.kill(session.id); } catch { /* session may already be dead */ }
     }
 
     const duration = Date.now() - start;
@@ -263,7 +275,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function cleanupPromptFile(path: string): void {
-  try { rmSync(path, { force: true }); } catch (err) { console.warn(`[mux-auditor] cleanup failed for ${path}: ${(err as Error).message}`); }
+  try { rmSync(path, { force: true }); } catch { /* temp file — OS will clean up */ }
 }
 
 function infraFailure(message: string, start: number): AuditResult {
@@ -340,28 +352,101 @@ export function parseAuditOutput(raw: string, duration: number): AuditResult {
  * Looks for {"type":"result","result":"..."} or assembles from content_block_delta.
  */
 export function extractAssistantText(raw: string): string | null {
-  // Terminal capture includes ANSI escape codes and control characters.
-  // Strip them before attempting JSON parsing.
+  // Strip ANSI escape codes and control characters before parsing.
   const stripped = raw
     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")   // ANSI escape sequences
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");  // control chars (keep \t \n \r)
-  // capture-pane pads each line to terminal width with spaces.
-  // Must trimEnd() BEFORE joining, otherwise JSON tokens break at wrap points:
-  //   {"type":"resu                    lt"} → invalid
+
+  // Path 1: Clean NDJSON (file-based output — one JSON per line).
+  // stream-json output from claude/codex/gemini is proper NDJSON.
+  const ndjsonResult = extractFromNdjsonLines(stripped);
+  if (ndjsonResult !== null) return ndjsonResult;
+
+  // Path 2: Terminal capture fallback (tmux capture-pane wraps/pads lines).
+  // Join all lines into one string, then re-split by {"type": lookahead.
+  return extractFromJoinedCapture(stripped);
+}
+
+/**
+ * Parse NDJSON line-by-line — fast path for file-based output.
+ *
+ * Wire formats (from cli-adapter.mjs):
+ *   Claude: {"type":"result","result":"..."} / {"type":"content_block_delta","delta":{"text":"..."}}
+ *   Codex:  {"type":"item.completed","item":{"type":"agent_message","text":"..."}} / {"type":"turn.completed"}
+ *   Gemini: {"type":"result","result":"..."} (same as Claude)
+ */
+function extractFromNdjsonLines(stripped: string): string | null {
+  const lines = stripped.split(/\r?\n/);
+  const objects: Array<Record<string, unknown>> = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.startsWith("{")) continue;
+    try {
+      objects.push(JSON.parse(trimmed));
+    } catch { /* skip malformed lines, try others */ }
+  }
+
+  if (objects.length === 0) return null;
+
+  // Claude/Gemini: "result" event with final text
+  for (const obj of objects) {
+    if (obj.type === "result" && typeof obj.result === "string" && (obj.result as string).length > 10) {
+      return obj.result as string;
+    }
+  }
+
+  // Codex: "item.completed" with agent_message — last one wins (accumulates)
+  let codexText = "";
+  for (const obj of objects) {
+    if (obj.type === "item.completed") {
+      const item = obj.item as Record<string, unknown> | undefined;
+      if (item?.type === "agent_message" && typeof item.text === "string") {
+        codexText = item.text as string;
+      }
+    }
+  }
+  if (codexText.length > 10) return codexText;
+
+  // Claude: assemble from content_block_delta text deltas
+  const parts: string[] = [];
+  for (const obj of objects) {
+    if (obj.type === "content_block_delta" && (obj.delta as Record<string, unknown>)?.text) {
+      parts.push((obj.delta as Record<string, unknown>).text as string);
+    }
+  }
+
+  return parts.length > 0 ? parts.join("") : null;
+}
+
+/** Fallback: join lines and split by regex — for terminal capture (padded/wrapped lines). */
+function extractFromJoinedCapture(stripped: string): string | null {
   const joined = stripped.split(/\r?\n/).map(l => l.trimEnd()).join("");
   const entries = joined.split(/(?=\{"type":)/);
 
-  // First try: find a "result" event with the final text
+  // Claude/Gemini: "result" event
   for (const entry of entries) {
     try {
       const obj = JSON.parse(entry);
       if (obj.type === "result" && typeof obj.result === "string" && obj.result.length > 10) {
         return obj.result;
       }
-    } catch (err) { console.warn(`[mux-auditor] NDJSON entry parse failed: ${(err as Error).message}`); }
+    } catch { /* expected — regex split produces fragments */ }
   }
 
-  // Fallback: assemble from content_block_delta text deltas
+  // Codex: "item.completed" with agent_message
+  let codexText = "";
+  for (const entry of entries) {
+    try {
+      const obj = JSON.parse(entry);
+      if (obj.type === "item.completed" && obj.item?.type === "agent_message" && typeof obj.item.text === "string") {
+        codexText = obj.item.text;
+      }
+    } catch { /* expected */ }
+  }
+  if (codexText.length > 10) return codexText;
+
+  // Claude: content_block_delta assembly
   const parts: string[] = [];
   for (const entry of entries) {
     try {
@@ -369,7 +454,7 @@ export function extractAssistantText(raw: string): string | null {
       if (obj.type === "content_block_delta" && obj.delta?.text) {
         parts.push(obj.delta.text);
       }
-    } catch (err) { console.warn(`[mux-auditor] content delta parse failed: ${(err as Error).message}`); }
+    } catch { /* expected */ }
   }
 
   return parts.length > 0 ? parts.join("") : null;
@@ -385,7 +470,7 @@ export function createMuxConsensusAuditors(
   roles: Record<string, string>,
   cwd: string,
   mux: ProcessMux,
-  options?: { pollIntervalMs?: number; timeoutMs?: number; keepSession?: boolean },
+  options?: { pollIntervalMs?: number; timeoutMs?: number; keepSession?: boolean; onProgress?: (role: string, chunk: string) => void },
 ): { advocate: Auditor; devil: Auditor; judge: Auditor } {
   const makeAuditor = (role: "advocate" | "devil" | "judge"): MuxAuditor => {
     const { provider, model } = parseSpec(roles[role] ?? "claude");
@@ -396,6 +481,7 @@ export function createMuxConsensusAuditors(
       mux,
       model,
       ...options,
+      onProgress: options?.onProgress ? (chunk: string) => options.onProgress!(role, chunk) : undefined,
     });
   };
 

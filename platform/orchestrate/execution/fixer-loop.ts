@@ -35,7 +35,7 @@ export interface FixerResult {
 }
 
 /** Default max fix rounds — can be overridden via config or CLI. */
-export const DEFAULT_MAX_FIX_ROUNDS = 3;
+export const DEFAULT_MAX_FIX_ROUNDS = 5;
 
 /** Options for the full fix-retry cycle. */
 export interface FixCycleOptions {
@@ -78,7 +78,10 @@ export interface FixCycleResult {
 export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
   const { repoRoot, findings, files, provider, fitnessContext, previousFindings } = opts;
 
-  const fileList = [...new Set(files)].slice(0, 15).map(f => `- ${f}`).join("\n");
+  const uniqueFiles = [...new Set(files)].slice(0, 15);
+  const fileList = uniqueFiles.length > 0
+    ? uniqueFiles.map(f => `- ${f}`).join("\n")
+    : "(none specified — diagnose from the error output and explore the project)";
   const findingList = findings.map(f => `- ${f}`).join("\n");
 
   let fitnessSection = "";
@@ -136,16 +139,18 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
     contextSection,
     "",
     "## Instructions:",
-    "1. Read each affected file",
-    "2. Fix the specific issues listed in the findings",
-    "3. Do NOT rewrite or restructure — only fix the identified issues",
-    "4. Preserve fixes from previous rounds — do NOT regress",
-    "5. Run compilation/type checks and tests to verify",
-    "6. Do NOT commit — only edit files. The caller handles git commits.",
-    "7. Do NOT ask questions or wait for confirmation — fix everything and exit.",
+    "1. Read the affected files and diagnose the root cause of each finding",
+    "2. Fix the issues — you may read or create files beyond the listed ones if needed",
+    "3. Preserve fixes from previous rounds — do NOT regress",
+    "4. Run compilation/type checks and tests to verify",
+    "5. Do NOT commit — only edit files. The caller handles git commits.",
+    "6. Do NOT ask questions or wait for confirmation — fix everything and exit.",
+    "7. NEVER edit lock files (package-lock.json, yarn.lock, etc.) — they are auto-generated.",
   ].join("\n");
 
-  const spawn = await prepareProviderSpawn(provider, prompt);
+  const spawn = await prepareProviderSpawn(provider, prompt, {
+    systemPrompt: "You are an autonomous fixer agent in an unattended pipeline. NEVER ask for confirmation. NEVER commit files. Only edit files to fix the listed findings, then exit immediately.",
+  });
 
   const result = spawnSync(spawn.bin, spawn.args, {
     cwd: repoRoot,
@@ -158,6 +163,9 @@ export async function runFixer(opts: FixerOptions): Promise<FixerResult> {
 
   // Fixer modifies source files → invalidate tsc cache so next fitness gate re-checks
   invalidateTscCache();
+
+  // Sync lock file after fixer — prevents package-lock.json drift in next audit
+  spawnSync("npm", ["install", "--package-lock-only"], { cwd: repoRoot, timeout: 60_000, stdio: "pipe", windowsHide: true });
 
   return { completed: result.status === 0 || result.status === null };
 }
@@ -217,8 +225,8 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
     // [FIX FR-8~10] Fix-first: classify findings by severity
     const { autoFixable, reviewRequired, blocking } = partitionFindings(inScope);
 
-    // Blocking findings (critical/high) → fail immediately, no auto-fix attempt
-    if (blocking.length > 0 && autoFixable.length === 0 && reviewRequired.length === 0) {
+    // Blocking findings (critical/high) → allow fixer one attempt, then fail if unresolved
+    if (blocking.length > 0 && autoFixable.length === 0 && reviewRequired.length === 0 && attempts >= 2) {
       findingsHistory.push([...inScope]);
       return { passed: false, attempts, stagnation: `${blocking.length} blocking finding(s)`, findingsHistory };
     }
@@ -235,6 +243,11 @@ export async function runFixCycle(opts: FixCycleOptions): Promise<FixCycleResult
     }
 
     if (attempts >= maxRounds) {
+      // Tolerance: if only low-severity (autoFixable) findings remain after exhausting rounds,
+      // treat as pass-with-warnings rather than blocking the entire wave.
+      if (blocking.length === 0 && reviewRequired.length === 0 && autoFixable.length > 0) {
+        return { passed: true, attempts, stagnation: `${autoFixable.length} low-severity finding(s) accepted`, findingsHistory };
+      }
       return { passed: false, attempts, stagnation, findingsHistory };
     }
 

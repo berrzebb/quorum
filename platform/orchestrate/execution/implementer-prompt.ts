@@ -125,5 +125,12 @@ ${depContext}${peerSection}${domainKnowledge}
 Implement ONLY this work breakdown item (${item.id}). Do not implement other items.
 Follow the implementer protocol. When done, run the verify command to confirm your work is correct.
 
+## AUTONOMOUS MODE (CRITICAL)
+You are running in an unattended pipeline. There is NO human to respond.
+- Do NOT ask questions or wait for confirmation — decide and act.
+- Do NOT commit files. Only create/edit files. The orchestrator handles git.
+- NEVER edit lock files (package-lock.json, yarn.lock, etc.) — they are auto-generated.
+- When implementation and verification are complete, EXIT immediately.
+
 ${protocol}`;
 }

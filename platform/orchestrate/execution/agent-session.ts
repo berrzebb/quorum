@@ -99,9 +99,10 @@ export async function spawnAgent(opts: SpawnAgentOptions): Promise<AgentHandle |
     writePromptFile(prompt, tmpDir, `${sessionName}.prompt.txt`);
 
     const modelFlag = tier.model ? ` --model ${tier.model}` : "";
+    const autonomousSys = `--append-system-prompt "You are an autonomous implementer agent in an unattended pipeline. NEVER ask for confirmation. NEVER commit files. Only create/edit the files specified in your task, verify, then exit immediately."`;
     const cliFlags = tier.provider === "codex"
       ? "exec --json --full-auto -"
-      : `-p --output-format stream-json --dangerously-skip-permissions${modelFlag}`;
+      : `-p --output-format stream-json --dangerously-skip-permissions${modelFlag} ${autonomousSys}`;
 
     const scriptFile = writeScriptFile(tmpDir, sessionName, promptFile, outputFile, tier.provider, cliFlags);
 

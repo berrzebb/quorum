@@ -335,7 +335,14 @@ export async function run(args: string[]): Promise<void> {
 
     if (parsed.mux) {
       mux = new ProcessMux();
-      auditors = createMuxConsensusAuditors(roles, cwd, mux);
+      const roleColors: Record<string, string> = { advocate: C.green, devil: C.red, judge: C.blue };
+      auditors = createMuxConsensusAuditors(roles, cwd, mux, {
+        onProgress: (role, chunk) => {
+          const color = roleColors[role] ?? C.reset;
+          // Stream each chunk with role label, no newline for inline flow
+          process.stdout.write(`${color}[${role}]${C.reset} ${chunk}`);
+        },
+      });
       console.log(`${C.dim}Mux mode: ${mux.getBackend()} (sessions visible in daemon TUI)${C.reset}\n`);
     } else {
       auditors = createConsensusAuditors(roles, cwd);
